@@ -87,6 +87,8 @@ yarn-error.*
 .env*.local
 .env
 server/api_config.local.php
+shop-api/config.local.php
+shop-api/uploads/
 
 # never publish local or generated environment files
 .env.*

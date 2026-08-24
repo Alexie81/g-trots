@@ -229,6 +229,18 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></svg>
       <span>Produse</span>
     </button>
+    <button class="nav-btn" data-tab="shop-categories">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h7l2 2h9v12H3V5Z"/><path d="M8 12h8M12 9v6"/></svg>
+      <span>Categorii</span>
+    </button>
+    <button class="nav-btn" data-tab="shop-brands">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.6 13.6 11 4H4v7l9.6 9.6a2 2 0 0 0 2.8 0l4.2-4.2a2 2 0 0 0 0-2.8Z"/><circle cx="7.5" cy="7.5" r="1"/></svg>
+      <span>Compatibilitati branduri</span>
+    </button>
+    <button class="nav-btn" data-tab="shop-manufacturers">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21V8l6 4V8l6 4V3h6v18H3Z"/><path d="M7 17h2M13 17h2M19 17h2"/></svg>
+      <span>Producatori</span>
+    </button>
     <button class="nav-btn" data-tab="shop-inventory">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8 12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
       <span>Stoc</span>
@@ -1345,6 +1357,21 @@
           <span class="shop-area-copy"><small>CATALOG</small><strong>Produse</strong><em>Organizeaza produsele, preturile si detaliile.</em></span>
           <span class="shop-area-arrow">&rarr;</span>
         </button>
+        <button type="button" class="shop-area-card pink" data-shop-open="shop-categories">
+          <span class="shop-area-icon"><svg viewBox="0 0 24 24"><path d="M3 5h7l2 2h9v12H3V5Z"/><path d="M8 12h8M12 9v6"/></svg></span>
+          <span class="shop-area-copy"><small>ORGANIZARE</small><strong>Categorii</strong><em>Construieste categorii si subcategorii pe oricate niveluri.</em></span>
+          <span class="shop-area-arrow">&rarr;</span>
+        </button>
+        <button type="button" class="shop-area-card teal" data-shop-open="shop-brands">
+          <span class="shop-area-icon"><svg viewBox="0 0 24 24"><path d="M20.6 13.6 11 4H4v7l9.6 9.6a2 2 0 0 0 2.8 0l4.2-4.2a2 2 0 0 0 0-2.8Z"/><circle cx="7.5" cy="7.5" r="1"/></svg></span>
+          <span class="shop-area-copy"><small>CATALOG</small><strong>Compatibilitati branduri</strong><em>Administreaza marcile cu care sunt compatibile produsele.</em></span>
+          <span class="shop-area-arrow">&rarr;</span>
+        </button>
+        <button type="button" class="shop-area-card indigo" data-shop-open="shop-manufacturers">
+          <span class="shop-area-icon"><svg viewBox="0 0 24 24"><path d="M3 21V8l6 4V8l6 4V3h6v18H3Z"/><path d="M7 17h2M13 17h2M19 17h2"/></svg></span>
+          <span class="shop-area-copy"><small>FURNIZARE</small><strong>Producatori</strong><em>Administreaza companiile care fabrica produsele.</em></span>
+          <span class="shop-area-arrow">&rarr;</span>
+        </button>
         <button type="button" class="shop-area-card green" data-shop-open="shop-inventory">
           <span class="shop-area-icon"><svg viewBox="0 0 24 24"><path d="M21 8 12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg></span>
           <span class="shop-area-copy"><small>INVENTAR</small><strong>Stoc</strong><em>Controleaza cantitatile, miscarile si alertele.</em></span>
@@ -1383,6 +1410,87 @@
     </div>
   </div>
 
+  <div class="tab-panel shop-tab-panel" id="tab-shop-categories">
+    <div class="shop-catalog-page">
+      <div class="shop-catalog-toolbar">
+        <button type="button" class="shop-back-btn" data-shop-open="shop-dashboard">&larr; Panou SHOP</button>
+        <button type="button" class="shop-catalog-refresh" data-shop-refresh title="Reincarca datele"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0 2 5"/><path d="M20 4v7h-7"/></svg></button>
+      </div>
+      <section class="shop-catalog-hero pink">
+        <span class="shop-catalog-hero-icon"><svg viewBox="0 0 24 24"><path d="M3 5h7l2 2h9v12H3V5Z"/><path d="M8 12h8M12 9v6"/></svg></span>
+        <span class="shop-catalog-hero-copy"><small>SHOP / CATALOG PRODUSE</small><strong>Categorii si subcategorii</strong><em>Organizeaza catalogul pe oricate niveluri si adauga miniaturi.</em></span>
+        <span class="shop-catalog-count"><b id="shop-category-count">0</b><small>TOTAL</small></span>
+      </section>
+      <div class="shop-catalog-tabs">
+        <button type="button" class="active" data-shop-open="shop-categories">Categorii</button>
+        <button type="button" data-shop-open="shop-brands">Compatibilitati</button>
+        <button type="button" data-shop-open="shop-manufacturers">Producatori</button>
+      </div>
+      <div class="shop-catalog-state" id="shop-category-state">Se incarca categoriile...</div>
+      <div class="shop-table-shell" id="shop-category-table-shell" hidden>
+        <table class="shop-table">
+          <thead><tr><th>Miniatura</th><th>Categorie</th><th>Parinte / nivel</th><th>Status</th><th>Actiuni</th></tr></thead>
+          <tbody id="shop-category-table-body"></tbody>
+        </table>
+      </div>
+      <button type="button" class="shop-fab" id="shop-category-add" title="Adauga categorie" aria-label="Adauga categorie"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    </div>
+  </div>
+
+  <div class="tab-panel shop-tab-panel" id="tab-shop-brands">
+    <div class="shop-catalog-page">
+      <div class="shop-catalog-toolbar">
+        <button type="button" class="shop-back-btn" data-shop-open="shop-dashboard">&larr; Panou SHOP</button>
+        <button type="button" class="shop-catalog-refresh" data-shop-refresh title="Reincarca datele"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0 2 5"/><path d="M20 4v7h-7"/></svg></button>
+      </div>
+      <section class="shop-catalog-hero teal">
+        <span class="shop-catalog-hero-icon"><svg viewBox="0 0 24 24"><path d="M20.6 13.6 11 4H4v7l9.6 9.6a2 2 0 0 0 2.8 0l4.2-4.2a2 2 0 0 0 0-2.8Z"/><circle cx="7.5" cy="7.5" r="1"/></svg></span>
+        <span class="shop-catalog-hero-copy"><small>SHOP / CATALOG PRODUSE</small><strong>Compatibilitati branduri</strong><em>Administreaza marcile cu care sunt compatibile produsele.</em></span>
+        <span class="shop-catalog-count"><b id="shop-brand-count">0</b><small>TOTAL</small></span>
+      </section>
+      <div class="shop-catalog-tabs">
+        <button type="button" data-shop-open="shop-categories">Categorii</button>
+        <button type="button" class="active" data-shop-open="shop-brands">Compatibilitati</button>
+        <button type="button" data-shop-open="shop-manufacturers">Producatori</button>
+      </div>
+      <div class="shop-catalog-state" id="shop-brand-state">Se incarca brandurile...</div>
+      <div class="shop-table-shell" id="shop-brand-table-shell" hidden>
+        <table class="shop-table shop-brand-table">
+          <thead><tr><th>Compatibilitate</th><th>Site web</th><th>Status</th><th>Actiuni</th></tr></thead>
+          <tbody id="shop-brand-table-body"></tbody>
+        </table>
+      </div>
+      <button type="button" class="shop-fab teal" id="shop-brand-add" title="Adauga compatibilitate" aria-label="Adauga compatibilitate"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    </div>
+  </div>
+
+  <div class="tab-panel shop-tab-panel" id="tab-shop-manufacturers">
+    <div class="shop-catalog-page">
+      <div class="shop-catalog-toolbar">
+        <button type="button" class="shop-back-btn" data-shop-open="shop-dashboard">&larr; Panou SHOP</button>
+        <button type="button" class="shop-catalog-refresh" data-shop-refresh title="Reincarca datele"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0 2 5"/><path d="M20 4v7h-7"/></svg></button>
+      </div>
+      <section class="shop-catalog-hero indigo">
+        <span class="shop-catalog-hero-icon"><svg viewBox="0 0 24 24"><path d="M3 21V8l6 4V8l6 4V3h6v18H3Z"/><path d="M7 17h2M13 17h2M19 17h2"/></svg></span>
+        <span class="shop-catalog-hero-copy"><small>SHOP / FURNIZARE</small><strong>Producatori</strong><em>Administreaza companiile care fabrica produsele.</em></span>
+        <span class="shop-catalog-count"><b id="shop-manufacturer-count">0</b><small>TOTAL</small></span>
+      </section>
+      <div class="shop-catalog-tabs">
+        <button type="button" data-shop-open="shop-categories">Categorii</button>
+        <button type="button" data-shop-open="shop-brands">Compatibilitati</button>
+        <button type="button" class="active" data-shop-open="shop-manufacturers">Producatori</button>
+      </div>
+      <div class="shop-catalog-state" id="shop-manufacturer-state">Se incarca producatorii...</div>
+      <div class="shop-table-shell" id="shop-manufacturer-table-shell" hidden>
+        <table class="shop-table shop-brand-table">
+          <thead><tr><th>Producator</th><th>Site web</th><th>Status</th><th>Actiuni</th></tr></thead>
+          <tbody id="shop-manufacturer-table-body"></tbody>
+        </table>
+      </div>
+      <button type="button" class="shop-fab indigo" id="shop-manufacturer-add" title="Adauga producator" aria-label="Adauga producator"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    </div>
+  </div>
+
   <div class="tab-panel shop-tab-panel" id="tab-shop-inventory">
     <div class="shop-placeholder-page">
       <button type="button" class="shop-back-btn" data-shop-open="shop-dashboard">&larr; Panou SHOP</button>
@@ -1407,6 +1515,63 @@
     </div>
   </div>
 </main>
+
+<div class="business-modal-overlay shop-modal-overlay" id="shop-category-modal" hidden>
+  <form class="business-modal shop-editor-modal" id="shop-category-form">
+    <div class="business-modal-head">
+      <div><span class="business-modal-icon shop-pink"><svg viewBox="0 0 24 24"><path d="M3 5h7l2 2h9v12H3V5Z"/><path d="M8 12h8M12 9v6"/></svg></span><span><strong id="shop-category-modal-title">Categorie noua</strong><small>Categorie sau subcategorie SHOP</small></span></div>
+      <button type="button" class="business-close-btn" data-shop-modal-close="shop-category-modal" title="Inchide"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="shop-editor-scroll">
+      <div class="shop-image-editor">
+        <button type="button" class="shop-image-preview" id="shop-category-image-preview"><span><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>Miniatura</span></button>
+        <div><button type="button" class="btn-ghost" id="shop-category-image-choose">Alege poza</button><button type="button" class="shop-image-remove" id="shop-category-image-remove">Sterge miniatura</button></div>
+        <input type="file" id="shop-category-image-input" accept="image/jpeg,image/png,image/webp" hidden />
+      </div>
+      <div class="field"><label for="shop-category-name">Nume *</label><input type="text" id="shop-category-name" maxlength="120" placeholder="Ex: Accesorii" required /></div>
+      <div class="field"><label for="shop-category-description">Descriere</label><textarea id="shop-category-description" rows="3" maxlength="1000" placeholder="Descriere scurta pentru categorie"></textarea></div>
+      <div class="field"><label for="shop-category-parent">Categorie parinte</label><select id="shop-category-parent"><option value="">Fara parinte — categorie principala</option></select><small class="shop-field-help">Poti alege inclusiv o subcategorie, pentru oricate niveluri.</small></div>
+      <label class="shop-active-toggle"><span><strong>Categorie activa</strong><small>Poate fi folosita in catalog.</small></span><input type="checkbox" id="shop-category-active" checked /><i></i></label>
+    </div>
+    <div class="business-modal-actions"><button type="button" class="btn-ghost" data-shop-modal-close="shop-category-modal">Anuleaza</button><button type="submit" class="btn-primary" id="shop-category-save">Salveaza categoria</button></div>
+  </form>
+</div>
+
+<div class="business-modal-overlay shop-modal-overlay" id="shop-brand-modal" hidden>
+  <form class="business-modal shop-editor-modal shop-brand-editor" id="shop-brand-form">
+    <div class="business-modal-head">
+      <div><span class="business-modal-icon shop-teal"><svg viewBox="0 0 24 24"><path d="M20.6 13.6 11 4H4v7l9.6 9.6a2 2 0 0 0 2.8 0l4.2-4.2a2 2 0 0 0 0-2.8Z"/><circle cx="7.5" cy="7.5" r="1"/></svg></span><span><strong id="shop-brand-modal-title">Compatibilitate noua</strong><small>Marca compatibila cu produsele</small></span></div>
+      <button type="button" class="business-close-btn" data-shop-modal-close="shop-brand-modal" title="Inchide"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="field"><label for="shop-brand-name">Nume *</label><input type="text" id="shop-brand-name" maxlength="120" placeholder="Ex: Apple, Samsung" required /></div>
+    <div class="field"><label for="shop-brand-website">Site web</label><input type="url" id="shop-brand-website" maxlength="255" placeholder="https://..." /></div>
+    <label class="shop-active-toggle"><span><strong>Compatibilitate activa</strong><small>Poate fi asociata produselor.</small></span><input type="checkbox" id="shop-brand-active" checked /><i></i></label>
+    <div class="business-modal-actions"><button type="button" class="btn-ghost" data-shop-modal-close="shop-brand-modal">Anuleaza</button><button type="submit" class="btn-primary" id="shop-brand-save">Salveaza compatibilitatea</button></div>
+  </form>
+</div>
+
+<div class="business-modal-overlay shop-modal-overlay" id="shop-manufacturer-modal" hidden>
+  <form class="business-modal shop-editor-modal shop-brand-editor" id="shop-manufacturer-form">
+    <div class="business-modal-head">
+      <div><span class="business-modal-icon shop-indigo"><svg viewBox="0 0 24 24"><path d="M3 21V8l6 4V8l6 4V3h6v18H3Z"/><path d="M7 17h2M13 17h2M19 17h2"/></svg></span><span><strong id="shop-manufacturer-modal-title">Producator nou</strong><small>Companie producatoare SHOP</small></span></div>
+      <button type="button" class="business-close-btn" data-shop-modal-close="shop-manufacturer-modal" title="Inchide"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="field"><label for="shop-manufacturer-name">Nume *</label><input type="text" id="shop-manufacturer-name" maxlength="120" placeholder="Ex: Bosch" required /></div>
+    <div class="field"><label for="shop-manufacturer-website">Site web</label><input type="url" id="shop-manufacturer-website" maxlength="255" placeholder="https://..." /></div>
+    <label class="shop-active-toggle"><span><strong>Producator activ</strong><small>Poate fi asociat produselor.</small></span><input type="checkbox" id="shop-manufacturer-active" checked /><i></i></label>
+    <div class="business-modal-actions"><button type="button" class="btn-ghost" data-shop-modal-close="shop-manufacturer-modal">Anuleaza</button><button type="submit" class="btn-primary" id="shop-manufacturer-save">Salveaza producatorul</button></div>
+  </form>
+</div>
+
+<div class="business-modal-overlay shop-modal-overlay" id="shop-delete-modal" hidden>
+  <div class="business-modal shop-delete-modal" role="dialog" aria-modal="true" aria-labelledby="shop-delete-title">
+    <div class="shop-delete-icon"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 11v6M14 11v6"/></svg></div>
+    <span class="shop-delete-kicker">CONFIRMARE STERGERE</span>
+    <h2 id="shop-delete-title">Stergi elementul?</h2>
+    <p id="shop-delete-message">Aceasta actiune nu poate fi anulata.</p>
+    <div class="business-modal-actions"><button type="button" class="btn-ghost" data-shop-modal-close="shop-delete-modal">Renunta</button><button type="button" class="btn-primary danger" id="shop-delete-confirm">Sterge</button></div>
+  </div>
+</div>
 
 <div class="business-modal-overlay" id="profile-modal" hidden>
   <form class="business-modal" id="profile-form">
@@ -1565,8 +1730,10 @@
   // Config
   window.API_URL = 'https://cab-it.ro/trotty-api';
   window.API_KEY = 'GTROTS_X9K3M7_2026_SECURE';
+  window.SHOP_API_URL = 'https://g-trots.ro/shop-api';
 </script>
 <script src="js/api.js"></script>
+<script src="js/shop-api.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/shell.js"></script>
 <script src="js/excel.js"></script>
@@ -1582,6 +1749,7 @@
 <script src="js/whatsapp-admin.js"></script>
 <script src="js/updater.js"></script>
 <script src="js/settings.js"></script>
+<script src="js/shop-catalog.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

@@ -1421,10 +1421,13 @@
         <span class="shop-catalog-hero-copy"><small>SHOP / CATALOG PRODUSE</small><strong>Categorii si subcategorii</strong><em>Organizeaza catalogul pe oricate niveluri si adauga miniaturi.</em></span>
         <span class="shop-catalog-count"><b id="shop-category-count">0</b><small>TOTAL</small></span>
       </section>
-      <div class="shop-catalog-tabs">
-        <button type="button" class="active" data-shop-open="shop-categories">Categorii</button>
-        <button type="button" data-shop-open="shop-brands">Compatibilitati</button>
-        <button type="button" data-shop-open="shop-manufacturers">Producatori</button>
+      <div class="shop-catalog-actions-row">
+        <div class="shop-catalog-tabs">
+          <button type="button" class="active" data-shop-open="shop-categories">Categorii</button>
+          <button type="button" data-shop-open="shop-brands">Compatibilitati</button>
+          <button type="button" data-shop-open="shop-manufacturers">Producatori</button>
+        </div>
+        <button type="button" class="shop-fab" id="shop-category-add" title="Adauga categorie" aria-label="Adauga categorie"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
       </div>
       <div class="shop-catalog-state" id="shop-category-state">Se incarca categoriile...</div>
       <div class="shop-table-shell" id="shop-category-table-shell" hidden>
@@ -1433,7 +1436,6 @@
           <tbody id="shop-category-table-body"></tbody>
         </table>
       </div>
-      <button type="button" class="shop-fab" id="shop-category-add" title="Adauga categorie" aria-label="Adauga categorie"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
     </div>
   </div>
 
@@ -1448,10 +1450,13 @@
         <span class="shop-catalog-hero-copy"><small>SHOP / CATALOG PRODUSE</small><strong>Compatibilitati branduri</strong><em>Administreaza marcile cu care sunt compatibile produsele.</em></span>
         <span class="shop-catalog-count"><b id="shop-brand-count">0</b><small>TOTAL</small></span>
       </section>
-      <div class="shop-catalog-tabs">
-        <button type="button" data-shop-open="shop-categories">Categorii</button>
-        <button type="button" class="active" data-shop-open="shop-brands">Compatibilitati</button>
-        <button type="button" data-shop-open="shop-manufacturers">Producatori</button>
+      <div class="shop-catalog-actions-row">
+        <div class="shop-catalog-tabs">
+          <button type="button" data-shop-open="shop-categories">Categorii</button>
+          <button type="button" class="active" data-shop-open="shop-brands">Compatibilitati</button>
+          <button type="button" data-shop-open="shop-manufacturers">Producatori</button>
+        </div>
+        <button type="button" class="shop-fab teal" id="shop-brand-add" title="Adauga compatibilitate" aria-label="Adauga compatibilitate"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
       </div>
       <div class="shop-catalog-state" id="shop-brand-state">Se incarca brandurile...</div>
       <div class="shop-table-shell" id="shop-brand-table-shell" hidden>
@@ -1460,7 +1465,6 @@
           <tbody id="shop-brand-table-body"></tbody>
         </table>
       </div>
-      <button type="button" class="shop-fab teal" id="shop-brand-add" title="Adauga compatibilitate" aria-label="Adauga compatibilitate"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
     </div>
   </div>
 
@@ -1475,10 +1479,13 @@
         <span class="shop-catalog-hero-copy"><small>SHOP / FURNIZARE</small><strong>Producatori</strong><em>Administreaza companiile care fabrica produsele.</em></span>
         <span class="shop-catalog-count"><b id="shop-manufacturer-count">0</b><small>TOTAL</small></span>
       </section>
-      <div class="shop-catalog-tabs">
-        <button type="button" data-shop-open="shop-categories">Categorii</button>
-        <button type="button" data-shop-open="shop-brands">Compatibilitati</button>
-        <button type="button" class="active" data-shop-open="shop-manufacturers">Producatori</button>
+      <div class="shop-catalog-actions-row">
+        <div class="shop-catalog-tabs">
+          <button type="button" data-shop-open="shop-categories">Categorii</button>
+          <button type="button" data-shop-open="shop-brands">Compatibilitati</button>
+          <button type="button" class="active" data-shop-open="shop-manufacturers">Producatori</button>
+        </div>
+        <button type="button" class="shop-fab indigo" id="shop-manufacturer-add" title="Adauga producator" aria-label="Adauga producator"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
       </div>
       <div class="shop-catalog-state" id="shop-manufacturer-state">Se incarca producatorii...</div>
       <div class="shop-table-shell" id="shop-manufacturer-table-shell" hidden>
@@ -1487,7 +1494,6 @@
           <tbody id="shop-manufacturer-table-body"></tbody>
         </table>
       </div>
-      <button type="button" class="shop-fab indigo" id="shop-manufacturer-add" title="Adauga producator" aria-label="Adauga producator"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
     </div>
   </div>
 

@@ -12520,7 +12520,8 @@ body::after {
 .shop-catalog-count { min-width: 68px; display: flex; flex-direction: column; align-items: center; border: 1px solid rgba(255,255,255,.07); border-radius: 15px; padding: 10px 13px; background: rgba(0,0,0,.16); }
 .shop-catalog-count b { color: #f8f5f2; font-size: 20px; }
 .shop-catalog-count small { margin-top: 2px; color: #6f6964; font-size: 7px; font-weight: 850; letter-spacing: .1em; }
-.shop-catalog-tabs { display: inline-flex; gap: 5px; margin: 15px 0; border: 1px solid rgba(255,255,255,.07); border-radius: 13px; padding: 4px; background: rgba(255,255,255,.025); }
+.shop-catalog-actions-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 15px 0; }
+.shop-catalog-tabs { display: inline-flex; gap: 5px; margin: 0; border: 1px solid rgba(255,255,255,.07); border-radius: 13px; padding: 4px; background: rgba(255,255,255,.025); }
 .shop-catalog-tabs button { min-width: 112px; border: 0; border-radius: 9px; padding: 9px 17px; color: #878079; background: transparent; font: inherit; font-size: 9px; font-weight: 800; cursor: pointer; }
 .shop-catalog-tabs button:hover { color: #d8d1cb; background: rgba(255,255,255,.04); }
 .shop-catalog-tabs button.active { color: #fff; background: #ff6b00; box-shadow: 0 8px 20px rgba(255,107,0,.2); }
@@ -12567,11 +12568,11 @@ body::after {
 .shop-table-action.delete { color: #f87171; border-color: rgba(239,68,68,.18); background: rgba(239,68,68,.06); }
 .shop-table-action:hover { filter: brightness(1.25); }
 .shop-table-action svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-.shop-fab { position: fixed; right: clamp(27px, 4vw, 58px); bottom: 26px; width: 56px; height: 56px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.16); border-radius: 50%; color: #fff; background: #ff6b00; box-shadow: 0 13px 34px rgba(255,107,0,.32); cursor: pointer; transition: transform .16s ease, filter .16s ease; z-index: 4; }
+.shop-fab { position: static; width: 56px; height: 56px; flex: 0 0 56px; display: grid; place-items: center; margin: 0; border: 1px solid rgba(255,255,255,.16); border-radius: 50%; padding: 0; color: #fff; background: #ff6b00; box-shadow: 0 13px 34px rgba(255,107,0,.32); font-size: 0; line-height: 0; cursor: pointer; transition: transform .16s ease, filter .16s ease; z-index: 4; }
 .shop-fab.teal { background: #14b8a6; box-shadow: 0 13px 34px rgba(20,184,166,.25); }
 .shop-fab.indigo { background: #6366f1; box-shadow: 0 13px 34px rgba(99,102,241,.25); }
 .shop-fab:hover { transform: translateY(-2px) scale(1.03); filter: brightness(1.08); }
-.shop-fab svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; }
+.shop-fab svg { width: 25px; height: 25px; display: block; margin: auto; fill: none; stroke: currentColor; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
 
 .shop-modal-overlay { z-index: 600; backdrop-filter: blur(7px); }
 .shop-editor-modal { width: min(560px, calc(100vw - 34px)); max-height: calc(100vh - 46px); overflow: hidden; }
@@ -12612,7 +12613,8 @@ body::after {
   .shop-catalog-hero { grid-template-columns: 48px minmax(0, 1fr); padding: 17px; }
   .shop-catalog-hero-icon { width: 48px; height: 48px; border-radius: 14px; }
   .shop-catalog-count { grid-column: 1 / -1; width: 100%; flex-direction: row; justify-content: space-between; }
-  .shop-catalog-tabs { width: 100%; }
+  .shop-catalog-actions-row { gap: 10px; }
+  .shop-catalog-tabs { min-width: 0; flex: 1; }
   .shop-catalog-tabs button { min-width: 0; flex: 1; }
-  .shop-fab { right: 20px; bottom: 20px; }
+  .shop-fab { width: 52px; height: 52px; flex-basis: 52px; }
 }

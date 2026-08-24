@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag-ul GitHub Release, de exemplu v1.2.33
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -35,6 +41,7 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           $assets = Get-ChildItem electron-app/release -File |
             Where-Object { $_.Extension -in '.exe', '.blockmap', '.yml' } |
@@ -44,6 +51,6 @@ jobs:
             throw 'Nu au fost generate fișiere pentru publicare.'
           }
 
-          gh release create $env:GITHUB_REF_NAME @assets `
-            --title "G-Trots Desktop $env:GITHUB_REF_NAME" `
+          gh release create $env:RELEASE_TAG @assets `
+            --title "G-Trots Desktop $env:RELEASE_TAG" `
             --generate-notes

@@ -1,0 +1,78 @@
+{
+  "name": "gtrots-desktop",
+  "version": "1.2.33",
+  "description": "G-Trots CRM Desktop",
+  "main": "main.js",
+  "scripts": {
+    "postinstall": "node install-xlsx.js",
+    "start": "electron .",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac"
+  },
+  "dependencies": {
+    "electron-log": "^5.4.4",
+    "electron-updater": "^6.8.9",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "electron": "^28.2.0",
+    "electron-builder": "^24.9.1",
+    "xlsx": "^0.18.5"
+  },
+  "build": {
+    "appId": "ro.cabit.gtrots.desktop",
+    "productName": "G-Trots CRM",
+    "artifactName": "GTrotsSetup-${version}.${ext}",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Alexie81",
+        "repo": "g-trots",
+        "releaseType": "release"
+      }
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "renderer/**/*",
+      "assets/**/*",
+      "node_modules/**/*",
+      "!node_modules/electron/**",
+      "!node_modules/electron-builder/**",
+      "!node_modules/.cache/**",
+      "!node_modules/**/{test,tests,__tests__,example,examples,docs,doc}/**",
+      "!node_modules/**/*.{md,map,ts,flow}",
+      "!node_modules/**/{.bin,.github}/**",
+      "!win64-installer/**",
+      "!win64-installer.zip",
+      "!release/**",
+      "!release-*/**",
+      "!*.exe",
+      "!*.zip",
+      "!*.apk",
+      "!*.blockmap",
+      "!builder-debug.yml"
+    ],
+    "afterPack": "scripts/after-pack.js",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  }
+}

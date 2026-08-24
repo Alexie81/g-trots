@@ -1,0 +1,31 @@
+{
+  "cli": {
+    "version": ">= 20.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://cab-it.ro/trotty-api",
+        "EXPO_PUBLIC_API_KEY": "GTROTS_X9K3M7_2026_SECURE",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://nhewmwvmrpmkvutzprff.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5oZXdtd3ZtcnBta3Z1dHpwcmZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MzY3OTUsImV4cCI6MjA5NjExMjc5NX0.nIbxwJMkYdqOFQotHOVvkqtYVRIa9K1ntLkTUqDfj24"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

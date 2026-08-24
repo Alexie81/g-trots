@@ -1,0 +1,2 @@
+1. sa vad exact principiul de finalizare client, deoarece in prezent imi da ca finalizat clientul cand il scanez sau cand ii fac fisa de service si nu e corectc trebuie sa i dau cumva finalizare fisa de service sau sa i dau cumva salvare la fisa de iesire
+sa nu se mai treaca automat ca finalizat

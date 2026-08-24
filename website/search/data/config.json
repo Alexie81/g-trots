@@ -1,0 +1,65 @@
+{
+    "version":  "v7.0",
+    "debounce_ms":  10,
+    "result_limit":  12,
+    "candidate_limit":  220,
+    "rerank_limit":  100,
+    "rrf_k":  60,
+    "phases":  [
+                   "instant compact index",
+                   "binary BM25",
+                   "exact entities",
+                   "character trigrams",
+                   "local semantic exact scan",
+                   "RRF",
+                   "contextual reranking",
+                   "diagnostic aggregation"
+               ],
+    "weights":  {
+                    "exact_model":  72,
+                    "fuzzy_model":  38,
+                    "model_mismatch":  -140,
+                    "exact_brand":  22,
+                    "exact_symptom":  58,
+                    "same_family":  18,
+                    "vehicle_match":  24,
+                    "vehicle_mismatch":  -75,
+                    "context_token":  4.2,
+                    "title_phrase":  30,
+                    "quality":  5,
+                    "error_code":  45,
+                    "voltage":  15,
+                    "percentage":  12
+                },
+    "assets":  {
+                   "instant":  "search/data/instant-core.json",
+                   "docs":  "search/data/diagnostic-docs.json",
+                   "bm25_meta":  "search/data/bm25-meta.json",
+                   "bm25_postings":  "search/data/bm25-postings.bin",
+                   "doc_lengths":  "search/data/doc-lengths.bin",
+                   "trigram_meta":  "search/data/trigram-meta.json",
+                   "trigram_postings":  "search/data/trigram-postings.bin",
+                   "trigram_counts":  "search/data/trigram-counts.bin",
+                   "semantic_meta":  "search/data/semantic-meta.json",
+                   "semantic_vectors":  "search/data/semantic-vectors.bin",
+                   "entity":  "search/data/entity-index-v6.json",
+                   "models":  "data/catalog/models.json",
+                   "symptoms":  "data/catalog/symptoms.json",
+                   "instant_postings_meta":  "search/data/instant-postings-v61-meta.json",
+                   "instant_postings_bin":  "search/data/instant-postings-v61.bin"
+               },
+    "performance":  {
+                        "worker":  true,
+                        "phased_loading":  true,
+                        "stale_query_cancellation":  true,
+                        "service_worker_cache":  true,
+                        "precompressed_assets":  true,
+                        "instant_inverted_index":  true
+                    },
+    "notes":  [
+                  "Instant phase uses a compact token-to-document inverted index and only scores a candidate pool.",
+                  "Full phase combines binary BM25, exact entities, fuzzy trigrams, local semantic vectors, RRF and contextual reranking.",
+                  "Exact vector scan is used for 20,000 records to avoid approximate-neighbor misses.",
+                  "Optional neural reranking should run only after submit or an intentional pause."
+              ]
+}

@@ -1,0 +1,7 @@
+{
+  "version": "v7",
+  "dimensions": 64,
+  "count": 20000,
+  "dtype": "int8",
+  "method": "exact local contextual feature-vector scan"
+}

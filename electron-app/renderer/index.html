@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>G-Trots CRM</title>
+  <link rel="icon" href="../assets/icon.png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #080706;
+      color: #F7F3EF;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .startup-loader,
+    .auth-overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 7% -7%, rgba(255,107,0,0.18), transparent 30%),
+        radial-gradient(circle at 91% 35%, rgba(255,107,0,0.075), transparent 34%),
+        radial-gradient(circle at 99% 105%, rgba(255,154,61,0.10), transparent 36%),
+        linear-gradient(145deg, #080706 0%, #14110E 52%, #070707 100%);
+    }
+    .startup-loader {
+      z-index: 220;
+      opacity: 1;
+      visibility: visible;
+      transition: opacity 0.36s ease, visibility 0.36s ease;
+    }
+    .startup-loader.startup-hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .auth-overlay {
+      z-index: 100;
+    }
+    .startup-card,
+    .auth-card {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 320px;
+      min-height: 250px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 30px;
+      background: rgba(255,255,255,0.045);
+      box-shadow: 0 30px 70px rgba(0,0,0,0.45);
+    }
+    .auth-card {
+      max-width: 380px;
+      align-items: stretch;
+      justify-content: flex-start;
+      padding: 24px;
+      opacity: 0;
+      transform: translateY(18px) scale(.975);
+      filter: blur(8px);
+      transition: opacity .48s ease, transform .52s cubic-bezier(.2,.82,.2,1), filter .52s ease;
+    }
+    .auth-overlay.auth-entered .auth-card {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      filter: blur(0);
+    }
+    .startup-spinner {
+      width: 104px;
+      height: 104px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      margin-bottom: 20px;
+    }
+    .startup-spinner::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 3px solid rgba(255,255,255,0.08);
+      border-top-color: #FF6B00;
+      border-right-color: #FF9A3D;
+      animation: startup-spin 0.95s linear infinite;
+    }
+    .startup-logo,
+    .auth-mark {
+      width: 66px;
+      height: 66px;
+      border-radius: 24px;
+      object-fit: cover;
+      box-shadow: 0 16px 34px rgba(255,107,0,0.24);
+    }
+    .startup-title {
+      color: #F7F3EF;
+      font-size: 21px;
+      font-weight: 850;
+      letter-spacing: 0.02em;
+    }
+    .startup-subtitle {
+      color: #A7A09A;
+      font-size: 12px;
+      margin-top: 6px;
+    }
+    @keyframes startup-spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="startup-loader" id="startup-loader">
+  <div class="startup-card">
+    <div class="startup-spinner">
+      <img class="startup-logo" src="../assets/logo.png" alt="G-Trots" />
+    </div>
+    <div class="startup-title">G-Trots</div>
+    <div class="startup-subtitle">Se pregateste aplicatia desktop...</div>
+  </div>
+</div>
+
+<div class="auth-overlay" id="auth-overlay">
+  <form class="auth-card" id="auth-login-form">
+    <div class="auth-brand">
+      <img class="auth-mark" src="../assets/logo.png" alt="G-Trots" />
+      <h1>G-Trots</h1>
+    </div>
+    <div class="field auth-field">
+      <label>User</label>
+      <input type="text" id="auth-username" autocomplete="username" placeholder="admin" required />
+    </div>
+    <div class="field auth-field">
+      <label>Parola</label>
+      <input type="password" id="auth-password" autocomplete="current-password" placeholder="admin" required />
+    </div>
+    <div id="auth-error" class="error-box" style="display:none"></div>
+    <button type="submit" class="btn-primary">Intra in aplicatie</button>
+  </form>
+</div>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <img class="logo-icon" src="../assets/logo.png" alt="G-Trots" />
+    <div>
+      <div class="logo-title">G-Trots</div>
+      <div class="logo-sub" id="sidebar-logo-version">v1.2.33</div>
+    </div>
+  </div>
+
+  <div class="module-switcher" aria-label="Alege modulul aplicatiei">
+    <button type="button" class="module-switch-btn active" data-module-select="service" aria-pressed="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.7 6.3 3-3a4.2 4.2 0 0 1-5.6 5.6l-6.8 6.8a2.1 2.1 0 1 0 3 3l6.8-6.8a4.2 4.2 0 0 1 5.6-5.6l-3 3"/></svg>
+      <span>SERVICE</span>
+    </button>
+    <button type="button" class="module-switch-btn" data-module-select="shop" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l1 13H5L6 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></svg>
+      <span>SHOP</span>
+    </button>
+  </div>
+
+  <nav class="sidebar-nav" data-module-nav="service">
+    <button class="nav-btn active" data-tab="scanner">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M17 17h3v3M14 20h3M20 14v3"/></svg>
+      <span>Scanner QR</span>
+    </button>
+    <button class="nav-btn" data-tab="clients" data-client-panel-access="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span>Clienti</span>
+    </button>
+    <button class="nav-btn" data-tab="service" data-service-sheet-access="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      <span>Fise de service</span>
+    </button>
+    <button class="nav-btn" data-tab="stats" data-stats-access="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <span>Statistici</span>
+    </button>
+    <button class="nav-btn" data-tab="partners" data-partners-access="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="M16 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/><path d="M2 21a6 6 0 0 1 12 0"/><path d="M14 18a5 5 0 0 1 8 3"/></svg>
+      <span>Parteneri</span>
+    </button>
+    <button class="nav-btn" data-tab="chat">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>
+      <span>Chat</span>
+      <span class="nav-badge" id="chat-nav-badge" style="display:none">0</span>
+    </button>
+    <button class="nav-btn" data-tab="whatsapp-admin" data-admin-only="true">
+      <svg class="whatsapp-nav-icon" width="19" height="19" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M21 11.5a8.5 8.5 0 0 1-12.56 7.47L3 21l2.03-5.44A8.5 8.5 0 1 1 21 11.5Z"/>
+        <path d="M8.35 7.8c.22-.48.45-.49.77-.5h.55c.2 0 .4.08.5.36l.76 1.82c.08.2.05.38-.08.55l-.57.72c-.13.16-.18.3-.04.53.62 1.06 1.53 1.94 2.62 2.5.23.13.37.1.51-.07l.81-.96c.17-.2.35-.24.57-.15l1.9.9c.24.11.39.17.44.31.05.14.04.8-.19 1.5-.23.68-1.32 1.3-1.85 1.39-.5.08-1.12.12-1.81-.1a12 12 0 0 1-2.2-1.01 9.8 9.8 0 0 1-3.68-3.6c-.92-1.59-.98-2.72-.78-3.37Z"/>
+      </svg>
+      <span>Admin Mesaje</span>
+    </button>
+    <button class="nav-btn" data-tab="history" data-admin-only="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3"/><path d="M12 7v5l3 2"/></svg>
+      <span>Istoricul tuturor modificarilor</span>
+    </button>
+    <button class="nav-btn" data-tab="settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.08.28.38.5.71.5H21a2 2 0 1 1 0 4h-.09c-.33 0-.63.22-.71.5Z"/></svg>
+      <span>Setari</span>
+    </button>
+  </nav>
+
+  <nav class="sidebar-nav shop-sidebar-nav" data-module-nav="shop" hidden>
+    <button class="nav-btn" data-tab="shop-dashboard">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span>Panou SHOP</span>
+    </button>
+    <button class="nav-btn" data-tab="shop-orders">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="20" r="1"/><circle cx="19" cy="20" r="1"/><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L21 8H7"/></svg>
+      <span>Comenzi</span>
+    </button>
+    <button class="nav-btn" data-tab="shop-products">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></svg>
+      <span>Produse</span>
+    </button>
+    <button class="nav-btn" data-tab="shop-inventory">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8 12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
+      <span>Stoc</span>
+    </button>
+    <button class="nav-btn" data-tab="shop-invoices">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>
+      <span>Facturi</span>
+    </button>
+  </nav>
+
+  <div class="sidebar-footer" id="sidebar-status">
+    <button type="button" class="sidebar-account-card" id="sidebar-account-btn">
+      <span class="account-avatar" id="sidebar-account-avatar">U</span>
+      <span class="account-copy">
+        <strong id="auth-user-label">Neautentificat</strong>
+        <small id="sidebar-account-role">Offline</small>
+        <span class="account-online"><i></i><b id="sidebar-account-status">Offline</b></span>
+      </span>
+      <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+    </button>
+    <button type="button" class="sidebar-update-card" id="sidebar-update-card" data-status="idle" hidden aria-live="polite">
+      <span class="sidebar-update-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 3v11"/><path d="m7.5 10 4.5 4.5 4.5-4.5"/><path d="M5 20h14"/></svg>
+      </span>
+      <span class="sidebar-update-copy">
+        <strong id="sidebar-update-title">Actualizare disponibila</strong>
+        <small id="sidebar-update-message">Se pregateste descarcarea...</small>
+      </span>
+      <span class="sidebar-update-action" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0 2 5"/><path d="M20 4v7h-7"/></svg>
+      </span>
+      <span class="sidebar-update-progress" aria-hidden="true"><i id="sidebar-update-progress-fill"></i></span>
+    </button>
+    <div class="sidebar-version"><b id="sidebar-app-version">v1.2.33</b> <span>i</span></div>
+    <button class="footer-logout" id="auth-logout-btn" style="display:none">Logout</button>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main-content">
+  <div class="app-topbar">
+    <div class="active-module-chip" id="active-module-chip">
+      <span class="active-module-dot"></span>
+      <small>Modul</small>
+      <strong id="active-module-label">SERVICE</strong>
+    </div>
+    <div class="app-topbar-spacer"></div>
+    <div class="app-topbar-actions">
+      <div class="business-dropdown-wrap">
+        <button type="button" class="topbar-icon-btn" id="topbar-notifications-btn" title="Notificari">
+          <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M13.7 21h-3.4"/></svg>
+          <span class="topbar-badge" id="topbar-notifications-badge" hidden>0</span>
+        </button>
+        <div class="business-dropdown topbar-notifications-menu" id="topbar-notifications-menu" hidden>
+          <div class="business-dropdown-head"><strong>Notificari</strong><span id="topbar-notifications-summary">Totul este la zi</span></div>
+          <button type="button" class="business-dropdown-item" id="topbar-open-chat">
+            <span class="dropdown-item-icon green"><svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg></span>
+            <span><strong>Support Chat</strong><small id="topbar-chat-summary">Niciun mesaj necitit</small></span>
+          </button>
+          <button type="button" class="business-dropdown-item update-notification-item" id="topbar-open-update" hidden>
+            <span class="dropdown-item-icon orange"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></span>
+            <span><strong>Actualizare aplicatie</strong><small id="topbar-update-summary">Versiune noua disponibila</small></span>
+          </button>
+        </div>
+      </div>
+      <div class="business-dropdown-wrap">
+        <button type="button" class="topbar-account-btn" id="topbar-account-btn">
+          <span class="account-avatar" id="topbar-account-avatar">U</span>
+          <span class="topbar-account-copy"><strong id="topbar-account-name">Neautentificat</strong><small id="topbar-account-role">Offline</small></span>
+          <svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg>
+        </button>
+        <div class="business-dropdown topbar-account-menu" id="topbar-account-menu" hidden>
+          <div class="business-dropdown-profile">
+            <span class="account-avatar" id="menu-account-avatar">U</span>
+            <span><strong id="menu-account-name">Neautentificat</strong><small id="menu-account-meta">@user</small></span>
+          </div>
+          <div class="business-dropdown-separator"></div>
+          <button type="button" class="business-dropdown-item" data-account-action="profile">
+            <span class="dropdown-item-icon blue"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span>
+            <span><strong>Profilul meu</strong><small>Nume afisat si parola</small></span>
+          </button>
+          <button type="button" class="business-dropdown-item" data-account-action="settings">
+            <span class="dropdown-item-icon orange"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.5 1A7 7 0 0 0 14 5.5L13.7 3h-4L9.3 5.5A7 7 0 0 0 7 7L4.5 6 2.5 9.5l2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5L7 17a7 7 0 0 0 2.3 1.5l.4 2.5h4l.3-2.5A7 7 0 0 0 16.5 17l2.5 1 2-3.5-2.1-1.5a7 7 0 0 0 .1-1Z"/></svg></span>
+            <span><strong>Setari aplicatie</strong><small>Administrare si preferinte</small></span>
+          </button>
+          <div class="business-dropdown-separator"></div>
+          <button type="button" class="business-dropdown-item danger" data-account-action="logout">
+            <span class="dropdown-item-icon red"><svg viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/></svg></span>
+            <span><strong>Deconectare</strong><small>Inchide sesiunea curenta</small></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- TAB: SCANNER -->
+  <div class="tab-panel active" id="tab-scanner">
+    <div class="page-header"><h1>Scanner QR</h1></div>
+    <div class="scanner-wrap">
+      <div class="scanner-icon">
+        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M17 17h3v3M14 20h3M20 14v3"/></svg>
+      </div>
+      <h2>Scanare Cod QR Client</h2>
+      <p class="scanner-hint">Scanati cu pistolul USB sau introduceti manual codul QR. Dupa verificare, clientul va fi incarcat automat si puteti deschide fisa de service.</p>
+      <div class="scanner-input-wrap">
+        <input type="text" id="qr-input" placeholder="Scanati sau scrieti codul QR..." autocomplete="off" spellcheck="false" />
+        <button class="btn-primary" id="qr-submit-btn">Verifica</button>
+      </div>
+      <div id="scanner-result"></div>
+      <p class="scanner-tip">Pistolul de scanare trimite automat Enter dupa scanare</p>
+    </div>
+  </div>
+
+  <!-- TAB: CLIENTI -->
+  <div class="tab-panel" id="tab-clients" data-client-panel-access="true">
+    <div class="page-header">
+      <h1>Clienti</h1>
+      <div class="clients-header-actions">
+        <input type="text" id="clients-search" placeholder="Cauta dupa nume, telefon..." class="search-input" />
+        <button type="button" class="btn-ghost clients-refresh-btn" id="clients-refresh-btn" title="Reincarca lista de clienti">
+          <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/><path d="M3 12A9 9 0 0 1 18.5 5.7L21 8"/><path d="M21 3v5h-5"/></svg>
+          <span>Reincarca</span>
+        </button>
+        <button type="button" class="btn-primary clients-add-btn" id="clients-add-btn">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          <span>Client nou</span>
+        </button>
+      </div>
+    </div>
+    <div class="clients-filter-strip" aria-label="Filtre clienti">
+      <button type="button" class="client-filter-chip" data-client-lifecycle-filter="active">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span>Activi</span>
+      </button>
+      <button type="button" class="client-filter-chip" data-client-lifecycle-filter="finalized">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/><circle cx="12" cy="12" r="9"/></svg>
+        <span>Finalizati</span>
+      </button>
+    </div>
+    <div class="clients-layout">
+      <div class="clients-list" id="clients-list"><div class="loading">Se incarca...</div></div>
+      <div class="client-detail" id="client-detail"><div class="empty-state">Selectati un client</div></div>
+    </div>
+  </div>
+
+  <!-- TAB: FISA DE SERVICE -->
+  <div class="tab-panel" id="tab-service" data-service-sheet-access="true">
+    <div class="page-header service-page-header">
+      <div>
+        <h1>Fise de service</h1>
+        <p class="page-subtitle">CRM pentru receptie, diagnostic, interventie si PDF-ul de predare.</p>
+      </div>
+      <div class="service-header-actions">
+        <input type="text" id="service-search" placeholder="Cauta nr fisa, client, telefon..." class="search-input" />
+        <select id="service-sort" class="service-sort-select" hidden aria-hidden="true">
+          <option value="created_at:desc">Data adaugarii ↓</option>
+          <option value="created_at:asc">Data adaugarii ↑</option>
+          <option value="updated_at:desc">Ultima modificare ↓</option>
+          <option value="updated_at:asc">Ultima modificare ↑</option>
+          <option value="sheet_number:asc">Nr fisa ↑</option>
+          <option value="sheet_number:desc">Nr fisa ↓</option>
+          <option value="client:asc">Client A-Z</option>
+          <option value="client:desc">Client Z-A</option>
+          <option value="phone:asc">Telefon / QR A-Z</option>
+          <option value="phone:desc">Telefon / QR Z-A</option>
+          <option value="total_price:desc">Pret total ↓</option>
+          <option value="total_price:asc">Pret total ↑</option>
+        </select>
+        <button class="btn-ghost" id="service-refresh-btn">Reincarca</button>
+        <button class="btn-primary service-new-btn" id="service-new-btn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M12 12v6M9 15h6"/></svg>
+          <span>Fisa noua</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="service-filter-strip" aria-label="Filtre si sortari fise">
+      <button type="button" class="service-filter-chip service-payment-filter-chip" data-service-payment-filter="incasati">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/><circle cx="12" cy="12" r="9"/></svg>
+        <span>Achitate</span>
+      </button>
+      <button type="button" class="service-filter-chip service-payment-filter-chip" data-service-payment-filter="de_incasat">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span>Neachitate</span>
+      </button>
+      <button type="button" class="service-filter-chip" data-service-sort-chip="created_at:desc">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M12 14v5M9 16l3 3 3-3"/></svg>
+        <span>Noi</span>
+      </button>
+      <button type="button" class="service-filter-chip" data-service-sort-chip="updated_at:desc">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span>Modificate</span>
+      </button>
+      <button type="button" class="service-filter-chip" data-service-sort-chip="sheet_number:asc">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>
+        <span>Nr fisa</span>
+      </button>
+      <button type="button" class="service-filter-chip" data-service-sort-chip="client:asc">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+        <span>Client</span>
+      </button>
+      <button type="button" class="service-filter-chip" data-service-sort-chip="total_price:desc">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6"/></svg>
+        <span>Pret</span>
+      </button>
+    </div>
+
+    <div class="service-table-panel">
+      <div class="service-table-summary">
+        <div>
+          <strong>Registru fise de service</strong>
+          <small>Click pe rand sau pe iconita de editare pentru adaugare/modificare in modal.</small>
+        </div>
+        <span id="service-table-count">0 fise</span>
+      </div>
+      <div class="table-responsive service-table-responsive">
+        <table class="table table-dark table-hover align-middle service-bootstrap-table">
+          <thead>
+            <tr>
+              <th scope="col"><button type="button" class="service-th-btn" data-service-column="sheet_number" data-service-label="Nr fisa">Nr fisa <span class="service-sort-indicator"></span></button></th>
+              <th scope="col"><button type="button" class="service-th-btn" data-service-column="client" data-service-label="Client">Client <span class="service-sort-indicator"></span></button></th>
+              <th scope="col"><button type="button" class="service-th-btn" data-service-column="phone" data-service-label="Telefon / QR">Telefon / QR <span class="service-sort-indicator"></span></button></th>
+              <th scope="col"><button type="button" class="service-th-btn" data-service-column="created_at" data-service-label="Data adaugarii">Data adaugarii <span class="service-sort-indicator"></span></button></th>
+              <th scope="col"><button type="button" class="service-th-btn" data-service-column="updated_at" data-service-label="Ultima modificare">Ultima modificare <span class="service-sort-indicator"></span></button></th>
+              <th scope="col"><button type="button" class="service-th-btn" data-service-column="total_price" data-service-label="Pret total">Pret total <span class="service-sort-indicator"></span></button></th>
+              <th scope="col" class="text-end">Actiuni</th>
+            </tr>
+          </thead>
+          <tbody id="service-sheets-list">
+            <tr><td colspan="7"><div class="loading">Se incarca...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="service-modal-overlay" id="service-sheet-modal" hidden>
+      <div class="service-modal-card" role="dialog" aria-modal="true" aria-labelledby="service-modal-title">
+        <button type="button" class="service-modal-close" id="service-modal-close" aria-label="Inchide fisa">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
+        <div class="service-sheet-editor" id="service-sheet-editor">
+          <div class="empty-state">Se pregateste fisa de service...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="service-signature-overlay" id="service-signature-modal" hidden>
+      <div class="service-signature-card" role="dialog" aria-modal="true" aria-labelledby="service-signature-title">
+        <div class="service-signature-header">
+          <div>
+            <span class="service-signature-kicker">Fisa de service</span>
+            <h2 id="service-signature-title">Semnare client</h2>
+            <p>Clientul semneaza in caseta folosind mouse-ul sau ecranul tactil.</p>
+          </div>
+          <button type="button" class="service-signature-close" id="service-signature-close" aria-label="Inchide semnarea">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="service-signature-canvas-wrap">
+          <canvas id="service-signature-canvas"></canvas>
+          <div class="service-signature-placeholder" id="service-signature-placeholder">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-5 1 1-5Z"/></svg>
+            <span>Semneaza aici</span>
+          </div>
+        </div>
+        <p class="service-signature-legal">Prin semnare, clientul confirma datele si conditiile din fisa de service.</p>
+        <div class="service-signature-actions">
+          <button type="button" class="btn-ghost" id="service-signature-clear">Sterge</button>
+          <button type="button" class="btn-primary" id="service-signature-save">Salveaza semnatura</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: ISTORIC -->
+  <div class="tab-panel" id="tab-history">
+    <div class="page-header history-page-header">
+      <div class="history-page-title">
+        <span class="history-page-title-icon">
+          <svg viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3"/><path d="M12 7v5l3 2"/></svg>
+        </span>
+        <h1>Istoricul tuturor modificarilor</h1>
+      </div>
+      <div class="history-header-actions">
+        <input type="text" id="history-search" placeholder="Cauta client, user, actiune..." class="search-input" />
+        <button class="btn-ghost" id="history-refresh-btn" style="white-space:nowrap">Reincarca</button>
+      </div>
+    </div>
+    <div class="history-layout">
+      <aside class="history-list-panel">
+        <button type="button" class="history-delete-launch" id="history-delete-open" data-admin-only="true">
+          <span class="history-delete-launch-icon">
+            <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg>
+          </span>
+          <span><strong>Gestionare stergere</strong><small>Sterge dupa perioada sau tot istoricul</small></span>
+          <svg class="history-delete-launch-arrow" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+        <div class="history-list" id="history-list"><div class="loading">Se incarca...</div></div>
+      </aside>
+      <div class="history-detail" id="history-detail"><div class="empty-state">Selectati o modificare</div></div>
+    </div>
+    <div class="history-delete-manager" id="history-delete-manager" hidden>
+      <div class="history-delete-manager-card" role="dialog" aria-modal="true" aria-labelledby="history-delete-manager-title">
+        <header class="history-delete-manager-head">
+          <span class="history-delete-manager-icon">
+            <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg>
+          </span>
+          <span><h2 id="history-delete-manager-title">Stergere istoric</h2><small>Alege exact valorile pe care doresti sa le elimini</small></span>
+          <button type="button" class="history-delete-manager-close" id="history-delete-manager-close" title="Inchide" aria-label="Inchide">
+            <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </header>
+        <div class="history-delete-mode-grid">
+          <button type="button" class="history-delete-mode active" id="history-delete-mode-range" data-mode="range">
+            <span><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="M8 15h3M14 15h2"/></svg></span>
+            <strong>Pe perioada</strong>
+            <small>Sterge doar valorile dintre doua date</small>
+          </button>
+          <button type="button" class="history-delete-mode danger" id="history-delete-mode-all" data-mode="all">
+            <span><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></span>
+            <strong>Tot istoricul</strong>
+            <small>Sterge definitiv toate valorile</small>
+          </button>
+        </div>
+        <div class="history-delete-range-panel" id="history-delete-range-panel">
+          <label class="history-date-field">
+            <span>Data de inceput</span>
+            <span class="history-date-control">
+              <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
+              <input type="date" id="history-delete-from" />
+            </span>
+          </label>
+          <span class="history-date-separator"><svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span>
+          <label class="history-date-field">
+            <span>Data finala</span>
+            <span class="history-date-control">
+              <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
+              <input type="date" id="history-delete-to" />
+            </span>
+          </label>
+        </div>
+        <div class="history-delete-manager-warning" id="history-delete-manager-warning">
+          <svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.7 2.5 17.2A2 2 0 0 0 4.2 20h15.6a2 2 0 0 0 1.7-2.8L13.7 3.7a2 2 0 0 0-3.4 0Z"/></svg>
+          <span id="history-delete-manager-warning-text">Vor fi sterse numai modificarile din perioada selectata.</span>
+        </div>
+        <footer class="history-delete-manager-actions">
+          <button type="button" class="history-delete-manager-cancel" id="history-delete-manager-cancel">Renunta</button>
+          <button type="button" class="history-delete-manager-submit" id="history-delete-submit">
+            <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M9 11h6M9 15h4"/></svg>
+            <span>Sterge</span>
+          </button>
+        </footer>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: STATISTICI -->
+  <div class="tab-panel" id="tab-stats">
+    <div class="page-header stats-page-header">
+      <div class="stats-page-title">
+        <span class="stats-page-title-icon">
+          <svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>
+        </span>
+        <div>
+          <h1>Statistici</h1>
+          <span>Prezentare generala a performantelor afacerii tale</span>
+        </div>
+      </div>
+      <div class="stats-header-actions">
+        <div class="stats-period-selector" id="stats-period-selector" aria-label="Selecteaza perioada">
+          <button type="button" data-period="7d">7 zile</button>
+          <button type="button" data-period="30d" class="active">30 zile</button>
+          <button type="button" data-period="90d">90 zile</button>
+          <button type="button" data-period="year">Anul acesta</button>
+          <button type="button" data-period="all">Total</button>
+        </div>
+        <button type="button" class="stats-custom-toggle" id="stats-custom-toggle">
+          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
+          <span>Personalizat</span>
+        </button>
+      </div>
+    </div>
+    <div class="stats-custom-range" id="stats-custom-range" hidden>
+      <label>De la <input type="date" id="stats-date-from" /></label>
+      <label>Pana la <input type="date" id="stats-date-to" /></label>
+      <button type="button" class="btn-primary" id="stats-custom-apply">Aplica perioada</button>
+    </div>
+    <div class="stats-content" id="stats-content"><div class="loading">Se incarca...</div></div>
+  </div>
+
+  <!-- TAB: PARTENERI -->
+  <div class="tab-panel" id="tab-partners" data-partners-access="true">
+    <div class="partners-page">
+      <header class="partners-header">
+        <div class="partners-title">
+          <span class="partners-title-icon">
+            <svg viewBox="0 0 24 24"><path d="M8 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="M16 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/><path d="M2 21a6 6 0 0 1 12 0"/><path d="M14 18a5 5 0 0 1 8 3"/></svg>
+          </span>
+          <div>
+            <h1>Administrare Parteneri</h1>
+            <span>Profiluri de afiliere si colaboratori pentru manopera</span>
+          </div>
+        </div>
+        <div class="partners-tabs" id="partners-tabs">
+          <button type="button" class="active" data-partner-tab="profiles">Profiluri afiliere</button>
+          <button type="button" data-partner-tab="collaborators">Colaboratori</button>
+        </div>
+      </header>
+      <div class="partners-layout">
+        <section class="partners-panel partners-form-panel">
+          <div class="partners-panel-head">
+            <div>
+              <span class="partners-panel-icon" id="partners-form-icon">%</span>
+              <span><strong id="partners-form-title">Profil afiliere</strong><small id="partners-form-subtitle">Comision calculat din venitul clientului</small></span>
+            </div>
+            <button type="button" class="btn-ghost partners-small-btn" id="partners-reset-btn">Goleste</button>
+          </div>
+          <form id="partners-form" class="partners-form">
+            <input type="hidden" id="partner-id" />
+            <div class="field">
+              <label for="partner-name">Nume</label>
+              <input type="text" id="partner-name" placeholder="Ex: Florin" required />
+            </div>
+            <div class="field">
+              <label for="partner-role">Rol</label>
+              <input type="text" id="partner-role" placeholder="Ex: Afiliat / Mecanic / Electrician" />
+            </div>
+            <div class="field">
+              <label for="partner-phone">Numar de telefon <span class="field-optional">Optional</span></label>
+              <div class="partners-phone-field">
+                <span class="partners-phone-icon">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.4 2.6a2 2 0 0 1-.6 1.8L7.6 9.4a16 16 0 0 0 7 7l1.3-1.3a2 2 0 0 1 1.8-.6l2.6.4a2 2 0 0 1 1.7 2Z"/></svg>
+                </span>
+                <input type="tel" inputmode="tel" autocomplete="tel" id="partner-phone" placeholder="0722 000 000" />
+                <span class="partners-phone-country">RO</span>
+              </div>
+            </div>
+            <div class="field">
+              <label for="partner-email">Email <span class="field-optional">Optional</span></label>
+              <input type="email" id="partner-email" placeholder="Ex: partener@email.ro" />
+            </div>
+            <div class="field partners-percentage-field" id="partner-percentage-field">
+              <label for="partner-percentage">Procent comision</label>
+              <input type="number" id="partner-percentage" min="0" max="100" step="0.01" placeholder="10" />
+            </div>
+            <div class="field">
+              <label for="partner-color">Culoare</label>
+              <div class="partners-color-row">
+                <input type="color" id="partner-color" value="#FF6B00" />
+                <input type="text" id="partner-color-text" value="#FF6B00" maxlength="7" />
+              </div>
+            </div>
+            <div class="partners-form-actions">
+              <button type="submit" class="btn-primary" id="partners-save-btn">Salveaza</button>
+            </div>
+          </form>
+        </section>
+        <section class="partners-panel partners-list-panel">
+          <div class="partners-panel-head">
+            <div>
+              <span class="partners-panel-icon list"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></span>
+              <span><strong id="partners-list-title">Profiluri create</strong><small id="partners-list-subtitle">Sincronizate din baza MySQL</small></span>
+            </div>
+            <button type="button" class="btn-ghost partners-small-btn" id="partners-refresh-btn">Reincarca</button>
+          </div>
+          <div class="partners-summary" id="partners-summary"></div>
+          <div class="partners-list" id="partners-list"><div class="loading">Se incarca...</div></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: CHAT -->
+  <div class="tab-panel" id="tab-chat">
+    <div class="page-header">
+      <h1>Chat Support</h1>
+      <button class="btn-ghost" id="chat-refresh-btn">Actualizeaza</button>
+    </div>
+
+    <div class="chat-layout" id="chat-layout">
+      <div class="chat-contacts" id="chat-contacts"></div>
+      <div class="chat-panel">
+        <div class="chat-panel-header">
+          <div>
+            <div class="chat-title" id="chat-title">Selecteaza un user</div>
+            <div class="chat-subtitle" id="chat-subtitle">Conversatiile utilizatorilor apar aici.</div>
+          </div>
+          <div class="chat-header-actions">
+            <button type="button" class="btn-ghost btn-sm chat-leave-btn" id="chat-leave-btn" style="display:none" title="Paraseste conversatia">
+              <svg viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/></svg>
+              Paraseste
+            </button>
+            <button type="button" class="btn-danger btn-sm chat-delete-btn" id="chat-delete-btn" style="display:none" title="Sterge conversatia">
+              <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14M10 10v6m4-6v6"/></svg>
+              Sterge conversatia
+            </button>
+            <button type="button" class="btn-ghost btn-sm chat-close-btn" id="chat-close-btn" style="display:none" title="Inchide conversatia">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></svg>
+              Inchide
+            </button>
+            <button type="button" class="btn-primary btn-sm chat-accept-btn" id="chat-accept-btn" style="display:none">Accepta chat</button>
+          </div>
+        </div>
+        <div class="chat-messages" id="chat-messages"></div>
+        <form class="chat-compose" id="chat-compose">
+          <textarea id="chat-message-input" rows="2" placeholder="Scrie mesaj..."></textarea>
+          <button type="submit" class="btn-primary">Trimite</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: SETARI -->
+  <div class="tab-panel" id="tab-settings">
+    <div class="page-header">
+      <h1>Setari</h1>
+      <button type="button" class="btn-ghost" id="users-refresh-btn" data-admin-only="true">Actualizeaza useri</button>
+    </div>
+    <div class="settings-layout">
+      <div class="settings-column">
+        <div class="settings-panel whatsapp-messages-panel">
+          <div class="settings-panel-title">
+            <span class="settings-panel-icon whatsapp">
+              <svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 9.6 9.6 0 0 1-4-.9L3 21l1.8-4.5A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8.5 8.5c.5 3 2 4.5 5 5"/></svg>
+            </span>
+            <div><h2>WhatsApp Predefined Messages</h2><small>shared client messages</small></div>
+          </div>
+          <form id="whatsapp-message-form" class="user-form whatsapp-message-form">
+            <input type="hidden" id="whatsapp-message-id" />
+            <div class="whatsapp-composer-intro">
+              <span class="whatsapp-composer-status"></span>
+              <span>Mesajele salvate sunt disponibile instant pe desktop si mobil.</span>
+            </div>
+            <div class="field whatsapp-field">
+              <label for="whatsapp-message-title">Titlu mesaj</label>
+              <div class="whatsapp-input-shell">
+                <span class="whatsapp-input-icon">
+                  <svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
+                </span>
+                <input id="whatsapp-message-title" maxlength="120" placeholder="Ex: Confirmare programare" required />
+              </div>
+            </div>
+            <div class="field whatsapp-field">
+              <div class="whatsapp-field-label-row">
+                <label for="whatsapp-message-body">Continut mesaj</label>
+                <span id="whatsapp-message-count">0 caractere</span>
+              </div>
+              <div class="whatsapp-input-shell whatsapp-textarea-shell">
+                <span class="whatsapp-input-icon">
+                  <svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 9.6 9.6 0 0 1-4-.9L3 21l1.8-4.5A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8 10h8"/><path d="M8 14h5"/></svg>
+                </span>
+                <textarea id="whatsapp-message-body" rows="5" placeholder="Scrie mesajul predefinit..." required></textarea>
+              </div>
+              <div class="whatsapp-template-hint"><strong>{{nume}}</strong> completeaza automat numele clientului.</div>
+            </div>
+            <div class="form-actions">
+              <button class="btn-primary whatsapp-save-btn" type="submit">
+                <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+                <span>Salveaza mesaj</span>
+              </button>
+              <button class="btn-ghost" id="whatsapp-message-reset" type="button">Goleste</button>
+            </div>
+          </form>
+          <div id="whatsapp-messages-list" class="whatsapp-messages-list"></div>
+        </div>
+        <div class="settings-panel expense-settings-panel" id="expense-settings-panel">
+          <div class="settings-panel-title">
+            <span class="settings-panel-icon expense">
+              <svg viewBox="0 0 24 24"><path d="M6 3h12v18H6z"/><path d="M9 7h6M9 11h6M9 15h3"/></svg>
+            </span>
+            <div><h2>Cheltuieli</h2><small>optiuni disponibile pe fiecare client</small></div>
+          </div>
+          <form id="expense-settings-form" class="expense-settings-form">
+            <input type="hidden" id="expense-settings-id" />
+            <div class="expense-settings-fields">
+              <div class="field">
+                <label for="expense-settings-name">Denumire</label>
+                <input type="text" id="expense-settings-name" placeholder="Ex: Transport, Curier, Consumabile" required />
+              </div>
+              <div class="field expense-settings-color-field">
+                <label for="expense-settings-color">Culoare</label>
+                <input type="color" id="expense-settings-color" value="#EF4444" />
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn-primary" id="expense-settings-save">Adauga cheltuiala</button>
+              <button type="button" class="btn-ghost" id="expense-settings-reset">Goleste</button>
+            </div>
+            <div class="error-box" id="expense-settings-error" hidden></div>
+          </form>
+          <div class="expense-settings-list-head">
+            <span>Cheltuieli configurate</span>
+            <strong id="expense-settings-count">0</strong>
+          </div>
+          <div class="expense-settings-list" id="expense-settings-list"></div>
+        </div>
+        <div class="settings-panel price-presets-panel" id="price-presets-panel" data-partners-access="true">
+          <div class="settings-panel-title">
+            <span class="settings-panel-icon price">
+              <svg viewBox="0 0 24 24"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </span>
+            <div><h2>Preturi predefinite</h2><small>apar la scanare si in financiar</small></div>
+          </div>
+          <form id="price-preset-form" class="expense-settings-form">
+            <input type="hidden" id="price-preset-id" />
+            <div class="expense-settings-fields">
+              <div class="field">
+                <label for="price-preset-label">Label</label>
+                <input type="text" id="price-preset-label" maxlength="120" placeholder="Ex: Revizie standard" required />
+              </div>
+              <div class="field">
+                <label for="price-preset-price">Pret (RON)</label>
+                <input type="number" id="price-preset-price" min="0" step="0.01" placeholder="0.00" required />
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn-primary" id="price-preset-save">Adauga pret</button>
+              <button type="button" class="btn-ghost" id="price-preset-reset">Goleste</button>
+            </div>
+            <div class="error-box" id="price-preset-error" hidden></div>
+          </form>
+          <div class="expense-settings-list-head">
+            <span>Preturi salvate</span>
+            <strong id="price-preset-count">0</strong>
+          </div>
+          <div class="expense-settings-list" id="price-preset-list"></div>
+        </div>
+        <div class="settings-panel company-settings-panel" id="company-settings-panel" data-partners-access="true">
+          <div class="settings-panel-title">
+            <span class="settings-panel-icon company">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 21h18" />
+                <path d="M5 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16" />
+                <path d="M9 7h1" />
+                <path d="M14 7h1" />
+                <path d="M9 11h1" />
+                <path d="M14 11h1" />
+                <path d="M9 15h1" />
+                <path d="M14 15h1" />
+              </svg>
+            </span>
+            <div><h2>Datele firmei</h2><small>date fiscale si contact</small></div>
+          </div>
+          <form id="company-settings-form" class="company-settings-form">
+            <div class="field">
+              <label for="company-name">Denumire firma</label>
+              <input type="text" id="company-name" maxlength="255" placeholder="Ex: Cab IT Expert SRL" />
+            </div>
+            <div class="form-grid">
+              <div class="field">
+                <label for="company-fiscal-code">CIF / CUI</label>
+                <input type="text" id="company-fiscal-code" maxlength="80" placeholder="Ex: RO..." />
+              </div>
+              <div class="field">
+                <label for="company-registration-number">Nr. Reg. Com.</label>
+                <input type="text" id="company-registration-number" maxlength="80" placeholder="Ex: J..." />
+              </div>
+            </div>
+            <div class="field">
+              <label for="company-address">Adresa</label>
+              <textarea id="company-address" rows="3" maxlength="2000" placeholder="Sediu / punct de lucru"></textarea>
+            </div>
+            <div class="form-grid">
+              <div class="field">
+                <label for="company-phone">Telefon</label>
+                <input type="text" id="company-phone" maxlength="50" placeholder="Ex: 07..." />
+              </div>
+              <div class="field">
+                <label for="company-email">Email</label>
+                <input type="email" id="company-email" maxlength="255" placeholder="contact@firma.ro" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="company-website">Website</label>
+              <input type="text" id="company-website" maxlength="255" placeholder="https://firma.ro" />
+            </div>
+            <div class="form-grid">
+              <div class="field">
+                <label for="company-bank-name">Banca</label>
+                <input type="text" id="company-bank-name" maxlength="255" placeholder="Ex: Banca..." />
+              </div>
+              <div class="field">
+                <label for="company-iban">IBAN</label>
+                <input type="text" id="company-iban" maxlength="80" placeholder="RO..." />
+              </div>
+            </div>
+            <div class="field">
+              <label>Stampila firma</label>
+              <div class="company-stamp-box">
+                <div class="company-stamp-preview" id="company-stamp-preview">
+                  <span>Nu ai selectat stampila</span>
+                </div>
+                <div class="company-stamp-actions">
+                  <input type="file" id="company-stamp-file" accept="image/png,image/jpeg" hidden />
+                  <button type="button" class="btn-ghost" id="company-stamp-pick-btn">Adauga fisier</button>
+                  <button type="button" class="btn-ghost danger" id="company-stamp-clear-btn" hidden>Sterge stampila</button>
+                </div>
+                <small class="field-hint">Stampila se va aseza in chenarul din dreapta jos pe pagina 2 a fisei.</small>
+              </div>
+            </div>
+            <div id="company-settings-status" class="system-db-status">Datele firmei sunt sincronizate prin API.</div>
+            <div class="form-actions">
+              <button type="submit" class="btn-primary" id="company-settings-save-btn">Salveaza datele firmei</button>
+              <button type="button" class="btn-ghost" id="company-settings-load-btn">Reincarca</button>
+            </div>
+          </form>
+        </div>
+        <div class="settings-panel version-panel">
+          <div class="settings-panel-title">
+            <span class="settings-panel-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+                <path d="M9 7h6" />
+                <path d="M9 11h4" />
+                <path d="M9 17h6" />
+              </svg>
+            </span>
+            <div>
+              <h2>Version App</h2>
+              <small>build & runtime</small>
+            </div>
+          </div>
+          <div class="version-brand-row">
+            <img src="../assets/logo.png" alt="G-Trots logo" class="version-logo" />
+            <div>
+              <div class="version-name">G-Trots CRM</div>
+              <div class="version-build">CRM Service</div>
+            </div>
+          </div>
+          <div class="settings-data-grid">
+            <div class="settings-data-card">
+              <span class="data-icon">
+                <svg viewBox="0 0 24 24"><path d="M20 7 10 17l-5-5" /></svg>
+              </span>
+              <span>Versiune</span>
+              <strong id="app-current-version">1.2.33</strong>
+            </div>
+            <div class="settings-data-card">
+              <span class="data-icon">
+                <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" /></svg>
+              </span>
+              <span>Platforma</span>
+              <strong>DESKTOP</strong>
+            </div>
+            <div class="settings-data-card">
+              <span class="data-icon">
+                <svg viewBox="0 0 24 24"><path d="M12 3v18" /><path d="M5 8h14" /><path d="M5 16h14" /><path d="M7 3h10l2 5-2 5 2 5-2 3H7l-2-3 2-5-2-5Z" /></svg>
+              </span>
+              <span>API</span>
+              <strong>cab-it.ro/trotty-api</strong>
+            </div>
+            <div class="settings-data-card">
+              <span class="data-icon success">
+                <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /><path d="m9 12 2 2 4-5" /></svg>
+              </span>
+              <span>Status</span>
+              <strong class="version-ok">Activ</strong>
+            </div>
+          </div>
+          <div class="app-update-card" id="app-update-card" data-status="idle">
+            <div class="app-update-head">
+              <span class="app-update-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3v12" />
+                  <path d="m7 10 5 5 5-5" />
+                  <path d="M5 21h14" />
+                </svg>
+              </span>
+              <div class="app-update-copy">
+                <strong>Update App</strong>
+                <small id="app-update-message">Poti verifica daca exista o versiune noua.</small>
+              </div>
+              <span class="app-update-badge" id="app-update-badge">Pregatit</span>
+            </div>
+            <div class="app-update-progress" id="app-update-progress" hidden>
+              <div class="app-update-progress-track">
+                <span id="app-update-progress-fill"></span>
+              </div>
+              <strong id="app-update-progress-label">0%</strong>
+            </div>
+            <div class="app-update-actions">
+              <button type="button" class="btn-ghost" id="app-update-check-btn">
+                Verifica actualizari
+              </button>
+              <button type="button" class="btn-primary" id="app-update-download-btn" hidden>
+                Descarca update
+              </button>
+              <button type="button" class="btn-primary app-update-install-btn" id="app-update-install-btn" hidden>
+                Instaleaza si reporneste
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-panel system-db-panel" data-admin-only="true">
+          <div class="settings-panel-title">
+            <span class="settings-panel-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3c4.97 0 9 1.57 9 3.5S16.97 10 12 10 3 8.43 3 6.5 7.03 3 12 3Z" />
+                <path d="M21 6.5v5c0 1.93-4.03 3.5-9 3.5s-9-1.57-9-3.5v-5" />
+                <path d="M21 11.5v5c0 1.93-4.03 3.5-9 3.5s-9-1.57-9-3.5v-5" />
+              </svg>
+            </span>
+            <div>
+              <h2>System Database Information</h2>
+              <small>api & mysql automation</small>
+            </div>
+          </div>
+          <form id="system-db-form" class="system-db-form">
+            <div class="field">
+              <label>API URL</label>
+              <input type="url" id="system-api-url" autocomplete="off" placeholder="https://cab-it.ro/trotty-api" required />
+            </div>
+            <div class="field">
+              <label>API Key</label>
+              <input type="text" id="system-api-key" autocomplete="off" spellcheck="false" required />
+            </div>
+            <div class="field">
+              <label>Adresa fise service salvate</label>
+              <input type="url" id="system-service-sheet-pdf-base-url" autocomplete="off" spellcheck="false" placeholder="https://g-trots.ro/fs/" required />
+            </div>
+            <div class="form-grid">
+              <div class="field">
+                <label>DB Host</label>
+                <input type="text" id="system-db-host" autocomplete="off" placeholder="localhost" required />
+              </div>
+              <div class="field">
+                <label>DB Name</label>
+                <input type="text" id="system-db-name" autocomplete="off" spellcheck="false" required />
+              </div>
+            </div>
+            <div class="form-grid">
+              <div class="field">
+                <label>DB User</label>
+                <input type="text" id="system-db-user" autocomplete="off" spellcheck="false" required />
+              </div>
+              <div class="field">
+                <label>DB Password</label>
+                <div class="password-visibility-wrap">
+                  <input type="password" id="system-db-pass" autocomplete="new-password" placeholder="Lasa gol ca sa pastrezi parola" />
+                  <button type="button" class="password-visibility-btn" id="system-db-pass-toggle" aria-label="Afiseaza parola">
+                    <svg class="eye-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg>
+                    <svg class="eye-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18" /><path d="M10.6 10.6a3 3 0 0 0 3.8 3.8" /><path d="M9.9 5.2A10.7 10.7 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2" /><path d="M6.1 6.8C3.5 8.6 2 12 2 12s3.5 7 10 7a10.8 10.8 0 0 0 4.1-.8" /></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <label class="check-row system-check-row">
+              <input type="checkbox" id="system-run-schema" checked />
+              <span>Ruleaza schema.sql automat</span>
+            </label>
+            <div id="system-db-status" class="system-db-status">Conectat la configuratia curenta.</div>
+            <div class="form-actions">
+              <button type="submit" class="btn-primary" id="system-db-save-btn">Salveaza sistem</button>
+              <button type="button" class="btn-ghost" id="system-db-load-btn">Reincarca</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="settings-panel login-system-panel" data-admin-only="true">
+          <div class="settings-panel-title">
+            <span class="settings-panel-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M19 8v6" />
+                <path d="M22 11h-6" />
+              </svg>
+            </span>
+            <div>
+              <h2>Users Login System</h2>
+              <small>roles & access</small>
+            </div>
+          </div>
+          <form id="user-form" class="user-form">
+            <input type="hidden" id="user-id" />
+            <div class="field">
+              <label>Nume afisat</label>
+              <input type="text" id="user-display-name" placeholder="Ex: Mobile 1" required />
+            </div>
+            <div class="field">
+              <label>User login</label>
+              <input type="text" id="user-username" autocomplete="off" placeholder="mobile1" required />
+            </div>
+            <div class="field">
+              <label>Parola</label>
+              <input type="password" id="user-password" autocomplete="new-password" placeholder="Completeaza doar la creare sau resetare" />
+            </div>
+            <div class="form-grid">
+              <div class="field">
+                <label>Rol</label>
+                <select id="user-role">
+                  <option value="user">User</option>
+                  <option value="manager">Manager</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Acces platforma</label>
+                <select id="user-platform">
+                  <option value="mobile">Mobile</option>
+                  <option value="desktop">Desktop</option>
+                  <option value="both">Desktop + Mobil</option>
+                </select>
+              </div>
+            </div>
+            <label class="check-row">
+              <input type="checkbox" id="user-active" checked />
+              <span>Cont activ</span>
+            </label>
+            <label class="check-row" id="user-support-chat-row" style="display:none">
+              <input type="checkbox" id="user-support-chat" />
+              <span>Acces Support Chat</span>
+            </label>
+            <label class="check-row" id="user-client-panel-row" style="display:none">
+              <input type="checkbox" id="user-client-panel" checked />
+              <span>Afiseaza panoul Clienti</span>
+            </label>
+            <label class="check-row" id="user-client-edit-row" style="display:none">
+              <input type="checkbox" id="user-client-edit" />
+              <span>Permite editarea clientilor</span>
+            </label>
+            <label class="check-row" id="user-service-sheet-row" style="display:none">
+              <input type="checkbox" id="user-service-sheet" checked />
+              <span>Afiseaza fisele de service</span>
+            </label>            <label class="check-row" id="user-client-financial-row" style="display:none">
+              <input type="checkbox" id="user-client-financial" checked />
+              <span>Vizualizare costuri clienti</span>
+            </label>
+            <div id="user-error" class="error-box" style="display:none"></div>
+            <div class="form-actions">
+              <button type="submit" class="btn-primary" id="user-save-btn">Salveaza user</button>
+              <button type="button" class="btn-ghost" id="user-reset-btn">Goleste</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="settings-panel settings-panel-wide" data-admin-only="true">
+        <div class="settings-list-header">
+          <div class="settings-panel-title">
+            <span class="settings-panel-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 6h13" />
+                <path d="M8 12h13" />
+                <path d="M8 18h13" />
+                <path d="M3 6h.01" />
+                <path d="M3 12h.01" />
+                <path d="M3 18h.01" />
+              </svg>
+            </span>
+            <div>
+              <h2>Useri creati</h2>
+              <small id="users-summary-label">live database</small>
+            </div>
+          </div>
+          <div class="settings-mini-stats" id="users-mini-stats"></div>
+        </div>
+        <div id="users-list" class="users-list"><div class="loading">Se incarca...</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-whatsapp-admin">
+    <div class="page-header whatsapp-admin-page-header">
+      <div class="whatsapp-admin-page-title">
+        <span class="whatsapp-admin-page-icon">
+          <svg class="whatsapp-admin-brand-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M21 11.5a8.5 8.5 0 0 1-12.56 7.47L3 21l2.03-5.44A8.5 8.5 0 1 1 21 11.5Z"/>
+            <path d="M8.35 7.8c.22-.48.45-.49.77-.5h.55c.2 0 .4.08.5.36l.76 1.82c.08.2.05.38-.08.55l-.57.72c-.13.16-.18.3-.04.53.62 1.06 1.53 1.94 2.62 2.5.23.13.37.1.51-.07l.81-.96c.17-.2.35-.24.57-.15l1.9.9c.24.11.39.17.44.31.05.14.04.8-.19 1.5-.23.68-1.32 1.3-1.85 1.39-.5.08-1.12.12-1.81-.1a12 12 0 0 1-2.2-1.01 9.8 9.8 0 0 1-3.68-3.6c-.92-1.59-.98-2.72-.78-3.37Z"/>
+          </svg>
+        </span>
+        <div>
+          <h1>Administrare Mesaje WhatsApp</h1>
+          <div class="page-header-sub">Biblioteci private de mesaje pentru fiecare cont</div>
+        </div>
+      </div>
+      <button class="btn-ghost whatsapp-admin-refresh-btn" id="whatsapp-admin-refresh" title="Actualizeaza datele">
+        <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0 2 5"/><path d="M20 4v7h-7"/></svg>
+        <span>Actualizeaza</span>
+      </button>
+    </div>
+    <div class="whatsapp-admin-layout">
+      <aside class="whatsapp-admin-users">
+        <div class="whatsapp-admin-section-head">
+          <div>
+            <strong>Utilizatori</strong>
+            <span id="whatsapp-admin-users-subtitle">Selecteaza contul administrat</span>
+          </div>
+          <span id="whatsapp-admin-users-count">0</span>
+        </div>
+        <div class="whatsapp-admin-user-tools">
+          <div class="whatsapp-admin-search">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+            <input type="text" id="whatsapp-admin-user-search" placeholder="Cauta utilizator..." />
+            <button type="button" id="whatsapp-admin-user-search-clear" title="Sterge cautarea">
+              <svg viewBox="0 0 24 24"><path d="m6 6 12 12"/><path d="m18 6-12 12"/></svg>
+            </button>
+          </div>
+          <div class="whatsapp-admin-platform-filter" id="whatsapp-admin-platform-filter">
+            <button type="button" class="active" data-platform="all">Toti</button>
+            <button type="button" data-platform="desktop">Desktop</button>
+            <button type="button" data-platform="mobile">Mobile</button>
+          </div>
+        </div>
+        <div id="whatsapp-admin-users-list" class="whatsapp-admin-users-list"></div>
+      </aside>
+      <section class="whatsapp-admin-workspace">
+        <div id="whatsapp-admin-empty" class="whatsapp-admin-empty">
+          <span class="settings-panel-icon whatsapp">
+            <svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 9.6 9.6 0 0 1-4-.9L3 21l1.8-4.5A8.5 8.5 0 1 1 21 11.5Z"/></svg>
+          </span>
+          <strong>Selecteaza un utilizator</strong>
+          <span>Vei putea administra mesajele WhatsApp private ale contului.</span>
+        </div>
+        <div id="whatsapp-admin-content" style="display:none">
+          <div class="whatsapp-admin-user-head">
+            <div class="whatsapp-admin-avatar" id="whatsapp-admin-avatar">U</div>
+            <div class="whatsapp-admin-user-identity">
+              <h2 id="whatsapp-admin-user-name">Utilizator</h2>
+              <span id="whatsapp-admin-user-meta">@user</span>
+            </div>
+            <div class="whatsapp-admin-user-head-stats">
+              <div class="whatsapp-admin-total"><strong id="whatsapp-admin-total">0</strong><span>mesaje</span></div>
+              <button type="button" class="btn-primary whatsapp-admin-new-btn" id="whatsapp-admin-new-message">
+                <svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                <span>Mesaj nou</span>
+              </button>
+            </div>
+          </div>
+          <div class="whatsapp-admin-grid">
+            <form id="whatsapp-admin-form" class="whatsapp-admin-editor">
+              <input type="hidden" id="whatsapp-admin-message-id" />
+              <div class="whatsapp-admin-editor-head">
+                <div>
+                  <div class="whatsapp-admin-editor-title" id="whatsapp-admin-editor-title">Mesaj nou</div>
+                  <span id="whatsapp-admin-editor-subtitle">Va fi salvat doar pentru utilizatorul selectat.</span>
+                </div>
+                <span class="whatsapp-admin-editor-state" id="whatsapp-admin-editor-state">Nou</span>
+              </div>
+              <div class="field">
+                <label for="whatsapp-admin-message-title">Titlu mesaj</label>
+                <div class="whatsapp-admin-field-shell">
+                  <svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
+                  <input id="whatsapp-admin-message-title" maxlength="120" placeholder="Ex: Confirmare programare" required />
+                </div>
+              </div>
+              <div class="field">
+                <div class="whatsapp-admin-label-row">
+                  <label for="whatsapp-admin-message-body">Continut mesaj</label>
+                  <span id="whatsapp-admin-message-count">0 caractere</span>
+                </div>
+                <div class="whatsapp-admin-field-shell whatsapp-admin-field-shell-textarea">
+                  <svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 9.6 9.6 0 0 1-4-.9L3 21l1.8-4.5A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8 10h8"/><path d="M8 14h5"/></svg>
+                  <textarea id="whatsapp-admin-message-body" rows="7" placeholder="Scrie mesajul pentru utilizator..." required></textarea>
+                </div>
+              </div>
+              <div class="whatsapp-template-hint"><strong>{{nume}}</strong> completeaza automat numele clientului.</div>
+              <div class="form-actions">
+                <button type="submit" class="btn-primary whatsapp-save-btn">
+                  <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+                  <span id="whatsapp-admin-save-label">Salveaza mesaj</span>
+                </button>
+                <button type="button" class="btn-ghost" id="whatsapp-admin-reset">Anuleaza</button>
+              </div>
+            </form>
+            <div class="whatsapp-admin-messages-wrap">
+              <div class="whatsapp-admin-messages-head">
+                <div>
+                  <div class="whatsapp-admin-editor-title">Mesajele utilizatorului</div>
+                  <span>Click pe un mesaj pentru previzualizare.</span>
+                </div>
+                <div class="whatsapp-admin-search whatsapp-admin-message-search">
+                  <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+                  <input type="text" id="whatsapp-admin-message-search" placeholder="Cauta..." />
+                </div>
+              </div>
+              <div id="whatsapp-admin-messages-list" class="whatsapp-admin-messages-list"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- MODUL SHOP -->
+  <div class="tab-panel shop-tab-panel" id="tab-shop-dashboard">
+    <div class="shop-page-scroll">
+      <section class="shop-hero">
+        <div class="shop-hero-copy">
+          <span class="shop-kicker">MODUL NOU G-TROTS</span>
+          <h1>SHOP</h1>
+          <p>Spatiul central pentru comenzi, produse, stoc si facturi. Structura este pregatita pentru urmatoarele functii comerciale.</p>
+          <span class="shop-ready-badge"><i></i> Structura initiala pregatita</span>
+        </div>
+        <div class="shop-hero-visual" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M6 8h12l1 13H5L6 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></svg>
+        </div>
+      </section>
+
+      <div class="shop-section-head">
+        <div><span>SPATII DE LUCRU</span><h2>Administrare magazin</h2></div>
+        <small>Alege o zona pentru a continua</small>
+      </div>
+
+      <section class="shop-area-grid">
+        <button type="button" class="shop-area-card blue" data-shop-open="shop-orders">
+          <span class="shop-area-icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="20" r="1"/><circle cx="19" cy="20" r="1"/><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L21 8H7"/></svg></span>
+          <span class="shop-area-copy"><small>VANZARI</small><strong>Comenzi</strong><em>Urmareste fluxul si statusul comenzilor.</em></span>
+          <span class="shop-area-arrow">&rarr;</span>
+        </button>
+        <button type="button" class="shop-area-card purple" data-shop-open="shop-products">
+          <span class="shop-area-icon"><svg viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></svg></span>
+          <span class="shop-area-copy"><small>CATALOG</small><strong>Produse</strong><em>Organizeaza produsele, preturile si detaliile.</em></span>
+          <span class="shop-area-arrow">&rarr;</span>
+        </button>
+        <button type="button" class="shop-area-card green" data-shop-open="shop-inventory">
+          <span class="shop-area-icon"><svg viewBox="0 0 24 24"><path d="M21 8 12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg></span>
+          <span class="shop-area-copy"><small>INVENTAR</small><strong>Stoc</strong><em>Controleaza cantitatile, miscarile si alertele.</em></span>
+          <span class="shop-area-arrow">&rarr;</span>
+        </button>
+        <button type="button" class="shop-area-card amber" data-shop-open="shop-invoices">
+          <span class="shop-area-icon"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span>
+          <span class="shop-area-copy"><small>DOCUMENTE</small><strong>Facturi</strong><em>Gestioneaza facturile si situatia incasarilor.</em></span>
+          <span class="shop-area-arrow">&rarr;</span>
+        </button>
+      </section>
+    </div>
+  </div>
+
+  <div class="tab-panel shop-tab-panel" id="tab-shop-orders">
+    <div class="shop-placeholder-page">
+      <button type="button" class="shop-back-btn" data-shop-open="shop-dashboard">&larr; Panou SHOP</button>
+      <div class="shop-placeholder-card blue">
+        <span class="shop-area-icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="20" r="1"/><circle cx="19" cy="20" r="1"/><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L21 8H7"/></svg></span>
+        <span class="shop-kicker">SHOP / VANZARI</span><h1>Comenzi</h1>
+        <p>Zona este pregatita pentru lista comenzilor, statusuri, clienti si totaluri.</p>
+        <span class="shop-coming-soon">URMEAZA SA FIE CONSTRUIT</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel shop-tab-panel" id="tab-shop-products">
+    <div class="shop-placeholder-page">
+      <button type="button" class="shop-back-btn" data-shop-open="shop-dashboard">&larr; Panou SHOP</button>
+      <div class="shop-placeholder-card purple">
+        <span class="shop-area-icon"><svg viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></svg></span>
+        <span class="shop-kicker">SHOP / CATALOG</span><h1>Produse</h1>
+        <p>Zona este pregatita pentru catalog, categorii, preturi, coduri si imagini.</p>
+        <span class="shop-coming-soon">URMEAZA SA FIE CONSTRUIT</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel shop-tab-panel" id="tab-shop-inventory">
+    <div class="shop-placeholder-page">
+      <button type="button" class="shop-back-btn" data-shop-open="shop-dashboard">&larr; Panou SHOP</button>
+      <div class="shop-placeholder-card green">
+        <span class="shop-area-icon"><svg viewBox="0 0 24 24"><path d="M21 8 12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg></span>
+        <span class="shop-kicker">SHOP / INVENTAR</span><h1>Stoc</h1>
+        <p>Zona este pregatita pentru cantitati, intrari, iesiri si alerte de stoc minim.</p>
+        <span class="shop-coming-soon">URMEAZA SA FIE CONSTRUIT</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel shop-tab-panel" id="tab-shop-invoices">
+    <div class="shop-placeholder-page">
+      <button type="button" class="shop-back-btn" data-shop-open="shop-dashboard">&larr; Panou SHOP</button>
+      <div class="shop-placeholder-card amber">
+        <span class="shop-area-icon"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span>
+        <span class="shop-kicker">SHOP / DOCUMENTE</span><h1>Facturi</h1>
+        <p>Zona este pregatita pentru emitere, cautare, incasari si exportul facturilor.</p>
+        <span class="shop-coming-soon">URMEAZA SA FIE CONSTRUIT</span>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="business-modal-overlay" id="profile-modal" hidden>
+  <form class="business-modal" id="profile-form">
+    <div class="business-modal-head">
+      <div><span class="business-modal-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span><strong>Profilul meu</strong><small>Informatiile contului autentificat</small></span></div>
+      <button type="button" class="business-close-btn" id="profile-modal-close" title="Inchide"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="business-modal-profile">
+      <span class="account-avatar large" id="profile-modal-avatar">U</span>
+      <span><strong id="profile-modal-username">@user</strong><small id="profile-modal-access">Desktop</small></span>
+    </div>
+    <div class="field">
+      <label for="profile-display-name">Nume afisat</label>
+      <input type="text" id="profile-display-name" required />
+    </div>
+    <div class="field">
+      <label for="profile-password">Parola noua</label>
+      <input type="password" id="profile-password" autocomplete="new-password" placeholder="Lasa gol pentru a pastra parola" />
+    </div>
+    <div class="business-modal-actions">
+      <button type="button" class="btn-ghost" id="profile-modal-cancel">Anuleaza</button>
+      <button type="submit" class="btn-primary" id="profile-save-btn">Salveaza profilul</button>
+    </div>
+  </form>
+</div>
+
+<div class="business-modal-overlay" id="logout-modal" hidden>
+  <div class="business-modal logout-modal" role="dialog" aria-modal="true" aria-labelledby="logout-modal-title">
+    <div class="business-modal-head">
+      <div><span class="business-modal-icon danger"><svg viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/></svg></span><span><strong id="logout-modal-title">Delogare</strong><small>Confirmare sesiune curenta</small></span></div>
+      <button type="button" class="business-close-btn" id="logout-modal-close" title="Inchide"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="logout-modal-body">
+      <div class="logout-confirm-view" id="logout-confirm-view">
+        <strong>Sigur vrei sa te deloghezi?</strong>
+        <span>Sesiunea curenta se va inchide si vei reveni la pagina de login.</span>
+      </div>
+      <div class="logout-loading-view" id="logout-loading-view" hidden>
+        <span class="logout-spinner"></span>
+        <strong>Te deloghez...</strong>
+        <small>Inchidem sesiunea in siguranta.</small>
+      </div>
+    </div>
+    <div class="business-modal-actions logout-actions" id="logout-modal-actions">
+      <button type="button" class="btn-ghost" id="logout-modal-cancel">Anuleaza</button>
+      <button type="button" class="btn-primary danger" id="logout-confirm-btn">Da, delogheaza-ma</button>
+    </div>
+  </div>
+</div>
+
+<div class="business-modal-overlay" id="app-update-modal" hidden>
+  <div class="business-modal app-update-modal" role="dialog" aria-modal="true" aria-labelledby="app-update-modal-title">
+    <div class="business-modal-head">
+      <div>
+        <span class="business-modal-icon app-update-modal-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+        </span>
+        <span>
+          <strong id="app-update-modal-title">Actualizare aplicatie</strong>
+          <small id="app-update-modal-subtitle">G-Trots Desktop</small>
+        </span>
+      </div>
+      <button type="button" class="business-close-btn" id="app-update-modal-close" title="Inchide">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="app-update-modal-body">
+      <div class="app-update-confirm-view" id="app-update-confirm-view">
+        <div class="app-update-version-flow">
+          <span><small>Versiunea ta</small><strong id="app-update-modal-current">-</strong></span>
+          <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m14 7 5 5-5 5"/></svg>
+          <span class="new"><small>Versiune noua</small><strong id="app-update-modal-available">-</strong></span>
+        </div>
+        <strong id="app-update-modal-message">Este disponibila o actualizare noua.</strong>
+        <span>Aplicatia va descarca actualizarea in siguranta, apoi se va reporni automat.</span>
+      </div>
+      <div class="app-update-loading-view" id="app-update-loading-view" hidden>
+        <span class="app-update-spinner"></span>
+        <strong id="app-update-loading-title">Se pregateste actualizarea...</strong>
+        <small id="app-update-loading-message">Te rugam sa nu inchizi aplicatia.</small>
+        <div class="app-update-modal-progress">
+          <span><i id="app-update-modal-progress-fill"></i></span>
+          <strong id="app-update-modal-progress-label">0%</strong>
+        </div>
+      </div>
+    </div>
+    <div class="business-modal-actions app-update-modal-actions" id="app-update-modal-actions">
+      <button type="button" class="btn-ghost" id="app-update-modal-cancel">Anuleaza</button>
+      <button type="button" class="btn-primary" id="app-update-modal-confirm">Actualizeaza</button>
+    </div>
+  </div>
+</div>
+
+<div class="business-modal-overlay" id="client-delete-modal" hidden>
+  <div class="business-modal client-delete-modal" role="dialog" aria-modal="true" aria-labelledby="client-delete-modal-title">
+    <div class="business-modal-head client-delete-modal-head">
+      <div>
+        <span class="business-modal-icon danger">
+          <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+        </span>
+        <span><strong id="client-delete-modal-title">Stergere client</strong><small>Confirmare definitiva</small></span>
+      </div>
+      <button type="button" class="business-close-btn" id="client-delete-modal-close" title="Inchide" aria-label="Inchide">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="client-delete-modal-body">
+      <div class="client-delete-hero">
+        <span class="client-delete-avatar" id="client-delete-avatar">C</span>
+        <span>
+          <strong id="client-delete-name">Client</strong>
+          <small id="client-delete-subtitle">Aceasta actiune nu poate fi anulata.</small>
+        </span>
+      </div>
+      <div class="client-delete-facts">
+        <span><small>Telefon</small><strong id="client-delete-phone">-</strong></span>
+        <span><small>Cod QR</small><strong id="client-delete-qr">-</strong></span>
+        <span><small>Status</small><strong id="client-delete-status">-</strong></span>
+      </div>
+      <div class="client-delete-warning">
+        <svg viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+        <span>Clientul va fi eliminat din baza de date impreuna cu informatiile legate de el. Continua doar daca esti sigur.</span>
+      </div>
+    </div>
+    <div class="business-modal-actions client-delete-modal-actions">
+      <button type="button" class="btn-ghost" id="client-delete-modal-cancel">Renunta</button>
+      <button type="button" class="btn-primary danger" id="client-delete-modal-confirm">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/></svg>
+        <span>Sterge</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="business-toast-stack" id="business-toast-stack"></div>
+
+<div class="qr-modal-overlay" id="qr-modal" style="display:none">
+  <div class="qr-modal-card" role="dialog" aria-modal="true" aria-labelledby="qr-modal-title">
+    <button class="qr-modal-close" id="qr-modal-close" type="button" title="Inchide">&times;</button>
+    <div class="qr-modal-kicker">Cod QR Client</div>
+    <h2 class="qr-modal-title" id="qr-modal-title">Client</h2>
+    <div id="qr-modal-content"></div>
+  </div>
+</div>
+
+<div class="qr-modal-overlay" id="whatsapp-preset-modal" style="display:none">
+  <div class="qr-modal-card whatsapp-preset-modal-card">
+    <button class="qr-modal-close" id="whatsapp-preset-close" type="button">&times;</button>
+    <div class="qr-modal-kicker">WhatsApp</div>
+    <h2 class="qr-modal-title" id="whatsapp-preset-title">Mesaj catre client</h2>
+    <div id="whatsapp-preset-list" class="whatsapp-preset-list"></div>
+  </div>
+</div>
+
+<script>
+  // Config
+  window.API_URL = 'https://cab-it.ro/trotty-api';
+  window.API_KEY = 'GTROTS_X9K3M7_2026_SECURE';
+</script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/shell.js"></script>
+<script src="js/excel.js"></script>
+<script src="js/scanner.js"></script>
+<script src="js/clients.js"></script>
+<script src="js/service.js"></script>
+<script src="js/history.js"></script>
+<script src="js/stats.js"></script>
+<script src="js/partners.js"></script>
+<script src="js/chat.js"></script>
+<script src="js/whatsapp-messages.js"></script>
+<script src="js/expense-settings.js"></script>
+<script src="js/whatsapp-admin.js"></script>
+<script src="js/updater.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

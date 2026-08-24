@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="G-Trots">
+  <rect width="64" height="64" rx="18" fill="#f07f00"/>
+  <g font-family="Manrope, Arial, sans-serif" font-size="30" font-weight="900" text-anchor="middle" dominant-baseline="central">
+    <text x="25" y="34" fill="#fff">G</text>
+    <text x="41" y="34" fill="#0a0a0a">T</text>
+  </g>
+</svg>

@@ -1,0 +1,49 @@
+name: Publicare Electron pentru Windows
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Descarcă sursele
+        uses: actions/checkout@v4
+
+      - name: Configurează Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: electron-app/package-lock.json
+
+      - name: Instalează dependențele
+        working-directory: electron-app
+        run: npm ci
+
+      - name: Construiește aplicația Windows
+        working-directory: electron-app
+        run: npm run dist:win
+
+      - name: Creează GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets = Get-ChildItem electron-app/release -File |
+            Where-Object { $_.Extension -in '.exe', '.blockmap', '.yml' } |
+            ForEach-Object { $_.FullName }
+
+          if (-not $assets) {
+            throw 'Nu au fost generate fișiere pentru publicare.'
+          }
+
+          gh release create $env:GITHUB_REF_NAME @assets `
+            --title "G-Trots Desktop $env:GITHUB_REF_NAME" `
+            --generate-notes

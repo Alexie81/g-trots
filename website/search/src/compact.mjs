@@ -1,0 +1,1 @@
+export function inflateTable(payload){if(Array.isArray(payload))return payload;const f=payload.fields,rows=payload.rows;return rows.map(r=>{const o={};for(let i=0;i<f.length;i++)o[f[i]]=r[i];return o;});}

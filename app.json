@@ -1,0 +1,97 @@
+{
+  "expo": {
+    "name": "G-Trots",
+    "slug": "g-trots",
+    "owner": "cabitexpert",
+    "version": "1.2.22",
+    "orientation": "portrait",
+    "icon": "./assets/images/logo.png",
+    "scheme": "gtrots",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0A0A0A",
+    "splash": {
+      "image": "./assets/images/logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0A0A"
+    },
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "icon": "./assets/images/logo.png",
+      "bundleIdentifier": "ro.cabit.gtrots"
+    },
+    "android": {
+      "package": "ro.cabit.gtrots",
+      "versionCode": 22,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "monochromeImage": "./assets/images/notification-icon.png",
+        "backgroundColor": "#0A0A0A"
+      },
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "notification": {
+      "icon": "./assets/images/notification-icon.png",
+      "color": "#FF6B00",
+      "iosDisplayInForeground": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-updates",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#FF6B00",
+          "defaultChannel": "chat"
+        }
+      ],
+      [
+        "react-native-share",
+        {
+          "ios": [
+            "whatsapp"
+          ],
+          "android": [
+            "com.whatsapp",
+            "com.whatsapp.w4b"
+          ]
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "enablePngCrunchInReleaseBuilds": true
+          }
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/f66d3116-783b-468a-971d-4b758c25fa82",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f66d3116-783b-468a-971d-4b758c25fa82"
+      }
+    }
+  }
+}

@@ -1,0 +1,36 @@
+# Dependencies and generated Expo output
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Desktop, website and backend artifacts are not part of the mobile bundle
+electron-app/
+desktop-update-server/
+website/
+website_downloads/
+server/
+supabase/
+
+# Local tooling and repository metadata
+.git/
+.codex/
+.bolt/
+
+# Local builds, archives and logs
+*.apk
+*.exe
+*.blockmap
+*.zip
+*.log
+*.err.log
+*.tsbuildinfo
+
+# Local secrets; preview values come from eas.json
+.env
+.env*.local
+
+# OS/editor files
+.DS_Store
+*.orig.*

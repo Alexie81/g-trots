@@ -1,0 +1,3608 @@
+{
+  "count": 226,
+  "models": [
+    {
+      "id": 0,
+      "brand": "",
+      "model": "10+",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "10+"
+      ],
+      "traits": [],
+      "note": "",
+      "normalized": "10+"
+    },
+    {
+      "id": 1,
+      "brand": "",
+      "model": "8",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "8"
+      ],
+      "traits": [],
+      "note": "",
+      "normalized": "8"
+    },
+    {
+      "id": 2,
+      "brand": "AOVO",
+      "model": "Pro",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "AOVO M365 Pro",
+        "AOVO Pro",
+        "AovoPro",
+        "Pro"
+      ],
+      "traits": [
+        "anvelope pline sau pneumatice în funcție de variantă",
+        "aplicație în funcție de versiune",
+        "frână spate pe disc",
+        "mecanism pliabil",
+        "platformă apropiată de formatul M365"
+      ],
+      "note": "AOVO Pro există în multe revizii și clone; înaintea oricărei piese trebuie confirmate tensiunea, mufele, dimensiunea roții și placa electronică.",
+      "normalized": "aovo pro"
+    },
+    {
+      "id": 3,
+      "brand": "Apollo",
+      "model": "Air",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Air",
+        "Apollo Air"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "apollo air"
+    },
+    {
+      "id": 4,
+      "brand": "Apollo",
+      "model": "City",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Apollo City"
+      ],
+      "traits": [],
+      "note": "",
+      "normalized": "apollo city"
+    },
+    {
+      "id": 5,
+      "brand": "Apollo",
+      "model": "City Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Apollo City",
+        "Apollo City Dual",
+        "Apollo City Pro",
+        "City Pro"
+      ],
+      "traits": [
+        "aplicație și comenzi integrate",
+        "două motoare pe anumite versiuni",
+        "frâne cu regenerare",
+        "suspensie"
+      ],
+      "note": "Apollo City Pro are comenzi și frânare integrate; calibrarea, senzorii și firmware-ul pot produce un comportament care seamănă cu o defecțiune de putere.",
+      "normalized": "apollo city pro"
+    },
+    {
+      "id": 6,
+      "brand": "Apollo",
+      "model": "Phantom",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Apollo Phantom",
+        "Phantom"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "apollo phantom"
+    },
+    {
+      "id": 7,
+      "brand": "Apollo",
+      "model": "Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Apollo Pro"
+      ],
+      "traits": [],
+      "note": "",
+      "normalized": "apollo pro"
+    },
+    {
+      "id": 8,
+      "brand": "Askoll",
+      "model": "eS2",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "Askoll eS2",
+        "eS2"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "askoll es2"
+    },
+    {
+      "id": 9,
+      "brand": "Askoll",
+      "model": "eS3",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "Askoll eS3",
+        "eS3"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "askoll es3"
+    },
+    {
+      "id": 10,
+      "brand": "Askoll",
+      "model": "eS3 EVO",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "Askoll ES3 Evo",
+        "Askoll eS3 EVO",
+        "eS3 EVO"
+      ],
+      "traits": [
+        "baterii detașabile",
+        "bord digital",
+        "motor și electronică pentru navetă urbană",
+        "sistem de încărcare separat de vehicul"
+      ],
+      "note": "La eS3 EVO, verifică separat fiecare baterie și contactele ei. Diferențele de încărcare, o baterie nerecunoscută sau alimentarea auxiliară pot limita pornirea fără ca motorul să fie cauza.",
+      "normalized": "askoll es3 evo"
+    },
+    {
+      "id": 11,
+      "brand": "Ausom",
+      "model": "Leopard DT1 Pro",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Ausom Leopard DT1 Pro",
+        "Leopard DT1 Pro"
+      ],
+      "traits": [
+        "display multifuncțional",
+        "două motoare",
+        "frâne și anvelope pentru drum mixt",
+        "suspensie față-spate"
+      ],
+      "note": "La Leopard DT1 Pro, compatibilitatea componentelor trebuie verificată după cod, tensiune și tipul mufelor, nu doar după aspect. Multe piese OEM seamănă între ele, dar nu comunică identic.",
+      "normalized": "ausom leopard dt1 pro"
+    },
+    {
+      "id": 12,
+      "brand": "CityCoco",
+      "model": "CityCoco 2000W",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "2000W",
+        "CityCoco 2000W"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "citycoco 2000w"
+    },
+    {
+      "id": 13,
+      "brand": "CityCoco",
+      "model": "CityCoco 3000W",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "3000W",
+        "CityCoco 3000W"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "citycoco 3000w"
+    },
+    {
+      "id": 14,
+      "brand": "CityCoco",
+      "model": "60V",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "60V",
+        "City Coco 60V",
+        "CityCoco 60V",
+        "Harley electric 60V"
+      ],
+      "traits": [
+        "accelerație de ghidon",
+        "baterie 60V în funcție de versiune",
+        "controller separat",
+        "frâne pe disc",
+        "motor hub în roata spate"
+      ],
+      "note": "CityCoco este o familie de platforme, nu un singur model. Puterea, mufa, bateria și controllerul pot diferi, astfel că etichetele și măsurătorile sunt obligatorii.",
+      "normalized": "citycoco 60v"
+    },
+    {
+      "id": 15,
+      "brand": "CityCoco",
+      "model": "City",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "CityCoco City"
+      ],
+      "traits": [],
+      "note": "",
+      "normalized": "citycoco city"
+    },
+    {
+      "id": 16,
+      "brand": "CityCoco",
+      "model": "Harley 1500W",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "CityCoco Harley 1500W",
+        "Harley 1500W"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "citycoco harley 1500w"
+    },
+    {
+      "id": 17,
+      "brand": "Dualtron",
+      "model": "",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [],
+      "traits": [],
+      "note": "",
+      "normalized": "dualtron"
+    },
+    {
+      "id": 18,
+      "brand": "Dualtron",
+      "model": "Achilleus",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Achilleus",
+        "Dualtron Achilleus",
+        "Minimotors Achilleus"
+      ],
+      "traits": [
+        "display configurabil",
+        "două motoare",
+        "frânare puternică",
+        "suspensie elastomerică sau specifică platformei"
+      ],
+      "note": "La Achilleus, o setare de display, un senzor de frână sau o conexiune poate limita ambele motoare. Pentru problemele de tracțiune, compară modul single/dual și reacția fiecărei roți.",
+      "normalized": "dualtron achilleus"
+    },
+    {
+      "id": 19,
+      "brand": "Dualtron",
+      "model": "Dolphin",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Dolphin",
+        "Dualtron Dolphin",
+        "Minimotors Dolphin"
+      ],
+      "traits": [
+        "design pliabil pentru navetă",
+        "display și comenzi Minimotors",
+        "frânare regenerativă asistată",
+        "suspensie compactă"
+      ],
+      "note": "La Dualtron Dolphin, problemele din ghidon și mecanismul de pliere pot influența cablajul. O eroare care apare la viraj sau pe denivelări trebuie analizată înainte de a înlocui componente electronice.",
+      "normalized": "dualtron dolphin"
+    },
+    {
+      "id": 20,
+      "brand": "Dualtron",
+      "model": "Mini",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Dualtron Mini",
+        "Minimotors Dualtron Mini"
+      ],
+      "traits": [
+        "anvelope pneumatice",
+        "display și controller Minimotors sau echivalent",
+        "frâne pe disc",
+        "motor puternic",
+        "suspensie"
+      ],
+      "note": "La Dualtron Mini, setările displayului și limitările controllerului trebuie verificate înaintea concluziei că motorul și-a pierdut puterea.",
+      "normalized": "dualtron mini"
+    },
+    {
+      "id": 21,
+      "brand": "Dualtron",
+      "model": "Popular",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Dualtron Popular",
+        "Popular"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "dualtron popular"
+    },
+    {
+      "id": 22,
+      "brand": "Dualtron",
+      "model": "Storm",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Dualtron Storm",
+        "Storm"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "dualtron storm"
+    },
+    {
+      "id": 23,
+      "brand": "Dualtron",
+      "model": "Thunder 2",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Dualtron Thunder 2",
+        "Thunder 2"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "dualtron thunder 2"
+    },
+    {
+      "id": 24,
+      "brand": "Dualtron",
+      "model": "Thunder 3",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Dualtron Thunder 3",
+        "Minimotors Thunder 3",
+        "Thunder 3"
+      ],
+      "traits": [
+        "display și setări Minimotors",
+        "două motoare și controllere de putere mare",
+        "frâne și anvelope pentru viteză ridicată",
+        "suspensie reglabilă"
+      ],
+      "note": "La Thunder 3, nu face probe lungi când apare încălzire, miros sau tăiere de putere. Notează modul, procentul bateriei și care motor pierde tracțiunea; informația scurtează mult diagnosticul.",
+      "normalized": "dualtron thunder 3"
+    },
+    {
+      "id": 25,
+      "brand": "Dualtron",
+      "model": "Togo Plus",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Dualtron Togo Plus",
+        "Togo Plus"
+      ],
+      "traits": [
+        "configurație pliabilă compactă",
+        "controler și display specific familiei",
+        "frânare combinată",
+        "suspensie pentru drum urban"
+      ],
+      "note": "La Togo Plus, setările displayului și senzorii de frână pot limita tracțiunea fără un defect major. Confirmă versiunea și tensiunea înainte de a comanda controller, display sau încărcător.",
+      "normalized": "dualtron togo plus"
+    },
+    {
+      "id": 26,
+      "brand": "Dualtron",
+      "model": "Victor",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Dualtron Victor",
+        "Victor"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "dualtron victor"
+    },
+    {
+      "id": 27,
+      "brand": "Dualtron",
+      "model": "Victor Luxury",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Dualtron Victor Luxury",
+        "Victor Luxury"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "dualtron victor luxury"
+    },
+    {
+      "id": 28,
+      "brand": "Dualtron",
+      "model": "Victor Luxury Plus",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Dualtron Victor Luxury Plus",
+        "Victor Luxury Plus"
+      ],
+      "traits": [
+        "baterie de capacitate mare",
+        "display și comenzi configurabile",
+        "două motoare",
+        "suspensie și frâne pentru navetă rapidă"
+      ],
+      "note": "La Victor Luxury Plus, autonomia și tăierile de putere trebuie corelate cu tensiunea sub sarcină, temperatura și presiunea anvelopelor. O baterie mare poate masca mult timp un dezechilibru până când apare sub accelerație.",
+      "normalized": "dualtron victor luxury plus"
+    },
+    {
+      "id": 29,
+      "brand": "Dualtron",
+      "model": "X2",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Dualtron X2",
+        "X2"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "dualtron x2"
+    },
+    {
+      "id": 30,
+      "brand": "E-TWOW",
+      "model": "Booster V",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Booster V",
+        "E-TWOW Booster V"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "e twow booster v"
+    },
+    {
+      "id": 31,
+      "brand": "E-TWOW",
+      "model": "GT SL",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "E-TWOW GT SL",
+        "GT SL"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "e twow gt sl"
+    },
+    {
+      "id": 32,
+      "brand": "E-TWOW",
+      "model": "GT Sport",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "E-TWOW GT",
+        "E-TWOW GT Sport",
+        "GT Sport"
+      ],
+      "traits": [
+        "frânare electronică și mecanică",
+        "greutate redusă și pliere compactă",
+        "roți compacte și electronică proprie",
+        "suspensie integrată"
+      ],
+      "note": "La GT Sport, zgomotele și vibrațiile se transmit rapid prin cadrul ușor. Separă jocul mecanic din pliere sau suspensie de problemele de motor, iar la frânare verifică atât componenta electronică, cât și frâna mecanică.",
+      "normalized": "e twow gt sport"
+    },
+    {
+      "id": 33,
+      "brand": "",
+      "model": "F2",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "F2"
+      ],
+      "traits": [],
+      "note": "",
+      "normalized": "f2"
+    },
+    {
+      "id": 34,
+      "brand": "",
+      "model": "F40",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "F40"
+      ],
+      "traits": [],
+      "note": "",
+      "normalized": "f40"
+    },
+    {
+      "id": 35,
+      "brand": "GOTRAX",
+      "model": "G3 Max",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "G3 Max",
+        "GOTRAX G3 Max",
+        "Gotrax G3 Max"
+      ],
+      "traits": [
+        "anvelope pneumatice",
+        "comenzi digitale",
+        "motor în roată",
+        "platformă pliabilă"
+      ],
+      "note": "G3 Max este o platformă simplă de navetă, dar lipsa suspensiei ample face ca presiunea anvelopelor și starea rulmenților să influențeze direct confortul și autonomia.",
+      "normalized": "gotrax g3 max"
+    },
+    {
+      "id": 36,
+      "brand": "Hiley",
+      "model": "Tiger 10",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Hiley Tiger 10",
+        "Tiger 10"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "hiley tiger 10"
+    },
+    {
+      "id": 37,
+      "brand": "Hiley",
+      "model": "Tiger 8",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Hiley Tiger 8",
+        "Tiger 8"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "hiley tiger 8"
+    },
+    {
+      "id": 38,
+      "brand": "Hiley",
+      "model": "Tiger 9",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Hiley Tiger 9",
+        "Tiger 9"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "hiley tiger 9"
+    },
+    {
+      "id": 39,
+      "brand": "Horwin",
+      "model": "EK1",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "EK1",
+        "Horwin EK1"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "horwin ek1"
+    },
+    {
+      "id": 40,
+      "brand": "Horwin",
+      "model": "EK3",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "EK3",
+        "HORWIN EK3",
+        "Horwin EK3"
+      ],
+      "traits": [
+        "baterie detașabilă",
+        "bord digital",
+        "motor electric central sau integrat în transmisie în funcție de versiune",
+        "sisteme de siguranță"
+      ],
+      "note": "La EK3, simptomele de tracțiune trebuie separate între baterie, interblocări, accelerație, controller și transmisia electrică.",
+      "normalized": "horwin ek3"
+    },
+    {
+      "id": 41,
+      "brand": "Horwin",
+      "model": "SK1",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "Horwin SK1",
+        "SK1"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "horwin sk1"
+    },
+    {
+      "id": 42,
+      "brand": "Horwin",
+      "model": "SK3",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "Horwin SK3",
+        "SK3"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "horwin sk3"
+    },
+    {
+      "id": 43,
+      "brand": "Inmotion",
+      "model": "Climber",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Climber",
+        "INMOTION Climber",
+        "Inmotion Climber"
+      ],
+      "traits": [
+        "anvelope pneumatice",
+        "două motoare",
+        "frânare electronică și mecanică",
+        "platformă compactă"
+      ],
+      "note": "La Climber este esențial să observi dacă ambele motoare reacționează la fel. O pierdere pe o singură roată schimbă complet ordinea verificărilor.",
+      "normalized": "inmotion climber"
+    },
+    {
+      "id": 44,
+      "brand": "Inmotion",
+      "model": "RS",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "INMOTION RS",
+        "Inmotion RS",
+        "RS"
+      ],
+      "traits": [
+        "două motoare de putere mare",
+        "frâne și anvelope dimensionate pentru performanță",
+        "sistem electronic complex",
+        "suspensie reglabilă"
+      ],
+      "note": "La Inmotion RS, diagnosticul trebuie făcut separat pe fiecare punte și în condiții controlate. Protecțiile termice, setările de putere și tensiunea sub sarcină pot imita un motor sau controller defect.",
+      "normalized": "inmotion rs"
+    },
+    {
+      "id": 45,
+      "brand": "Inmotion",
+      "model": "RS Lite",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "INMOTION RS Lite",
+        "Inmotion RS Lite",
+        "RS Lite"
+      ],
+      "traits": [
+        "display și aplicație",
+        "două motoare",
+        "frâne hidraulice și structură robustă",
+        "suspensie reglabilă"
+      ],
+      "note": "La Inmotion RS Lite, separă întâi problema de setare sau senzor de problema de putere. Notează dacă simptomul apare în modul cu un motor, cu două motoare, la rece sau după câteva minute.",
+      "normalized": "inmotion rs lite"
+    },
+    {
+      "id": 46,
+      "brand": "Inmotion",
+      "model": "S1F",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "INMOTION S1F",
+        "Inmotion S1F",
+        "S1F"
+      ],
+      "traits": [
+        "aplicație",
+        "cadru pliabil",
+        "motor în roată",
+        "suspensie pentru navetă"
+      ],
+      "note": "S1F trebuie testat atât la rece, cât și după câțiva kilometri; contactele și limitările termice pot produce simptome care nu apar la pornire.",
+      "normalized": "inmotion s1f"
+    },
+    {
+      "id": 47,
+      "brand": "INOKIM",
+      "model": "Light 2",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "INOKIM Light 2",
+        "Light 2"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "inokim light 2"
+    },
+    {
+      "id": 48,
+      "brand": "INOKIM",
+      "model": "OX",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "INOKIM OX",
+        "OX"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "inokim ox"
+    },
+    {
+      "id": 49,
+      "brand": "INOKIM",
+      "model": "OXO",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "INOKIM OXO",
+        "Inokim OXO",
+        "OXO"
+      ],
+      "traits": [
+        "două motoare",
+        "frâne pentru viteză ridicată",
+        "structură robustă și pliabilă",
+        "suspensie reglabilă specifică platformei"
+      ],
+      "note": "La INOKIM OXO, verifică modurile de tracțiune și fiecare motor separat. Jocul din brațe, direcție sau pliere poate produce vibrații asemănătoare unei roți dezechilibrate.",
+      "normalized": "inokim oxo"
+    },
+    {
+      "id": 50,
+      "brand": "INOKIM",
+      "model": "Quick 4",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "INOKIM Quick 4",
+        "Quick 4"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "inokim quick 4"
+    },
+    {
+      "id": 51,
+      "brand": "iScooter",
+      "model": "i9",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "i9",
+        "i9 electric scooter",
+        "iScooter i9",
+        "iScooter i9 Pro"
+      ],
+      "traits": [
+        "controller și display generice",
+        "mai multe revizii de producție",
+        "mecanism pliabil",
+        "platformă compactă de buget"
+      ],
+      "note": "iScooter i9 există în mai multe revizii și piețe. Eticheta, tensiunea și fotografiile mufelor sunt mai importante decât denumirea comercială singură.",
+      "normalized": "iscooter i9"
+    },
+    {
+      "id": 52,
+      "brand": "iScooter",
+      "model": "iX7 Pro",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "iScooter iX7 Pro",
+        "iX7 Pro"
+      ],
+      "traits": [
+        "componente OEM și mai multe revizii posibile",
+        "display generic configurabil",
+        "platformă dual-motor sau de putere ridicată, în funcție de versiune",
+        "suspensie față-spate"
+      ],
+      "note": "La iX7 Pro, confirmă eticheta, tensiunea și versiunea controllerului înainte de diagnostic. Denumirea comercială poate acoperi revizii cu display, mufe și setări diferite.",
+      "normalized": "iscooter ix7 pro"
+    },
+    {
+      "id": 53,
+      "brand": "Joyor",
+      "model": "F5S+",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "F5S+",
+        "Joyor F5S+"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "joyor f5s+"
+    },
+    {
+      "id": 54,
+      "brand": "Joyor",
+      "model": "S10-S",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Joyor S10-S",
+        "Joyor S10-S Z",
+        "Joyor S10S",
+        "S10-S"
+      ],
+      "traits": [
+        "display de comandă",
+        "două motoare",
+        "frâne pe disc",
+        "suspensie față-spate"
+      ],
+      "note": "La Joyor S10-S, cablajul din zona ghidonului și distribuția puterii către cele două motoare trebuie verificate separat.",
+      "normalized": "joyor s10 s"
+    },
+    {
+      "id": 55,
+      "brand": "Joyor",
+      "model": "S5",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Joyor S5",
+        "S5"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "joyor s5"
+    },
+    {
+      "id": 56,
+      "brand": "Joyor",
+      "model": "T10",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Joyor T10",
+        "T10"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "joyor t10"
+    },
+    {
+      "id": 57,
+      "brand": "Joyor",
+      "model": "Y8-S",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Joyor Y8-S",
+        "Y8-S"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "joyor y8 s"
+    },
+    {
+      "id": 58,
+      "brand": "Kaabo",
+      "model": "",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [],
+      "traits": [],
+      "note": "",
+      "normalized": "kaabo"
+    },
+    {
+      "id": 59,
+      "brand": "Kaabo",
+      "model": "Mantis 10",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Kaabo Mantis 10",
+        "Mantis 10"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "kaabo mantis 10"
+    },
+    {
+      "id": 60,
+      "brand": "Kaabo",
+      "model": "Mantis 8",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Kaabo Mantis 8",
+        "Mantis 8"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "kaabo mantis 8"
+    },
+    {
+      "id": 61,
+      "brand": "Kaabo",
+      "model": "Mantis King GT",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Kaabo Mantis King GT",
+        "Mantis King GT"
+      ],
+      "traits": [
+        "display color și control electronic complex",
+        "două motoare și moduri de tracțiune",
+        "frâne hidraulice",
+        "suspensie reglabilă"
+      ],
+      "note": "La Mantis King GT, compară reacția motorului față cu cea a motorului spate și urmărește avertizările de pe display. Nu presupune că o tăiere de putere este motor defect înainte de verificarea controllerului, senzorilor și bateriei.",
+      "normalized": "kaabo mantis king gt"
+    },
+    {
+      "id": 62,
+      "brand": "Kaabo",
+      "model": "Mantis X Plus",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Kaabo Mantis X Plus",
+        "Mantis X Plus"
+      ],
+      "traits": [
+        "cablaj complex în zona ghidonului și deckului",
+        "două motoare și selectarea tracțiunii",
+        "frâne hidraulice sau asistate",
+        "suspensie față-spate"
+      ],
+      "note": "La Mantis X Plus, compară întotdeauna reacția motorului față cu cea a motorului spate. O diferență de putere poate veni din comenzi, controller, cablaj sau protecția termică, nu numai din motor.",
+      "normalized": "kaabo mantis x plus"
+    },
+    {
+      "id": 63,
+      "brand": "Kaabo",
+      "model": "Wolf King GT",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Kaabo Wolf King GT",
+        "Wolf King GT"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "kaabo wolf king gt"
+    },
+    {
+      "id": 64,
+      "brand": "Kaabo",
+      "model": "Wolf King GT Pro",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Kaabo Wolf King GT Pro",
+        "Wolf King GT Pro"
+      ],
+      "traits": [
+        "coloană dublă și structură grea",
+        "display și controllere multiple",
+        "două motoare de putere mare",
+        "suspensie și frâne pentru sarcină ridicată"
+      ],
+      "note": "La Wolf King GT Pro, orice instabilitate, fisură, frână slabă sau încălzire de cablu este motiv de oprire. Puterea mare amplifică efectul unei anvelope montate greșit, al unui rulment uzat sau al unui contact electric imperfect.",
+      "normalized": "kaabo wolf king gt pro"
+    },
+    {
+      "id": 65,
+      "brand": "Kaabo",
+      "model": "Wolf King GTR",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Kaabo Wolf King GTR",
+        "Wolf King GTR"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "kaabo wolf king gtr"
+    },
+    {
+      "id": 66,
+      "brand": "Kaabo",
+      "model": "Wolf Warrior 11",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Kaabo Wolf Warrior 11",
+        "Wolf Warrior 11"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "kaabo wolf warrior 11"
+    },
+    {
+      "id": 67,
+      "brand": "Kaabo",
+      "model": "Wolf Warrior X Plus",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Kaabo Wolf Warrior X Plus",
+        "Wolf Warrior X Plus"
+      ],
+      "traits": [
+        "coloană dublă și structură grea",
+        "două motoare",
+        "frâne pentru sarcină ridicată",
+        "suspensie robustă"
+      ],
+      "note": "La Wolf Warrior X Plus, vibrațiile și instabilitatea trebuie verificate pe lanțul complet: anvelope, jante, rulmenți, brațe și coloană. La problemele de putere, testează separat fiecare mod de tracțiune.",
+      "normalized": "kaabo wolf warrior x plus"
+    },
+    {
+      "id": 68,
+      "brand": "Kugoo",
+      "model": "",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [],
+      "traits": [],
+      "note": "",
+      "normalized": "kugoo"
+    },
+    {
+      "id": 69,
+      "brand": "Kugoo",
+      "model": "G-Booster",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "G-Booster",
+        "Kugoo G-Booster"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "kugoo g booster"
+    },
+    {
+      "id": 70,
+      "brand": "Kugoo",
+      "model": "G2",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "G2",
+        "Kugoo G2"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "kugoo g2"
+    },
+    {
+      "id": 71,
+      "brand": "Kugoo",
+      "model": "G2 Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "G2 Pro",
+        "Kugoo G2 Pro"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "kugoo g2 pro"
+    },
+    {
+      "id": 72,
+      "brand": "Kugoo",
+      "model": "G5",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "G5",
+        "Kugoo G5"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "kugoo g5"
+    },
+    {
+      "id": 73,
+      "brand": "Kugoo",
+      "model": "Kirin M4",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Kirin M4",
+        "Kugoo Kirin M4"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "kugoo kirin m4"
+    },
+    {
+      "id": 74,
+      "brand": "Kugoo",
+      "model": "M4 Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Kirin M4 Pro",
+        "Kugoo Kirin M4 Pro",
+        "Kugoo M4 Pro",
+        "M4 Pro"
+      ],
+      "traits": [
+        "anvelope cu cameră pe multe versiuni",
+        "display tip QS-S4 sau similar",
+        "frâne pe disc",
+        "scaun pe unele versiuni",
+        "suspensie"
+      ],
+      "note": "Există mai multe versiuni M4 Pro, de aceea piesele, mufele și setările nu trebuie comandate doar după numele comercial; fotografia etichetei și a controllerului contează.",
+      "normalized": "kugoo m4 pro"
+    },
+    {
+      "id": 75,
+      "brand": "Kugoo",
+      "model": "S1 Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Kugoo S1 Pro",
+        "S1 Pro"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "kugoo s1 pro"
+    },
+    {
+      "id": 76,
+      "brand": "KuKirin",
+      "model": "",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [],
+      "traits": [],
+      "note": "",
+      "normalized": "kukirin"
+    },
+    {
+      "id": 77,
+      "brand": "KuKirin",
+      "model": "G2",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "G2",
+        "KuKirin G2"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "kukirin g2"
+    },
+    {
+      "id": 78,
+      "brand": "KuKirin",
+      "model": "G2 Master",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "G2 Master",
+        "KuKirin G2 Master",
+        "Kukirin G2 Master"
+      ],
+      "traits": [
+        "anvelope pneumatice",
+        "două controllere sau electronică duală",
+        "două motoare",
+        "frâne puternice",
+        "suspensie față-spate"
+      ],
+      "note": "La G2 Master trebuie observat dacă simptomul afectează ambele motoare sau doar unul; această diferență schimbă rapid direcția diagnosticului.",
+      "normalized": "kukirin g2 master"
+    },
+    {
+      "id": 79,
+      "brand": "KuKirin",
+      "model": "G2 Max",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "G2 Max",
+        "KuKirin G2 Max",
+        "Kugoo Kirin G2 Max",
+        "Kukirin G2 Max"
+      ],
+      "traits": [
+        "anvelope pneumatice",
+        "display tip trigger",
+        "frâne mecanice sau hidraulice în funcție de versiune",
+        "motor puternic",
+        "suspensie"
+      ],
+      "note": "Puterea și masa modelului fac ca presiunea anvelopelor, frânele, jocurile și căderile de tensiune sub sarcină să fie deosebit de importante.",
+      "normalized": "kukirin g2 max"
+    },
+    {
+      "id": 80,
+      "brand": "KuKirin",
+      "model": "G2 Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "G2 Pro",
+        "KuKirin G2 Pro"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "kukirin g2 pro"
+    },
+    {
+      "id": 81,
+      "brand": "KuKirin",
+      "model": "G3",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "G3",
+        "KuKirin G3"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "kukirin g3"
+    },
+    {
+      "id": 82,
+      "brand": "KuKirin",
+      "model": "G3 Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "G3 Pro",
+        "KuKirin G3 Pro",
+        "Kukirin G3 Pro"
+      ],
+      "traits": [
+        "anvelope late",
+        "baterie de capacitate mare",
+        "două motoare",
+        "frâne hidraulice pe multe versiuni",
+        "suspensie amplă"
+      ],
+      "note": "Pentru G3 Pro, testele sub sarcină trebuie făcute prudent: un simptom care apare numai în modul dual poate avea altă origine decât unul prezent și în modul single.",
+      "normalized": "kukirin g3 pro"
+    },
+    {
+      "id": 83,
+      "brand": "KuKirin",
+      "model": "G4",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "G4",
+        "KuKirin G4",
+        "Kukirin G4"
+      ],
+      "traits": [
+        "anvelope late",
+        "cadru robust",
+        "display central",
+        "motor de putere mare",
+        "suspensie"
+      ],
+      "note": "La G4, vibrațiile, încălzirea și comportamentul anvelopei trebuie verificate înainte de a atribui automat problema controllerului sau motorului.",
+      "normalized": "kukirin g4"
+    },
+    {
+      "id": 84,
+      "brand": "KuKirin",
+      "model": "G4 Max",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "G4 Max",
+        "KuKirin G4 Max"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "kukirin g4 max"
+    },
+    {
+      "id": 85,
+      "brand": "KuKirin",
+      "model": "M4 Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "KuKirin M4 Pro",
+        "M4 Pro"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "kukirin m4 pro"
+    },
+    {
+      "id": 86,
+      "brand": "",
+      "model": "MAX G2",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "MAX G2"
+      ],
+      "traits": [],
+      "note": "",
+      "normalized": "max g2"
+    },
+    {
+      "id": 87,
+      "brand": "",
+      "model": "MAX G30",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "MAX G30"
+      ],
+      "traits": [],
+      "note": "",
+      "normalized": "max g30"
+    },
+    {
+      "id": 88,
+      "brand": "",
+      "model": "Mini",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Mini"
+      ],
+      "traits": [],
+      "note": "",
+      "normalized": "mini"
+    },
+    {
+      "id": 89,
+      "brand": "NAMI",
+      "model": "Burn-E 2",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Burn-E 2",
+        "NAMI Burn-E 2"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "nami burn e 2"
+    },
+    {
+      "id": 90,
+      "brand": "NAMI",
+      "model": "Burn-E 2 Max",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Burn-E 2 Max",
+        "NAMI Burn-E 2 Max"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "nami burn e 2 max"
+    },
+    {
+      "id": 91,
+      "brand": "NAMI",
+      "model": "Klima",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Klima",
+        "NAMI Klima",
+        "NAMI Klima Max",
+        "Nami Klima"
+      ],
+      "traits": [
+        "controller de performanță",
+        "două motoare",
+        "frâne hidraulice",
+        "suspensie reglabilă"
+      ],
+      "note": "La NAMI Klima, testele la putere mare trebuie făcute numai în condiții controlate. Diferența dintre modul single și dual este unul dintre cele mai utile indicii.",
+      "normalized": "nami klima"
+    },
+    {
+      "id": 92,
+      "brand": "Navee",
+      "model": "",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [],
+      "traits": [],
+      "note": "",
+      "normalized": "navee"
+    },
+    {
+      "id": 93,
+      "brand": "Navee",
+      "model": "GT3",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "GT3",
+        "Navee GT3"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "navee gt3"
+    },
+    {
+      "id": 94,
+      "brand": "Navee",
+      "model": "N40",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "N40",
+        "Navee N40"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "navee n40"
+    },
+    {
+      "id": 95,
+      "brand": "Navee",
+      "model": "N65",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "N65",
+        "Navee N65"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "navee n65"
+    },
+    {
+      "id": 96,
+      "brand": "Navee",
+      "model": "S40",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Navee S40",
+        "S40"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "navee s40"
+    },
+    {
+      "id": 97,
+      "brand": "Navee",
+      "model": "S60",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Navee S60",
+        "S60"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "navee s60"
+    },
+    {
+      "id": 98,
+      "brand": "Navee",
+      "model": "S65",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "NAVEE S65",
+        "Navee S65",
+        "S65"
+      ],
+      "traits": [
+        "anvelope tubeless",
+        "aplicație",
+        "cadru pliabil",
+        "motor cu transmisie sau arhitectură specifică seriei",
+        "suspensie față-spate"
+      ],
+      "note": "S65 poate produce zgomote de rulare diferite de un motor hub clasic; sunetul trebuie corelat cu sarcina și viteza, nu interpretat izolat.",
+      "normalized": "navee s65"
+    },
+    {
+      "id": 99,
+      "brand": "Navee",
+      "model": "ST3 Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Navee ST3 Pro",
+        "ST3 Pro"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "navee st3 pro"
+    },
+    {
+      "id": 100,
+      "brand": "Navee",
+      "model": "V40",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Navee V40",
+        "V40"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "navee v40"
+    },
+    {
+      "id": 101,
+      "brand": "Navee",
+      "model": "V50",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Navee V50",
+        "V50"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "navee v50"
+    },
+    {
+      "id": 102,
+      "brand": "NIU",
+      "model": "KQi 100P",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "KQi 100P",
+        "KQi100P",
+        "NIU KQi 100P",
+        "Niu KQi100P"
+      ],
+      "traits": [
+        "aplicație NIU",
+        "motor în roată",
+        "platformă compactă de navetă",
+        "sistem de frânare pentru utilizare urbană"
+      ],
+      "note": "La KQi 100P, traseele în pantă și sarcina mare pot fi confundate cu o defecțiune; testul trebuie repetat pe teren comparabil și cu presiunea corectă.",
+      "normalized": "niu kqi 100p"
+    },
+    {
+      "id": 103,
+      "brand": "NIU",
+      "model": "KQi 300X",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "KQi 300X",
+        "KQi300X",
+        "NIU KQi 300X",
+        "NIU KQi300X"
+      ],
+      "traits": [
+        "anvelope tubeless",
+        "aplicație NIU",
+        "frânare dublă",
+        "motor spate",
+        "suspensie față"
+      ],
+      "note": "La KQi 300X, zgomotele de pe față trebuie separate între suspensie, headset, frână și anvelopă, nu tratate ca o singură problemă.",
+      "normalized": "niu kqi 300x"
+    },
+    {
+      "id": 104,
+      "brand": "NIU",
+      "model": "KQi Air",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "KQi Air",
+        "NIU KQi Air",
+        "Niu KQi Air"
+      ],
+      "traits": [
+        "anvelope pneumatice",
+        "aplicație NIU",
+        "construcție ușoară",
+        "motor în roată"
+      ],
+      "note": "KQi Air pune accent pe greutate redusă, iar orice joc, vibrație sau piesă montată incorect se simte repede; nu presupune că toate componentele KQi3 sunt compatibile.",
+      "normalized": "niu kqi air"
+    },
+    {
+      "id": 105,
+      "brand": "NIU",
+      "model": "KQi2 Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "KQi2 Pro",
+        "NIU KQi2 Pro"
+      ],
+      "traits": [
+        "anvelope pneumatice",
+        "aplicație și blocare electronică",
+        "frânare electronică asistată",
+        "motor în roată pentru navetă"
+      ],
+      "note": "La KQi2 Pro, verificările simple din aplicație, senzorul de frână, încărcătorul și presiunea anvelopelor pot separa rapid o limitare normală de o defecțiune. Nu folosi setări sau firmware destinate altui model NIU.",
+      "normalized": "niu kqi2 pro"
+    },
+    {
+      "id": 106,
+      "brand": "NIU",
+      "model": "KQi3 Max",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "KQi3 Max",
+        "NIU KQi3 Max",
+        "Niu KQi3 Max"
+      ],
+      "traits": [
+        "anvelope tubeless",
+        "aplicație NIU",
+        "cadru rigid",
+        "frâne pe ambele roți",
+        "motor spate"
+      ],
+      "note": "KQi3 Max folosește o integrare strânsă între aplicație, display și controller; o limitare de viteză sau lipsa accelerației nu înseamnă automat motor defect.",
+      "normalized": "niu kqi3 max"
+    },
+    {
+      "id": 107,
+      "brand": "NIU",
+      "model": "KQi3 Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "KQi3 Pro",
+        "NIU KQi3 Pro"
+      ],
+      "traits": [
+        "anvelope pneumatice pentru navetă",
+        "aplicație NIU și conectivitate Bluetooth",
+        "frânare pe ambele roți",
+        "platformă rigidă fără suspensie complexă"
+      ],
+      "note": "La KQi3 Pro, compară informațiile din aplicație cu displayul și reacția reală a vehiculului. O problemă de deblocare, viteză afișată sau frânare electronică nu trebuie confundată automat cu o defecțiune a motorului.",
+      "normalized": "niu kqi3 pro"
+    },
+    {
+      "id": 108,
+      "brand": "NIU",
+      "model": "MQi GT",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "MQi GT",
+        "NIU MQi GT"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "niu mqi gt"
+    },
+    {
+      "id": 109,
+      "brand": "NIU",
+      "model": "MQi GT EVO",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "MQi GT EVO",
+        "MQi GT Evo",
+        "NIU MQi GT EVO"
+      ],
+      "traits": [
+        "aplicație, GPS și conectivitate",
+        "baterii detașabile și comunicație cu vehiculul",
+        "mod READY și interblocări de siguranță",
+        "sistem de alimentare de joasă tensiune separat de tracțiune"
+      ],
+      "note": "La MQi GT EVO, bordul aprins nu înseamnă automat că lanțul de tracțiune este pregătit. Verifică recunoașterea bateriilor, modul READY, frânele, cricul și alimentarea auxiliară.",
+      "normalized": "niu mqi gt evo"
+    },
+    {
+      "id": 110,
+      "brand": "NIU",
+      "model": "MQi+ Sport",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "MQi+ Sport",
+        "NIU MQi Plus Sport",
+        "NIU MQi+ Sport"
+      ],
+      "traits": [
+        "alimentare auxiliară și interblocări",
+        "aplicație, GPS și alarmă",
+        "baterie detașabilă",
+        "motor în roată"
+      ],
+      "note": "La MQi+ Sport, separă problema de conectivitate sau baterie auxiliară de lanțul de tracțiune. Un GPS offline, o alarmă activată sau un contact de frână blocat nu înseamnă automat controller defect.",
+      "normalized": "niu mqi+ sport"
+    },
+    {
+      "id": 111,
+      "brand": "NIU",
+      "model": "NQi GTS",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "NIU NQi GTS",
+        "NQi GTS",
+        "Niu NQi GTS"
+      ],
+      "traits": [
+        "aplicație NIU și telematică",
+        "baterii detașabile în funcție de versiune",
+        "controller integrat",
+        "motor hub",
+        "sisteme de siguranță și senzori"
+      ],
+      "note": "La NQi GTS, aplicația și telematica oferă indicii, dar diagnosticul nu trebuie bazat exclusiv pe un mesaj din aplicație; starea bateriilor și alimentarea sub sarcină rămân esențiale.",
+      "normalized": "niu nqi gts"
+    },
+    {
+      "id": 112,
+      "brand": "NIU",
+      "model": "NQi Sport",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "NIU NQi Sport",
+        "NQi Sport"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "niu nqi sport"
+    },
+    {
+      "id": 113,
+      "brand": "NIU",
+      "model": "UQi GT",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "NIU UQi GT",
+        "UQi GT"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "niu uqi gt"
+    },
+    {
+      "id": 114,
+      "brand": "OEM",
+      "model": "48V QS-S4 10 inch",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "48V QS-S4 10 inch",
+        "OEM 48V QS-S4 10 inch",
+        "scooter OEM 48V",
+        "trotineta chinezeasca 48V QS-S4",
+        "trotineta no name 10 inch"
+      ],
+      "traits": [
+        "anvelope de 10 inch",
+        "controller generic 48V",
+        "display QS-S4 sau compatibil",
+        "frâne pe disc",
+        "multe revizii de cablaj"
+      ],
+      "note": "La platformele no-name, numele de pe cadru este adesea mai puțin util decât codul controllerului, tensiunea bateriei, tipul displayului și fotografiile mufelor.",
+      "normalized": "oem 48v qs s4 10 inch"
+    },
+    {
+      "id": 115,
+      "brand": "OEM / no-name",
+      "model": "36V 10 inch commuter",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "36V 10 inch commuter",
+        "OEM / no-name 36V 10 inch commuter",
+        "trotineta chinezeasca 10 inch 36v",
+        "trotineta no name 36v 10 inch"
+      ],
+      "traits": [
+        "baterie 36V",
+        "controller generic",
+        "platformă urbană",
+        "roți de 10 inch"
+      ],
+      "note": "Confirmă tensiunea nominală și fotografia etichetei înainte de a cumpăra piese; platforme foarte asemănătoare pot folosi protocoale diferite.",
+      "normalized": "oem no name 36v 10 inch commuter"
+    },
+    {
+      "id": 116,
+      "brand": "OEM / no-name",
+      "model": "36V 8.5 inch basic",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "36V 8.5 inch basic",
+        "OEM / no-name 36V 8.5 inch basic",
+        "scooter 36v basic",
+        "trotineta chinezeasca 36v roti 8.5",
+        "trotineta no name 36v 8.5"
+      ],
+      "traits": [
+        "baterie 36V",
+        "controller generic",
+        "platformă urbană simplă",
+        "roți de 8,5 inch"
+      ],
+      "note": "La platformele fără marcă, codul controllerului, tensiunea bateriei, tipul displayului și conectorii sunt mai utile decât numele de pe carcasă.",
+      "normalized": "oem no name 36v 8 5 inch basic"
+    },
+    {
+      "id": 117,
+      "brand": "OEM / no-name",
+      "model": "36V copii cu motor în spate",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "36V copii cu motor în spate",
+        "OEM / no-name 36V copii cu motor în spate",
+        "trotineta copii 36v no name",
+        "trotineta electrica copii generica"
+      ],
+      "traits": [
+        "baterie compactă",
+        "comenzi simple",
+        "motor în roata spate",
+        "putere redusă"
+      ],
+      "note": "La modelele pentru copii, verifică întâi siguranța comenzii, limitarea de viteză și starea mecanică; nu ocoli interblocările de protecție.",
+      "normalized": "oem no name 36v copii cu motor in spate"
+    },
+    {
+      "id": 118,
+      "brand": "OEM / no-name",
+      "model": "36V cu anvelope pline",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "36V cu anvelope pline",
+        "OEM / no-name 36V cu anvelope pline",
+        "trotineta chinezeasca anvelope solide",
+        "trotineta no name 36v roti pline"
+      ],
+      "traits": [
+        "anvelope pline",
+        "baterie 36V",
+        "cadru urban compact",
+        "controller generic"
+      ],
+      "note": "Anvelopele pline transmit mai multe vibrații către cablaj și prinderi; verifică jocurile și punctele de flexare înainte de a suspecta electronica.",
+      "normalized": "oem no name 36v cu anvelope pline"
+    },
+    {
+      "id": 119,
+      "brand": "OEM / no-name",
+      "model": "48V 11 inch tubeless",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "48V 11 inch tubeless",
+        "OEM / no-name 48V 11 inch tubeless",
+        "trotineta chinezeasca 11 inch 48v",
+        "trotineta no name 48v 11 inch tubeless"
+      ],
+      "traits": [
+        "anvelope tubeless de 11 inch",
+        "baterie 48V",
+        "controller generic",
+        "suspensie frecventă"
+      ],
+      "note": "La platformele de 11 inch, dimensiunea exactă a talonului, valvei și jantei trebuie confirmată; denumirea comercială nu este suficientă.",
+      "normalized": "oem no name 48v 11 inch tubeless"
+    },
+    {
+      "id": 120,
+      "brand": "OEM / no-name",
+      "model": "48V cu șa și coș",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "48V cu șa și coș",
+        "OEM / no-name 48V cu șa și coș",
+        "trotineta 48v cu sa no name",
+        "trotineta electrica cu scaun si cos"
+      ],
+      "traits": [
+        "cablaj expus în mai multe zone",
+        "platformă 48V",
+        "roți pneumatice",
+        "șa detașabilă"
+      ],
+      "note": "La platformele cu șa, vibrațiile și traseul mai lung al cablurilor pot crea contacte intermitente; urmărește punctele de flexare.",
+      "normalized": "oem no name 48v cu ia ii coi"
+    },
+    {
+      "id": 121,
+      "brand": "OEM / no-name",
+      "model": "48V dual suspension",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "48V dual suspension",
+        "OEM / no-name 48V dual suspension",
+        "trotineta 48v off road generica",
+        "trotineta no name 48v suspensie dubla"
+      ],
+      "traits": [
+        "baterie 48V",
+        "controller generic",
+        "roți de 10 inch",
+        "suspensie față-spate"
+      ],
+      "note": "Verifică prinderile, cablajul și revizia controllerului; aceste platforme sunt rebranduite frecvent cu piese apropiate vizual.",
+      "normalized": "oem no name 48v dual suspension"
+    },
+    {
+      "id": 122,
+      "brand": "OEM / no-name",
+      "model": "48V QS-S4 10 inch",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "48V QS-S4 10 inch",
+        "OEM / no-name 48V QS-S4 10 inch",
+        "display qs-s4 48v",
+        "trotineta 48v qs s4",
+        "trotineta no name 48v 10 inch"
+      ],
+      "traits": [
+        "baterie 48V",
+        "controller generic",
+        "display QS-S4 sau compatibil",
+        "roți de 10 inch"
+      ],
+      "note": "La platformele QS-S4, setările displayului, tensiunea și protocolul controllerului trebuie confirmate împreună; aspectul identic nu garantează compatibilitatea.",
+      "normalized": "oem no name 48v qs s4 10 inch"
+    },
+    {
+      "id": 123,
+      "brand": "OEM / no-name",
+      "model": "52V dual motor",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "52V dual motor",
+        "OEM / no-name 52V dual motor",
+        "trotineta 52v doua motoare",
+        "trotineta no name 52v dual motor"
+      ],
+      "traits": [
+        "baterie 52V",
+        "două controllere sau controller dublu",
+        "două motoare",
+        "suspensie"
+      ],
+      "note": "Testează fiecare punte separat și nu presupune că ambele controllere sau motoare sunt identice fără codurile pieselor.",
+      "normalized": "oem no name 52v dual motor"
+    },
+    {
+      "id": 124,
+      "brand": "OEM / no-name",
+      "model": "52V QS-S4 single motor",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "52V QS-S4 single motor",
+        "OEM / no-name 52V QS-S4 single motor",
+        "trotineta 52v qs s4 un motor",
+        "trotineta no name 52v display qs-s4"
+      ],
+      "traits": [
+        "baterie 52V",
+        "controller generic",
+        "display QS-S4 sau compatibil",
+        "un motor"
+      ],
+      "note": "Setările de tensiune și diametru din display pot modifica indicațiile și comportamentul; confirmă protocolul înainte de schimbarea componentelor.",
+      "normalized": "oem no name 52v qs s4 single motor"
+    },
+    {
+      "id": 125,
+      "brand": "OEM / no-name",
+      "model": "60V 11 inch single motor",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "60V 11 inch single motor",
+        "OEM / no-name 60V 11 inch single motor",
+        "trotineta 60v single motor",
+        "trotineta no name 60v un motor 11 inch"
+      ],
+      "traits": [
+        "baterie 60V",
+        "controller generic",
+        "roți de 11 inch",
+        "un motor de putere mare"
+      ],
+      "note": "La un singur motor de putere mare, conectorii de fază și căderea de tensiune sub sarcină sunt piste importante când apare pierdere de cuplu.",
+      "normalized": "oem no name 60v 11 inch single motor"
+    },
+    {
+      "id": 126,
+      "brand": "OEM / no-name",
+      "model": "60V dual motor",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "60V dual motor",
+        "OEM / no-name 60V dual motor",
+        "trotineta 60v doua motoare",
+        "trotineta no name 60v dual motor"
+      ],
+      "traits": [
+        "baterie 60V",
+        "două motoare",
+        "sistem de putere ridicată",
+        "suspensie"
+      ],
+      "note": "La 60V, încălzirea conectorilor și căderile de tensiune trebuie tratate cu prudență; nu se recomandă probe lungi când apare miros sau temperatură neobișnuită.",
+      "normalized": "oem no name 60v dual motor"
+    },
+    {
+      "id": 127,
+      "brand": "OEM / no-name",
+      "model": "60V off-road cu două motoare",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "60V off-road cu două motoare",
+        "OEM / no-name 60V off-road cu două motoare",
+        "trotineta 60v off road no name",
+        "trotineta chinezeasca dual motor offroad"
+      ],
+      "traits": [
+        "anvelope off-road",
+        "controllere multiple",
+        "două motoare",
+        "suspensie"
+      ],
+      "note": "Noroiul, apa și șocurile mecanice pot afecta simultan cablajul și partea mecanică; diagnosticul trebuie separat pe fiecare punte.",
+      "normalized": "oem no name 60v off road cu doua motoare"
+    },
+    {
+      "id": 128,
+      "brand": "OEM / no-name",
+      "model": "72V dual motor 11 inch",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "72V dual motor 11 inch",
+        "OEM / no-name 72V dual motor 11 inch",
+        "superscooter generic 72v 11 inch",
+        "trotineta no name 72v dual motor 11 inch"
+      ],
+      "traits": [
+        "baterie 72V",
+        "controllere de putere mare",
+        "două motoare",
+        "roți de 11 inch"
+      ],
+      "note": "Orice încălzire, miros sau tăiere de putere trebuie investigată fără probe repetate; energia și curenții sunt mari.",
+      "normalized": "oem no name 72v dual motor 11 inch"
+    },
+    {
+      "id": 129,
+      "brand": "OEM / no-name",
+      "model": "72V superscooter",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "72V superscooter",
+        "OEM / no-name 72V superscooter",
+        "superscooter 72v generic",
+        "trotineta 72v doua motoare",
+        "trotineta no name 72v"
+      ],
+      "traits": [
+        "baterie 72V",
+        "controllere de putere mare",
+        "două motoare",
+        "frâne hidraulice frecvente"
+      ],
+      "note": "Puterea mare amplifică efectul unei conexiuni slabe, al unei anvelope montate greșit sau al unui rulment uzat; oprește testul la orice semn de supraîncălzire.",
+      "normalized": "oem no name 72v superscooter"
+    },
+    {
+      "id": 130,
+      "brand": "OEM / no-name",
+      "model": "CityCoco 60V 1500W generic",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "CityCoco 60V 1500W generic",
+        "OEM / no-name CityCoco 60V 1500W generic",
+        "citycoco 1500w no name",
+        "scuter electric chopper 60v 1500w"
+      ],
+      "traits": [
+        "baterie 60V",
+        "cadru tip chopper",
+        "controller generic",
+        "motor în roată"
+      ],
+      "note": "La CityCoco generic, codurile controllerului și ale displayului sunt esențiale; multe vehicule arată la fel, dar au mufe și protocoale diferite.",
+      "normalized": "oem no name citycoco 60v 1500w generic"
+    },
+    {
+      "id": 131,
+      "brand": "OEM / no-name",
+      "model": "CityCoco 60V 2000W generic",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "CityCoco 60V 2000W generic",
+        "OEM / no-name CityCoco 60V 2000W generic",
+        "citycoco 2000w no name",
+        "scuter electric harley 2000w 60v"
+      ],
+      "traits": [
+        "baterie 60V",
+        "controller generic",
+        "motor în roată 2000W clasă",
+        "roți late"
+      ],
+      "note": "Confirmă tensiunea, curentul controllerului și dimensiunea roții înainte de a comanda piese; denumirea 2000W este folosită pe mai multe platforme.",
+      "normalized": "oem no name citycoco 60v 2000w generic"
+    },
+    {
+      "id": 132,
+      "brand": "OEM / no-name",
+      "model": "CityCoco 72V 3000W generic",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "CityCoco 72V 3000W generic",
+        "OEM / no-name CityCoco 72V 3000W generic",
+        "citycoco 3000w 72v no name",
+        "scuter electric harley 72v 3000w"
+      ],
+      "traits": [
+        "baterie 72V",
+        "controller generic",
+        "motor în roată de putere mare",
+        "roți late"
+      ],
+      "note": "La 72V, nu continua probele când se încălzesc cablurile sau conectorii; măsurătorile trebuie făcute cu echipament potrivit.",
+      "normalized": "oem no name citycoco 72v 3000w generic"
+    },
+    {
+      "id": 133,
+      "brand": "OEM / no-name",
+      "model": "scuter 48V cu baterii plumb",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "OEM / no-name scuter 48V cu baterii plumb",
+        "scuter 48V cu baterii plumb",
+        "scuter chinezesc 4 baterii 12v",
+        "scuter electric 48v baterii plumb"
+      ],
+      "traits": [
+        "controller generic",
+        "motor în roată",
+        "pachet de baterii plumb 48V",
+        "încărcător extern"
+      ],
+      "note": "Măsoară fiecare acumulator separat și sub sarcină; o singură baterie slăbită poate provoca opriri și autonomie redusă.",
+      "normalized": "oem no name scuter 48v cu baterii plumb"
+    },
+    {
+      "id": 134,
+      "brand": "OEM / no-name",
+      "model": "scuter 60V cu baterii plumb",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "OEM / no-name scuter 60V cu baterii plumb",
+        "scuter 60V cu baterii plumb",
+        "scuter chinezesc 5 baterii 12v",
+        "scuter electric 60v baterii plumb"
+      ],
+      "traits": [
+        "controller generic",
+        "motor în roată",
+        "pachet de baterii plumb",
+        "încărcător extern"
+      ],
+      "note": "La pachetele cu acumulatori de plumb, o singură baterie slăbită poate trage în jos întregul șir; fiecare element trebuie măsurat separat.",
+      "normalized": "oem no name scuter 60v cu baterii plumb"
+    },
+    {
+      "id": 135,
+      "brand": "OEM / no-name",
+      "model": "scuter 60V litiu fix",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "OEM / no-name scuter 60V litiu fix",
+        "scuter 60V litiu fix",
+        "scuter chinezesc baterie litiu integrata",
+        "scuter electric no name 60v litiu fix"
+      ],
+      "traits": [
+        "BMS",
+        "baterie litiu fixă",
+        "controller generic",
+        "motor în roată"
+      ],
+      "note": "La bateria fixă, accesul și izolarea trebuie făcute în service; nu demonta pachetul fără procedură și echipament adecvat.",
+      "normalized": "oem no name scuter 60v litiu fix"
+    },
+    {
+      "id": 136,
+      "brand": "OEM / no-name",
+      "model": "scuter 72V cu baterii plumb",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "OEM / no-name scuter 72V cu baterii plumb",
+        "scuter 72V cu baterii plumb",
+        "scuter chinezesc 6 baterii 12v",
+        "scuter electric 72v baterii plumb"
+      ],
+      "traits": [
+        "controller generic",
+        "motor în roată",
+        "pachet de baterii plumb 72V",
+        "încărcător extern"
+      ],
+      "note": "Diferențele mici între cele șase baterii se amplifică sub sarcină; fiecare element trebuie testat și comparat.",
+      "normalized": "oem no name scuter 72v cu baterii plumb"
+    },
+    {
+      "id": 137,
+      "brand": "OEM / no-name",
+      "model": "scuter 72V litiu detașabil",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "OEM / no-name scuter 72V litiu detașabil",
+        "scuter 72V litiu detașabil",
+        "scuter chinezesc baterie litiu detasabila",
+        "scuter electric no name 72v litiu"
+      ],
+      "traits": [
+        "BMS comunicant sau simplu",
+        "baterie litiu detașabilă",
+        "controller generic",
+        "motor în roată"
+      ],
+      "note": "Verifică atât contactele bateriei, cât și compatibilitatea dintre BMS, încărcător și controller; aceeași carcasă poate ascunde configurații diferite.",
+      "normalized": "oem no name scuter 72v litiu detaiabil"
+    },
+    {
+      "id": 138,
+      "brand": "OEM / no-name",
+      "model": "scuter cargo 72V pentru livrări",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "OEM / no-name scuter cargo 72V pentru livrări",
+        "scuter cargo 72V pentru livrări",
+        "scuter cargo electric chinezesc",
+        "scuter electric livrari 72v no name"
+      ],
+      "traits": [
+        "baterie 72V",
+        "cadru cargo",
+        "motor în roată",
+        "sarcină utilă ridicată"
+      ],
+      "note": "Sarcina mare schimbă temperaturile, frânarea și căderea de tensiune; diagnosticul trebuie făcut cu o sarcină apropiată de utilizarea reală.",
+      "normalized": "oem no name scuter cargo 72v pentru livrari"
+    },
+    {
+      "id": 139,
+      "brand": "OEM / no-name",
+      "model": "triciclu electric 60V cargo",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "OEM / no-name triciclu electric 60V cargo",
+        "scuter electric trei roti cargo",
+        "triciclu electric 60V cargo",
+        "triciclu electric 60v no name"
+      ],
+      "traits": [
+        "baterie 60V",
+        "controller generic",
+        "transmisie sau motor în punte",
+        "trei roți"
+      ],
+      "note": "La triciclurile electrice, diferențialul, cablajul lung și sarcina pe punte pot produce simptome diferite față de un scuter cu două roți.",
+      "normalized": "oem no name triciclu electric 60v cargo"
+    },
+    {
+      "id": 140,
+      "brand": "",
+      "model": "OX",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "OX"
+      ],
+      "traits": [],
+      "note": "",
+      "normalized": "ox"
+    },
+    {
+      "id": 141,
+      "brand": "Piaggio",
+      "model": "1 Active",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "1 Active",
+        "Piaggio 1 Active",
+        "Piaggio One Active"
+      ],
+      "traits": [
+        "baterie detașabilă",
+        "bord digital și moduri de rulare",
+        "interblocări și alimentare auxiliară",
+        "motor în roată"
+      ],
+      "note": "La Piaggio 1 Active, confirmă modul READY, starea contactelor bateriei și alimentarea auxiliară. Dacă bordul funcționează, dar tracțiunea lipsește, senzorii de frână, cricul sau comunicația bateriei sunt piste importante.",
+      "normalized": "piaggio 1 active"
+    },
+    {
+      "id": 142,
+      "brand": "",
+      "model": "Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Pro"
+      ],
+      "traits": [],
+      "note": "",
+      "normalized": "pro"
+    },
+    {
+      "id": 143,
+      "brand": "Pure Electric",
+      "model": "Pure Advance",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Pure Advance",
+        "Pure Electric Pure Advance"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "pure electric pure advance"
+    },
+    {
+      "id": 144,
+      "brand": "Pure Electric",
+      "model": "Pure Air",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Pure Air",
+        "Pure Electric Pure Air"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "pure electric pure air"
+    },
+    {
+      "id": 145,
+      "brand": "Pure Electric",
+      "model": "Pure Air Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Pure Air Pro",
+        "Pure Electric Pure Air Pro"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "pure electric pure air pro"
+    },
+    {
+      "id": 146,
+      "brand": "Razor",
+      "model": "C35",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "C35",
+        "Razor C35"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "razor c35"
+    },
+    {
+      "id": 147,
+      "brand": "Razor",
+      "model": "E Prime",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "E Prime",
+        "Razor E Prime"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "razor e prime"
+    },
+    {
+      "id": 148,
+      "brand": "Razor",
+      "model": "E300",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "E300",
+        "Razor E300"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "razor e300"
+    },
+    {
+      "id": 149,
+      "brand": "Segway",
+      "model": "E110S",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "E110S",
+        "Segway E110S",
+        "Segway eScooter E110S"
+      ],
+      "traits": [
+        "alimentare auxiliară pentru bord și lumini",
+        "baterie detașabilă și BMS comunicant",
+        "mod READY și interblocări",
+        "pornire inteligentă și aplicație"
+      ],
+      "note": "La E110S, bordul aprins nu confirmă că tracțiunea este pregătită. Verifică bateria auxiliară, recunoașterea bateriei principale, frâna, cricul și modul READY înainte de a suspecta motorul.",
+      "normalized": "segway e110s"
+    },
+    {
+      "id": 150,
+      "brand": "Segway",
+      "model": "E125S",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "E125S",
+        "Segway E125S",
+        "Segway eScooter E125S"
+      ],
+      "traits": [
+        "aplicație și funcții antifurt",
+        "baterii detașabile",
+        "interblocări pentru pornire",
+        "sistem DC-DC pentru consumatorii auxiliari"
+      ],
+      "note": "La E125S, diferențele dintre baterii, contactele și alimentarea de 12V pot provoca simptome aparent fără legătură. Notează dacă dispare READY, dacă se resetează bordul sau dacă problema apare cu una dintre baterii.",
+      "normalized": "segway e125s"
+    },
+    {
+      "id": 151,
+      "brand": "Segway",
+      "model": "E300SE",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "E300SE",
+        "Segway E300SE",
+        "Segway eScooter E300SE"
+      ],
+      "traits": [
+        "alimentare DC-DC pentru bord și lumini",
+        "baterii modulare și BMS comunicant",
+        "interblocări pentru frână și cric",
+        "pornire fără cheie și aplicație"
+      ],
+      "note": "La E300SE, separă alimentarea auxiliară de lanțul de tracțiune. Un bord funcțional, o baterie nerecunoscută sau o interblocare activă pot împiedica modul READY fără ca motorul să fie defect.",
+      "normalized": "segway e300se"
+    },
+    {
+      "id": 152,
+      "brand": "Segway Ninebot",
+      "model": "D38E",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "D38E",
+        "Segway Ninebot D38E"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "segway ninebot d38e"
+    },
+    {
+      "id": 153,
+      "brand": "Segway Ninebot",
+      "model": "E2 Plus",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "E2 Plus",
+        "Segway Ninebot E2 Plus"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "segway ninebot e2 plus"
+    },
+    {
+      "id": 154,
+      "brand": "Segway Ninebot",
+      "model": "E2 Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "E2 Pro",
+        "Segway Ninebot E2 Pro"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "segway ninebot e2 pro"
+    },
+    {
+      "id": 155,
+      "brand": "Segway Ninebot",
+      "model": "E2 Pro E",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "E2 Pro E",
+        "Ninebot E2 Pro",
+        "Segway E2 Pro E",
+        "Segway Ninebot E2 Pro E"
+      ],
+      "traits": [
+        "aplicație și funcții de securitate",
+        "componente optimizate pentru greutate redusă",
+        "construcție compactă pentru navetă",
+        "frânare combinată"
+      ],
+      "note": "La E2 Pro E, începe cu alimentarea, senzorul de frână și cablajul din ghidon înainte de a suspecta motorul. La modelele compacte, o mufă mică slăbită poate produce simptome care par mai grave decât sunt.",
+      "normalized": "segway ninebot e2 pro e"
+    },
+    {
+      "id": 156,
+      "brand": "Segway Ninebot",
+      "model": "E3 Pro E",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "E3 Pro E",
+        "Ninebot E3 Pro E",
+        "Segway E3 Pro",
+        "Segway Ninebot E3 Pro E"
+      ],
+      "traits": [
+        "design urban compact",
+        "frânare electronică asistată",
+        "semnalizare și funcții conectate",
+        "suspensie pentru navetă"
+      ],
+      "note": "La E3 Pro E, senzorii de comandă și funcțiile conectate pot bloca tracțiunea chiar când bateria și motorul sunt funcționale.",
+      "normalized": "segway ninebot e3 pro e"
+    },
+    {
+      "id": 157,
+      "brand": "Segway Ninebot",
+      "model": "F2",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "F2",
+        "Segway Ninebot F2"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "segway ninebot f2"
+    },
+    {
+      "id": 158,
+      "brand": "Segway Ninebot",
+      "model": "F2 Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "F2 Pro",
+        "Ninebot F2 Pro",
+        "Segway F2 Pro E",
+        "Segway Ninebot F2 Pro"
+      ],
+      "traits": [
+        "anvelope pneumatice",
+        "control prin aplicație",
+        "frânare combinată",
+        "mecanism pliabil",
+        "semnalizări"
+      ],
+      "note": "La F2 Pro, semnalizările, senzorii de frână și setările din aplicație pot influența simptome care par inițial probleme de motor.",
+      "normalized": "segway ninebot f2 pro"
+    },
+    {
+      "id": 159,
+      "brand": "Segway Ninebot",
+      "model": "F25",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "F25",
+        "Segway Ninebot F25"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "segway ninebot f25"
+    },
+    {
+      "id": 160,
+      "brand": "Segway Ninebot",
+      "model": "F3 E",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "F3 E",
+        "Ninebot F3",
+        "Segway F3 E",
+        "Segway Ninebot F3 E"
+      ],
+      "traits": [
+        "asistență electronică și aplicație",
+        "platformă pliabilă de navetă",
+        "sistem de iluminare integrat",
+        "suspensie pentru drum urban"
+      ],
+      "note": "La F3 E, confirmă mai întâi modul de rulare, nivelul real al bateriei și eventualele avertizări din aplicație. Multe manifestări intermitente se separă prin observarea momentului exact în care apar.",
+      "normalized": "segway ninebot f3 e"
+    },
+    {
+      "id": 161,
+      "brand": "Segway Ninebot",
+      "model": "F3 Pro E",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "F3 Pro E",
+        "Ninebot F3 Pro",
+        "Segway F3 Pro E",
+        "Segway Ninebot F3 Pro E"
+      ],
+      "traits": [
+        "aplicație și blocare electronică",
+        "frânare regenerativă combinată",
+        "suspensie pentru denivelări",
+        "utilizare urbană zilnică"
+      ],
+      "note": "La F3 Pro E, merită comparate informațiile din display și aplicație cu reacția reală a frânei, accelerației și motorului. Un blocaj software, un senzor de frână sau o conexiune pot produce simptome asemănătoare.",
+      "normalized": "segway ninebot f3 pro e"
+    },
+    {
+      "id": 162,
+      "brand": "Segway Ninebot",
+      "model": "F40",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "F40",
+        "Segway Ninebot F40"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "segway ninebot f40"
+    },
+    {
+      "id": 163,
+      "brand": "Segway Ninebot",
+      "model": "GT1",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "GT1",
+        "Segway Ninebot GT1"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "segway ninebot gt1"
+    },
+    {
+      "id": 164,
+      "brand": "Segway Ninebot",
+      "model": "GT2",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "GT2",
+        "Segway Ninebot GT2"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "segway ninebot gt2"
+    },
+    {
+      "id": 165,
+      "brand": "Segway Ninebot",
+      "model": "GT3 E",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "GT3 E",
+        "Ninebot GT3",
+        "Segway GT3 E",
+        "Segway Ninebot GT3 E"
+      ],
+      "traits": [
+        "frâne dimensionate pentru viteze ridicate",
+        "platformă grea și stabilă",
+        "sistem electronic cu aplicație și moduri de rulare",
+        "suspensie față-spate"
+      ],
+      "note": "La GT3 E, diagnosticul corect separă întâi restricțiile software și semnalele de siguranță de defectele mecanice sau electrice. Observă dacă simptomul apare într-un anumit mod de rulare sau după încălzire.",
+      "normalized": "segway ninebot gt3 e"
+    },
+    {
+      "id": 166,
+      "brand": "Segway Ninebot",
+      "model": "GT3 Pro",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "GT3 Pro",
+        "Ninebot GT3 Pro",
+        "Segway GT3 Pro",
+        "Segway Ninebot GT3 Pro"
+      ],
+      "traits": [
+        "anvelope mari și masă ridicată",
+        "două motoare și control electronic complex",
+        "frânare puternică și multiple moduri de rulare",
+        "suspensie orientată spre viteză și stabilitate"
+      ],
+      "note": "La GT3 Pro, o limitare de putere, o vibrație sau o eroare de tracțiune trebuie corelată cu modul de rulare, temperatura și starea ambelor punți. Nu porni de la ideea că cele două motoare sau controllere se comportă identic.",
+      "normalized": "segway ninebot gt3 pro"
+    },
+    {
+      "id": 167,
+      "brand": "Segway Ninebot",
+      "model": "MAX G2",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "MAX G2",
+        "Ninebot Max G2",
+        "Segway G2 Max",
+        "Segway Ninebot MAX G2"
+      ],
+      "traits": [
+        "anvelope tubeless",
+        "control prin aplicație",
+        "motor spate",
+        "semnalizări integrate",
+        "suspensie față-spate"
+      ],
+      "note": "MAX G2 are mai multe sisteme de confort și control decât G30, astfel că zgomotele, erorile și limitările trebuie legate de condiția exactă în care apar.",
+      "normalized": "segway ninebot max g2"
+    },
+    {
+      "id": 168,
+      "brand": "Segway Ninebot",
+      "model": "MAX G3 E",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "MAX G3 E",
+        "Ninebot Max G3",
+        "Segway G3 E",
+        "Segway Ninebot MAX G3 E"
+      ],
+      "traits": [
+        "funcții conectate",
+        "platformă de navetă cu autonomie mare",
+        "sistem de frânare complex",
+        "suspensie"
+      ],
+      "note": "La MAX G3 E, încărcarea, estimarea autonomiei și limitarea puterii trebuie citite împreună; un procent afișat corect nu garantează că bateria se comportă la fel sub sarcină.",
+      "normalized": "segway ninebot max g3 e"
+    },
+    {
+      "id": 169,
+      "brand": "Segway Ninebot",
+      "model": "MAX G30",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "MAX G30",
+        "MAX G30E II",
+        "Ninebot G30",
+        "Segway G30",
+        "Segway Ninebot MAX G30"
+      ],
+      "traits": [
+        "anvelope tubeless",
+        "aplicație Segway-Ninebot",
+        "frână față și frânare regenerativă",
+        "mecanism pliabil",
+        "motor în roata spate"
+      ],
+      "note": "La MAX G30, o oprire în mers trebuie corelată atent cu nivelul bateriei, încărcarea, conectorii și comportamentul motorului spate.",
+      "normalized": "segway ninebot max g30"
+    },
+    {
+      "id": 170,
+      "brand": "Segway Ninebot",
+      "model": "P100S",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "P100S",
+        "Segway Ninebot P100S"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "segway ninebot p100s"
+    },
+    {
+      "id": 171,
+      "brand": "Segway Ninebot",
+      "model": "P100SE",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Ninebot P100SE",
+        "P100SE",
+        "Segway Ninebot P100SE",
+        "Segway P100SE"
+      ],
+      "traits": [
+        "frânare puternică pentru utilizare urbană",
+        "funcții conectate și blocare electronică",
+        "platformă grea și stabilă",
+        "suspensie față-spate"
+      ],
+      "note": "La P100SE, o întrerupere poate veni din protecțiile electronice, din alimentare sau dintr-un contact care cedează la vibrații. Corelează întotdeauna simptomul cu modul de rulare, nivelul bateriei și starea luminilor sau a displayului.",
+      "normalized": "segway ninebot p100se"
+    },
+    {
+      "id": 172,
+      "brand": "Segway Ninebot",
+      "model": "P65",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "P65",
+        "Segway Ninebot P65"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "segway ninebot p65"
+    },
+    {
+      "id": 173,
+      "brand": "Segway Ninebot",
+      "model": "P65E",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Ninebot P65E",
+        "P65E",
+        "Segway Ninebot P65E",
+        "Segway P65E"
+      ],
+      "traits": [
+        "anvelope mari pentru oraș",
+        "frânare electronică și mecanică",
+        "platformă rigidă cu masă ridicată",
+        "sistem conectat prin aplicație"
+      ],
+      "note": "La P65E, verifică separat o limitare software, o interblocare de frână și o problemă electrică reală. Simptomele care apar la aprinderea farului sau la virarea ghidonului indică adesea o pistă diferită față de cele care apar numai sub sarcină.",
+      "normalized": "segway ninebot p65e"
+    },
+    {
+      "id": 174,
+      "brand": "Segway Ninebot",
+      "model": "ZT3 Pro E",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Ninebot ZT3 Pro E",
+        "Segway Ninebot ZT3 Pro E",
+        "Segway ZT3 Pro",
+        "ZT3 Pro E"
+      ],
+      "traits": [
+        "cadru robust",
+        "control al tracțiunii și aplicație",
+        "roți mari pentru teren variat",
+        "suspensie față-spate"
+      ],
+      "note": "ZT3 Pro E este construit pentru suprafețe mai dificile, dar vibrațiile și șocurile pot scoate la iveală contacte, jocuri sau probleme de etanșare care nu apar pe asfalt neted.",
+      "normalized": "segway ninebot zt3 pro e"
+    },
+    {
+      "id": 175,
+      "brand": "Silence",
+      "model": "S01",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "S01",
+        "Silence S01",
+        "Silence S01 Connected"
+      ],
+      "traits": [
+        "baterie detașabilă tip trolley",
+        "frânare regenerativă",
+        "motor electric în roată",
+        "sistem conectat"
+      ],
+      "note": "La S01, mecanismul bateriei detașabile și comunicația cu vehiculul sunt parte din diagnostic; o baterie introdusă fizic nu este neapărat recunoscută electronic.",
+      "normalized": "silence s01"
+    },
+    {
+      "id": 176,
+      "brand": "Silence",
+      "model": "S02",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "S02",
+        "Silence S02"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "silence s02"
+    },
+    {
+      "id": 177,
+      "brand": "SmartGyro",
+      "model": "K2",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "K2",
+        "SmartGyro K2"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "smartgyro k2"
+    },
+    {
+      "id": 178,
+      "brand": "SmartGyro",
+      "model": "Rockway",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Rockway",
+        "SmartGyro Rockway"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "smartgyro rockway"
+    },
+    {
+      "id": 179,
+      "brand": "SmartGyro",
+      "model": "SpeedWay",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "SmartGyro SpeedWay",
+        "SpeedWay"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "smartgyro speedway"
+    },
+    {
+      "id": 180,
+      "brand": "Super Soco",
+      "model": "CPx",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "CPx",
+        "Soco CPx",
+        "Super Soco CPx",
+        "Vmoto CPx"
+      ],
+      "traits": [
+        "baterie detașabilă",
+        "bord digital",
+        "motor electric în roata spate",
+        "senzori de siguranță"
+      ],
+      "note": "La CPx, contactele bateriei și interblocările de siguranță pot împiedica modul READY chiar dacă bordul se aprinde normal.",
+      "normalized": "super soco cpx"
+    },
+    {
+      "id": 181,
+      "brand": "Super Soco",
+      "model": "CUx",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "CUx",
+        "Soco CUx",
+        "Super Soco CUx",
+        "Vmoto Soco CUx"
+      ],
+      "traits": [
+        "baterie detașabilă",
+        "controller și bord integrate",
+        "motor electric în roată",
+        "senzori de siguranță",
+        "sistem de iluminare complet"
+      ],
+      "note": "La CUx, contactele bateriei, interblocările de siguranță și comunicația dintre bord și controller pot imita o defecțiune de motor.",
+      "normalized": "super soco cux"
+    },
+    {
+      "id": 182,
+      "brand": "Super Soco",
+      "model": "TC Max",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "Super Soco TC Max",
+        "TC Max"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "super soco tc max"
+    },
+    {
+      "id": 183,
+      "brand": "Super Soco",
+      "model": "TC Wanderer",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "Super Soco TC Wanderer",
+        "TC Wanderer",
+        "Vmoto TC Wanderer"
+      ],
+      "traits": [
+        "alimentare separată pentru lumini și bord",
+        "baterie detașabilă",
+        "contact și interblocări de siguranță",
+        "motor în roată"
+      ],
+      "note": "La TC Wanderer, urmărește separat contactul, recunoașterea bateriei, alimentarea DC-DC și semnalele de frână sau cric. Un singur conector oxidat poate lăsa bordul activ, dar tracțiunea indisponibilă.",
+      "normalized": "super soco tc wanderer"
+    },
+    {
+      "id": 184,
+      "brand": "Super Soco",
+      "model": "TS Street Hunter",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "Super Soco TS Street Hunter",
+        "TS Street Hunter"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "super soco ts street hunter"
+    },
+    {
+      "id": 185,
+      "brand": "Teverun",
+      "model": "Fighter 11+",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Fighter 11 Plus",
+        "Fighter 11+",
+        "Teverun Fighter 11+",
+        "Teverun Fighter Eleven Plus"
+      ],
+      "traits": [
+        "display și electronică de putere",
+        "două motoare",
+        "frâne hidraulice",
+        "suspensie amplă"
+      ],
+      "note": "Fighter 11+ are mai multe configurații și revizii; codul controllerului, displayul și tensiunea trebuie confirmate înainte de orice comandă de piesă.",
+      "normalized": "teverun fighter 11+"
+    },
+    {
+      "id": 186,
+      "brand": "Teverun",
+      "model": "Fighter Mini",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Fighter Mini",
+        "Teverun Fighter Mini"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "teverun fighter mini"
+    },
+    {
+      "id": 187,
+      "brand": "Teverun",
+      "model": "Fighter Supreme",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Fighter Supreme",
+        "Teverun Fighter Supreme"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "teverun fighter supreme"
+    },
+    {
+      "id": 188,
+      "brand": "Vmoto",
+      "model": "CPx Explorer",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "CPx Explorer",
+        "Vmoto CPx Explorer"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "vmoto cpx explorer"
+    },
+    {
+      "id": 189,
+      "brand": "Vmoto",
+      "model": "Stash",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "Stash",
+        "Vmoto Stash"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "vmoto stash"
+    },
+    {
+      "id": 190,
+      "brand": "VSETT",
+      "model": "",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [],
+      "traits": [],
+      "note": "",
+      "normalized": "vsett"
+    },
+    {
+      "id": 191,
+      "brand": "VSETT",
+      "model": "10+",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "10+",
+        "VSETT 10 Plus",
+        "VSETT 10+"
+      ],
+      "traits": [
+        "două controllere și două motoare",
+        "frâne hidraulice în multe configurații",
+        "sistem electric de putere ridicată",
+        "suspensie robustă"
+      ],
+      "note": "La VSETT 10+, temperatura, sarcina și modul de tracțiune sunt esențiale. Testează separat puntea față și spate și nu continua dacă un cablu de fază, un conector sau controllerul se încălzește neobișnuit.",
+      "normalized": "vsett 10+"
+    },
+    {
+      "id": 192,
+      "brand": "VSETT",
+      "model": "11+",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "11+",
+        "VSETT 11 Plus",
+        "VSETT 11+"
+      ],
+      "traits": [
+        "cablaj și controllere multiple",
+        "două motoare de putere mare",
+        "frâne hidraulice",
+        "suspensie și structură pentru sarcină ridicată"
+      ],
+      "note": "La VSETT 11+, diagnosticul trebuie făcut pe fiecare punte și cu atenție la încălzire. Vibrațiile, pierderile de putere și frânarea neuniformă pot avea cauze diferite pe față și pe spate.",
+      "normalized": "vsett 11+"
+    },
+    {
+      "id": 193,
+      "brand": "VSETT",
+      "model": "8",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "VSETT 8"
+      ],
+      "traits": [],
+      "note": "",
+      "normalized": "vsett 8"
+    },
+    {
+      "id": 194,
+      "brand": "VSETT",
+      "model": "9",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "VSETT 9"
+      ],
+      "traits": [],
+      "note": "",
+      "normalized": "vsett 9"
+    },
+    {
+      "id": 195,
+      "brand": "VSETT",
+      "model": "9+",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "9+",
+        "VSETT 9 Plus",
+        "VSETT 9+"
+      ],
+      "traits": [
+        "display și comenzi cu multiple setări",
+        "două motoare și mai multe moduri de tracțiune",
+        "frâne pentru utilizare rapidă",
+        "suspensie față-spate"
+      ],
+      "note": "La VSETT 9+, compară comportamentul în modul cu un motor și în modul cu două motoare. O problemă aparentă de motor poate veni din comutator, controller, senzori de frână sau dintr-o conexiune care cedează la ghidon.",
+      "normalized": "vsett 9+"
+    },
+    {
+      "id": 196,
+      "brand": "Xiaomi",
+      "model": "",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [],
+      "traits": [],
+      "note": "",
+      "normalized": "xiaomi"
+    },
+    {
+      "id": 197,
+      "brand": "Xiaomi",
+      "model": "Electric Scooter 3",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Electric Scooter 3",
+        "Xiaomi Electric Scooter 3"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "xiaomi electric scooter 3"
+    },
+    {
+      "id": 198,
+      "brand": "Xiaomi",
+      "model": "Electric Scooter 4",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Electric Scooter 4",
+        "Xiaomi Electric Scooter 4"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "xiaomi electric scooter 4"
+    },
+    {
+      "id": 199,
+      "brand": "Xiaomi",
+      "model": "Electric Scooter 4 Lite",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Electric Scooter 4 Lite",
+        "Xiaomi Electric Scooter 4 Lite"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "xiaomi electric scooter 4 lite"
+    },
+    {
+      "id": 200,
+      "brand": "Xiaomi",
+      "model": "Electric Scooter 4 Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Electric Scooter 4 Pro",
+        "Xiaomi Electric Scooter 4 Pro"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "xiaomi electric scooter 4 pro"
+    },
+    {
+      "id": 201,
+      "brand": "Xiaomi",
+      "model": "Electric Scooter 4 Pro 2nd Gen",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Electric Scooter 4 Pro 2nd Gen",
+        "Xiaomi 4 Pro 2nd Gen",
+        "Xiaomi Electric Scooter 4 Pro 2nd Gen",
+        "Xiaomi Scooter 4 Pro Gen 2"
+      ],
+      "traits": [
+        "anvelope pneumatice",
+        "conectivitate prin aplicație",
+        "frânare electronică asistată",
+        "mecanism pliabil",
+        "platformă Xiaomi de generație nouă"
+      ],
+      "note": "La această generație, setările din aplicație, senzorii de comandă și compatibilitatea electronică trebuie separate de defecțiunile pur mecanice.",
+      "normalized": "xiaomi electric scooter 4 pro 2nd gen"
+    },
+    {
+      "id": 202,
+      "brand": "Xiaomi",
+      "model": "Electric Scooter 4 Ultra",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Electric Scooter 4 Ultra",
+        "Xiaomi 4 Ultra",
+        "Xiaomi Electric Scooter 4 Ultra"
+      ],
+      "traits": [
+        "anvelope tubeless",
+        "conectivitate prin aplicație",
+        "frânare combinată",
+        "platformă mai grea",
+        "suspensie față-spate"
+      ],
+      "note": "Suspensia și anvelopele tubeless schimbă modul în care se caută zgomotele, vibrațiile și pierderile de aer față de modelele Xiaomi mai simple.",
+      "normalized": "xiaomi electric scooter 4 ultra"
+    },
+    {
+      "id": 203,
+      "brand": "Xiaomi",
+      "model": "Electric Scooter 5",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Electric Scooter 5",
+        "Xiaomi 5",
+        "Xiaomi Electric Scooter 5",
+        "Xiaomi Scooter 5"
+      ],
+      "traits": [
+        "anvelope pneumatice",
+        "conectivitate cu aplicația",
+        "platformă urbană pliabilă",
+        "sistem electronic de frânare"
+      ],
+      "note": "La familia Xiaomi 5, comportamentul din aplicație și semnalele de pe display trebuie comparate cu starea mecanică; aceeași limitare poate veni din setări, senzori sau alimentare.",
+      "normalized": "xiaomi electric scooter 5"
+    },
+    {
+      "id": 204,
+      "brand": "Xiaomi",
+      "model": "Electric Scooter 5 Max",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Electric Scooter 5 Max",
+        "Xiaomi 5 Max",
+        "Xiaomi Electric Scooter 5 Max",
+        "Xiaomi Scooter 5 Max"
+      ],
+      "traits": [
+        "anvelope pneumatice",
+        "conectivitate prin aplicație",
+        "platformă pentru autonomie extinsă",
+        "suspensie avansată"
+      ],
+      "note": "La 5 Max, masa, suspensia și autonomia declarată fac importantă separarea pierderilor normale date de traseu de o cădere reală de performanță.",
+      "normalized": "xiaomi electric scooter 5 max"
+    },
+    {
+      "id": 205,
+      "brand": "Xiaomi",
+      "model": "Electric Scooter 5 Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Electric Scooter 5 Pro",
+        "Xiaomi 5 Pro",
+        "Xiaomi Electric Scooter 5 Pro",
+        "Xiaomi Scooter 5 Pro"
+      ],
+      "traits": [
+        "anvelope pneumatice",
+        "aplicație și funcții conectate",
+        "frânare combinată",
+        "suspensie pentru confort urban"
+      ],
+      "note": "Versiunea Pro are mai multe elemente de confort și control, astfel că zgomotele și limitările trebuie localizate înainte de a fi atribuite motorului sau controllerului.",
+      "normalized": "xiaomi electric scooter 5 pro"
+    },
+    {
+      "id": 206,
+      "brand": "Xiaomi",
+      "model": "Electric Scooter 6",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Electric Scooter 6",
+        "Xiaomi 6",
+        "Xiaomi Electric Scooter 6",
+        "Xiaomi Scooter 6"
+      ],
+      "traits": [
+        "electronică orientată spre eficiență",
+        "integrare cu aplicația Xiaomi Home",
+        "platformă pliabilă",
+        "sistem de frânare combinat"
+      ],
+      "note": "La Electric Scooter 6, nu confunda o limitare activată de sistem cu o defecțiune de motor. Notează modul selectat, avertizările și condiția în care se repetă problema.",
+      "normalized": "xiaomi electric scooter 6"
+    },
+    {
+      "id": 207,
+      "brand": "Xiaomi",
+      "model": "Electric Scooter 6 Lite",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Electric Scooter 6 Lite",
+        "Xiaomi 6 Lite",
+        "Xiaomi Electric Scooter 6 Lite",
+        "Xiaomi Scooter 6 Lite"
+      ],
+      "traits": [
+        "aplicație Xiaomi Home",
+        "configurație orientată spre navetă",
+        "construcție pliabilă și ușoară",
+        "frânare electronică și mecanică"
+      ],
+      "note": "La Electric Scooter 6 Lite, verifică întâi lucrurile simple: încărcarea reală, blocarea din aplicație, senzorul de frână și conexiunile din ghidon. Piesele pot diferi față de modelele 6, 6 Pro sau 6 Max.",
+      "normalized": "xiaomi electric scooter 6 lite"
+    },
+    {
+      "id": 208,
+      "brand": "Xiaomi",
+      "model": "Electric Scooter 6 Max",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Electric Scooter 6 Max",
+        "Xiaomi 6 Max",
+        "Xiaomi Electric Scooter 6 Max",
+        "Xiaomi Scooter 6 Max"
+      ],
+      "traits": [
+        "baterie de capacitate mai mare",
+        "masă și sarcină mai ridicate decât modelele Lite",
+        "sistem conectat prin aplicație",
+        "suspensie pentru navetă lungă"
+      ],
+      "note": "La Electric Scooter 6 Max, căderile de putere și autonomia trebuie corelate cu sarcina, temperatura, presiunea în anvelope și tensiunea bateriei sub accelerație. Masa mai mare schimbă felul în care se manifestă problemele mecanice.",
+      "normalized": "xiaomi electric scooter 6 max"
+    },
+    {
+      "id": 209,
+      "brand": "Xiaomi",
+      "model": "Electric Scooter 6 Pro",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Electric Scooter 6 Pro",
+        "Xiaomi 6 Pro",
+        "Xiaomi Electric Scooter 6 Pro",
+        "Xiaomi Scooter 6 Pro"
+      ],
+      "traits": [
+        "anvelope pentru utilizare urbană",
+        "aplicație și funcții de securitate",
+        "frânare electronică asistată",
+        "suspensie și confort îmbunătățite"
+      ],
+      "note": "La Electric Scooter 6 Pro, o problemă de stabilitate, frânare sau putere trebuie analizată împreună cu suspensia, presiunea anvelopelor și setările electronice. Nu extrapola automat soluțiile de la generațiile mai vechi.",
+      "normalized": "xiaomi electric scooter 6 pro"
+    },
+    {
+      "id": 210,
+      "brand": "Xiaomi",
+      "model": "Electric Scooter 6 Ultra",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Electric Scooter 6 Ultra",
+        "Xiaomi 6 Ultra",
+        "Xiaomi Electric Scooter 6 Ultra",
+        "Xiaomi Scooter 6 Ultra"
+      ],
+      "traits": [
+        "frânare și control electronic evoluate",
+        "platformă orientată spre confort",
+        "sistem conectat și display avansat",
+        "suspensie complexă și roți mari"
+      ],
+      "note": "La Electric Scooter 6 Ultra, zgomotele și jocurile trebuie localizate în suspensie, direcție sau roți înainte de a fi atribuite cadrului. Problemele electronice trebuie corelate cu displayul, aplicația și eventualele protecții active.",
+      "normalized": "xiaomi electric scooter 6 ultra"
+    },
+    {
+      "id": 211,
+      "brand": "Xiaomi",
+      "model": "Mi Electric Scooter 1S",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Mi Electric Scooter 1S",
+        "Xiaomi Mi Electric Scooter 1S"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "xiaomi mi electric scooter 1s"
+    },
+    {
+      "id": 212,
+      "brand": "Xiaomi",
+      "model": "Mi Electric Scooter Essential",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Mi Electric Scooter Essential",
+        "Xiaomi Mi Electric Scooter Essential"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "xiaomi mi electric scooter essential"
+    },
+    {
+      "id": 213,
+      "brand": "Xiaomi",
+      "model": "Mi Electric Scooter Pro 2",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Mi Electric Scooter Pro 2",
+        "Xiaomi Mi Electric Scooter Pro 2"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "xiaomi mi electric scooter pro 2"
+    },
+    {
+      "id": 214,
+      "brand": "Xiaomi",
+      "model": "Pro",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "Xiaomi Pro"
+      ],
+      "traits": [],
+      "note": "",
+      "normalized": "xiaomi pro"
+    },
+    {
+      "id": 215,
+      "brand": "Xiaomi",
+      "model": "Pro 2",
+      "vehicle_type": "trotinetă electrică",
+      "aliases": [
+        "Mi Pro 2",
+        "Pro 2",
+        "Xiaomi M365 Pro 2",
+        "Xiaomi Pro 2"
+      ],
+      "traits": [
+        "anvelope pneumatice",
+        "aplicație Xiaomi Home/Mi Home",
+        "frână mecanică și frânare electronică",
+        "mecanism pliabil",
+        "motor integrat în roată"
+      ],
+      "note": "Pe Pro 2, diferența dintre o problemă de alimentare, una de comandă și una mecanică se vede mai ales din comportamentul displayului, al frânei și al roții motor.",
+      "normalized": "xiaomi pro 2"
+    },
+    {
+      "id": 216,
+      "brand": "Yadea",
+      "model": "C1S",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "C1S",
+        "Yadea C1S"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "yadea c1s"
+    },
+    {
+      "id": 217,
+      "brand": "Yadea",
+      "model": "E8S Pro",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "E8S Pro",
+        "Yadea E8S Pro"
+      ],
+      "traits": [],
+      "note": "Fiind un scuter electric, lanțul de pornire include bateria, alimentarea auxiliară, interblocările și controllerul.",
+      "normalized": "yadea e8s pro"
+    },
+    {
+      "id": 218,
+      "brand": "Yadea",
+      "model": "G5",
+      "vehicle_type": "scuter electric",
+      "aliases": [
+        "G5",
+        "YADEA G5",
+        "Yadea G5"
+      ],
+      "traits": [
+        "baterie detașabilă",
+        "bord digital",
+        "iluminare și semnalizare complete",
+        "motor electric în roată"
+      ],
+      "note": "La Yadea G5, contactele bateriei, comutatoarele de frână și alimentarea de joasă tensiune pot bloca tracțiunea fără să oprească toate funcțiile bordului.",
+      "normalized": "yadea g5"
+    },
+    {
+      "id": 219,
+      "brand": "ZERO",
+      "model": "",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [],
+      "traits": [],
+      "note": "",
+      "normalized": "zero"
+    },
+    {
+      "id": 220,
+      "brand": "ZERO",
+      "model": "10+",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "10+",
+        "ZERO 10+"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "zero 10+"
+    },
+    {
+      "id": 221,
+      "brand": "ZERO",
+      "model": "10X",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "10X",
+        "ZERO 10X"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "zero 10x"
+    },
+    {
+      "id": 222,
+      "brand": "ZERO",
+      "model": "11X",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "11X",
+        "ZERO 11X"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "zero 11x"
+    },
+    {
+      "id": 223,
+      "brand": "ZERO",
+      "model": "8",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "ZERO 8"
+      ],
+      "traits": [],
+      "note": "",
+      "normalized": "zero 8"
+    },
+    {
+      "id": 224,
+      "brand": "ZERO",
+      "model": "8X",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "8X",
+        "ZERO 8X"
+      ],
+      "traits": [],
+      "note": "Fiind o trotinetă electrică, simptomul trebuie corelat cu bateria, cablajul din ghidon, controllerul și partea mecanică.",
+      "normalized": "zero 8x"
+    },
+    {
+      "id": 225,
+      "brand": "ZERO",
+      "model": "9",
+      "vehicle_type": "trotineta electrică",
+      "aliases": [
+        "ZERO 9"
+      ],
+      "traits": [],
+      "note": "",
+      "normalized": "zero 9"
+    }
+  ]
+}

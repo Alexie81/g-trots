@@ -697,8 +697,35 @@ const reviewPagination = document.querySelector("[data-review-pagination]");
 const reviewPrevious = document.querySelector("[data-review-previous]");
 const reviewNext = document.querySelector("[data-review-next]");
 const reviewDots = document.querySelector("[data-review-dots]");
+const ratingChoice = reviewForm?.querySelector(".rating-choice");
+const ratingInputs = ratingChoice ? [...ratingChoice.querySelectorAll('input[name="rating"]')] : [];
 const REVIEWS_PER_PAGE = 2;
 let currentReviewPage = 1;
+
+function paintRatingChoice(value) {
+  const selectedValue = Number(value) || 0;
+  ratingInputs.forEach(input => {
+    input.closest("label")?.classList.toggle("is-active", Number(input.value) <= selectedValue);
+  });
+}
+
+function syncRatingChoice() {
+  paintRatingChoice(ratingInputs.find(input => input.checked)?.value || 0);
+}
+
+ratingInputs.forEach(input => {
+  const label = input.closest("label");
+  input.addEventListener("change", syncRatingChoice);
+  input.addEventListener("focus", () => paintRatingChoice(input.value));
+  label?.addEventListener("mouseenter", () => paintRatingChoice(input.value));
+});
+
+ratingChoice?.addEventListener("mouseleave", syncRatingChoice);
+ratingChoice?.addEventListener("focusout", () => {
+  window.setTimeout(() => {
+    if (!ratingChoice.contains(document.activeElement)) syncRatingChoice();
+  }, 0);
+});
 
 function readAllReviews() {
   try {
@@ -837,9 +864,11 @@ reviewForm?.addEventListener("submit", event => {
   writeProductReviews(reviews);
   currentReviewPage = 1;
   reviewForm.reset();
+  syncRatingChoice();
   setReviewFormOpen(false);
   renderReviews();
 });
 
 showGalleryView(0);
+syncRatingChoice();
 renderReviews();

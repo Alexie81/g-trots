@@ -29,7 +29,7 @@ jobs:
 
       - name: Construiește aplicația Windows
         working-directory: electron-app
-        run: npm run dist:win
+        run: npm run dist:win -- --publish never
 
       - name: Creează GitHub Release
         shell: pwsh

@@ -15,7 +15,9 @@ categorii sau crearea buclelor între categorie și subcategorii.
 locală a `trotty-api`, dar folosește baza SHOP separată. Ca alternativă se poate
 crea `config.local.php` pornind de la `config.example.php`.
 
-Endpoint: `https://g-trots.ro/shop-api/api.php`.
+Endpoint stabil: `https://g-trots.ro/shop-api/api-v2.php`. Fișierul `api-v2.php`
+încarcă aceeași implementare din `api.php`, astfel încât website-ul și ambele
+aplicații nu pot ajunge accidental pe versiuni diferite ale API-ului.
 
 Filtrele magazinului public folosesc ruta read-only
 `?action=publicCatalogFilters`. Aceasta returnează doar categoriile,
@@ -27,12 +29,22 @@ compatibilitățile și producătorii activi și nu expune cheia administrativă
 - `publicProduct&id=<id-sau-slug>` — pagina completă a produsului;
 - `publicShopConfig` — livrările și metodele de plată active;
 - `createPublicOrder` — creează comanda și rezervă automat stocul urmărit.
+- `stripeCheckoutStatus` — confirmă plata direct la Stripe și întoarce bonul;
+- `stripeWebhook` — procesează idempotent confirmările și expirările Stripe.
 
 ## Administrare
 
 Rutele administrative cer cheia SHOP și tokenul utilizatorului autentificat.
 Sunt disponibile operații CRUD pentru produse și surse, gestiunea comenzilor,
 ajustări și istoric de stoc, metode de plată și livrări.
+
+Catalogul CRM este sursa unică de adevăr. Stripe nu are un catalog administrat
+separat: fiecare produs local păstrează ID-ul copiei tehnice Stripe. La salvare
+se sincronizează numele, descrierea, pagina publică, imaginea principală,
+vizibilitatea și prețul. La modificarea prețului se creează automat un preț
+Stripe nou și cel vechi este arhivat; la ștergere, copia Stripe este arhivată
+înainte de eliminarea produsului și a fișierelor locale. Ruta administrativă
+`syncStripeCatalog` repară sau reface legăturile pentru întreg catalogul.
 
 Dezactivarea unei surse ascunde imediat toate produsele sale din rutele publice,
 fără să le șteargă din CRM. Ștergerea definitivă a unui produs elimină imaginile

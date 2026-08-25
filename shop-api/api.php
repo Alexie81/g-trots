@@ -10,6 +10,8 @@ header('Access-Control-Allow-Headers: Content-Type, X-API-Key, X-Auth-Token');
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
+require_once __DIR__ . '/stripe.php';
+
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(204);
     exit;
@@ -24,19 +26,19 @@ function shopConfig(): array {
         'db_pass' => '',
         'auth_api_url' => 'https://g-trots.ro/trotty-api/api.php',
         'public_base_url' => 'https://g-trots.ro/shop-api',
+        'website_base_url' => 'https://g-trots.ro',
+        'stripe_secret_key' => '',
+        'stripe_publishable_key' => '',
+        'stripe_webhook_secret' => '',
     ];
 
-    $localFile = __DIR__ . '/config.local.php';
-    if (is_file($localFile)) {
-        $local = include $localFile;
-        return array_merge($defaults, is_array($local) ? $local : []);
-    }
+    $config = $defaults;
 
     $sharedFile = dirname(__DIR__) . '/trotty-api/api_config.local.php';
     if (is_file($sharedFile)) {
         $shared = include $sharedFile;
         if (is_array($shared)) {
-            return array_merge($defaults, [
+            $config = array_merge($config, [
                 'api_key' => (string)($shared['api_key'] ?? ''),
                 'db_host' => (string)($shared['db_host'] ?? 'localhost'),
                 'db_user' => (string)($shared['db_user'] ?? ''),
@@ -45,7 +47,13 @@ function shopConfig(): array {
         }
     }
 
-    return $defaults;
+    $localFile = __DIR__ . '/config.local.php';
+    if (is_file($localFile)) {
+        $local = include $localFile;
+        if (is_array($local)) $config = array_merge($config, $local);
+    }
+
+    return $config;
 }
 
 function jsonResponse($payload, int $status = 200): void {
@@ -59,8 +67,17 @@ function requestHeader(string $name): string {
     return trim((string)($_SERVER[$key] ?? ''));
 }
 
+function rawRequestBody(): string {
+    static $raw = null;
+    if ($raw === null) {
+        $value = file_get_contents('php://input');
+        $raw = $value === false ? '' : (string)$value;
+    }
+    return $raw;
+}
+
 function requestBody(): array {
-    $raw = file_get_contents('php://input');
+    $raw = rawRequestBody();
     if ($raw === false || trim($raw) === '') return [];
     $decoded = json_decode($raw, true);
     if (!is_array($decoded)) jsonResponse(['error' => 'Corpul cererii nu este JSON valid.'], 400);
@@ -196,6 +213,10 @@ function ensureShopSchema(PDO $db): void {
             is_active TINYINT(1) NOT NULL DEFAULT 1,
             is_featured TINYINT(1) NOT NULL DEFAULT 0,
             view_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            stripe_product_id VARCHAR(80) NULL,
+            stripe_price_id VARCHAR(80) NULL,
+            stripe_synced_at DATETIME NULL,
+            stripe_sync_error VARCHAR(500) NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_shop_products_name (name),
@@ -203,7 +224,9 @@ function ensureShopSchema(PDO $db): void {
             INDEX idx_shop_products_manufacturer (manufacturer_id),
             INDEX idx_shop_products_source (source_id),
             INDEX idx_shop_products_active (is_active),
-            INDEX idx_shop_products_stock (stock_mode, stock_quantity)
+            INDEX idx_shop_products_stock (stock_mode, stock_quantity),
+            UNIQUE INDEX idx_shop_products_stripe_product (stripe_product_id),
+            INDEX idx_shop_products_stripe_price (stripe_price_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     $discountTypeColumn = $db->query("SHOW COLUMNS FROM shop_products LIKE 'discount_type'")->fetch();
@@ -234,6 +257,23 @@ function ensureShopSchema(PDO $db): void {
     if (!$accountingStockColumn) {
         $db->exec('ALTER TABLE shop_products ADD COLUMN accounting_stock_quantity INT NOT NULL DEFAULT 0 AFTER stock_quantity');
         $db->exec('UPDATE shop_products SET accounting_stock_quantity = stock_quantity WHERE stock_mode = "tracked"');
+    }
+    $stripeProductColumns = [
+        'stripe_product_id' => 'VARCHAR(80) NULL AFTER view_count',
+        'stripe_price_id' => 'VARCHAR(80) NULL AFTER stripe_product_id',
+        'stripe_synced_at' => 'DATETIME NULL AFTER stripe_price_id',
+        'stripe_sync_error' => 'VARCHAR(500) NULL AFTER stripe_synced_at',
+    ];
+    foreach ($stripeProductColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_products LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_products ADD COLUMN {$column} {$definition}");
+        }
+    }
+    if (!$db->query("SHOW INDEX FROM shop_products WHERE Key_name = 'idx_shop_products_stripe_product'")->fetch()) {
+        $db->exec('ALTER TABLE shop_products ADD UNIQUE INDEX idx_shop_products_stripe_product (stripe_product_id)');
+    }
+    if (!$db->query("SHOW INDEX FROM shop_products WHERE Key_name = 'idx_shop_products_stripe_price'")->fetch()) {
+        $db->exec('ALTER TABLE shop_products ADD INDEX idx_shop_products_stripe_price (stripe_price_id)');
     }
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_product_brands (
@@ -316,11 +356,47 @@ function ensureShopSchema(PDO $db): void {
             shipping_cost DECIMAL(12,2) NOT NULL DEFAULT 0,
             total DECIMAL(12,2) NOT NULL,
             currency CHAR(3) NOT NULL DEFAULT 'RON',
+            stripe_checkout_session_id VARCHAR(255) NULL,
+            stripe_payment_intent_id VARCHAR(255) NULL,
+            stripe_payment_token VARCHAR(96) NULL,
+            stripe_paid_at DATETIME NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_shop_orders_number (order_number),
             INDEX idx_shop_orders_status (status, created_at),
-            INDEX idx_shop_orders_customer (customer_phone, customer_email)
+            INDEX idx_shop_orders_customer (customer_phone, customer_email),
+            UNIQUE INDEX idx_shop_orders_stripe_session (stripe_checkout_session_id),
+            INDEX idx_shop_orders_stripe_payment (stripe_payment_intent_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $stripeOrderColumns = [
+        'stripe_checkout_session_id' => 'VARCHAR(255) NULL AFTER currency',
+        'stripe_payment_intent_id' => 'VARCHAR(255) NULL AFTER stripe_checkout_session_id',
+        'stripe_payment_token' => 'VARCHAR(96) NULL AFTER stripe_payment_intent_id',
+        'stripe_paid_at' => 'DATETIME NULL AFTER stripe_payment_token',
+    ];
+    foreach ($stripeOrderColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_orders LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_orders ADD COLUMN {$column} {$definition}");
+        }
+    }
+    if (!$db->query("SHOW INDEX FROM shop_orders WHERE Key_name = 'idx_shop_orders_stripe_session'")->fetch()) {
+        $db->exec('ALTER TABLE shop_orders ADD UNIQUE INDEX idx_shop_orders_stripe_session (stripe_checkout_session_id)');
+    }
+    if (!$db->query("SHOW INDEX FROM shop_orders WHERE Key_name = 'idx_shop_orders_stripe_payment'")->fetch()) {
+        $db->exec('ALTER TABLE shop_orders ADD INDEX idx_shop_orders_stripe_payment (stripe_payment_intent_id)');
+    }
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_stripe_events (
+            id VARCHAR(255) NOT NULL PRIMARY KEY,
+            event_type VARCHAR(120) NOT NULL,
+            status VARCHAR(30) NOT NULL DEFAULT 'processing',
+            attempts INT UNSIGNED NOT NULL DEFAULT 1,
+            last_error VARCHAR(500) NULL,
+            processed_at DATETIME NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_shop_stripe_events_status (status, updated_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     $db->exec(
@@ -744,6 +820,11 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['category_id'] = empty($row['category_id']) ? null : (string)$row['category_id'];
     $row['manufacturer_id'] = empty($row['manufacturer_id']) ? null : (string)$row['manufacturer_id'];
     $row['source_id'] = empty($row['source_id']) ? null : (string)$row['source_id'];
+    $row['source_is_active'] = (bool)($row['source_is_active'] ?? true);
+    $row['stripe_product_id'] = empty($row['stripe_product_id']) ? null : (string)$row['stripe_product_id'];
+    $row['stripe_price_id'] = empty($row['stripe_price_id']) ? null : (string)$row['stripe_price_id'];
+    $row['stripe_sync_error'] = empty($row['stripe_sync_error']) ? null : (string)$row['stripe_sync_error'];
+    $row['stripe_sync_status'] = $row['stripe_sync_error'] !== null ? 'error' : ($row['stripe_product_id'] !== null ? 'synced' : 'pending');
     $row['stock_available'] = $row['stock_mode'] === 'unlimited' || $row['stock_quantity'] > 0;
     if (!$withDescription) unset($row['description_html']);
     return $row;
@@ -752,7 +833,7 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
 function productSelectSql(): string {
     return 'SELECT p.*, c.name AS category_name, c.slug AS category_slug,
                    m.name AS manufacturer_name, m.slug AS manufacturer_slug,
-                   s.name AS source_name,
+                   s.name AS source_name, s.is_active AS source_is_active,
                    (SELECT COUNT(*) FROM shop_product_reviews r WHERE r.product_id = p.id) AS review_count,
                    (SELECT AVG(r.rating) FROM shop_product_reviews r WHERE r.product_id = p.id) AS review_average
             FROM shop_products p
@@ -931,13 +1012,20 @@ function syncProductImages(PDO $db, string $productId, array $images, string $de
     }
 }
 
-function paymentSettings(PDO $db): array {
+function paymentSettings(PDO $db, ?array $config = null): array {
     $row = $db->query('SELECT * FROM shop_payment_settings WHERE id = 1')->fetch();
+    $stripeConfigured = $config !== null && stripeIsConfigured($config);
+    $stripeSyncedProducts = $stripeConfigured ? (int)$db->query('SELECT COUNT(*) FROM shop_products WHERE stripe_product_id IS NOT NULL AND stripe_sync_error IS NULL')->fetchColumn() : 0;
+    $stripeSyncErrors = $stripeConfigured ? (int)$db->query('SELECT COUNT(*) FROM shop_products WHERE stripe_sync_error IS NOT NULL')->fetchColumn() : 0;
     return [
         'card_enabled' => (bool)($row['card_enabled'] ?? false),
         'cash_on_delivery_enabled' => (bool)($row['cash_on_delivery_enabled'] ?? true),
         'card_label' => (string)($row['card_label'] ?? 'Card online'),
         'cash_on_delivery_label' => (string)($row['cash_on_delivery_label'] ?? 'Ramburs la curier'),
+        'stripe_configured' => $stripeConfigured,
+        'stripe_test_mode' => $stripeConfigured && stripeIsTestMode($config ?? []),
+        'stripe_synced_products' => $stripeSyncedProducts,
+        'stripe_sync_errors' => $stripeSyncErrors,
         'updated_at' => $row['updated_at'] ?? null,
     ];
 }
@@ -993,7 +1081,7 @@ function orderRow(PDO $db, array $row): array {
     return $row;
 }
 
-function createPublicOrder(PDO $db, array $body): array {
+function createPublicOrder(PDO $db, array $body, array $config): array {
     $name = mb_substr(trim((string)($body['customer_name'] ?? '')), 0, 180);
     $phone = mb_substr(trim((string)($body['customer_phone'] ?? '')), 0, 50);
     $address = mb_substr(trim((string)($body['address'] ?? '')), 0, 255);
@@ -1003,9 +1091,9 @@ function createPublicOrder(PDO $db, array $body): array {
     }
     $items = is_array($body['items'] ?? null) ? array_values($body['items']) : [];
     if (!$items || count($items) > 50) throw new InvalidArgumentException('Comanda trebuie sa contina intre 1 si 50 de produse.');
-    $payments = paymentSettings($db);
+    $payments = paymentSettings($db, $config);
     $paymentMethod = trim((string)($body['payment_method'] ?? 'cash_on_delivery'));
-    if ($paymentMethod === 'card' && !$payments['card_enabled']) throw new InvalidArgumentException('Plata cu cardul nu este activa.');
+    if ($paymentMethod === 'card' && (!$payments['card_enabled'] || !$payments['stripe_configured'])) throw new InvalidArgumentException('Plata cu cardul nu este activa.');
     if ($paymentMethod === 'cash_on_delivery' && !$payments['cash_on_delivery_enabled']) throw new InvalidArgumentException('Plata ramburs nu este activa.');
     if (!in_array($paymentMethod, ['card', 'cash_on_delivery'], true)) throw new InvalidArgumentException('Metoda de plata nu este valida.');
     $shippingId = existingReference($db, 'shop_shipping_methods', $body['shipping_method_id'] ?? null, 'Metoda de livrare');
@@ -1078,6 +1166,10 @@ try {
     $action = trim((string)($_GET['action'] ?? 'health'));
     $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     $db = shopDb($config);
+
+    if ($action === 'stripeWebhook' && $method === 'POST') {
+        jsonResponse(stripeProcessWebhook($db, $config, rawRequestBody(), requestHeader('Stripe-Signature')));
+    }
 
     if ($action === 'publicCatalogFilters' && $method === 'GET') {
         $categories = $db->query(
@@ -1174,14 +1266,65 @@ try {
 
     if ($action === 'publicShopConfig' && $method === 'GET') {
         $shipping = $db->query('SELECT * FROM shop_shipping_methods WHERE is_active = 1 ORDER BY sort_order ASC, name ASC')->fetchAll();
+        $publicPayments = paymentSettings($db, $config);
+        $publicPayments['card_enabled'] = $publicPayments['card_enabled'] && $publicPayments['stripe_configured'];
+        unset($publicPayments['stripe_synced_products'], $publicPayments['stripe_sync_errors']);
         jsonResponse([
-            'payments' => paymentSettings($db),
+            'payments' => $publicPayments,
             'shipping_methods' => array_map('shippingRow', $shipping),
         ]);
     }
 
     if ($action === 'createPublicOrder' && $method === 'POST') {
-        jsonResponse(createPublicOrder($db, $body), 201);
+        $order = createPublicOrder($db, $body, $config);
+        if (($order['payment_method'] ?? '') === 'card') {
+            try {
+                $stripeSession = stripeCreateCheckoutSession($db, $config, $order, $body);
+                $order['stripe_checkout_session_id'] = $stripeSession['id'];
+                $order['stripe_checkout_url'] = $stripeSession['url'];
+            } catch (Throwable $error) {
+                stripeRestoreOrderStock($db, (string)$order['id'], 'Sesiunea Stripe nu a putut fi creata.');
+                error_log('[G-Trots Stripe checkout] ' . $error->getMessage());
+                throw new InvalidArgumentException('Plata cu cardul nu a putut fi initializata. Incearca din nou.');
+            }
+        }
+        jsonResponse($order, 201);
+    }
+
+    if ($action === 'stripeCheckoutStatus' && in_array($method, ['GET', 'POST'], true)) {
+        $sessionId = trim((string)($_GET['session_id'] ?? ($body['session_id'] ?? '')));
+        if (!preg_match('/^cs_(test|live)_[A-Za-z0-9]+$/', $sessionId)) throw new InvalidArgumentException('Sesiunea Stripe nu este valida.');
+        $session = stripeRequest($config, 'GET', 'checkout/sessions/' . rawurlencode($sessionId));
+        $order = stripeApplyCheckoutSession($db, $session);
+        if (!$order) jsonResponse(['error' => 'Comanda Stripe nu a fost gasita.'], 404);
+        jsonResponse([
+            'session_status' => (string)($session['status'] ?? ''),
+            'payment_status' => (string)($session['payment_status'] ?? 'unpaid'),
+            'order' => stripePublicOrderReceipt($db, $config, $order),
+        ]);
+    }
+
+    if ($action === 'cancelStripeCheckout' && $method === 'POST') {
+        $orderNumber = trim((string)($body['order_number'] ?? ''));
+        $token = trim((string)($body['token'] ?? ''));
+        if ($orderNumber === '' || strlen($token) < 32) throw new InvalidArgumentException('Anularea Stripe nu este valida.');
+        $stmt = $db->prepare('SELECT * FROM shop_orders WHERE order_number = ? AND stripe_payment_token = ? AND payment_method = "card" LIMIT 1');
+        $stmt->execute([$orderNumber, $token]);
+        $order = $stmt->fetch();
+        if (!$order) jsonResponse(['error' => 'Comanda Stripe nu a fost gasita.'], 404);
+        $sessionId = trim((string)($order['stripe_checkout_session_id'] ?? ''));
+        if ($sessionId !== '') {
+            $session = stripeRequest($config, 'GET', 'checkout/sessions/' . rawurlencode($sessionId));
+            if (in_array((string)($session['payment_status'] ?? ''), ['paid', 'no_payment_required'], true)) {
+                stripeApplyCheckoutSession($db, $session);
+                throw new InvalidArgumentException('Plata este deja confirmata si nu mai poate fi anulata.');
+            }
+            if (($session['status'] ?? '') === 'open') {
+                stripeRequest($config, 'POST', 'checkout/sessions/' . rawurlencode($sessionId) . '/expire', []);
+            }
+        }
+        stripeRestoreOrderStock($db, (string)$order['id'], 'Clientul a revenit din Stripe fara finalizarea platii.');
+        jsonResponse(['cancelled' => true]);
     }
 
     verifyApiKey($config);
@@ -1382,9 +1525,12 @@ try {
             if ($db->inTransaction()) $db->rollBack();
             throw $error;
         }
+        $stripeSummary = stripeSyncCatalog($db, $config, $id);
         $stmt = $db->prepare('SELECT * FROM shop_product_sources WHERE id = ?');
         $stmt->execute([$id]);
-        jsonResponse(sourceRow($stmt->fetch()));
+        $sourceResponse = sourceRow($stmt->fetch());
+        $sourceResponse['stripe_sync'] = $stripeSummary;
+        jsonResponse($sourceResponse);
     }
 
     if ($action === 'deleteProductSource' && $method === 'DELETE') {
@@ -1439,7 +1585,10 @@ try {
             if ($db->inTransaction()) $db->rollBack();
             throw $error;
         }
-        jsonResponse(findProduct($db, $id, $config), 201);
+        $stripeSync = stripeSyncProductSafe($db, $config, $id);
+        $productResponse = findProduct($db, $id, $config);
+        $productResponse['stripe_sync'] = $stripeSync;
+        jsonResponse($productResponse, 201);
     }
 
     if ($action === 'updateProduct' && in_array($method, ['PUT', 'PATCH'], true)) {
@@ -1472,11 +1621,15 @@ try {
             if ($db->inTransaction()) $db->rollBack();
             throw $error;
         }
-        jsonResponse(findProduct($db, $id, $config));
+        $stripeSync = stripeSyncProductSafe($db, $config, $id);
+        $productResponse = findProduct($db, $id, $config);
+        $productResponse['stripe_sync'] = $stripeSync;
+        jsonResponse($productResponse);
     }
 
     if ($action === 'deleteProduct' && $method === 'DELETE') {
         $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
+        stripeArchiveProduct($db, $config, $id);
         $images = $db->prepare('SELECT image_path FROM shop_product_images WHERE product_id = ?');
         $images->execute([$id]);
         $paths = $images->fetchAll(PDO::FETCH_COLUMN);
@@ -1597,7 +1750,11 @@ try {
         jsonResponse(orderRow($db, $stmt->fetch()));
     }
 
-    if ($action === 'getPaymentSettings' && $method === 'GET') jsonResponse(paymentSettings($db));
+    if ($action === 'getPaymentSettings' && $method === 'GET') jsonResponse(paymentSettings($db, $config));
+
+    if ($action === 'syncStripeCatalog' && $method === 'POST') {
+        jsonResponse(stripeSyncCatalog($db, $config));
+    }
 
     if ($action === 'updatePaymentSettings' && in_array($method, ['PUT', 'PATCH'], true)) {
         $cardEnabled = boolValue($body['card_enabled'] ?? false);
@@ -1605,7 +1762,7 @@ try {
         if (!$cardEnabled && !$codEnabled) throw new InvalidArgumentException('Activeaza cel putin o metoda de plata.');
         $stmt = $db->prepare('UPDATE shop_payment_settings SET card_enabled = ?, cash_on_delivery_enabled = ?, card_label = ?, cash_on_delivery_label = ? WHERE id = 1');
         $stmt->execute([$cardEnabled ? 1 : 0, $codEnabled ? 1 : 0, mb_substr(trim((string)($body['card_label'] ?? 'Card online')), 0, 120), mb_substr(trim((string)($body['cash_on_delivery_label'] ?? 'Ramburs la curier')), 0, 120)]);
-        jsonResponse(paymentSettings($db));
+        jsonResponse(paymentSettings($db, $config));
     }
 
     if ($action === 'listShippingMethods' && $method === 'GET') {

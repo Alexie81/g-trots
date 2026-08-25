@@ -1,5 +1,28 @@
 (() => {
+  const API_URL = "https://g-trots.ro/shop-api/api-v2.php";
   const ORDER_STATE_KEY = "g-trots-last-checkout-v1";
+
+  async function api(action, options = {}) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 16000);
+    try {
+      const response = await fetch(`${API_URL}?action=${encodeURIComponent(action)}`, {
+        method: options.method || "GET",
+        headers: {
+          Accept: "application/json",
+          ...(options.body ? { "Content-Type": "application/json" } : {})
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined,
+        cache: "no-store",
+        signal: controller.signal
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || `Confirmarea nu a putut fi verificata (${response.status}).`);
+      return payload;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
 
   function readState() {
     try {
@@ -8,6 +31,23 @@
     } catch {
       return {};
     }
+  }
+
+  function saveState(state) {
+    try {
+      sessionStorage.setItem(ORDER_STATE_KEY, JSON.stringify(state));
+    } catch {
+      // Bonul ramane functional si cand stocarea sesiunii nu este disponibila.
+    }
+  }
+
+  function clearPaidCart(state) {
+    const savedIds = Array.isArray(state.cartIds) ? state.cartIds : [];
+    if (savedIds.length) {
+      savedIds.forEach(id => window.GTrotsCart?.remove?.(id));
+      return;
+    }
+    (window.GTrotsCart?.get?.() || []).forEach(item => window.GTrotsCart?.remove?.(item.id));
   }
 
   function escapeHtml(value) {
@@ -219,14 +259,45 @@
     observer.observe(receipt);
   }
 
-  function initialize() {
-    const state = readState();
+  async function initialize() {
+    let state = readState();
     const params = new URLSearchParams(window.location.search);
     const isFailed = document.body.dataset.checkoutStatus === "failed";
-    const orderNumber = String(params.get("comanda") || state.orderNumber || "").trim();
-    const method = String(params.get("metoda") || state.paymentMethod || "").trim();
-    const status = String(params.get("status") || "").trim();
+    let orderNumber = String(params.get("comanda") || state.orderNumber || "").trim();
+    let method = String(params.get("metoda") || state.paymentMethod || "").trim();
+    let status = String(params.get("status") || "").trim();
     const numberWrap = document.querySelector("[data-order-number-wrap]");
+
+    if (isFailed && status === "cancelled" && orderNumber && params.get("token")) {
+      try {
+        await api("cancelStripeCheckout", {
+          method: "POST",
+          body: { order_number: orderNumber, token: params.get("token") }
+        });
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "Sesiunea Stripe nu a putut fi inchisa.";
+        setTextAll("[data-failure-reason]", reason);
+      }
+    }
+
+    if (!isFailed && method === "card" && params.get("session_id")) {
+      try {
+        const result = await api("stripeCheckoutStatus", {
+          method: "POST",
+          body: { session_id: params.get("session_id") }
+        });
+        if (result.order && typeof result.order === "object") {
+          state = { ...state, ...result.order, cartIds: state.cartIds || [] };
+          saveState(state);
+          orderNumber = String(result.order.orderNumber || orderNumber);
+          method = String(result.order.paymentMethod || method);
+        }
+        status = ["paid", "no_payment_required"].includes(String(result.payment_status || "")) ? "paid" : "pending";
+        if (status === "paid") clearPaidCart(state);
+      } catch {
+        status = "pending";
+      }
+    }
 
     if (orderNumber) {
       numberWrap?.removeAttribute("hidden");

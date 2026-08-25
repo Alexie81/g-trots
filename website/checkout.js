@@ -319,7 +319,10 @@
 
         try {
           const totals = updateTotals(currentCart, config);
-          const order = await api("createPublicOrder", { method: "POST", body: { ...fields, items } });
+          const order = await api("createPublicOrder", {
+            method: "POST",
+            body: { ...fields, items, return_base_url: window.location.origin }
+          });
           const shipping = config.shipping_methods.find(row => String(row.id) === String(fields.shipping_method_id));
           const payment = payments.find(row => row.id === fields.payment_method);
           const receiptItems = currentCart.map(item => {
@@ -348,16 +351,27 @@
               shippingCost: Number(order.shipping_cost ?? totals.shippingCost),
               total: Number(order.total ?? totals.total),
               items: receiptItems,
+              cartIds: currentCart.map(item => String(item.id || "")).filter(Boolean),
               createdAt: new Date().toISOString()
             }));
           } catch {
             // Redirecționarea rămâne funcțională și fără stocare de sesiune.
           }
+          if (fields.payment_method === "card") {
+            const checkoutUrl = new URL(String(order.stripe_checkout_url || ""));
+            const isStripeCheckout = checkoutUrl.protocol === "https:"
+              && (checkoutUrl.hostname === "checkout.stripe.com" || checkoutUrl.hostname.endsWith(".checkout.stripe.com"));
+            if (!isStripeCheckout) throw new Error("Stripe nu a returnat o pagina de plata valida.");
+            message.textContent = "Te redirectionam in siguranta catre Stripe…";
+            window.location.assign(checkoutUrl.href);
+            return;
+          }
+
           currentCart.forEach(item => window.GTrotsCart?.remove?.(item.id));
           const params = new URLSearchParams({
             comanda: String(order.order_number || ""),
             metoda: String(fields.payment_method || ""),
-            status: fields.payment_method === "card" ? "pending" : "cod"
+            status: "cod"
           });
           window.location.assign(`plata-finalizata.html?${params.toString()}`);
         } catch (error) {

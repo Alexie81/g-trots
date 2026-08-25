@@ -125,6 +125,11 @@ export type ShopProduct = {
   review_count: number;
   review_average: number | null;
   view_count: number;
+  stripe_product_id: string | null;
+  stripe_price_id: string | null;
+  stripe_synced_at: string | null;
+  stripe_sync_error: string | null;
+  stripe_sync_status: 'pending' | 'synced' | 'error';
   brand_ids: string[];
   brands: Pick<ShopBrand, 'id' | 'name' | 'slug'>[];
   created_at: string;
@@ -235,7 +240,18 @@ export type ShopPaymentSettings = {
   cash_on_delivery_enabled: boolean;
   card_label: string;
   cash_on_delivery_label: string;
+  stripe_configured: boolean;
+  stripe_test_mode: boolean;
+  stripe_synced_products: number;
+  stripe_sync_errors: number;
   updated_at?: string | null;
+};
+
+export type ShopStripeSyncSummary = {
+  synced: number;
+  archived: number;
+  skipped: number;
+  errors: { product_id: string; error: string }[];
 };
 
 export type ShopShippingMethod = {
@@ -350,6 +366,7 @@ export const shopApi = {
   updateOrder: (token: string, id: string, payload: Pick<ShopOrder, 'status' | 'payment_status'> & { admin_notes: string }) => shopCall<ShopOrder>('updateOrder', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
   getPaymentSettings: (token: string) => shopCall<ShopPaymentSettings>('getPaymentSettings', token),
   updatePaymentSettings: (token: string, payload: ShopPaymentSettings) => shopCall<ShopPaymentSettings>('updatePaymentSettings', token, { method: 'PUT', body: JSON.stringify(payload) }),
+  syncStripeCatalog: (token: string) => shopCall<ShopStripeSyncSummary>('syncStripeCatalog', token, { method: 'POST', body: '{}' }),
   listShippingMethods: (token: string) => shopCall<ShopShippingMethod[]>('listShippingMethods', token),
   createShippingMethod: (token: string, payload: Omit<ShopShippingMethod, 'id'>) => shopCall<ShopShippingMethod>('createShippingMethod', token, { method: 'POST', body: JSON.stringify(payload) }),
   updateShippingMethod: (token: string, id: string, payload: Omit<ShopShippingMethod, 'id'>) => shopCall<ShopShippingMethod>('updateShippingMethod', token, { method: 'PUT', body: JSON.stringify(payload) }, id),

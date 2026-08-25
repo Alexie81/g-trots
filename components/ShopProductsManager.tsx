@@ -451,10 +451,14 @@ export default function ShopProductsManager() {
     };
     setSaving(true);
     try {
-      if (form.id) await shopApi.updateProduct(token, form.id, payload);
-      else await shopApi.createProduct(token, payload);
+      const saved = form.id
+        ? await shopApi.updateProduct(token, form.id, payload)
+        : await shopApi.createProduct(token, payload);
       setEditorVisible(false);
       await load(true);
+      if (saved.stripe_sync_status === 'error') {
+        Alert.alert('Produs salvat in catalog', `Produsul este salvat, dar oglinda Stripe nu s-a actualizat: ${saved.stripe_sync_error || 'sincronizarea va trebui reincercata.'}`);
+      }
     } catch (saveError) {
       Alert.alert('Nu s-a putut salva', saveError instanceof Error ? saveError.message : 'Incearca din nou.');
     } finally {

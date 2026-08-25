@@ -81,6 +81,7 @@
     updateOrder: (id, payload) => call('updateOrder', json('PUT', payload), id),
     getPaymentSettings: () => call('getPaymentSettings'),
     updatePaymentSettings: (payload) => call('updatePaymentSettings', json('PUT', payload)),
+    syncStripeCatalog: () => call('syncStripeCatalog', json('POST', {})),
     listShippingMethods: () => call('listShippingMethods'),
     createShippingMethod: (payload) => call('createShippingMethod', json('POST', payload)),
     updateShippingMethod: (id, payload) => call('updateShippingMethod', json('PUT', payload), id),

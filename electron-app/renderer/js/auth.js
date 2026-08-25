@@ -22,6 +22,8 @@
   const userLabel = document.getElementById('auth-user-label');
   const logoutBtn = document.getElementById('auth-logout-btn');
   let startupComplete = false;
+  let resolveAuthReady;
+  const authReady = new Promise((resolve) => { resolveAuthReady = resolve; });
 
   function setError(message) {
     if (!errorBox) return;
@@ -209,14 +211,20 @@
   }
 
   async function initializeAuth() {
-    await validateStoredSession();
-    renderAuthState();
-    hideStartupLoader();
+    try {
+      await validateStoredSession();
+      renderAuthState();
+      hideStartupLoader();
+    } finally {
+      resolveAuthReady?.();
+      resolveAuthReady = null;
+    }
   }
 
   window.AUTH = {
     getToken: () => authToken,
     getUser: () => authUser,
+    whenReady: () => authReady,
     isLoggedIn,
     isAdmin,
     canManagePartners,

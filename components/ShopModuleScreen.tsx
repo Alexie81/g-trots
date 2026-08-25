@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -20,9 +20,13 @@ import {
   Boxes,
   Camera,
   ChevronRight,
+  CircleEllipsis,
+  CreditCard,
   FileText,
   Factory,
   FolderTree,
+  Globe2,
+  House,
   ImageIcon,
   Package,
   Pencil,
@@ -33,9 +37,15 @@ import {
   Sparkles,
   Tags,
   Trash2,
+  TrendingUp,
+  Truck,
   X,
 } from 'lucide-react-native';
 import Header from '@/components/Header';
+import ShopInventoryManager from '@/components/ShopInventoryManager';
+import ShopOrdersManager from '@/components/ShopOrdersManager';
+import ShopProductsManager from '@/components/ShopProductsManager';
+import { ShopPaymentMethodsManager, ShopProductSourcesManager, ShopShippingManager } from '@/components/ShopMoreManagers';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -44,27 +54,90 @@ import {
   ShopBrandPayload,
   ShopCategory,
   ShopCategoryPayload,
+  ShopDashboardStats,
   ShopManufacturer,
   ShopManufacturerPayload,
 } from '@/services/shopApi';
 
 type CatalogView = 'categories' | 'brands' | 'manufacturers';
+type SettingsView = 'sources' | 'payments' | 'shipping';
+type PrimaryTab = 'home' | 'orders' | 'products' | 'inventory' | 'more';
+type ShopView = PrimaryTab | CatalogView | SettingsView;
 type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; item: ShopBrand } | { type: 'manufacturer'; item: ShopManufacturer };
 
-const dashboardAreas = [
+const primaryTabs = [
+  { key: 'home', title: 'Acasă', Icon: House },
+  { key: 'orders', title: 'Comenzi', Icon: ShoppingCart },
+  { key: 'products', title: 'Produse', Icon: Package },
+  { key: 'inventory', title: 'Stocuri', Icon: Boxes },
+  { key: 'more', title: 'Mai multe', Icon: CircleEllipsis },
+] as const;
+
+const homeAreas = [
   { key: 'orders', title: 'Comenzi', description: 'Fluxul comenzilor si statusurile lor.', Icon: ShoppingCart, color: '#38BDF8' },
   { key: 'products', title: 'Produse', description: 'Catalog, preturi si informatii comerciale.', Icon: Package, color: '#A78BFA' },
+  { key: 'inventory', title: 'Stocuri', description: 'Cantitati, miscari si alerte de stoc.', Icon: Boxes, color: '#22C55E' },
   { key: 'categories', title: 'Categorii', description: 'Categorii, subcategorii si imagini.', Icon: FolderTree, color: '#FB7185' },
   { key: 'brands', title: 'Compatibilitati branduri', description: 'Marcile cu care sunt compatibile produsele.', Icon: Tags, color: '#2DD4BF' },
   { key: 'manufacturers', title: 'Producatori', description: 'Companiile care fabrica produsele.', Icon: Factory, color: '#818CF8' },
-  { key: 'inventory', title: 'Stoc', description: 'Cantitati, miscari si alerte de stoc.', Icon: Boxes, color: '#22C55E' },
   { key: 'invoices', title: 'Facturi', description: 'Documentele si situatia incasarilor.', Icon: FileText, color: '#F59E0B' },
+] as const;
+
+const primaryTabDetails = {
+  orders: {
+    eyebrow: 'GESTIONARE COMENZI',
+    title: 'Comenzi',
+    description: 'Urmareste comenzile si statusurile lor dintr-un singur loc.',
+    emptyTitle: 'Zona de comenzi este pregatita',
+    emptyText: 'Lista si actiunile pentru comenzi vor fi adaugate aici.',
+    Icon: ShoppingCart,
+    color: '#38BDF8',
+  },
+  products: {
+    eyebrow: 'CATALOG COMERCIAL',
+    title: 'Produse',
+    description: 'Administreaza produsele, preturile si informatiile comerciale.',
+    emptyTitle: 'Zona de produse este pregatita',
+    emptyText: 'Produsele si actiunile catalogului vor fi adaugate aici.',
+    Icon: Package,
+    color: '#A78BFA',
+  },
+  inventory: {
+    eyebrow: 'GESTIONARE STOC',
+    title: 'Stocuri',
+    description: 'Consulta cantitatile, miscarile si alertele de stoc.',
+    emptyTitle: 'Zona de stocuri este pregatita',
+    emptyText: 'Cantitatile si miscarile de stoc vor fi adaugate aici.',
+    Icon: Boxes,
+    color: '#22C55E',
+  },
+  more: {
+    eyebrow: 'ADMINISTRARE SHOP',
+    title: 'Mai multe',
+    description: 'Gasesti aici instrumentele actuale si toate sectiunile care vor fi adaugate pe viitor.',
+    emptyTitle: '',
+    emptyText: '',
+    Icon: CircleEllipsis,
+    color: Colors.orange,
+  },
+} as const;
+
+const moreAreas = [
+  { key: 'sources', title: 'Surse produse', description: 'Magazinele si furnizorii din care provin produsele.', Icon: Globe2, color: '#38BDF8' },
+  { key: 'categories', title: 'Categorii', description: 'Categorii, subcategorii si imagini.', Icon: FolderTree, color: '#FB7185' },
+  { key: 'brands', title: 'Compatibilitati branduri', description: 'Marcile cu care sunt compatibile produsele.', Icon: Tags, color: '#2DD4BF' },
+  { key: 'manufacturers', title: 'Producatori', description: 'Companiile care fabrica produsele.', Icon: Factory, color: '#818CF8' },
+  { key: 'invoices', title: 'Facturi', description: 'Documentele si situatia incasarilor.', Icon: FileText, color: '#F59E0B' },
+  { key: 'payments', title: 'Metode de plata', description: 'Activeaza plata cu cardul sau ramburs la curier.', Icon: CreditCard, color: '#A78BFA' },
+  { key: 'shipping', title: 'Livrari', description: 'Costuri, praguri gratuite si termene de livrare.', Icon: Truck, color: '#22C55E' },
 ] as const;
 
 export default function ShopModuleScreen() {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
-  const [view, setView] = useState<'dashboard' | CatalogView>('dashboard');
+  const [view, setView] = useState<ShopView>('home');
+  const [dashboard, setDashboard] = useState<ShopDashboardStats | null>(null);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
   const [categories, setCategories] = useState<ShopCategory[]>([]);
   const [brands, setBrands] = useState<ShopBrand[]>([]);
   const [manufacturers, setManufacturers] = useState<ShopManufacturer[]>([]);
@@ -111,6 +184,16 @@ export default function ShopModuleScreen() {
       setLoading(false);
     }
   }, [token]);
+
+  const loadDashboard = useCallback(async () => {
+    if (!token) return;
+    setDashboardLoading(true);
+    try { setDashboard(await shopApi.getDashboardStats(token)); }
+    catch { setDashboard(null); }
+    finally { setDashboardLoading(false); }
+  }, [token]);
+
+  useEffect(() => { if (view === 'home') void loadDashboard(); }, [view, loadDashboard]);
 
   const openCatalog = (next: CatalogView) => {
     setView(next);
@@ -268,43 +351,134 @@ export default function ShopModuleScreen() {
     [categories, editingCategory]
   );
 
-  if (view === 'dashboard') {
+  if (view === 'home') {
     return (
       <View style={styles.container}>
-        <Header title="" />
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <Header title="Acasă" />
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingBottom: 94 + insets.bottom }]}
+          showsVerticalScrollIndicator={false}>
           <View style={styles.hero}>
-            <View style={styles.heroIcon}><Sparkles size={21} color="#38BDF8" /></View>
-            <Text style={styles.kicker}>MODUL COMERCIAL</Text>
-            <Text style={styles.title}>SHOP</Text>
-            <Text style={styles.subtitle}>Administreaza comenzile, produsele, catalogul, stocul si facturile din acelasi loc.</Text>
-            <View style={styles.statusPill}><View style={styles.statusDot} /><Text style={styles.statusText}>Catalog online conectat</Text></View>
+            <View style={styles.heroTop}><View style={styles.heroIcon}><TrendingUp size={21} color="#38BDF8" /></View><TouchableOpacity style={styles.heroRefresh} onPress={() => void loadDashboard()}><RefreshCw size={17} color={Colors.textSecondary} /></TouchableOpacity></View>
+            <Text style={styles.kicker}>DASHBOARD COMERCIAL</Text>
+            <Text style={styles.title}>Magazinul tău, pe scurt.</Text>
+            <Text style={styles.subtitle}>Vânzări, comenzi, achiziții și profit actualizate direct din baza magazinului online.</Text>
+            <View style={styles.statusPill}><View style={styles.statusDot} /><Text style={styles.statusText}>Date sincronizate cu magazinul</Text></View>
           </View>
-          <View style={styles.sectionHeader}>
-            <View><Text style={styles.sectionKicker}>SPATII DE LUCRU</Text><Text style={styles.sectionTitle}>Administrare magazin</Text></View>
-            <BarChart3 size={20} color={Colors.textMuted} />
-          </View>
-          <View style={styles.grid}>
-            {dashboardAreas.map(({ key, title, description, Icon, color }) => {
-              const enabled = key === 'categories' || key === 'brands' || key === 'manufacturers';
-              return (
-                <TouchableOpacity
-                  key={key}
-                  style={styles.card}
-                  activeOpacity={enabled ? 0.72 : 1}
-                  onPress={() => enabled && openCatalog(key)}>
-                  <View style={[styles.cardIcon, { borderColor: `${color}44`, backgroundColor: `${color}14` }]}><Icon size={22} color={color} /></View>
-                  <Text style={styles.cardTitle}>{title}</Text>
-                  <Text style={styles.cardDescription}>{description}</Text>
-                  <View style={styles.cardFooter}>
-                    <Text style={[styles.cardState, { color }]}>{enabled ? 'DESCHIDE' : 'URMEAZA'}</Text>
-                    {enabled && <ChevronRight size={16} color={color} />}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <View style={styles.sectionHeader}><View><Text style={styles.sectionKicker}>PERFORMANTA SHOP</Text><Text style={styles.sectionTitle}>Statistici generale</Text></View><BarChart3 size={20} color={Colors.textMuted} /></View>
+          {dashboardLoading ? <View style={styles.dashboardLoading}><ActivityIndicator color={Colors.orange} /><Text style={styles.dashboardLoadingText}>Se actualizeaza statisticile...</Text></View> : <View style={styles.dashboardMetrics}>
+            <DashboardMetric title="VÂNZĂRI" value={formatShopMoney(dashboard?.revenue || 0)} color="#38BDF8" />
+            <DashboardMetric title="COMENZI" value={String(dashboard?.orders_count || 0)} color="#A78BFA" />
+            <DashboardMetric title="ACHIZIȚII" value={formatShopMoney(dashboard?.acquisitions || 0)} color="#F59E0B" />
+            <DashboardMetric title="PROFIT" value={formatShopMoney(dashboard?.profit || 0)} color="#22C55E" />
+          </View>}
+          <View style={styles.newOrdersBanner}><View style={styles.newOrdersIcon}><ShoppingCart size={21} color="#38BDF8" /></View><View style={styles.newOrdersCopy}><Text style={styles.newOrdersValue}>{dashboard?.new_orders_count || 0}</Text><Text style={styles.newOrdersLabel}>comenzi noi care așteaptă procesarea</Text></View><TouchableOpacity style={styles.newOrdersButton} onPress={() => setView('orders')}><Text style={styles.newOrdersButtonText}>Vezi comenzile</Text><ChevronRight size={16} color={Colors.white} /></TouchableOpacity></View>
+          <View style={styles.sectionHeader}><View><Text style={styles.sectionKicker}>SCURTATURI</Text><Text style={styles.sectionTitle}>Acțiuni rapide</Text></View></View>
+          <View style={styles.quickActions}><TouchableOpacity style={styles.quickAction} onPress={() => setView('products')}><View style={[styles.cardIcon, { backgroundColor: '#A78BFA14' }]}><Package size={22} color="#A78BFA" /></View><View style={styles.quickActionCopy}><Text style={styles.quickActionTitle}>Produse</Text><Text style={styles.quickActionText}>Adaugă sau editează catalogul.</Text></View><ChevronRight size={18} color="#A78BFA" /></TouchableOpacity><TouchableOpacity style={styles.quickAction} onPress={() => setView('orders')}><View style={[styles.cardIcon, { backgroundColor: '#38BDF814' }]}><ShoppingCart size={22} color="#38BDF8" /></View><View style={styles.quickActionCopy}><Text style={styles.quickActionTitle}>Comenzi</Text><Text style={styles.quickActionText}>Verifică și procesează comenzile.</Text></View><ChevronRight size={18} color="#38BDF8" /></TouchableOpacity></View>
+          <View style={styles.sectionHeader}><View><Text style={styles.sectionKicker}>ACTIVITATE RECENTA</Text><Text style={styles.sectionTitle}>Ultimele comenzi</Text></View></View>
+          <View style={styles.recentOrders}>{dashboard?.recent_orders?.length ? dashboard.recent_orders.slice(0, 5).map((order) => <TouchableOpacity key={order.id} style={styles.recentOrder} onPress={() => setView('orders')}><View><Text style={styles.recentOrderNumber}>{order.order_number}</Text><Text style={styles.recentOrderMeta}>{order.customer_name} · {order.created_at}</Text></View><View style={styles.recentOrderRight}><Text style={styles.recentOrderTotal}>{formatShopMoney(order.total)}</Text><Text style={[styles.recentOrderStatus, order.status === 'new' && styles.recentOrderNew]}>{order.status === 'new' ? 'NOUĂ' : order.status.toUpperCase()}</Text></View></TouchableOpacity>) : <Text style={styles.dashboardEmpty}>Nu există încă nicio comandă.</Text>}</View>
         </ScrollView>
+
+        <ShopBottomNavigation activeTab="home" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
+      </View>
+    );
+  }
+
+  if (view === 'orders' || view === 'products' || view === 'inventory' || view === 'more') {
+    const details = primaryTabDetails[view];
+    const ScreenIcon = details.Icon;
+    const isMore = view === 'more';
+
+    return (
+      <View style={styles.container}>
+        <Header title={details.title} />
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingBottom: 94 + insets.bottom }]}
+          showsVerticalScrollIndicator={false}>
+          {!isMore ? <View style={[styles.hero, { backgroundColor: `${details.color}12` }]}>
+            <View style={[styles.heroIcon, { borderColor: `${details.color}40`, backgroundColor: `${details.color}18` }]}>
+              <ScreenIcon size={22} color={details.color} />
+            </View>
+            <Text style={[styles.kicker, { color: details.color }]}>{details.eyebrow}</Text>
+            <Text style={styles.title}>{details.title}</Text>
+            <Text style={styles.subtitle}>{details.description}</Text>
+          </View> : null}
+
+          {view === 'orders' ? (
+            <ShopOrdersManager />
+          ) : view === 'products' ? (
+            <ShopProductsManager />
+          ) : view === 'inventory' ? (
+            <ShopInventoryManager />
+          ) : isMore ? (
+            <>
+              <View style={styles.sectionHeader}>
+                <View>
+                  <Text style={styles.sectionKicker}>TOATE INSTRUMENTELE</Text>
+                  <Text style={styles.sectionTitle}>Administrare magazin</Text>
+                </View>
+              </View>
+              <View style={styles.moreList}>
+                {moreAreas.map(({ key, title, description, Icon, color }) => {
+                  const enabled = key !== 'invoices';
+                  const openArea = () => {
+                    if (!enabled) return;
+                    if (key === 'categories' || key === 'brands' || key === 'manufacturers') openCatalog(key);
+                    else setView(key);
+                  };
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      style={styles.moreCard}
+                      activeOpacity={enabled ? 0.72 : 1}
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: !enabled }}
+                      onPress={openArea}>
+                      <View style={[styles.moreCardIcon, { backgroundColor: `${color}16` }]}>
+                        <Icon size={21} color={color} />
+                      </View>
+                      <View style={styles.moreCardCopy}>
+                        <Text style={styles.moreCardTitle}>{title}</Text>
+                        <Text style={styles.moreCardDescription}>{description}</Text>
+                      </View>
+                      {enabled ? (
+                        <ChevronRight size={19} color={Colors.textMuted} />
+                      ) : (
+                        <View style={styles.soonBadge}><Text style={styles.soonBadgeText}>IN CURAND</Text></View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </>
+          ) : (
+            <View style={styles.primaryEmpty}>
+              <View style={[styles.primaryEmptyIcon, { backgroundColor: `${details.color}14` }]}>
+                <ScreenIcon size={32} color={details.color} />
+              </View>
+              <Text style={styles.primaryEmptyTitle}>{details.emptyTitle}</Text>
+              <Text style={styles.primaryEmptyText}>{details.emptyText}</Text>
+              <View style={[styles.comingSoonPill, { backgroundColor: `${details.color}14` }]}>
+                <Text style={[styles.comingSoonText, { color: details.color }]}>IN CURAND</Text>
+              </View>
+            </View>
+          )}
+        </ScrollView>
+
+        <ShopBottomNavigation activeTab={view} onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
+      </View>
+    );
+  }
+
+  if (view === 'sources' || view === 'payments' || view === 'shipping') {
+    const title = view === 'sources' ? 'Surse produse' : view === 'payments' ? 'Metode de plata' : 'Livrari';
+    return (
+      <View style={styles.container}>
+        <Header title={title} showBack onBack={() => setView('more')} />
+        <ScrollView contentContainerStyle={{ paddingBottom: 88 + insets.bottom }} showsVerticalScrollIndicator={false}>
+          {view === 'sources' ? <ShopProductSourcesManager /> : view === 'payments' ? <ShopPaymentMethodsManager /> : <ShopShippingManager />}
+        </ScrollView>
+        <ShopBottomNavigation activeTab="more" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
       </View>
     );
   }
@@ -319,14 +493,14 @@ export default function ShopModuleScreen() {
       <Header
         title="Catalog SHOP"
         showBack
-        onBack={() => setView('dashboard')}
+        onBack={() => setView('more')}
         right={
           <TouchableOpacity style={styles.headerAction} onPress={() => void loadCatalog()} disabled={loading}>
             <RefreshCw size={18} color={Colors.orange} />
           </TouchableOpacity>
         }
       />
-      <ScrollView contentContainerStyle={[styles.catalogContent, { paddingBottom: 104 + insets.bottom }]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.catalogContent, { paddingBottom: 178 + insets.bottom }]} showsVerticalScrollIndicator={false}>
         <View style={styles.catalogHero}>
           <View style={styles.catalogHeroIcon}>{isCategories ? <FolderTree size={24} color="#FB7185" /> : isBrands ? <Tags size={24} color="#2DD4BF" /> : <Factory size={24} color="#818CF8" />}</View>
           <View style={styles.catalogHeroText}>
@@ -357,12 +531,14 @@ export default function ShopModuleScreen() {
       </ScrollView>
 
       <TouchableOpacity
-        style={[styles.fab, { bottom: 22 + insets.bottom }]}
+        style={[styles.fab, { bottom: 86 + insets.bottom }]}
         activeOpacity={0.82}
         accessibilityLabel={isCategories ? 'Adauga categorie' : isBrands ? 'Adauga compatibilitate brand' : 'Adauga producator'}
         onPress={() => isCategories ? openCategoryForm() : isBrands ? openBrandForm() : openManufacturerForm()}>
         <Plus size={28} color={Colors.white} strokeWidth={2.6} />
       </TouchableOpacity>
+
+      <ShopBottomNavigation activeTab="more" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
 
       <Modal visible={categoryModal} transparent animationType="slide" onRequestClose={() => !saving && setCategoryModal(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => !saving && setCategoryModal(false)}>
@@ -463,6 +639,51 @@ export default function ShopModuleScreen() {
   );
 }
 
+function ShopBottomNavigation({
+  activeTab,
+  onSelect,
+  bottomInset,
+}: {
+  activeTab: PrimaryTab;
+  onSelect: (tab: PrimaryTab) => void;
+  bottomInset: number;
+}) {
+  return (
+    <View
+      style={[
+        styles.bottomNavigation,
+        { height: 66 + bottomInset, paddingBottom: Math.max(bottomInset, 6) },
+      ]}>
+      {primaryTabs.map(({ key, title, Icon }) => {
+        const active = activeTab === key;
+        return (
+          <TouchableOpacity
+            key={key}
+            style={styles.bottomNavigationItem}
+            activeOpacity={0.72}
+            accessibilityRole="tab"
+            accessibilityLabel={title}
+            accessibilityState={{ selected: active }}
+            onPress={() => onSelect(key)}>
+            <View style={styles.bottomNavigationIcon}>
+              <Icon
+                size={21}
+                color={active ? Colors.orange : Colors.textMuted}
+                strokeWidth={active ? 2.6 : 2.1}
+              />
+            </View>
+            <Text
+              numberOfLines={1}
+              style={[styles.bottomNavigationLabel, active && styles.bottomNavigationLabelActive]}>
+              {title}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
 function isCategoryDescendant(candidateId: string, ancestorId: string, categories: ShopCategory[]): boolean {
   const byId = new Map(categories.map((category) => [category.id, category]));
   const visited = new Set<string>();
@@ -540,6 +761,14 @@ function ManufacturerTable({ manufacturers, onEdit, onDelete }: { manufacturers:
   );
 }
 
+function formatShopMoney(value: number) {
+  return `${new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0))} lei`;
+}
+
+function DashboardMetric({ title, value, color }: { title: string; value: string; color: string }) {
+  return <View style={styles.dashboardMetric}><View style={[styles.dashboardMetricDot, { backgroundColor: color }]} /><Text style={styles.dashboardMetricTitle}>{title}</Text><Text numberOfLines={1} adjustsFontSizeToFit style={[styles.dashboardMetricValue, { color }]}>{value}</Text></View>;
+}
+
 function StatusBadge({ active }: { active: boolean }) {
   return <View style={[styles.badge, active ? styles.badgeActive : styles.badgeInactive]}><View style={[styles.badgeDot, { backgroundColor: active ? Colors.success : Colors.textMuted }]} /><Text style={[styles.badgeText, { color: active ? '#9CD9AE' : Colors.textSecondary }]}>{active ? 'Activa' : 'Inactiva'}</Text></View>;
 }
@@ -556,7 +785,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
   content: { padding: 16, paddingBottom: 38 },
   hero: { overflow: 'hidden', borderWidth: 0, borderRadius: 28, padding: 24, backgroundColor: '#151B1E' },
-  heroIcon: { width: 44, height: 44, borderWidth: 1, borderColor: 'rgba(56,189,248,0.30)', borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(56,189,248,0.10)', marginBottom: 18 },
+  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }, heroIcon: { width: 44, height: 44, borderWidth: 1, borderColor: 'rgba(56,189,248,0.30)', borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(56,189,248,0.10)' }, heroRefresh: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.06)' },
   kicker: { color: '#38BDF8', fontSize: 9, fontFamily: 'Inter-Bold', letterSpacing: 1.5 },
   title: { color: Colors.textPrimary, fontSize: 31, fontFamily: 'Inter-Bold', letterSpacing: 1, marginTop: 5 },
   subtitle: { color: Colors.textSecondary, fontSize: 13, lineHeight: 20, fontFamily: 'Inter-Regular', marginTop: 8 },
@@ -566,6 +795,9 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 26, marginBottom: 13, paddingHorizontal: 2 },
   sectionKicker: { color: Colors.orange, fontSize: 8, fontFamily: 'Inter-Bold', letterSpacing: 1.3 },
   sectionTitle: { color: Colors.textPrimary, fontSize: 17, fontFamily: 'Inter-Bold', marginTop: 4 },
+  dashboardLoading: { minHeight: 120, alignItems: 'center', justifyContent: 'center', gap: 10, borderRadius: 22, backgroundColor: '#1B1B1F' }, dashboardLoadingText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10 }, dashboardMetrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, dashboardMetric: { width: '48%', minHeight: 112, flexGrow: 1, borderRadius: 22, padding: 16, backgroundColor: '#1B1B1F' }, dashboardMetricDot: { width: 8, height: 8, borderRadius: 4 }, dashboardMetricTitle: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.9, marginTop: 12 }, dashboardMetricValue: { fontFamily: 'Inter-Bold', fontSize: 18, marginTop: 7 },
+  newOrdersBanner: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: 'rgba(56,189,248,0.16)', borderRadius: 22, padding: 13, backgroundColor: 'rgba(56,189,248,0.07)', marginTop: 11 }, newOrdersIcon: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: 'rgba(56,189,248,0.11)' }, newOrdersCopy: { flex: 1 }, newOrdersValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 20 }, newOrdersLabel: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 13, marginTop: 2 }, newOrdersButton: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 13, paddingHorizontal: 11, backgroundColor: '#1684B4' }, newOrdersButtonText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 },
+  quickActions: { gap: 9 }, quickAction: { minHeight: 80, flexDirection: 'row', alignItems: 'center', gap: 13, borderRadius: 20, padding: 13, backgroundColor: '#1B1B1F' }, quickActionCopy: { flex: 1 }, quickActionTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 13 }, quickActionText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 9, marginTop: 3 }, recentOrders: { overflow: 'hidden', borderRadius: 21, backgroundColor: '#1B1B1F' }, recentOrder: { minHeight: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#353137', paddingHorizontal: 14 }, recentOrderNumber: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 11 }, recentOrderMeta: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 4 }, recentOrderRight: { alignItems: 'flex-end' }, recentOrderTotal: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 11 }, recentOrderStatus: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, marginTop: 4 }, recentOrderNew: { color: '#38BDF8' }, dashboardEmpty: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 10, padding: 22, textAlign: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   card: { width: '48%', minHeight: 188, flexGrow: 1, borderWidth: 0, borderRadius: 24, padding: 18, backgroundColor: '#1B1B1F' },
   cardIcon: { width: 46, height: 46, borderWidth: 0, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
@@ -573,6 +805,25 @@ const styles = StyleSheet.create({
   cardDescription: { flex: 1, color: Colors.textSecondary, fontSize: 10, lineHeight: 15, fontFamily: 'Inter-Regular', marginTop: 5 },
   cardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 11 },
   cardState: { fontSize: 8, fontFamily: 'Inter-Bold', letterSpacing: 1.1 },
+  moreList: { gap: 9 },
+  moreCard: { minHeight: 78, flexDirection: 'row', alignItems: 'center', gap: 13, borderRadius: 20, padding: 13, backgroundColor: '#1B1B1F' },
+  moreCardIcon: { width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  moreCardCopy: { flex: 1, minWidth: 0 },
+  moreCardTitle: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 13 },
+  moreCardDescription: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 15, marginTop: 3 },
+  soonBadge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5, backgroundColor: 'rgba(245,158,11,0.11)' },
+  soonBadgeText: { color: '#F59E0B', fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.7 },
+  primaryEmpty: { minHeight: 280, alignItems: 'center', justifyContent: 'center', borderRadius: 26, padding: 28, backgroundColor: '#1B1B1F', marginTop: 16 },
+  primaryEmptyIcon: { width: 68, height: 68, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginBottom: 17 },
+  primaryEmptyTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 16, textAlign: 'center' },
+  primaryEmptyText: { maxWidth: 310, color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 7 },
+  comingSoonPill: { borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7, marginTop: 17 },
+  comingSoonText: { fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 1 },
+  bottomNavigation: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20, flexDirection: 'row', alignItems: 'flex-start', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', paddingTop: 6, paddingHorizontal: 4, backgroundColor: 'rgba(20,20,20,0.98)', shadowColor: '#000', shadowOpacity: 0.36, shadowRadius: 14, shadowOffset: { width: 0, height: -5 }, elevation: 18 },
+  bottomNavigationItem: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  bottomNavigationIcon: { width: 38, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  bottomNavigationLabel: { color: Colors.textMuted, fontFamily: 'Inter-Medium', fontSize: 9 },
+  bottomNavigationLabelActive: { color: Colors.orange, fontFamily: 'Inter-SemiBold' },
   headerAction: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.orangeDim, borderWidth: 1, borderColor: Colors.orangeMid },
   catalogContent: { padding: 16 },
   catalogHero: { flexDirection: 'row', alignItems: 'center', gap: 15, padding: 19, borderRadius: 24, borderWidth: 0, backgroundColor: '#1D1B20' },

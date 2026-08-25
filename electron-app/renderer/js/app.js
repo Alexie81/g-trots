@@ -69,8 +69,9 @@
   document.querySelectorAll('[data-module-select]').forEach(button => {
     button.addEventListener('click', () => selectModule(button.dataset.moduleSelect));
   });
-  document.querySelectorAll('[data-shop-open]').forEach(button => {
-    button.addEventListener('click', () => switchTab(button.dataset.shopOpen));
+  document.addEventListener('click', event => {
+    const button = event.target.closest('[data-shop-open]');
+    if (button) switchTab(button.dataset.shopOpen);
   });
 
   window.addEventListener('auth-change', () => {

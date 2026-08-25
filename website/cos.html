@@ -12,17 +12,56 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="magazin.css">
-    <link rel="stylesheet" href="favorites.css">
+    <link rel="stylesheet" href="magazin.css?v=20260825-2">
+    <link rel="stylesheet" href="favorites.css?v=20260825-2">
   </head>
   <body class="shop-page favorites-page cart-page">
     <a class="skip-link" href="#cart-content">Sari la coș</a>
     <header class="site-header"><div class="header-inner"><a class="logo" href="index.html" aria-label="G-Trots, pagina principală"><img src="assets/logo.png" width="1024" height="1024" alt=""><b><span>G</span>-Trots</b></a><nav class="main-nav" aria-label="Navigație principală"></nav><a class="button button-small header-cta shop-header-cta" href="magazin.html#catalog">Vezi produsele <span aria-hidden="true">›</span></a><button class="menu-toggle" type="button" aria-label="Deschide meniul" aria-expanded="false"><span></span><span></span></button></div></header>
     <main class="favorites-main" id="cart-content">
       <section class="favorites-hero shell"><div class="favorites-hero-copy"><span class="favorites-eyebrow">Magazin G-Trots</span><h1>Coșul tău<br><em>de cumpărături.</em></h1><p>Produsele adăugate în coș vor fi pregătite aici pentru verificarea compatibilității și comandă.</p></div><span class="favorites-total" data-cart-total>0 produse</span><span class="cart-hero-symbol" aria-hidden="true"><span class="global-cart-icon"><i></i><i></i></span></span></section>
-      <section class="favorites-content shell"><div class="favorites-grid" data-cart-grid hidden></div><div class="favorites-empty" data-cart-empty><div><span class="favorites-empty-icon cart-empty-icon" aria-hidden="true"><span class="global-cart-icon"><i></i><i></i></span></span><h2>Coșul este gol.</h2><p>Descoperă produsele și revino aici când ai ales piesa potrivită.</p><a class="button" href="magazin.html#catalog">Vezi produsele <span aria-hidden="true">›</span></a></div></div></section>
+      <section class="favorites-content cart-commerce shell">
+        <div class="cart-layout" data-cart-layout hidden>
+          <section class="cart-products-surface" aria-labelledby="cart-products-title">
+            <header class="cart-section-header">
+              <div>
+                <span>Produsele tale</span>
+                <h2 id="cart-products-title">Coș de cumpărături</h2>
+              </div>
+              <strong data-cart-items-summary>0 produse</strong>
+            </header>
+            <div class="favorites-grid" data-cart-grid></div>
+          </section>
+
+          <aside class="cart-summary" aria-labelledby="cart-summary-title">
+            <span class="cart-summary-eyebrow">Rezumat comandă</span>
+            <h2 id="cart-summary-title">Totalul tău</h2>
+            <div class="cart-summary-lines">
+              <div><span>Produse</span><strong data-cart-subtotal>0,00 lei</strong></div>
+              <div><span>Livrare</span><strong data-cart-shipping>Se confirmă ulterior</strong></div>
+            </div>
+            <div class="cart-summary-total">
+              <div><span>Total produse</span><small>Fără costul livrării</small></div>
+              <strong data-cart-order-total>0,00 lei</strong>
+            </div>
+            <a class="cart-checkout-button" data-cart-checkout href="checkout.html">
+              <span class="checkout-icon-wrap" aria-hidden="true"><i class="checkout-bag-icon"></i></span>
+              <strong>Finalizează comanda</strong>
+              <b aria-hidden="true">›</b>
+            </a>
+            <p class="cart-checkout-note">Continui într-o pagină separată, unde alegi livrarea și metoda de plată înainte să trimiți comanda.</p>
+            <ul class="cart-trust-list">
+              <li><i aria-hidden="true">✓</i><span><strong>Compatibilitate verificată</strong><small>Confirmăm modelul trotinetei înainte de comandă.</small></span></li>
+              <li><i aria-hidden="true">✓</i><span><strong>Asistență reală</strong><small>Primești ajutor direct de la un tehnician G-Trots.</small></span></li>
+              <li><i aria-hidden="true">✓</i><span><strong>Comandă în siguranță</strong><small>Costul final este comunicat transparent.</small></span></li>
+            </ul>
+          </aside>
+        </div>
+        <div class="favorites-empty" data-cart-empty><div><span class="favorites-empty-icon cart-empty-icon" aria-hidden="true"><span class="global-cart-icon"><i></i><i></i></span></span><h2>Coșul este gol.</h2><p>Descoperă produsele și revino aici când ai ales piesa potrivită.</p><a class="button" href="magazin.html#catalog">Vezi produsele <span aria-hidden="true">›</span></a></div></div>
+      </section>
     </main>
     <footer class="shell shop-footer"><div class="footer-inner"><a class="logo" href="index.html"><img src="assets/logo.png" width="1024" height="1024" alt=""><b><span>G</span>-Trots</b></a><p>Service și magazin pentru mobilitate electrică.</p><nav><a href="index.html">Acasă</a><a href="magazin.html">Magazin</a><a href="ghiduri-service-trotinete-electrice.html">Ghiduri</a><a href="index.html#contact">Contact</a></nav><a class="footer-phone" href="tel:+40762093915">+40 0762 093 915</a><small>© 2026 G-Trots</small></div></footer>
-    <script src="favorites.js" defer></script>
+    <script src="favorites.js?v=20260825-4" defer></script>
+    <script src="shop-live.js?v=20260825-2" defer></script>
   </body>
 </html>

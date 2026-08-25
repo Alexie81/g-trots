@@ -20,8 +20,8 @@
     <meta property="og:image" content="https://g-trots.ro/assets/vehicle-performance-scooter.png">
     <link rel="preload" href="assets/magazin-produse-v1.png" as="image" type="image/png">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="magazin.css">
-    <link rel="stylesheet" href="favorites.css">
+    <link rel="stylesheet" href="magazin.css?v=20260825-2">
+    <link rel="stylesheet" href="favorites.css?v=20260825-2">
   </head>
   <body class="shop-page">
     <a class="skip-link" href="#catalog">Sari la produse</a>
@@ -111,7 +111,7 @@
 
       <section class="shop-catalog shell" id="catalog" aria-labelledby="catalog-title">
         <button class="mobile-filter-button" type="button" aria-controls="shop-filters" aria-expanded="false">
-          <span aria-hidden="true"><i></i><i></i><i></i></span><strong>Filtrează produsele</strong><b>0</b>
+          <span aria-hidden="true"><i></i><i></i><i></i></span><strong>Filtrează produsele</strong>
         </button>
 
         <div class="catalog-layout">
@@ -125,13 +125,63 @@
 
             <div class="filter-group filter-categories">
               <div class="filter-heading"><strong>Categorii</strong><button type="button" class="clear-filters">Resetează</button></div>
-              <div class="filter-options-scroll" tabindex="0" aria-label="Lista categoriilor">
-                <button class="category-filter active" type="button" data-category="all"><span>Toate produsele</span><b>6</b></button>
-                <button class="category-filter" type="button" data-category="anvelope"><i class="category-thumb category-thumb-anvelope" aria-hidden="true"></i><span>Anvelope</span><b>1</b></button>
-                <button class="category-filter" type="button" data-category="electronica"><i class="category-thumb category-thumb-electronica" aria-hidden="true"></i><span>Electronică</span><b>1</b></button>
-                <button class="category-filter" type="button" data-category="alimentare"><i class="category-thumb category-thumb-alimentare" aria-hidden="true"></i><span>Alimentare</span><b>2</b></button>
-                <button class="category-filter" type="button" data-category="motoare"><i class="category-thumb category-thumb-motoare" aria-hidden="true"></i><span>Motoare</span><b>1</b></button>
-                <button class="category-filter" type="button" data-category="franare"><i class="category-thumb category-thumb-franare" aria-hidden="true"></i><span>Frânare</span><b>1</b></button>
+              <div class="filter-options-scroll category-tree" tabindex="0" aria-label="Arborele categoriilor">
+                <button class="category-filter active" type="button" data-category="all"><span>Toate produsele</span></button>
+
+                <div class="category-tree-node category-tree-level-1" data-tree-open>
+                  <button class="category-filter category-filter-parent" type="button" data-category="piese"><i class="category-tree-marker" aria-hidden="true"></i><span>Piese și componente</span></button>
+                  <div class="category-tree-children">
+                    <div class="category-tree-node category-tree-level-2">
+                      <button class="category-filter" type="button" data-category="roti"><i class="category-thumb category-thumb-anvelope" aria-hidden="true"></i><span>Roți și rulare</span></button>
+                      <div class="category-tree-children">
+                        <div class="category-tree-node category-tree-level-3"><button class="category-filter category-filter-leaf" type="button" data-category="anvelope-10-inch"><span>Anvelope 10 inch</span></button></div>
+                        <div class="category-tree-node category-tree-level-3"><button class="category-filter category-filter-leaf" type="button" data-category="anvelope-offroad"><span>Anvelope off-road</span></button></div>
+                      </div>
+                    </div>
+
+                    <div class="category-tree-node category-tree-level-2">
+                      <button class="category-filter" type="button" data-category="electronica"><i class="category-thumb category-thumb-electronica" aria-hidden="true"></i><span>Electronică</span></button>
+                      <div class="category-tree-children">
+                        <div class="category-tree-node category-tree-level-3"><button class="category-filter category-filter-leaf" type="button" data-category="displayuri"><span>Display-uri</span></button></div>
+                        <div class="category-tree-node category-tree-level-3"><button class="category-filter category-filter-leaf" type="button" data-category="controlere"><span>Controlere</span></button></div>
+                      </div>
+                    </div>
+
+                    <div class="category-tree-node category-tree-level-2">
+                      <button class="category-filter" type="button" data-category="alimentare"><i class="category-thumb category-thumb-alimentare" aria-hidden="true"></i><span>Alimentare</span></button>
+                      <div class="category-tree-children">
+                        <div class="category-tree-node category-tree-level-3"><button class="category-filter category-filter-leaf" type="button" data-category="baterii"><span>Baterii</span></button></div>
+                        <div class="category-tree-node category-tree-level-3"><button class="category-filter category-filter-leaf" type="button" data-category="incarcatoare"><span>Încărcătoare</span></button></div>
+                      </div>
+                    </div>
+
+                    <div class="category-tree-node category-tree-level-2">
+                      <button class="category-filter" type="button" data-category="motoare"><i class="category-thumb category-thumb-motoare" aria-hidden="true"></i><span>Motoare</span></button>
+                      <div class="category-tree-children">
+                        <div class="category-tree-node category-tree-level-3"><button class="category-filter category-filter-leaf" type="button" data-category="motoare-2000w"><span>Motoare 2000W</span></button></div>
+                      </div>
+                    </div>
+
+                    <div class="category-tree-node category-tree-level-2">
+                      <button class="category-filter" type="button" data-category="franare"><i class="category-thumb category-thumb-franare" aria-hidden="true"></i><span>Frânare</span></button>
+                      <div class="category-tree-children">
+                        <div class="category-tree-node category-tree-level-3"><button class="category-filter category-filter-leaf" type="button" data-category="frane-hidraulice"><span>Kituri hidraulice</span></button></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="category-tree-node category-tree-level-1">
+                  <button class="category-filter category-filter-parent" type="button" data-category="trotinete"><i class="category-tree-marker category-tree-marker-scooter" aria-hidden="true"></i><span>Trotinete electrice</span></button>
+                  <div class="category-tree-children">
+                    <div class="category-tree-node category-tree-level-2">
+                      <button class="category-filter category-filter-leaf" type="button" data-category="trotinete-offroad"><span>Off-road</span></button>
+                      <div class="category-tree-children">
+                        <div class="category-tree-node category-tree-level-3"><button class="category-filter category-filter-leaf" type="button" data-category="trotinete-dual-motor"><span>Dual motor</span></button></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -141,13 +191,29 @@
               <div class="price-scale"><span>100 lei</span><span>2.600 lei</span></div>
             </div>
 
-            <div class="filter-group brand-filter" role="group" aria-labelledby="brand-filter-title">
+            <div class="filter-group brand-filter compatibility-filter" role="group" aria-labelledby="brand-filter-title">
               <strong class="brand-filter-title" id="brand-filter-title">Compatibilitate marcă</strong>
               <div class="filter-options-scroll" tabindex="0" aria-label="Lista mărcilor compatibile">
-                <label><input type="checkbox" value="universal"><span>Universal</span><b>3</b></label>
-                <label><input type="checkbox" value="kukirin"><span>KuKirin</span><b>4</b></label>
-                <label><input type="checkbox" value="xiaomi"><span>Xiaomi</span><b>3</b></label>
-                <label><input type="checkbox" value="ninebot"><span>Ninebot</span><b>2</b></label>
+                <label><input type="checkbox" value="universal"><span>Universal</span></label>
+                <label><input type="checkbox" value="kukirin"><span>KuKirin</span></label>
+                <label><input type="checkbox" value="xiaomi"><span>Xiaomi</span></label>
+                <label><input type="checkbox" value="ninebot"><span>Ninebot</span></label>
+              </div>
+            </div>
+
+            <div class="filter-group brand-filter stock-filter" role="group" aria-labelledby="stock-filter-title">
+              <strong class="brand-filter-title" id="stock-filter-title">Stoc</strong>
+              <div class="filter-options-scroll" tabindex="0" aria-label="Filtrare după disponibilitate">
+                <label><input type="checkbox" value="in-stock"><span>În stoc</span></label>
+                <label><input type="checkbox" value="out-of-stock"><span>Nu este în stoc</span></label>
+              </div>
+            </div>
+
+            <div class="filter-group brand-filter manufacturer-filter" role="group" aria-labelledby="manufacturer-filter-title">
+              <strong class="brand-filter-title" id="manufacturer-filter-title">Producători</strong>
+              <div class="filter-options-scroll" tabindex="0" aria-label="Lista producătorilor">
+                <label><input type="checkbox" value="g-trots"><span>G-Trots</span></label>
+                <label><input type="checkbox" value="kukirin"><span>KuKirin</span></label>
               </div>
             </div>
 
@@ -193,7 +259,7 @@
             </div>
 
             <div class="product-grid" id="product-grid">
-              <article class="product-card reveal" data-product-id="anvelopa-g10-all-terrain" data-category="anvelope" data-brand="universal kukirin xiaomi ninebot" data-price="149" data-name="Anvelopă G10 All-Terrain" data-search="anvelopa cauciuc offroad all terrain 10 inch universal kukirin xiaomi ninebot">
+              <article class="product-card reveal" data-product-id="anvelopa-g10-all-terrain" data-category="anvelope" data-taxonomy="piese roti anvelope-10-inch anvelope-offroad" data-brand="universal kukirin xiaomi ninebot" data-stock="in-stock" data-manufacturer="g-trots" data-price="149" data-name="Anvelopă G10 All-Terrain" data-search="anvelopa cauciuc offroad all terrain 10 inch universal kukirin xiaomi ninebot">
                 <div class="product-stage">
                   <span class="product-badge">Recomandat</span>
                   <div class="product-card-actions">
@@ -216,7 +282,7 @@
                 <a class="product-card-link" href="magazin/produs/anvelopa-g10-all-terrain/" aria-label="Deschide pagina produsului Anvelopă G10 All-Terrain"></a>
               </article>
 
-              <article class="product-card reveal" data-product-id="display-smart-ride-s3" data-category="electronica" data-brand="kukirin xiaomi ninebot" data-price="349" data-name="Display Smart Ride S3" data-search="display bord ecran smart ride s3 electronica kukirin xiaomi ninebot">
+              <article class="product-card reveal" data-product-id="display-smart-ride-s3" data-category="electronica" data-taxonomy="piese electronica displayuri" data-brand="kukirin xiaomi ninebot" data-stock="in-stock" data-manufacturer="g-trots" data-price="349" data-name="Display Smart Ride S3" data-search="display bord ecran smart ride s3 electronica kukirin xiaomi ninebot">
                 <div class="product-stage">
                   <div class="product-card-actions">
                     <button class="cart-button" type="button" data-add-cart aria-label="Adaugă Display Smart Ride S3 în coș"><span class="global-cart-icon" aria-hidden="true"><i></i><i></i></span><b aria-hidden="true">+</b></button>
@@ -238,7 +304,7 @@
                 <a class="product-card-link" href="magazin/produs/display-smart-ride-s3/" aria-label="Deschide pagina produsului Display Smart Ride S3"></a>
               </article>
 
-              <article class="product-card reveal" data-product-id="incarcator-fastcharge-54-6v" data-category="alimentare" data-brand="universal kukirin xiaomi" data-price="189" data-name="Încărcător FastCharge 54.6V" data-search="incarcator fast charge 54.6v alimentare universal kukirin xiaomi">
+              <article class="product-card reveal" data-product-id="incarcator-fastcharge-54-6v" data-category="alimentare" data-taxonomy="piese alimentare incarcatoare" data-brand="universal kukirin xiaomi" data-stock="in-stock" data-manufacturer="g-trots" data-price="189" data-name="Încărcător FastCharge 54.6V" data-search="incarcator fast charge 54.6v alimentare universal kukirin xiaomi">
                 <div class="product-stage">
                   <div class="product-card-actions">
                     <button class="cart-button" type="button" data-add-cart aria-label="Adaugă Încărcător FastCharge în coș"><span class="global-cart-icon" aria-hidden="true"><i></i><i></i></span><b aria-hidden="true">+</b></button>
@@ -260,7 +326,7 @@
                 <a class="product-card-link" href="magazin/produs/incarcator-fastcharge-54-6v/" aria-label="Deschide pagina produsului Încărcător FastCharge 54.6V"></a>
               </article>
 
-              <article class="product-card reveal" data-product-id="motor-dualhub-x2-2000w" data-category="motoare" data-brand="kukirin" data-price="1899" data-name="Motor DualHub X2 2000W" data-search="motor dual hub x2 2000w roata kukirin putere">
+              <article class="product-card reveal" data-product-id="motor-dualhub-x2-2000w" data-category="motoare" data-taxonomy="piese motoare motoare-2000w" data-brand="kukirin" data-stock="in-stock" data-manufacturer="kukirin" data-price="1899" data-name="Motor DualHub X2 2000W" data-search="motor dual hub x2 2000w roata kukirin putere">
                 <div class="product-stage">
                   <span class="product-badge">Recomandat</span>
                   <div class="product-card-actions">
@@ -283,7 +349,7 @@
                 <a class="product-card-link" href="magazin/produs/motor-dualhub-x2-2000w/" aria-label="Deschide pagina produsului Motor DualHub X2 2000W"></a>
               </article>
 
-              <article class="product-card reveal" data-product-id="baterie-powercore-52v-23ah" data-category="alimentare" data-brand="kukirin" data-price="2499" data-name="Baterie PowerCore 52V 23Ah" data-search="baterie power core 52v 23ah acumulator autonomie alimentare kukirin">
+              <article class="product-card reveal" data-product-id="baterie-powercore-52v-23ah" data-category="alimentare" data-taxonomy="piese alimentare baterii" data-brand="kukirin" data-stock="in-stock" data-manufacturer="kukirin" data-price="2499" data-name="Baterie PowerCore 52V 23Ah" data-search="baterie power core 52v 23ah acumulator autonomie alimentare kukirin">
                 <div class="product-stage">
                   <div class="product-card-actions">
                     <button class="cart-button" type="button" data-add-cart aria-label="Adaugă Baterie PowerCore în coș"><span class="global-cart-icon" aria-hidden="true"><i></i><i></i></span><b aria-hidden="true">+</b></button>
@@ -305,7 +371,7 @@
                 <a class="product-card-link" href="magazin/produs/baterie-powercore-52v-23ah/" aria-label="Deschide pagina produsului Baterie PowerCore 52V 23Ah"></a>
               </article>
 
-              <article class="product-card reveal" data-product-id="kit-frana-hydrostop-pro" data-category="franare" data-brand="universal kukirin xiaomi ninebot" data-price="399" data-name="Kit frână HydroStop Pro" data-search="kit frana hidraulica hydro stop pro disc etrier universal kukirin xiaomi ninebot">
+              <article class="product-card reveal" data-product-id="kit-frana-hydrostop-pro" data-category="franare" data-taxonomy="piese franare frane-hidraulice" data-brand="universal kukirin xiaomi ninebot" data-stock="in-stock" data-manufacturer="g-trots" data-price="399" data-name="Kit frână HydroStop Pro" data-search="kit frana hidraulica hydro stop pro disc etrier universal kukirin xiaomi ninebot">
                 <div class="product-stage">
                   <div class="product-card-actions">
                     <button class="cart-button" type="button" data-add-cart aria-label="Adaugă Kit frână HydroStop în coș"><span class="global-cart-icon" aria-hidden="true"><i></i><i></i></span><b aria-hidden="true">+</b></button>
@@ -341,6 +407,7 @@
                 <div class="pagination-select-wrap">
                   <select class="pagination-native-select" id="products-per-page" tabindex="-1" aria-hidden="true">
                     <option value="10" selected>10</option>
+                    <option value="15">15</option>
                     <option value="25">25</option>
                     <option value="50">50</option>
                     <option value="75">75</option>
@@ -352,6 +419,7 @@
                   </button>
                   <div class="pagination-select-menu" id="products-per-page-menu" role="listbox" aria-label="Număr de produse afișate pe pagină" hidden>
                     <button type="button" role="option" data-value="10" aria-selected="true">10</button>
+                    <button type="button" role="option" data-value="15" aria-selected="false">15</button>
                     <button type="button" role="option" data-value="25" aria-selected="false">25</button>
                     <button type="button" role="option" data-value="50" aria-selected="false">50</button>
                     <button type="button" role="option" data-value="75" aria-selected="false">75</button>
@@ -441,7 +509,8 @@
       <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3a12.8 12.8 0 0 0-11 19.3L3.4 29l6.9-1.6A12.9 12.9 0 1 0 16 3Zm0 23.3c-2 0-3.8-.5-5.4-1.5l-.4-.2-4 .9.9-3.9-.3-.4A10.3 10.3 0 1 1 16 26.3Zm5.7-7.7c-.3-.2-1.9-.9-2.2-1s-.5-.2-.7.2-.8 1-1 1.2-.4.2-.7.1a8.5 8.5 0 0 1-2.5-1.6 9.3 9.3 0 0 1-1.7-2.1c-.2-.3 0-.5.1-.7l.5-.6.3-.6c.1-.2 0-.4 0-.6l-1-2.3c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.6.1-.9.4-.3.4-1.2 1.2-1.2 2.9s1.3 3.4 1.5 3.6c.2.2 2.5 3.8 6 5.3 3.6 1.6 3.6 1 4.3.9.6 0 1.9-.8 2.2-1.6.3-.8.3-1.5.2-1.6-.1-.2-.3-.3-.6-.4Z"/></svg>
       <span>WhatsApp</span>
     </a>
-    <script src="favorites.js" defer></script>
-    <script src="magazin.js" defer></script>
+    <script src="favorites.js?v=20260825-4" defer></script>
+    <script src="magazin.js?v=20260825-2" defer></script>
+    <script src="shop-live.js?v=20260825-2" defer></script>
   </body>
 </html>

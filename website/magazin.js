@@ -188,11 +188,16 @@ if (scooterStage && !prefersReducedMotion) {
 }
 
 const productGrid = document.querySelector("#product-grid");
-const productCards = [...document.querySelectorAll(".product-card")];
+let productCards = [...document.querySelectorAll(".product-card")];
 const searchInput = document.querySelector("#product-search");
 const searchClear = document.querySelector(".shop-search-clear");
-const categoryButtons = [...document.querySelectorAll(".category-filter")];
-const brandInputs = [...document.querySelectorAll(".brand-filter input")];
+const categoryTree = document.querySelector(".category-tree");
+const compatibilityOptions = document.querySelector(".compatibility-filter .filter-options-scroll");
+const manufacturerOptions = document.querySelector(".manufacturer-filter .filter-options-scroll");
+let categoryButtons = [...document.querySelectorAll(".category-filter")];
+let brandInputs = [...document.querySelectorAll(".compatibility-filter input")];
+let stockInputs = [...document.querySelectorAll(".stock-filter input")];
+let manufacturerInputs = [...document.querySelectorAll(".manufacturer-filter input")];
 const priceRange = document.querySelector("#price-range");
 const priceOutput = document.querySelector("#price-output");
 const resultsCount = document.querySelector("#results-count");
@@ -222,6 +227,111 @@ const pageSizeMenu = document.querySelector(".pagination-select-menu");
 const pageSizeOptions = [...document.querySelectorAll(".pagination-select-menu [data-value]")];
 const paginationRange = document.querySelector("#pagination-range");
 const paginationPages = document.querySelector("#pagination-pages");
+
+const legacyProductImages = {
+  "anvelopa-g10-all-terrain": 1,
+  "display-smart-ride-s3": 2,
+  "incarcator-fastcharge-54-6v": 3,
+  "motor-dualhub-x2-2000w": 4,
+  "baterie-powercore-52v-23ah": 5,
+  "kit-frana-hydrostop-pro": 6
+};
+
+function escapeCatalogHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, character => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[character]);
+}
+
+function productStockLabel(product) {
+  if (product.stock_mode === "unlimited") return "În stoc";
+  const quantity = Number(product.stock_quantity || 0);
+  if (quantity <= 0) return "Stoc epuizat";
+  if (quantity <= Number(product.low_stock_threshold || 3)) return "Stoc limitat";
+  return "În stoc";
+}
+
+function liveProductCard(product, index) {
+  const slug = String(product.slug || product.id || "");
+  const legacyImage = Number(product.images?.[0]?.sprite_index || legacyProductImages[slug] || 0);
+  const imageUrl = product.images?.[0]?.sprite_index ? "" : safePublicImageUrl(product.images?.[0]?.url);
+  const imageClasses = `product-image${legacyImage ? ` product-image-${legacyImage}` : ""}${imageUrl ? " product-image-live" : ""}`;
+  const imageStyle = imageUrl ? ` style="background-image:url('${escapeCatalogHtml(imageUrl)}')"` : "";
+  const categorySlug = String(product.category_slug || "produse");
+  const categoryName = String(product.category_name || "Produs G-Trots");
+  const manufacturerSlug = String(product.manufacturer_slug || "g-trots");
+  const brands = Array.isArray(product.brands) ? product.brands : [];
+  const brandSlugs = brands.map(brand => String(brand.slug || "")).filter(Boolean);
+  const brandNames = brands.map(brand => String(brand.name || "")).filter(Boolean);
+  const currentPrice = product.sale_price == null ? Number(product.price || 0) : Number(product.sale_price || 0);
+  const standardPrice = Number(product.price || 0);
+  const stockLabel = productStockLabel(product);
+  const stockKey = product.stock_mode === "unlimited" || Number(product.stock_quantity || 0) > 0 ? "in-stock" : "out-of-stock";
+  const stockClass = stockKey === "out-of-stock" ? " is-out" : stockLabel === "Stoc limitat" ? " is-low" : "";
+  const shortDescription = String(product.short_description || "Produs disponibil în magazinul G-Trots.");
+  const route = `/magazin/produs/${encodeURIComponent(slug)}/`;
+  const brandBadges = (brandNames.length ? brandNames : [String(product.manufacturer_name || "G-Trots")])
+    .slice(0, 4)
+    .map(name => `<span>${escapeCatalogHtml(name)}</span>`)
+    .join("");
+  const oldPrice = product.sale_price == null
+    ? ""
+    : `<del>${new Intl.NumberFormat("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(standardPrice)} lei</del>`;
+
+  const article = document.createElement("article");
+  article.className = "product-card reveal visible live-product-card";
+  article.dataset.productId = slug;
+  article.dataset.apiProductId = String(product.id || "");
+  article.dataset.category = categorySlug;
+  article.dataset.taxonomy = `produse ${categorySlug}`;
+  article.dataset.brand = brandSlugs.join(" ");
+  article.dataset.stock = stockKey;
+  article.dataset.manufacturer = manufacturerSlug;
+  article.dataset.price = String(currentPrice);
+  article.dataset.name = String(product.name || "Produs G-Trots");
+  article.dataset.search = `${product.name || ""} ${shortDescription} ${brandNames.join(" ")} ${product.sku || ""}`;
+  article.dataset.index = String(index);
+  article.innerHTML = `
+    <div class="product-stage">
+      <div class="product-card-actions">
+        <button class="cart-button" type="button" data-add-cart aria-label="Adaugă ${escapeCatalogHtml(product.name)} în coș"><span class="global-cart-icon" aria-hidden="true"><i></i><i></i></span><b aria-hidden="true">+</b></button>
+        <button class="favorite-button" type="button" aria-label="Adaugă ${escapeCatalogHtml(product.name)} la favorite" aria-pressed="false">♡</button>
+      </div>
+      <div class="${imageClasses}"${imageStyle} role="img" aria-label="${escapeCatalogHtml(product.name)}"></div>
+      <span class="product-quick-note${stockClass}"><i></i>${stockLabel}</span>
+    </div>
+    <div class="product-info">
+      <span class="product-category">${escapeCatalogHtml(categoryName)}</span>
+      <h3>${escapeCatalogHtml(product.name)}</h3>
+      <p>${escapeCatalogHtml(shortDescription)}</p>
+      <div class="product-fit">${brandBadges}</div>
+    </div>
+    <div class="product-bottom">
+      <div class="product-price"><small>Preț</small><strong>${new Intl.NumberFormat("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(currentPrice)} <span>lei</span></strong>${oldPrice}</div>
+      <span class="product-open-hint" aria-hidden="true">›</span>
+    </div>
+    <a class="product-card-link" href="${route}" aria-label="Deschide pagina produsului ${escapeCatalogHtml(product.name)}"></a>`;
+  return article;
+}
+
+function renderLiveProducts(products) {
+  if (!productGrid || !Array.isArray(products) || products.length === 0) return false;
+  const cards = products.map(liveProductCard);
+  productGrid.replaceChildren(...cards);
+  productCards = cards;
+  const oldMaximum = Number(priceRange?.max || 0);
+  const maximumPrice = Math.max(...products.map(product => Number(product.sale_price ?? product.price ?? 0)), oldMaximum, 1);
+  if (priceRange && maximumPrice > oldMaximum) {
+    const wasAtMaximum = Number(priceRange.value) >= oldMaximum;
+    priceRange.max = String(Math.ceil(maximumPrice / 100) * 100);
+    if (wasAtMaximum) priceRange.value = priceRange.max;
+    updateRangeAppearance();
+  }
+  currentPage = 1;
+  applyFilters();
+  productGrid.dataset.catalogSource = "shop-api";
+  return true;
+}
 
 function setSortMenuOpen(isOpen, focusSelected = false) {
   if (!sortTrigger || !sortMenu) return;
@@ -285,6 +395,193 @@ if (filtersPanel && filtersStickyColumn) {
 let activeCategory = "all";
 let currentPage = 1;
 
+function directTreeChild(node, selector) {
+  return [...node.children].find(child => child.matches(selector)) || null;
+}
+
+function updateTreeToggleLabel(node, expanded) {
+  const toggle = directTreeChild(node, ".category-tree-toggle");
+  const filter = directTreeChild(node, ".category-filter");
+  if (!toggle || !filter) return;
+  const label = filter.querySelector("span")?.textContent?.trim() || "categoria";
+  toggle.setAttribute("aria-expanded", String(expanded));
+  toggle.setAttribute("aria-label", `${expanded ? "Restrânge" : "Extinde"} subcategoriile pentru ${label}`);
+}
+
+function setTreeNodeExpanded(node, expanded, animate = true) {
+  const children = directTreeChild(node, ".category-tree-children");
+  if (!children) return;
+  window.clearTimeout(children._treeAnimationTimer);
+  updateTreeToggleLabel(node, expanded);
+
+  if (!animate || prefersReducedMotion) {
+    node.classList.toggle("is-collapsed", !expanded);
+    children.style.height = expanded ? "auto" : "0px";
+    return;
+  }
+
+  if (expanded) {
+    children.style.height = "0px";
+    node.classList.remove("is-collapsed");
+    children.getBoundingClientRect();
+    children.style.height = `${children.scrollHeight}px`;
+    children._treeAnimationTimer = window.setTimeout(() => {
+      if (!node.classList.contains("is-collapsed")) children.style.height = "auto";
+    }, 380);
+    return;
+  }
+
+  children.style.height = `${children.getBoundingClientRect().height}px`;
+  children.getBoundingClientRect();
+  node.classList.add("is-collapsed");
+  window.requestAnimationFrame(() => { children.style.height = "0px"; });
+}
+
+function initializeCategoryTree(root = document) {
+  const nodes = [...root.querySelectorAll(".category-tree-node")];
+  nodes.forEach((node, index) => {
+    const children = directTreeChild(node, ".category-tree-children");
+    const filter = directTreeChild(node, ".category-filter");
+    if (!children || !filter) return;
+    if (directTreeChild(node, ".category-tree-toggle")) return;
+
+    node.classList.add("has-children");
+    children.id ||= `category-children-${index + 1}`;
+    const toggle = document.createElement("button");
+    toggle.className = "category-tree-toggle";
+    toggle.type = "button";
+    toggle.setAttribute("aria-controls", children.id);
+    toggle.innerHTML = '<span aria-hidden="true"></span>';
+    node.insertBefore(toggle, children);
+
+    const expanded = node.hasAttribute("data-tree-open");
+    setTreeNodeExpanded(node, expanded, false);
+    toggle.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      setTreeNodeExpanded(node, toggle.getAttribute("aria-expanded") !== "true");
+    });
+  });
+}
+
+const SHOP_PUBLIC_FILTERS_URL = "https://g-trots.ro/shop-api/api-v2.php?action=publicCatalogFilters";
+
+function safePublicImageUrl(value) {
+  try {
+    const url = new URL(String(value || ""), window.location.origin);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function createCategoryVisual(category, depth) {
+  const thumbnailUrl = safePublicImageUrl(category.thumbnail_url);
+  if (thumbnailUrl) {
+    const thumbnail = document.createElement("i");
+    thumbnail.className = "category-thumb category-thumb-api";
+    thumbnail.setAttribute("aria-hidden", "true");
+    thumbnail.style.backgroundImage = `url(${JSON.stringify(thumbnailUrl)})`;
+    return thumbnail;
+  }
+
+  if (depth !== 1) return null;
+  const marker = document.createElement("i");
+  marker.className = "category-tree-marker";
+  marker.setAttribute("aria-hidden", "true");
+  return marker;
+}
+
+function createCategoryNode(category, childMap, depth, openRoot, ancestry = new Set()) {
+  if (ancestry.has(category.id)) return null;
+  const nextAncestry = new Set(ancestry).add(category.id);
+  const children = (childMap.get(category.id) || []).filter(child => !nextAncestry.has(child.id));
+  const node = document.createElement("div");
+  node.className = `category-tree-node category-tree-level-${Math.min(depth, 3)}`;
+  if (depth === 1 && openRoot) node.setAttribute("data-tree-open", "");
+
+  const button = document.createElement("button");
+  button.className = "category-filter";
+  if (depth === 1) button.classList.add("category-filter-parent");
+  if (children.length === 0) button.classList.add("category-filter-leaf");
+  button.type = "button";
+  button.dataset.category = String(category.slug || category.id);
+
+  const visual = createCategoryVisual(category, depth);
+  if (visual) button.append(visual);
+  const label = document.createElement("span");
+  label.textContent = String(category.name || "Categorie");
+  button.append(label);
+  node.append(button);
+
+  if (children.length > 0) {
+    const childrenContainer = document.createElement("div");
+    childrenContainer.className = "category-tree-children";
+    children.forEach(child => {
+      const childNode = createCategoryNode(child, childMap, depth + 1, false, nextAncestry);
+      if (childNode) childrenContainer.append(childNode);
+    });
+    if (childrenContainer.childElementCount > 0) node.append(childrenContainer);
+  }
+
+  return node;
+}
+
+function renderCategoryFilters(categories) {
+  if (!categoryTree) return;
+  const activeCategories = categories.filter(category => category && category.is_active !== false && category.id);
+  const includedIds = new Set(activeCategories.map(category => String(category.id)));
+  const childMap = new Map();
+  activeCategories.forEach(category => {
+    const parentId = category.parent_id && includedIds.has(String(category.parent_id))
+      ? String(category.parent_id)
+      : "root";
+    if (!childMap.has(parentId)) childMap.set(parentId, []);
+    childMap.get(parentId).push(category);
+  });
+
+  const fragment = document.createDocumentFragment();
+  const allButton = document.createElement("button");
+  allButton.className = "category-filter active";
+  allButton.type = "button";
+  allButton.dataset.category = "all";
+  const allLabel = document.createElement("span");
+  allLabel.textContent = "Toate produsele";
+  allButton.append(allLabel);
+  fragment.append(allButton);
+
+  (childMap.get("root") || []).forEach((category, index) => {
+    const node = createCategoryNode(category, childMap, 1, index === 0);
+    if (node) fragment.append(node);
+  });
+
+  categoryTree.replaceChildren(fragment);
+  initializeCategoryTree(categoryTree);
+}
+
+function renderChoiceFilters(container, rows, emptyLabel) {
+  if (!container) return;
+  const fragment = document.createDocumentFragment();
+  rows.filter(row => row && row.is_active !== false && row.slug).forEach(row => {
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = String(row.slug);
+    const text = document.createElement("span");
+    text.textContent = String(row.name || row.slug);
+    label.append(input, text);
+    fragment.append(label);
+  });
+
+  if (fragment.childNodes.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "filter-empty";
+    empty.textContent = emptyLabel;
+    fragment.append(empty);
+  }
+  container.replaceChildren(fragment);
+}
+
 function normalizeText(value) {
   return value
     .toLocaleLowerCase("ro-RO")
@@ -311,12 +608,22 @@ function getSelectedBrands() {
   return brandInputs.filter(input => input.checked).map(input => input.value);
 }
 
+function getSelectedStocks() {
+  return stockInputs.filter(input => input.checked).map(input => input.value);
+}
+
+function getSelectedManufacturers() {
+  return manufacturerInputs.filter(input => input.checked).map(input => input.value);
+}
+
 function updateMobileFilterCount() {
   if (!mobileFilterCount) return;
   const brandCount = getSelectedBrands().length;
+  const stockCount = getSelectedStocks().length;
+  const manufacturerCount = getSelectedManufacturers().length;
   const categoryCount = activeCategory === "all" ? 0 : 1;
   const priceCount = priceRange && priceRange.value !== priceRange.max ? 1 : 0;
-  mobileFilterCount.textContent = String(brandCount + categoryCount + priceCount);
+  mobileFilterCount.textContent = String(brandCount + stockCount + manufacturerCount + categoryCount + priceCount);
 }
 
 function sortCards(cards) {
@@ -368,6 +675,8 @@ function applyFilters({ resetPage = true } = {}) {
   if (resetPage) currentPage = 1;
   const query = normalizeText(searchInput?.value || "");
   const selectedBrands = getSelectedBrands();
+  const selectedStocks = getSelectedStocks();
+  const selectedManufacturers = getSelectedManufacturers();
   const maxPrice = Number(priceRange?.value || Infinity);
   const visibleCards = [];
   const hiddenCards = [];
@@ -375,11 +684,14 @@ function applyFilters({ resetPage = true } = {}) {
   productCards.forEach(card => {
     const searchableText = normalizeText(`${card.dataset.name} ${card.dataset.search}`);
     const cardBrands = (card.dataset.brand || "").split(" ");
+    const cardTaxonomy = `${card.dataset.category || ""} ${card.dataset.taxonomy || ""}`.split(" ").filter(Boolean);
     const matchesSearch = !query || searchableText.includes(query);
-    const matchesCategory = activeCategory === "all" || card.dataset.category === activeCategory;
+    const matchesCategory = activeCategory === "all" || cardTaxonomy.includes(activeCategory);
     const matchesBrand = selectedBrands.length === 0 || selectedBrands.some(brand => cardBrands.includes(brand));
+    const matchesStock = selectedStocks.length === 0 || selectedStocks.includes(card.dataset.stock);
+    const matchesManufacturer = selectedManufacturers.length === 0 || selectedManufacturers.includes(card.dataset.manufacturer);
     const matchesPrice = Number(card.dataset.price) <= maxPrice;
-    const isVisible = matchesSearch && matchesCategory && matchesBrand && matchesPrice;
+    const isVisible = matchesSearch && matchesCategory && matchesBrand && matchesStock && matchesManufacturer && matchesPrice;
 
     (isVisible ? visibleCards : hiddenCards).push(card);
   });
@@ -415,24 +727,78 @@ function resetFilters() {
   if (searchClear) searchClear.hidden = true;
   if (priceRange) priceRange.value = priceRange.max;
   brandInputs.forEach(input => { input.checked = false; });
+  stockInputs.forEach(input => { input.checked = false; });
+  manufacturerInputs.forEach(input => { input.checked = false; });
   categoryButtons.forEach(button => button.classList.toggle("active", button.dataset.category === "all"));
   updateRangeAppearance();
   applyFilters();
 }
 
+function refreshFilterReferences() {
+  categoryButtons = [...document.querySelectorAll(".category-filter")];
+  brandInputs = [...document.querySelectorAll(".compatibility-filter input")];
+  stockInputs = [...document.querySelectorAll(".stock-filter input")];
+  manufacturerInputs = [...document.querySelectorAll(".manufacturer-filter input")];
+}
+
+function bindFilterControls() {
+  refreshFilterReferences();
+  categoryButtons.forEach(button => {
+    if (button.dataset.filterBound === "true") return;
+    button.dataset.filterBound = "true";
+    button.addEventListener("click", () => {
+      activeCategory = button.dataset.category || "all";
+      categoryButtons.forEach(item => item.classList.toggle("active", item === button));
+      applyFilters();
+    });
+  });
+
+  [...brandInputs, ...stockInputs, ...manufacturerInputs].forEach(input => {
+    if (input.dataset.filterBound === "true") return;
+    input.dataset.filterBound = "true";
+    input.addEventListener("change", applyFilters);
+  });
+}
+
+async function loadCatalogFilters() {
+  const loadingTargets = [categoryTree, compatibilityOptions, manufacturerOptions].filter(Boolean);
+  loadingTargets.forEach(element => element.setAttribute("aria-busy", "true"));
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 9000);
+
+  try {
+    const response = await fetch(SHOP_PUBLIC_FILTERS_URL, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+      cache: "no-store"
+    });
+    if (!response.ok) throw new Error(`SHOP API ${response.status}`);
+    const payload = await response.json();
+    if (!payload || !Array.isArray(payload.categories) || !Array.isArray(payload.brands) || !Array.isArray(payload.manufacturers)) {
+      throw new Error("Răspuns SHOP invalid");
+    }
+
+    renderCategoryFilters(payload.categories);
+    renderChoiceFilters(compatibilityOptions, payload.brands, "Nu există mărci active.");
+    renderChoiceFilters(manufacturerOptions, payload.manufacturers, "Nu există producători activi.");
+    activeCategory = "all";
+    bindFilterControls();
+    applyFilters();
+    filtersPanel?.setAttribute("data-catalog-source", "shop-api");
+  } catch {
+    filtersPanel?.setAttribute("data-catalog-source", "fallback");
+  } finally {
+    window.clearTimeout(timeout);
+    loadingTargets.forEach(element => element.removeAttribute("aria-busy"));
+  }
+}
+
+initializeCategoryTree();
+bindFilterControls();
+
 productCards.forEach((card, index) => {
   card.dataset.index = String(index);
 });
-
-categoryButtons.forEach(button => {
-  button.addEventListener("click", () => {
-    activeCategory = button.dataset.category;
-    categoryButtons.forEach(item => item.classList.toggle("active", item === button));
-    applyFilters();
-  });
-});
-
-brandInputs.forEach(input => input.addEventListener("change", applyFilters));
 
 if (searchInput) {
   searchInput.addEventListener("input", () => {
@@ -633,5 +999,13 @@ document.querySelectorAll("[data-direct-call]").forEach(link => {
 
 updateRangeAppearance();
 syncSortControl();
+if (productsPerPage) {
+  productsPerPage.value = window.matchMedia("(max-width: 700px)").matches ? "10" : "15";
+}
 syncPageSizeControl();
 applyFilters();
+loadCatalogFilters();
+
+window.GTrotsShopCatalog = {
+  renderLiveProducts
+};

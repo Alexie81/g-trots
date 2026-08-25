@@ -1,0 +1,282 @@
+(() => {
+  const ORDER_STATE_KEY = "g-trots-last-checkout-v1";
+
+  function readState() {
+    try {
+      const parsed = JSON.parse(sessionStorage.getItem(ORDER_STATE_KEY) || "null");
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, character => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[character]);
+  }
+
+  function safeUrl(value) {
+    try {
+      const raw = String(value || "").trim();
+      if (!raw) return "";
+      const url = new URL(raw, window.location.origin);
+      return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function parsePrice(value) {
+    if (typeof value === "number") return value;
+    const normalized = String(value || "").replace(/\./g, "").replace(",", ".").replace(/[^\d.]/g, "");
+    return Number(normalized) || 0;
+  }
+
+  function formatMoney(value) {
+    return `${new Intl.NumberFormat("ro-RO", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(Number(value) || 0)} lei`;
+  }
+
+  function setTextAll(selector, value) {
+    if (value === undefined || value === null || value === "") return;
+    document.querySelectorAll(selector).forEach(element => { element.textContent = String(value); });
+  }
+
+  function setResultIcon(type) {
+    const host = document.querySelector("[data-result-icon]");
+    if (!host) return;
+    const icons = {
+      paid: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M7 9.5A2.5 2.5 0 0 1 5.5 11M17 14.5a2.5 2.5 0 0 1 1.5-1.5"/></svg>`,
+      processing: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>`,
+      pending: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M3 10h18M8 14h3"/></svg>`
+    };
+    host.innerHTML = icons[type] || icons.processing;
+  }
+
+  function configureResultState(method, status) {
+    const hero = document.querySelector(".order-result-hero.is-confirmed");
+    const receipt = document.querySelector("[data-order-receipt]");
+    const isCod = method === "cash_on_delivery" || status === "cod";
+    const isPaid = status === "paid";
+    const mode = isPaid ? "paid" : isCod ? "processing" : "pending";
+
+    hero?.classList.add(`is-${mode}`);
+    receipt?.classList.add(`is-${mode}`);
+    setResultIcon(mode);
+
+    if (isPaid) {
+      document.title = "Plată efectuată | G-Trots";
+      setTextAll("[data-result-eyebrow]", "Plata a fost confirmată");
+      setTextAll("[data-result-title-main]", "Plată");
+      setTextAll("[data-result-title-accent]", "efectuată.");
+      setTextAll("[data-result-mark-title]", "Plată efectuată");
+      setTextAll("[data-result-mark-copy]", "Suma a fost confirmată în siguranță.");
+      setTextAll("[data-receipt-status-text]", "Plătită");
+      return;
+    }
+
+    if (isCod) {
+      document.title = "Comandă în procesare | G-Trots";
+      setTextAll("[data-result-eyebrow]", "Comanda a intrat în procesare");
+      setTextAll("[data-result-title-main]", "Comandă");
+      setTextAll("[data-result-title-accent]", "în procesare.");
+      setTextAll("[data-result-mark-title]", "În procesare");
+      setTextAll("[data-result-mark-copy]", "Pregătim verificarea și livrarea.");
+      setTextAll("[data-receipt-status-text]", "În procesare");
+      return;
+    }
+
+    document.title = "Plată în curs de confirmare | G-Trots";
+    setTextAll("[data-result-eyebrow]", "Plata este în curs de confirmare");
+    setTextAll("[data-result-title-main]", "Plata");
+    setTextAll("[data-result-title-accent]", "se confirmă.");
+    setTextAll("[data-result-mark-title]", "Confirmăm plata");
+    setTextAll("[data-result-mark-copy]", "Așteptăm răspunsul procesatorului.");
+    setTextAll("[data-receipt-status-text]", "În confirmare");
+  }
+
+  function currentCartItems() {
+    const cart = window.GTrotsCart?.get?.() || [];
+    const products = window.GTrotsFavorites?.products || {};
+    return cart.map(item => {
+      const product = products[item.id] || {};
+      const quantity = Number(item.quantity || 1);
+      const unitPrice = Number(product.priceValue ?? parsePrice(product.price));
+      return {
+        id: String(item.id || ""),
+        name: String(product.name || "Produs G-Trots"),
+        quantity,
+        unitPrice,
+        lineTotal: unitPrice * quantity,
+        image: Number(product.image || 0),
+        imageUrl: safeUrl(product.imageUrl),
+        url: String(product.url || "/magazin.html")
+      };
+    });
+  }
+
+  function normalizedItems(state) {
+    const source = Array.isArray(state.items) && state.items.length ? state.items : currentCartItems();
+    return source.map(item => {
+      const quantity = Math.max(1, Number(item.quantity || 1));
+      const unitPrice = Number(item.unitPrice ?? item.unit_price ?? 0);
+      return {
+        id: String(item.id || ""),
+        name: String(item.name || item.product_name || "Produs G-Trots"),
+        quantity,
+        unitPrice,
+        lineTotal: Number(item.lineTotal ?? item.line_total ?? unitPrice * quantity),
+        image: Number(item.image || item.sprite_index || 0),
+        imageUrl: safeUrl(item.imageUrl || item.image_url),
+        url: String(item.url || "/magazin.html")
+      };
+    });
+  }
+
+  function renderReceipt(state, method) {
+    const host = document.querySelector("[data-order-items]");
+    if (!host) return;
+    const empty = document.querySelector("[data-order-items-empty]");
+    const items = normalizedItems(state);
+    const subtotalFromItems = items.reduce((sum, item) => sum + item.lineTotal, 0);
+    const subtotal = Number.isFinite(Number(state.subtotal)) ? Number(state.subtotal) : subtotalFromItems;
+    const hasShipping = state.shippingCost !== undefined && state.shippingCost !== null;
+    const shipping = hasShipping ? Number(state.shippingCost || 0) : null;
+    const total = Number.isFinite(Number(state.total)) && Number(state.total) > 0
+      ? Number(state.total)
+      : subtotal + Number(shipping || 0);
+
+    host.innerHTML = items.map(item => {
+      const legacyImage = item.image >= 1 && item.image <= 6 ? ` is-legacy-image receipt-product-image-${item.image}` : "";
+      const imageStyle = item.imageUrl ? ` style="background-image:url('${escapeHtml(item.imageUrl)}')"` : "";
+      return `<article class="order-receipt-product">
+        <a href="${escapeHtml(item.url)}" class="order-receipt-product-image${legacyImage}"${imageStyle} aria-label="Deschide ${escapeHtml(item.name)}"></a>
+        <span><strong>${escapeHtml(item.name)}</strong><small>${item.quantity} × ${formatMoney(item.unitPrice)}</small></span>
+        <b>${formatMoney(item.lineTotal)}</b>
+      </article>`;
+    }).join("");
+    host.hidden = items.length === 0;
+    if (empty) empty.hidden = items.length > 0;
+
+    setTextAll("[data-order-subtotal]", formatMoney(subtotal));
+    setTextAll("[data-order-shipping]", shipping === null ? "Se confirmă" : shipping === 0 ? "Gratuit" : formatMoney(shipping));
+    setTextAll("[data-order-total]", formatMoney(total));
+    setTextAll("[data-order-shipping-label]", state.shippingLabel || "Livrare");
+    const paymentLabel = state.paymentLabel || (method === "card" ? "Card online" : "Ramburs la curier");
+    setTextAll("[data-order-payment]", paymentLabel);
+    setTextAll("[data-order-date]", new Intl.DateTimeFormat("ro-RO", {
+      day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
+    }).format(state.createdAt ? new Date(state.createdAt) : new Date()));
+  }
+
+  async function copyText(value) {
+    if (!value) return false;
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      const input = document.createElement("textarea");
+      input.value = value;
+      input.style.position = "fixed";
+      input.style.opacity = "0";
+      document.body.append(input);
+      input.select();
+      const copied = document.execCommand("copy");
+      input.remove();
+      return copied;
+    }
+  }
+
+  function bindInteractions(orderNumber) {
+    document.querySelectorAll("[data-copy-order]").forEach(button => {
+      button.addEventListener("click", async () => {
+        const copied = await copyText(orderNumber);
+        const label = button.querySelector("b, span");
+        const initial = label?.textContent || "";
+        if (label) label.textContent = copied ? "Copiat!" : "Nu s-a copiat";
+        window.setTimeout(() => { if (label) label.textContent = initial; }, 1600);
+      });
+    });
+    document.querySelector("[data-print-order]")?.addEventListener("click", () => window.print());
+  }
+
+  function revealReceipt() {
+    const receipt = document.querySelector("[data-order-receipt]");
+    if (!receipt) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) {
+      receipt.classList.add("is-revealed");
+      return;
+    }
+    receipt.classList.add("is-reveal-ready");
+    const observer = new IntersectionObserver(entries => {
+      if (!entries.some(entry => entry.isIntersecting)) return;
+      receipt.classList.add("is-revealed");
+      observer.disconnect();
+    }, { threshold: 0.22 });
+    observer.observe(receipt);
+  }
+
+  function initialize() {
+    const state = readState();
+    const params = new URLSearchParams(window.location.search);
+    const isFailed = document.body.dataset.checkoutStatus === "failed";
+    const orderNumber = String(params.get("comanda") || state.orderNumber || "").trim();
+    const method = String(params.get("metoda") || state.paymentMethod || "").trim();
+    const status = String(params.get("status") || "").trim();
+    const numberWrap = document.querySelector("[data-order-number-wrap]");
+
+    if (orderNumber) {
+      numberWrap?.removeAttribute("hidden");
+      setTextAll("[data-order-number]", orderNumber);
+    } else {
+      numberWrap?.setAttribute("hidden", "");
+    }
+
+    const whatsapp = document.querySelector("[data-status-whatsapp]");
+    if (whatsapp) {
+      const message = orderNumber
+        ? `Bună ziua! Am nevoie de ajutor pentru comanda ${orderNumber}.`
+        : "Bună ziua! Am nevoie de ajutor pentru finalizarea unei comenzi.";
+      whatsapp.href = `https://wa.me/40762093915?text=${encodeURIComponent(message)}`;
+    }
+
+    if (isFailed) {
+      const cartCount = (window.GTrotsCart?.get?.() || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+      setTextAll("[data-failure-cart-count]", cartCount
+        ? `${cartCount} ${cartCount === 1 ? "produs păstrat" : "produse păstrate"} în coș`
+        : "Coșul tău rămâne disponibil");
+      const reason = String(params.get("motiv") || "").trim();
+      if (reason) setTextAll("[data-failure-reason]", reason);
+      return;
+    }
+
+    configureResultState(method, status);
+
+    if (method === "cash_on_delivery" || status === "cod") {
+      setTextAll("[data-status-lead]", "Comanda este confirmată în sistemul G-Trots. Vei achita la livrare, după verificarea produselor și pregătirea expedierii.");
+      setTextAll("[data-payment-step-title]", "Plătești la livrare");
+      setTextAll("[data-payment-step-copy]", state.paymentLabel || "Suma va fi achitată curierului când primești coletul.");
+    } else if (status === "paid") {
+      setTextAll("[data-status-lead]", "Plata este confirmată, iar comanda a ajuns în sistemul G-Trots. Începem pregătirea produselor pentru livrare.");
+      setTextAll("[data-payment-step-title]", "Plata este confirmată");
+      setTextAll("[data-payment-step-copy]", "Nu mai este necesară nicio acțiune pentru plată.");
+    } else if (method === "card") {
+      setTextAll("[data-status-lead]", "Comanda este confirmată în sistemul G-Trots. Plata cu cardul rămâne în curs de confirmare până la verificarea comenzii.");
+      setTextAll("[data-payment-step-title]", "Confirmăm plata cu cardul");
+      setTextAll("[data-payment-step-copy]", state.paymentLabel || "Primești confirmarea după verificarea comenzii.");
+    }
+
+    if (state.shippingLabel) {
+      setTextAll("[data-shipping-step-copy]", `${state.shippingLabel}. Primești confirmarea înainte ca produsele să plece spre tine.`);
+    }
+    renderReceipt(state, method);
+    bindInteractions(orderNumber);
+    revealReceipt();
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialize, { once: true });
+  else initialize();
+})();

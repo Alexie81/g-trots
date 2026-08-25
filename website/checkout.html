@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ro">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finalizare comandă | G-Trots</title>
+    <meta name="description" content="Finalizează în siguranță comanda ta din magazinul G-Trots.">
+    <meta name="robots" content="noindex, follow">
+    <meta name="theme-color" content="#080808">
+    <link rel="icon" href="assets/logo.png" type="image/png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="favorites.css?v=20260825-3">
+    <link rel="stylesheet" href="checkout.css?v=20260825-5">
+  </head>
+  <body class="shop-page favorites-page checkout-page">
+    <a class="skip-link" href="#checkout-content">Sari la finalizarea comenzii</a>
+    <header class="site-header"><div class="header-inner"><a class="logo" href="index.html" aria-label="G-Trots, pagina principală"><img src="assets/logo.png" width="1024" height="1024" alt=""><b><span>G</span>-Trots</b></a><nav class="main-nav" aria-label="Navigație principală"></nav><button class="menu-toggle" type="button" aria-label="Deschide meniul" aria-expanded="false"><span></span><span></span></button></div></header>
+
+    <main class="checkout-main" id="checkout-content">
+      <section class="checkout-hero shell">
+        <div class="checkout-hero-copy">
+          <a class="checkout-back-link" href="cos.html"><span aria-hidden="true">←</span> Înapoi la coș</a>
+          <span class="checkout-eyebrow"><i></i> Comandă protejată</span>
+          <h1>Finalizarea<br><em>comenzii.</em></h1>
+          <p>Completează datele, alege livrarea și metoda de plată. Totalul este calculat transparent înainte să trimiți comanda.</p>
+        </div>
+        <div class="checkout-progress" aria-label="Progres comandă">
+          <div class="is-complete"><span>1</span><strong>Coș</strong><small>Produse alese</small></div>
+          <i aria-hidden="true"></i>
+          <div class="is-current"><span>2</span><strong>Checkout</strong><small>Date și plată</small></div>
+          <i aria-hidden="true"></i>
+          <div><span>3</span><strong>Confirmare</strong><small>Comandă trimisă</small></div>
+        </div>
+      </section>
+
+      <section class="checkout-content shell">
+        <div class="checkout-loading" data-checkout-loading>
+          <span class="checkout-loader" aria-hidden="true"></span>
+          <strong>Pregătim comanda ta</strong>
+          <p>Verificăm produsele și opțiunile active de livrare.</p>
+        </div>
+
+        <div class="checkout-empty" data-checkout-empty hidden>
+          <span class="checkout-empty-icon" aria-hidden="true"><span class="global-cart-icon"><i></i><i></i></span></span>
+          <span class="checkout-eyebrow"><i></i> Coș gol</span>
+          <h2>Nu ai încă produse de comandat.</h2>
+          <p>Adaugă produsele dorite în coș, apoi revino aici pentru livrare și plată.</p>
+          <a class="checkout-primary-link" href="magazin.html#catalog">Descoperă produsele <span aria-hidden="true">›</span></a>
+        </div>
+
+        <form class="checkout-form" id="checkout-form" data-checkout-form hidden novalidate>
+          <div class="checkout-form-column">
+            <section class="checkout-panel" aria-labelledby="contact-title">
+              <header class="checkout-panel-header">
+                <span>01</span>
+                <div><small>Date de contact</small><h2 id="contact-title">Cine primește comanda?</h2></div>
+              </header>
+              <div class="checkout-fields">
+                <label class="is-wide"><span>Nume și prenume <b>*</b></span><input name="customer_name" autocomplete="name" required placeholder="Ex: Alexie Popescu"><small data-field-error="customer_name"></small></label>
+                <label><span>Telefon <b>*</b></span><input name="customer_phone" autocomplete="tel" inputmode="tel" required placeholder="07xx xxx xxx"><small data-field-error="customer_phone"></small></label>
+                <label><span>Email <em>opțional</em></span><input name="customer_email" type="email" autocomplete="email" placeholder="nume@email.ro"><small data-field-error="customer_email"></small></label>
+              </div>
+            </section>
+
+            <section class="checkout-panel" aria-labelledby="address-title">
+              <header class="checkout-panel-header">
+                <span>02</span>
+                <div><small>Adresa de livrare</small><h2 id="address-title">Unde trimitem comanda?</h2></div>
+              </header>
+              <div class="checkout-fields">
+                <label class="is-wide"><span>Adresa completă <b>*</b></span><input name="address" autocomplete="street-address" required placeholder="Stradă, număr, bloc, scară, apartament"><small data-field-error="address"></small></label>
+                <label><span>Localitate <b>*</b></span><input name="city" autocomplete="address-level2" required placeholder="București"><small data-field-error="city"></small></label>
+                <label><span>Județ / Sector</span><input name="county" autocomplete="address-level1" placeholder="București / Ilfov"><small data-field-error="county"></small></label>
+                <label><span>Cod poștal</span><input name="postal_code" autocomplete="postal-code" inputmode="numeric" placeholder="000000"><small data-field-error="postal_code"></small></label>
+                <label class="is-wide"><span>Observații pentru comandă</span><textarea name="customer_notes" rows="4" placeholder="Modelul trotinetei, reper pentru curier sau alte detalii utile"></textarea><small data-field-error="customer_notes"></small></label>
+              </div>
+            </section>
+
+            <section class="checkout-panel" aria-labelledby="shipping-title">
+              <header class="checkout-panel-header">
+                <span>03</span>
+                <div><small>Transport</small><h2 id="shipping-title">Cum livrăm?</h2></div>
+              </header>
+              <div class="checkout-options" data-checkout-shipping role="radiogroup" aria-label="Metodă de livrare"></div>
+            </section>
+
+            <section class="checkout-panel" aria-labelledby="payment-title">
+              <header class="checkout-panel-header">
+                <span>04</span>
+                <div><small>Metoda de plată</small><h2 id="payment-title">Cum dorești să plătești?</h2></div>
+              </header>
+              <div class="checkout-options checkout-payment-options" data-checkout-payment role="radiogroup" aria-label="Metodă de plată"></div>
+            </section>
+
+          </div>
+
+          <aside class="checkout-summary" aria-labelledby="summary-title">
+            <header><span>Rezumat comandă</span><h2 id="summary-title">Produsele tale</h2><strong data-checkout-item-count>0 produse</strong></header>
+            <div class="checkout-summary-items" data-checkout-items></div>
+            <div class="checkout-summary-lines">
+              <div><span>Subtotal</span><strong data-checkout-subtotal>0,00 lei</strong></div>
+              <div><span>Livrare</span><strong data-checkout-shipping-cost>—</strong></div>
+            </div>
+            <div class="checkout-summary-total"><span><strong>Total de plată</strong><small>TVA inclus, acolo unde se aplică</small></span><b data-checkout-total>0,00 lei</b></div>
+            <button class="checkout-submit" type="submit" data-checkout-submit>
+              <span class="checkout-submit-lock" aria-hidden="true"></span>
+              <strong>Trimite comanda</strong>
+              <b aria-hidden="true">›</b>
+            </button>
+            <label class="checkout-confirmation">
+              <input type="checkbox" name="confirm_order" required>
+              <span><i aria-hidden="true">✓</i></span>
+              <p><strong>Confirm că datele comenzii sunt corecte.</strong><small>Produsele și compatibilitatea pot fi reverificate de echipa G-Trots înainte de expediere.</small></p>
+            </label>
+            <p class="checkout-submit-message" data-checkout-message aria-live="polite"></p>
+            <div class="checkout-security"><span aria-hidden="true">✓</span><p><strong>Date transmise în siguranță</strong><small>Nu salvăm date de card pe acest website.</small></p></div>
+          </aside>
+        </form>
+      </section>
+    </main>
+
+    <footer class="shell shop-footer"><div class="footer-inner"><a class="logo" href="index.html"><img src="assets/logo.png" width="1024" height="1024" alt=""><b><span>G</span>-Trots</b></a><p>Service și magazin pentru mobilitate electrică.</p><nav><a href="index.html">Acasă</a><a href="magazin.html">Magazin</a><a href="ghiduri-service-trotinete-electrice.html">Ghiduri</a><a href="index.html#contact">Contact</a></nav><a class="footer-phone" href="tel:+40762093915">+40 0762 093 915</a><small>© 2026 G-Trots</small></div></footer>
+    <script src="favorites.js?v=20260825-4" defer></script>
+    <script src="checkout.js?v=20260825-4" defer></script>
+  </body>
+</html>

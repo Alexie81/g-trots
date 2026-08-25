@@ -68,7 +68,8 @@ const products = {
 };
 
 const params = new URLSearchParams(window.location.search);
-const productId = document.body.dataset.productId || params.get("id") || "anvelopa-g10-all-terrain";
+const pathMatch = window.location.pathname.match(/\/magazin\/produs\/([^/]+)\/?$/i);
+const productId = (pathMatch ? decodeURIComponent(pathMatch[1]) : null) || params.get("slug") || params.get("id") || document.body.dataset.productId || "anvelopa-g10-all-terrain";
 const product = products[productId] || products["anvelopa-g10-all-terrain"];
 
 const setText = (selector, value) => {
@@ -121,12 +122,36 @@ menuToggle?.addEventListener("click", () => {
   document.body.classList.toggle("menu-open", !open);
 });
 
+const productBackLink = document.querySelector(".product-back-link");
+const productBreadcrumb = document.querySelector(".product-detail-breadcrumb");
+if (productBackLink && productBreadcrumb) {
+  const backRow = document.createElement("div");
+  backRow.className = "product-back-row shell";
+  backRow.append(productBackLink);
+  productBreadcrumb.insertAdjacentElement("afterend", backRow);
+}
+
 const productVisual = document.querySelector(".product-detail-visual");
 const galleryButtons = [...document.querySelectorAll("[data-gallery-view]")];
 const galleryViews = galleryButtons.length
   ? galleryButtons.map(button => button.dataset.galleryView)
   : ["full"];
 let activeGalleryIndex = 0;
+let productGalleryDots = null;
+
+if (productVisual && galleryViews.length > 1) {
+  productGalleryDots = document.createElement("nav");
+  productGalleryDots.className = "product-gallery-dots";
+  productGalleryDots.setAttribute("aria-label", "Alege imaginea produsului");
+  galleryViews.forEach((view, index) => {
+    const dot = document.createElement("button");
+    dot.type = "button";
+    dot.setAttribute("aria-label", `Imaginea ${index + 1}`);
+    dot.addEventListener("click", () => showGalleryView(index));
+    productGalleryDots.append(dot);
+  });
+  productVisual.append(productGalleryDots);
+}
 
 function showGalleryView(index) {
   if (!productVisual || galleryViews.length === 0) return;
@@ -138,6 +163,11 @@ function showGalleryView(index) {
     const active = buttonIndex === activeGalleryIndex;
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
+  });
+  [...(productGalleryDots?.children || [])].forEach((dot, dotIndex) => {
+    const active = dotIndex === activeGalleryIndex;
+    dot.classList.toggle("active", active);
+    dot.setAttribute("aria-current", active ? "true" : "false");
   });
 }
 
@@ -511,7 +541,8 @@ function syncExpandableSection(section) {
   if (!shell || !content || !toggle) return;
 
   shell.style.setProperty("--product-expanded-height", `${content.scrollHeight}px`);
-  const isCollapsible = content.scrollHeight > shell.clientHeight + 2 || section.classList.contains("is-expanded");
+  const isSpecifications = section.id === "specificatii" && content.querySelector(".product-spec-groups dl > div");
+  const isCollapsible = content.scrollHeight > shell.clientHeight + 2 || Boolean(isSpecifications && content.scrollHeight >= shell.clientHeight - 4) || section.classList.contains("is-expanded");
   section.classList.toggle("is-not-collapsible", !isCollapsible);
   toggle.hidden = !isCollapsible;
 }
@@ -540,6 +571,8 @@ expandableSections.forEach(section => {
 
   syncExpandableSection(section);
 });
+
+window.GTrotsSyncExpandableSections = () => expandableSections.forEach(syncExpandableSection);
 
 if ("ResizeObserver" in window && expandableSections.length) {
   const expandResizeObserver = new ResizeObserver(() => expandableSections.forEach(syncExpandableSection));
@@ -805,9 +838,16 @@ function renderReviews() {
 
   document.querySelectorAll("[data-review-count]").forEach(element => { element.textContent = `(${count})`; });
   document.querySelectorAll("[data-review-average]").forEach(element => { element.textContent = count ? average.toFixed(1).replace(".", ",") : "—"; });
-  document.querySelectorAll("[data-review-stars]").forEach(element => {
-    const rounded = Math.round(average);
-    element.textContent = count ? `${"★".repeat(rounded)}${"☆".repeat(5 - rounded)}` : "☆☆☆☆☆";
+  document.querySelectorAll("[data-review-stars], [data-review-meta] > span").forEach(element => {
+    const stars = Array.from({ length: 5 }, (_, index) => {
+      const star = document.createElement("i");
+      const fill = count ? Math.min(1, Math.max(0, average - index)) * 100 : 0;
+      star.textContent = "★";
+      star.style.setProperty("--review-star-fill", `${fill}%`);
+      return star;
+    });
+    element.classList.add("review-stars-meter");
+    element.replaceChildren(...stars);
   });
   document.querySelectorAll("[data-review-summary-text]").forEach(element => { element.textContent = count ? countLabel : "Nicio recenzie încă"; });
   document.querySelectorAll("[data-review-link-text]").forEach(element => { element.textContent = count ? countLabel : "Fii primul care scrie o recenzie"; });

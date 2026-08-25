@@ -60,6 +60,51 @@
     }
   };
 
+  function safeImageUrl(value) {
+    try {
+      const raw = String(value || "").trim();
+      if (!raw) return "";
+      const url = new URL(raw, window.location.origin);
+      return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, character => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[character]);
+  }
+
+  function productImageMarkup(product, className = "favorite-product-image") {
+    const imageUrl = safeImageUrl(product.imageUrl);
+    const legacyClass = Number(product.image) > 0 ? ` favorite-product-image-${Number(product.image)}` : "";
+    const style = imageUrl ? ` style="background-image:url('${escapeHtml(imageUrl)}')"` : "";
+    return `<div class="${className}${legacyClass}${imageUrl ? " is-live-image" : ""}"${style} role="img" aria-label="${escapeHtml(product.name)}"></div>`;
+  }
+
+  function registerProducts(rows) {
+    if (!Array.isArray(rows)) return;
+    rows.forEach(product => {
+      const id = String(product?.id || product?.slug || "").trim();
+      if (!id) return;
+      PRODUCTS[id] = {
+        ...PRODUCTS[id],
+        ...product,
+        id,
+        name: String(product.name || PRODUCTS[id]?.name || "Produs G-Trots"),
+        category: String(product.category || PRODUCTS[id]?.category || "Produs G-Trots"),
+        description: String(product.description || PRODUCTS[id]?.description || ""),
+        price: String(product.price || PRODUCTS[id]?.price || "0,00 lei"),
+        stock: String(product.stock || PRODUCTS[id]?.stock || "În stoc"),
+        url: String(product.url || PRODUCTS[id]?.url || `/magazin/produs/${encodeURIComponent(id)}/`),
+        imageUrl: safeImageUrl(product.imageUrl || PRODUCTS[id]?.imageUrl)
+      };
+    });
+    refresh();
+  }
+
   function ensureStyles() {
     if (document.querySelector('link[href$="favorites.css"]')) return;
     const link = document.createElement("link");
@@ -169,9 +214,10 @@
   function normalizeNavigation() {
     const phoneIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 10.8c1.7 3.3 3.3 4.9 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.4.6 3.6.6.6 0 .9.4.9.9V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.6c.5 0 .9.3.9.8.1 1.3.3 2.5.6 3.6.1.4 0 .8-.3 1.1l-2.2 2.3Z"/></svg>';
     const currentPath = window.location.pathname.toLowerCase();
-    const favoritesActive = currentPath.endsWith("/favorite.html");
-    const cartActive = currentPath.endsWith("/cos.html");
-    const shopActive = !favoritesActive && !cartActive && /magazin|anvelopa-g10|display-smart|incarcator-fastcharge|motor-dualhub|baterie-powercore|kit-frana/.test(currentPath);
+    const cleanPath = currentPath.replace(/\/+$/, "").replace(/\.html$/, "");
+    const favoritesActive = cleanPath.endsWith("/favorite");
+    const cartActive = ["/cos", "/checkout", "/plata-finalizata", "/plata-esuata"].some(path => cleanPath.endsWith(path));
+    const shopActive = !favoritesActive && !cartActive && /\/(magazin|produs)(?:\/|$)|anvelopa-g10|display-smart|incarcator-fastcharge|motor-dualhub|baterie-powercore|kit-frana/.test(cleanPath);
     const guidesActive = !shopActive && !favoritesActive && !cartActive && currentPath !== "/" && !currentPath.endsWith("/index.html");
 
     document.querySelectorAll(".main-nav").forEach(nav => {
@@ -203,7 +249,7 @@
         favoritesLink.className = "global-favorites-nav";
         favoritesLink.href = "/favorite.html";
         favoritesLink.setAttribute("aria-label", "Produse favorite, 0 produse salvate");
-        if (window.location.pathname.toLowerCase().endsWith("/favorite.html")) favoritesLink.setAttribute("aria-current", "page");
+        if (window.location.pathname.toLowerCase().replace(/\/+$/, "").replace(/\.html$/, "").endsWith("/favorite")) favoritesLink.setAttribute("aria-current", "page");
         favoritesLink.innerHTML = '<span class="global-favorites-heart" aria-hidden="true">♡</span><b data-global-favorites-count>0</b><span class="global-favorites-tooltip" role="tooltip">Produse favorite</span>';
         actions.append(favoritesLink);
       }
@@ -213,7 +259,8 @@
         cartLink.className = "global-cart-nav";
         cartLink.href = "/cos.html";
         cartLink.setAttribute("aria-label", "Coș de cumpărături, 0 produse");
-        if (window.location.pathname.toLowerCase().endsWith("/cos.html")) cartLink.setAttribute("aria-current", "page");
+        const activePath = window.location.pathname.toLowerCase().replace(/\/+$/, "").replace(/\.html$/, "");
+        if (["/cos", "/checkout", "/plata-finalizata", "/plata-esuata"].some(path => activePath.endsWith(path))) cartLink.setAttribute("aria-current", "page");
         cartLink.innerHTML = '<span class="global-cart-icon" aria-hidden="true"><i></i><i></i></span><b data-global-cart-count>0</b><span class="global-cart-tooltip" role="tooltip">Coș de cumpărături</span>';
         actions.append(cartLink);
       }
@@ -301,19 +348,19 @@
     const product = PRODUCTS[id];
     return `<article class="favorite-product-card" data-favorite-card="${id}">
       <div class="favorite-product-stage">
-        <div class="favorite-product-image favorite-product-image-${product.image}" role="img" aria-label="${product.name}"></div>
-        <span class="favorite-product-stock"><i></i>${product.stock}</span>
+        ${productImageMarkup(product)}
+        <span class="favorite-product-stock"><i></i>${escapeHtml(product.stock)}</span>
       </div>
       <div class="favorite-product-copy">
-        <span>${product.category}</span>
-        <h2>${product.name}</h2>
-        <p>${product.description}</p>
+        <span>${escapeHtml(product.category)}</span>
+        <h2>${escapeHtml(product.name)}</h2>
+        <p>${escapeHtml(product.description)}</p>
       </div>
       <div class="favorite-product-bottom">
-        <strong>${product.price}</strong>
-        <button class="favorite-remove" type="button" data-remove-favorite="${id}" aria-label="Elimină ${product.name} din favorite">♥</button>
+        <strong>${escapeHtml(product.price)}</strong>
+        <button class="favorite-remove" type="button" data-remove-favorite="${id}" aria-label="Elimină ${escapeHtml(product.name)} din favorite">♥</button>
       </div>
-      <a class="favorite-product-link" href="${product.url}" aria-label="Deschide ${product.name}"></a>
+      <a class="favorite-product-link" href="${escapeHtml(product.url)}" aria-label="Deschide ${escapeHtml(product.name)}"></a>
     </article>`;
   }
 
@@ -328,38 +375,73 @@
 
   function cartCard(item) {
     const product = PRODUCTS[item.id];
+    const unitPrice = parseProductPrice(product.price);
+    const lineTotal = formatProductPrice(unitPrice * item.quantity);
     return `<article class="favorite-product-card cart-product-card" data-cart-card="${item.id}">
       <div class="favorite-product-stage">
-        <div class="favorite-product-image favorite-product-image-${product.image}" role="img" aria-label="${product.name}"></div>
-        <span class="favorite-product-stock"><i></i>${product.stock}</span>
+        ${productImageMarkup(product)}
+        <span class="favorite-product-stock"><i></i>${escapeHtml(product.stock)}</span>
       </div>
       <div class="favorite-product-copy">
-        <span>${product.category}</span>
-        <h2>${product.name}</h2>
-        <p>${product.description}</p>
+        <span>${escapeHtml(product.category)}</span>
+        <h2>${escapeHtml(product.name)}</h2>
+        <p>${escapeHtml(product.description)}</p>
       </div>
       <div class="favorite-product-bottom">
-        <strong>${product.price}</strong>
+        <div class="cart-line-price"><small>${item.quantity} × ${escapeHtml(product.price)}</small><strong>${lineTotal}</strong></div>
         <div class="cart-product-controls">
           <div class="cart-quantity" aria-label="Cantitate ${item.quantity}">
-            <button type="button" data-cart-decrease="${item.id}" aria-label="Scade cantitatea pentru ${product.name}">−</button>
+            <button type="button" data-cart-decrease="${item.id}" aria-label="Scade cantitatea pentru ${escapeHtml(product.name)}">−</button>
             <b>${item.quantity}</b>
-            <button type="button" data-cart-increase="${item.id}" aria-label="Mărește cantitatea pentru ${product.name}">+</button>
+            <button type="button" data-cart-increase="${item.id}" aria-label="Mărește cantitatea pentru ${escapeHtml(product.name)}">+</button>
           </div>
-          <button class="favorite-remove cart-remove" type="button" data-remove-cart="${item.id}" aria-label="Elimină ${product.name} din coș">×</button>
+          <button class="favorite-remove cart-remove" type="button" data-remove-cart="${item.id}" aria-label="Elimină ${escapeHtml(product.name)} din coș">×</button>
         </div>
       </div>
-      <a class="favorite-product-link" href="${product.url}" aria-label="Deschide ${product.name}"></a>
+      <a class="favorite-product-link" href="${escapeHtml(product.url)}" aria-label="Deschide ${escapeHtml(product.name)}"></a>
     </article>`;
+  }
+
+  function parseProductPrice(price) {
+    const normalized = String(price).replace(/\./g, "").replace(",", ".").replace(/[^\d.]/g, "");
+    return Number(normalized) || 0;
+  }
+
+  function formatProductPrice(value) {
+    return `${new Intl.NumberFormat("ro-RO", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(value)} lei`;
+  }
+
+  function updateCartSummary(cart) {
+    const itemCount = cart.reduce((total, item) => total + item.quantity, 0);
+    const subtotal = cart.reduce((total, item) => {
+      return total + parseProductPrice(PRODUCTS[item.id]?.price) * item.quantity;
+    }, 0);
+    const formattedSubtotal = formatProductPrice(subtotal);
+
+    document.querySelectorAll("[data-cart-items-summary]").forEach(element => {
+      element.textContent = `${itemCount} ${itemCount === 1 ? "produs" : "produse"}`;
+    });
+    document.querySelectorAll("[data-cart-subtotal], [data-cart-order-total]").forEach(element => {
+      element.textContent = formattedSubtotal;
+    });
+
+    const checkout = document.querySelector("[data-cart-checkout]");
+    if (checkout) checkout.href = "/checkout.html";
   }
 
   function renderCart(cart = readCart()) {
     const grid = document.querySelector("[data-cart-grid]");
     const empty = document.querySelector("[data-cart-empty]");
+    const layout = document.querySelector("[data-cart-layout]");
     if (!grid || !empty) return;
     grid.innerHTML = cart.map(cartCard).join("");
     grid.hidden = cart.length === 0;
+    if (layout) layout.hidden = cart.length === 0;
     empty.hidden = cart.length !== 0;
+    updateCartSummary(cart);
   }
 
   function refresh(ids = readFavorites(), cart = readCart()) {
@@ -440,6 +522,7 @@
 
   window.GTrotsFavorites = {
     products: PRODUCTS,
+    registerProducts,
     get: readFavorites,
     toggle: toggleFavorite,
     remove: id => writeFavorites(readFavorites().filter(item => item !== id))

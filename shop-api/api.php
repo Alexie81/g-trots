@@ -1096,6 +1096,13 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
     if ($paymentMethod === 'card' && (!$payments['card_enabled'] || !$payments['stripe_configured'])) throw new InvalidArgumentException('Plata cu cardul nu este activa.');
     if ($paymentMethod === 'cash_on_delivery' && !$payments['cash_on_delivery_enabled']) throw new InvalidArgumentException('Plata ramburs nu este activa.');
     if (!in_array($paymentMethod, ['card', 'cash_on_delivery'], true)) throw new InvalidArgumentException('Metoda de plata nu este valida.');
+    $customerEmail = mb_substr(trim((string)($body['customer_email'] ?? '')), 0, 180);
+    if ($paymentMethod === 'card' && !filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
+        throw new InvalidArgumentException('Completeaza o adresa de e-mail valida pentru plata cu cardul.');
+    }
+    if ($customerEmail !== '' && !filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
+        throw new InvalidArgumentException('Adresa de e-mail nu este valida.');
+    }
     $shippingId = existingReference($db, 'shop_shipping_methods', $body['shipping_method_id'] ?? null, 'Metoda de livrare');
     if (!$shippingId) throw new InvalidArgumentException('Alege metoda de livrare.');
     $shippingStmt = $db->prepare('SELECT * FROM shop_shipping_methods WHERE id = ? AND is_active = 1');
@@ -1132,7 +1139,7 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
         $insertOrder = $db->prepare('INSERT INTO shop_orders (id, order_number, status, payment_status, payment_method, customer_name, customer_email, customer_phone, address, city, county, postal_code, customer_notes, shipping_method_id, shipping_method_name, subtotal, shipping_cost, total, currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $insertOrder->execute([
             $orderId, $orderNumber, 'new', 'pending', $paymentMethod, $name,
-            mb_substr(trim((string)($body['customer_email'] ?? '')), 0, 180) ?: null, $phone, $address, $city,
+            $customerEmail ?: null, $phone, $address, $city,
             mb_substr(trim((string)($body['county'] ?? '')), 0, 120) ?: null,
             mb_substr(trim((string)($body['postal_code'] ?? '')), 0, 30) ?: null,
             mb_substr(trim((string)($body['customer_notes'] ?? '')), 0, 3000) ?: null,

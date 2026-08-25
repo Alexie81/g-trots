@@ -315,6 +315,15 @@
     }
 
     if (isFailed) {
+      if (status === "cancelled") {
+        document.title = "Plată anulată | G-Trots";
+        setTextAll("[data-failure-eyebrow]", "Plata a fost anulată");
+        setTextAll("[data-failure-title]", "Ai anulat");
+        setTextAll("[data-failure-title-accent]", "plata.");
+        setTextAll("[data-status-lead]", "Nu s-a încasat nicio sumă. Produsele tale au rămas în coș și poți relua comanda oricând.");
+        setTextAll("[data-failure-mark-title]", "Plată anulată");
+        setTextAll("[data-failure-mark-copy]", "Comanda și stocul au fost actualizate corect.");
+      }
       const cartCount = (window.GTrotsCart?.get?.() || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
       setTextAll("[data-failure-cart-count]", cartCount
         ? `${cartCount} ${cartCount === 1 ? "produs păstrat" : "produse păstrate"} în coș`

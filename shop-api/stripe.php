@@ -295,6 +295,7 @@ function stripeCreateCheckoutSession(PDO $db, array $config, array $order, array
         'client_reference_id' => (string)$order['id'],
         'success_url' => $successUrl,
         'cancel_url' => $cancelUrl,
+        'expires_at' => time() + 1800,
         'locale' => 'ro',
         'submit_type' => 'pay',
         'metadata' => [

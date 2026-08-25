@@ -145,7 +145,7 @@
       methods.push({
         id: "card",
         label: config.payments.card_label || "Card online",
-        description: "Comanda este verificată înainte de confirmarea plății."
+        description: "Plătești securizat în pagina Stripe; nu stocăm datele cardului."
       });
     }
     return methods;

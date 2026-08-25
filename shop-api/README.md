@@ -46,6 +46,10 @@ Stripe nou și cel vechi este arhivat; la ștergere, copia Stripe este arhivată
 înainte de eliminarea produsului și a fișierelor locale. Ruta administrativă
 `syncStripeCatalog` repară sau reface legăturile pentru întreg catalogul.
 
+În mediul de test, `php register-stripe-webhook.php` creează o singură destinație
+pentru evenimentele Checkout și salvează automat secretul în `config.local.php`.
+Scriptul poate rula numai din linia de comandă și nu afișează secretul.
+
 Dezactivarea unei surse ascunde imediat toate produsele sale din rutele publice,
 fără să le șteargă din CRM. Ștergerea definitivă a unui produs elimină imaginile
 încărcate de pe disc și păstrează în comenzile istorice datele comerciale salvate.

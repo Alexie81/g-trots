@@ -13350,6 +13350,69 @@ body::after {
 .shop-editor-toggles b,
 .commerce-source-switch > b { font-size: 12px; }
 
+/* Order workflow: Material 3 status timeline and customer notifications. */
+#shop-order-modal .shop-commerce-modal.compact { width: min(940px, calc(100vw - 44px)); }
+#shop-order-modal .shop-commerce-modal-scroll { padding: 22px; }
+.shop-order-items > div > img { width: 46px; height: 46px; flex: 0 0 auto; border-radius: 14px; object-fit: cover; background: #f3f0ec; }
+.shop-order-section-title { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.shop-order-section-title > span { color: #ff8a27; font-size: 9px; font-weight: 900; letter-spacing: .12em; }
+.shop-order-section-title > strong { color: #eee9e5; font-size: 15px; }
+.shop-order-timeline,
+.shop-order-status-section { margin-top: 14px; border: 1px solid rgba(255,255,255,.07); border-radius: 24px; padding: 18px; background: linear-gradient(145deg, #201e22, #19181b); }
+.shop-order-timeline-flow { display: grid; gap: 0; }
+.shop-order-timeline-step { min-height: 88px; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; animation: shop-order-step-in .42s both cubic-bezier(.2,.8,.2,1); }
+.shop-order-timeline-step:nth-child(2) { animation-delay: .05s; }
+.shop-order-timeline-step:nth-child(3) { animation-delay: .1s; }
+.shop-order-timeline-step:nth-child(4) { animation-delay: .15s; }
+.shop-order-timeline-step:nth-child(5) { animation-delay: .2s; }
+@keyframes shop-order-step-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.shop-order-timeline-rail { display: flex; flex-direction: column; align-items: center; }
+.shop-order-timeline-rail > span { width: 38px; height: 38px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid #48444b; border-radius: 14px; color: #7a747c; background: #29272c; }
+.shop-order-timeline-rail svg,
+.shop-order-status-icon svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.shop-order-timeline-rail > i { width: 2px; min-height: 37px; flex: 1; margin: 4px 0; border-radius: 99px; background: #36333a; }
+.shop-order-timeline-step.reached .shop-order-timeline-rail > span { border-color: var(--status-color); color: #171411; background: var(--status-color); box-shadow: 0 8px 18px color-mix(in srgb, var(--status-color) 22%, transparent); }
+.shop-order-timeline-step.reached .shop-order-timeline-rail > i { background: color-mix(in srgb, var(--status-color) 58%, #36333a); }
+.shop-order-timeline-card { min-width: 0; min-height: 74px; align-self: start; border: 1px solid transparent; border-radius: 18px; padding: 12px 14px; background: rgba(255,255,255,.025); }
+.shop-order-timeline-step.current .shop-order-timeline-card { border-color: color-mix(in srgb, var(--status-color) 58%, transparent); background: color-mix(in srgb, var(--status-color) 8%, #211f23); }
+.shop-order-timeline-card > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.shop-order-timeline-card strong { color: #bdb6b0; font-size: 13px; }
+.shop-order-timeline-step.reached .shop-order-timeline-card strong { color: var(--status-color); }
+.shop-order-timeline-card em { color: var(--status-color); font-size: 8px; font-style: normal; font-weight: 900; letter-spacing: .1em; }
+.shop-order-timeline-card p { margin: 5px 0 0; color: #89828a; font-size: 11px; line-height: 1.45; }
+.shop-order-timeline-card footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 9px; }
+.shop-order-timeline-card time,
+.shop-order-timeline-card > small { color: #716b72; font-size: 9px; }
+.shop-order-timeline-card footer b { color: #34d399; font-size: 8px; letter-spacing: .06em; }
+.shop-order-status-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.shop-order-status-option { min-height: 74px; display: grid; grid-template-columns: 46px minmax(0, 1fr) 24px; align-items: center; gap: 11px; margin: 0 !important; border: 1px solid #3c3940; border-radius: 19px; padding: 11px; background: #1c1b1f; cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
+.shop-order-status-option:hover { border-color: color-mix(in srgb, var(--status-color) 55%, #3c3940); transform: translateY(-1px); }
+.shop-order-status-option.selected { border-color: var(--status-color); background: color-mix(in srgb, var(--status-color) 9%, #1c1b1f); }
+.shop-order-status-option > input { position: absolute; width: 1px !important; min-height: 1px !important; opacity: 0; pointer-events: none; }
+.shop-order-status-icon { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 15px; color: var(--status-color); background: color-mix(in srgb, var(--status-color) 14%, transparent); }
+.shop-order-status-option > span:nth-of-type(2) { min-width: 0; display: grid; gap: 4px; }
+.shop-order-status-option strong { color: #eee9e5; font-size: 12px; }
+.shop-order-status-option small { color: #807980; font-size: 9px; font-weight: 500; line-height: 1.35; letter-spacing: 0; }
+.shop-order-status-option > i { width: 23px; height: 23px; display: grid; place-items: center; border: 1px solid #55515a; border-radius: 50%; color: transparent; font-size: 11px; font-style: normal; }
+.shop-order-status-option.selected > i { border-color: var(--status-color); color: #171411; background: var(--status-color); }
+.shop-order-notify { min-height: 86px; display: grid !important; grid-template-columns: 48px minmax(0, 1fr) 26px; align-items: center; gap: 12px; margin: 12px 0 16px !important; border: 1px solid #4a3a29; border-radius: 21px; padding: 13px 15px; background: linear-gradient(135deg, rgba(255,138,39,.1), rgba(255,255,255,.018)); cursor: pointer; }
+.shop-order-notify > input { position: absolute; width: 1px !important; min-height: 1px !important; opacity: 0; }
+.shop-order-notify:has(input:disabled) { opacity: .48; cursor: default; }
+.shop-order-notify-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 16px; color: #ff9c4d; background: rgba(255,138,39,.13); font-size: 18px; }
+.shop-order-notify > span:nth-of-type(2) { min-width: 0; display: grid; gap: 5px; }
+.shop-order-notify strong { color: #f2ede8; font-size: 12px; }
+.shop-order-notify small { color: #918981; font-size: 9px; line-height: 1.45; letter-spacing: 0; }
+.shop-order-notify > i { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid #5b534b; border-radius: 9px; color: transparent; font-size: 12px; font-style: normal; }
+.shop-order-notify:has(input:checked) { border-color: #ff8126; background: rgba(255,129,38,.13); }
+.shop-order-notify input:checked ~ i { border-color: #ff8126; color: #171411; background: #ff8126; }
+@media (max-width: 720px) {
+  #shop-order-modal .shop-commerce-modal.compact { width: calc(100vw - 20px); }
+  #shop-order-modal .shop-commerce-modal-scroll { padding: 14px; }
+  .shop-order-grid,
+  .shop-order-status-picker { grid-template-columns: 1fr; }
+  .shop-order-section-title { align-items: start; flex-direction: column; gap: 4px; }
+}
+
 /* SHOP payments: Material 3 tonal surfaces, switches and actions. */
 .shop-payment-settings {
   --payment-primary: #ffb77d;

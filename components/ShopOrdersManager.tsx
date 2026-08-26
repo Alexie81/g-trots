@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   Modal,
   ScrollView,
   StyleSheet,
@@ -11,20 +13,20 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Check, ChevronRight, PackageCheck, RefreshCw, Save, Search, ShoppingCart, X } from 'lucide-react-native';
+import { BadgeCheck, Ban, BellRing, Check, ChevronRight, CircleCheckBig, Clock3, Mail, PackageCheck, PackageOpen, RefreshCw, Save, Search, ShoppingCart, Truck, X } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { shopApi, ShopOrder } from '@/services/shopApi';
 import ShopPagination from '@/components/ShopPagination';
 
-const orderStatuses: { value: ShopOrder['status']; label: string; color: string }[] = [
-  { value: 'new', label: 'Noua', color: '#38BDF8' },
-  { value: 'confirmed', label: 'Confirmata', color: '#A78BFA' },
-  { value: 'processing', label: 'In pregatire', color: '#F59E0B' },
-  { value: 'shipped', label: 'Expediata', color: '#2DD4BF' },
-  { value: 'completed', label: 'Finalizata', color: '#22C55E' },
-  { value: 'cancelled', label: 'Anulata', color: '#EF4444' },
-];
+const orderStatuses = [
+  { value: 'new', label: 'În procesare', description: 'Comanda a intrat în fluxul de lucru.', color: '#38BDF8', icon: Clock3 },
+  { value: 'confirmed', label: 'Confirmată', description: 'Comanda și plata au fost confirmate.', color: '#34D399', icon: BadgeCheck },
+  { value: 'processing', label: 'În pregătire', description: 'Produsele sunt pregătite pentru expediere.', color: '#FB923C', icon: PackageOpen },
+  { value: 'shipped', label: 'Predată curierului', description: 'Pachetul a plecat către client.', color: '#A78BFA', icon: Truck },
+  { value: 'completed', label: 'Livrată', description: 'Comanda a ajuns la destinație.', color: '#22C55E', icon: CircleCheckBig },
+  { value: 'cancelled', label: 'Comandă anulată', description: 'Comanda nu mai este procesată.', color: '#FB7185', icon: Ban },
+] satisfies { value: ShopOrder['status']; label: string; description: string; color: string; icon: typeof Clock3 }[];
 
 const paymentStatuses: { value: ShopOrder['payment_status']; label: string }[] = [
   { value: 'pending', label: 'In asteptare' },
@@ -56,6 +58,8 @@ export default function ShopOrdersManager() {
   const [status, setStatus] = useState<ShopOrder['status']>('new');
   const [paymentStatus, setPaymentStatus] = useState<ShopOrder['payment_status']>('pending');
   const [adminNotes, setAdminNotes] = useState('');
+  const [notifyCustomer, setNotifyCustomer] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -76,11 +80,23 @@ export default function ShopOrdersManager() {
   const safePage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
   const pagedOrders = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
-  const open = (order: ShopOrder) => {
+  const open = async (order: ShopOrder) => {
     setSelected(order);
     setStatus(order.status);
     setPaymentStatus(order.payment_status);
     setAdminNotes(order.admin_notes || '');
+    setNotifyCustomer(false);
+    if (!token) return;
+    setDetailLoading(true);
+    try {
+      const detailed = await shopApi.getOrder(token, order.id);
+      setSelected(detailed);
+      setStatus(detailed.status);
+      setPaymentStatus(detailed.payment_status);
+      setAdminNotes(detailed.admin_notes || '');
+    } catch (detailError) {
+      Alert.alert('Detaliile nu s-au putut actualiza', detailError instanceof Error ? detailError.message : 'Încearcă din nou.');
+    } finally { setDetailLoading(false); }
   };
 
   const save = async () => {
@@ -91,10 +107,17 @@ export default function ShopOrdersManager() {
     }
     setSaving(true);
     try {
-      const updated = await shopApi.updateOrder(token, selected.id, { status, payment_status: paymentStatus, admin_notes: adminNotes.trim() });
+      const updated = await shopApi.updateOrder(token, selected.id, { status, payment_status: paymentStatus, admin_notes: adminNotes.trim(), notify_customer: notifyCustomer });
       setOrders((current) => current.map((order) => order.id === updated.id ? updated : order));
       setSelected(updated);
-      Alert.alert('Comanda actualizata', `Statusul comenzii ${updated.order_number} a fost salvat.`);
+      setNotifyCustomer(false);
+      const email = updated.email_notification;
+      Alert.alert(
+        'Comanda actualizată',
+        email?.requested
+          ? (email.sent ? `Statusul a fost salvat, iar clientul a primit e-mailul la ${email.recipient || selected.customer_email}.` : `Statusul a fost salvat, dar e-mailul nu a putut fi trimis: ${email.error || 'verifică setările SMTP.'}`)
+          : `Statusul comenzii ${updated.order_number} a fost salvat.`
+      );
     } catch (saveError) {
       Alert.alert('Nu s-a putut salva', saveError instanceof Error ? saveError.message : 'Incearca din nou.');
     } finally { setSaving(false); }
@@ -110,13 +133,13 @@ export default function ShopOrdersManager() {
         <TouchableOpacity style={styles.refresh} onPress={() => void load()}><RefreshCw size={18} color={Colors.textSecondary} /></TouchableOpacity>
       </View>
       <View style={styles.stats}>
-        <View><Text style={styles.statValue}>{orders.filter((order) => order.status === 'new').length}</Text><Text style={styles.statLabel}>COMENZI NOI</Text></View>
+        <View><Text style={styles.statValue}>{orders.filter((order) => order.status === 'new').length}</Text><Text style={styles.statLabel}>ÎN PROCESARE</Text></View>
         <View><Text style={styles.statValue}>{orders.filter((order) => order.status === 'processing').length}</Text><Text style={styles.statLabel}>IN PREGATIRE</Text></View>
         <View><Text style={styles.statValue}>{money(orders.reduce((sum, order) => sum + (order.status !== 'cancelled' ? order.total : 0), 0))}</Text><Text style={styles.statLabel}>VALOARE</Text></View>
       </View>
       {filtered.length ? pagedOrders.map((order) => {
         const statusMeta = orderStatuses.find((item) => item.value === order.status) || orderStatuses[0];
-        return <TouchableOpacity key={order.id} style={styles.orderCard} activeOpacity={0.76} onPress={() => open(order)}>
+        return <TouchableOpacity key={order.id} style={styles.orderCard} activeOpacity={0.76} onPress={() => void open(order)}>
           <View style={[styles.orderIcon, { backgroundColor: `${statusMeta.color}15` }]}><ShoppingCart size={21} color={statusMeta.color} /></View>
           <View style={styles.orderCopy}>
             <View style={styles.orderTop}><Text style={styles.orderNumber}>{order.order_number}</Text><Text style={[styles.status, { color: statusMeta.color }]}>{statusMeta.label.toUpperCase()}</Text></View>
@@ -132,13 +155,33 @@ export default function ShopOrdersManager() {
         <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
           <View style={styles.modalHeader}><TouchableOpacity style={styles.close} onPress={() => setSelected(null)}><X size={21} color={Colors.textSecondary} /></TouchableOpacity><View style={styles.modalHeaderCopy}><Text style={styles.modalKicker}>COMANDA SHOP</Text><Text style={styles.modalTitle}>{selected?.order_number}</Text></View><TouchableOpacity style={[styles.save, saving && styles.disabled]} onPress={() => void save()} disabled={saving}>{saving ? <ActivityIndicator color={Colors.white} /> : <><Save size={17} color={Colors.white} /><Text style={styles.saveText}>Salveaza</Text></>}</TouchableOpacity></View>
           {selected ? <ScrollView contentContainerStyle={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 20) + 30 }]} showsVerticalScrollIndicator={false}>
+            {detailLoading ? <View style={styles.detailLoading}><ActivityIndicator color={Colors.orange} /><Text style={styles.detailLoadingText}>Actualizăm istoricul comenzii...</Text></View> : null}
             <InfoBlock title="Client" lines={[selected.customer_name, selected.customer_phone, selected.customer_email || 'Fara e-mail']} />
             <InfoBlock title="Livrare" lines={[selected.address, `${selected.city}${selected.county ? `, ${selected.county}` : ''}`, selected.shipping_method_name]} />
             <Text style={styles.sectionLabel}>PRODUSE</Text>
             <View style={styles.items}>{selected.items.map((item) => <View key={item.id} style={styles.item}><View style={styles.itemQty}><Text style={styles.itemQtyText}>{item.quantity}×</Text></View><View style={styles.itemCopy}><Text style={styles.itemName}>{item.product_name}</Text><Text style={styles.itemSku}>{item.product_sku || 'Fara SKU'}</Text></View><Text style={styles.itemTotal}>{money(item.line_total)}</Text></View>)}</View>
             <View style={styles.totals}><View><Text>Produse</Text><Text>{money(selected.subtotal)}</Text></View><View><Text>Livrare</Text><Text>{money(selected.shipping_cost)}</Text></View><View style={styles.grandTotal}><Text>Total</Text><Text>{money(selected.total)}</Text></View></View>
+            <Text style={styles.sectionLabel}>EVOLUȚIA COMENZII</Text>
+            <OrderStatusTimeline order={selected} />
             <Text style={styles.sectionLabel}>STATUS COMANDA</Text>
-            <View style={styles.chips}>{orderStatuses.map((item) => <TouchableOpacity key={item.value} style={[styles.chip, status === item.value && { borderColor: item.color, backgroundColor: `${item.color}15` }]} onPress={() => setStatus(item.value)}>{status === item.value ? <Check size={13} color={item.color} /> : null}<Text style={[styles.chipText, status === item.value && { color: item.color }]}>{item.label}</Text></TouchableOpacity>)}</View>
+            <View style={styles.statusPicker}>{orderStatuses.map((item) => {
+              const StatusIcon = item.icon;
+              const active = status === item.value;
+              return <TouchableOpacity key={item.value} activeOpacity={0.76} style={[styles.statusOption, active && { borderColor: item.color, backgroundColor: `${item.color}12` }]} onPress={() => { setStatus(item.value); if (item.value === selected.status) setNotifyCustomer(false); }}>
+                <View style={[styles.statusOptionIcon, { backgroundColor: `${item.color}18` }]}><StatusIcon size={18} color={item.color} /></View>
+                <View style={styles.statusOptionCopy}><Text style={[styles.statusOptionTitle, active && { color: item.color }]}>{item.label}</Text><Text style={styles.statusOptionText}>{item.description}</Text></View>
+                <View style={[styles.radio, active && { borderColor: item.color, backgroundColor: item.color }]}>{active ? <Check size={12} color="#14110F" strokeWidth={3} /> : null}</View>
+              </TouchableOpacity>;
+            })}</View>
+            <TouchableOpacity
+              activeOpacity={0.78}
+              disabled={!selected.customer_email || status === selected.status}
+              style={[styles.notifyCard, notifyCustomer && styles.notifyCardActive, (!selected.customer_email || status === selected.status) && styles.notifyCardDisabled]}
+              onPress={() => setNotifyCustomer((current) => !current)}>
+              <View style={styles.notifyIcon}><BellRing size={19} color={notifyCustomer ? '#15110D' : Colors.orange} /></View>
+              <View style={styles.notifyCopy}><Text style={styles.notifyTitle}>Trimite actualizarea pe e-mail</Text><Text style={styles.notifyText}>{!selected.customer_email ? 'Comanda nu are o adresă de e-mail.' : status === selected.status ? 'Selectează un status diferit pentru a putea notifica clientul.' : `Clientul va primi bonul și linkul de urmărire la ${selected.customer_email}.`}</Text></View>
+              <View style={[styles.checkbox, notifyCustomer && styles.checkboxActive]}>{notifyCustomer ? <Check size={13} color="#15110D" strokeWidth={3} /> : <Mail size={13} color={Colors.textMuted} />}</View>
+            </TouchableOpacity>
             <Text style={styles.sectionLabel}>STATUS PLATA · {selected.payment_method === 'card' ? 'CARD' : 'RAMBURS'}</Text>
             <View style={styles.chips}>{paymentStatuses.map((item) => <TouchableOpacity key={item.value} style={[styles.chip, paymentStatus === item.value && styles.chipActive]} onPress={() => setPaymentStatus(item.value)}>{paymentStatus === item.value ? <Check size={13} color={Colors.orange} /> : null}<Text style={[styles.chipText, paymentStatus === item.value && styles.chipTextActive]}>{item.label}</Text></TouchableOpacity>)}</View>
             {selected.customer_notes ? <InfoBlock title="Observatii client" lines={[selected.customer_notes]} /> : null}
@@ -148,6 +191,44 @@ export default function ShopOrdersManager() {
       </Modal>
     </View>
   );
+}
+
+function OrderStatusTimeline({ order }: { order: ShopOrder }) {
+  const reveal = useRef(new Animated.Value(0)).current;
+  const history = order.status_history || [];
+  const regular = orderStatuses.filter((item) => item.value !== 'cancelled');
+  const recorded = new Set(history.map((entry) => entry.to_status));
+  const currentIndex = regular.findIndex((item) => item.value === order.status);
+  const visible = order.status === 'cancelled'
+    ? orderStatuses.filter((item) => recorded.has(item.value) || item.value === 'cancelled')
+    : regular.filter((item, index) => recorded.has(item.value) || index >= Math.max(0, currentIndex));
+
+  useEffect(() => {
+    reveal.setValue(0);
+    Animated.timing(reveal, { toValue: 1, duration: 520, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [order.id, order.status, history.length, reveal]);
+
+  return <Animated.View style={[styles.timeline, { opacity: reveal, transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
+    {visible.map((item, index) => {
+      const StatusIcon = item.icon;
+      const entry = [...history].reverse().find((historyEntry) => historyEntry.to_status === item.value);
+      const reached = Boolean(entry) || item.value === order.status;
+      const current = item.value === order.status;
+      return <View key={item.value} style={styles.timelineRow}>
+        <View style={styles.timelineRail}>
+          <View style={[styles.timelineDot, reached && { backgroundColor: item.color, borderColor: item.color }, current && styles.timelineDotCurrent]}>
+            <StatusIcon size={16} color={reached ? '#15110D' : Colors.textMuted} strokeWidth={2.5} />
+          </View>
+          {index < visible.length - 1 ? <View style={[styles.timelineLine, reached && entry && { backgroundColor: `${item.color}88` }]} /> : null}
+        </View>
+        <View style={[styles.timelineCard, current && { borderColor: `${item.color}88`, backgroundColor: `${item.color}0F` }]}>
+          <View style={styles.timelineTop}><Text style={[styles.timelineTitle, reached && { color: item.color }]}>{item.label}</Text>{current ? <Text style={[styles.timelineCurrent, { color: item.color }]}>ACUM</Text> : null}</View>
+          <Text style={styles.timelineDescription}>{item.description}</Text>
+          {entry ? <View style={styles.timelineMeta}><Text style={styles.timelineDate}>{dateTime(entry.created_at)}</Text>{entry.customer_notified ? <View style={styles.timelineMail}><Mail size={11} color="#34D399" /><Text style={styles.timelineMailText}>CLIENT NOTIFICAT</Text></View> : null}</View> : <Text style={styles.timelinePending}>{current ? 'Statusul curent' : 'Pas următor'}</Text>}
+        </View>
+      </View>;
+    })}
+  </Animated.View>;
 }
 
 function InfoBlock({ title, lines }: { title: string; lines: string[] }) {
@@ -161,6 +242,11 @@ const styles = StyleSheet.create({
   orderCard: { minHeight: 86, flexDirection: 'row', alignItems: 'center', gap: 11, borderRadius: 19, padding: 11, backgroundColor: '#1B1B1F', marginBottom: 8 }, orderIcon: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15 }, orderCopy: { flex: 1, minWidth: 0 }, orderTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }, orderNumber: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 11 }, status: { fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.5 }, customer: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 9, marginTop: 5 }, orderBottom: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginTop: 7 }, orderDate: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8 }, orderTotal: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 10 },
   empty: { minHeight: 230, alignItems: 'center', justifyContent: 'center', borderRadius: 24, backgroundColor: '#1B1B1F' }, emptyTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 15, marginTop: 13 }, emptyText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, marginTop: 5 },
   modalSafe: { flex: 1, backgroundColor: Colors.bg }, modalHeader: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#29272B', paddingHorizontal: 12, backgroundColor: '#171513' }, close: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: '#27242A' }, modalHeaderCopy: { flex: 1 }, modalKicker: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 1 }, modalTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 15, marginTop: 2 }, save: { minWidth: 96, height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 13, backgroundColor: Colors.orange }, saveText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 }, disabled: { opacity: 0.55 }, modalContent: { width: '100%', maxWidth: 760, alignSelf: 'center', padding: 16 },
+  detailLoading: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, borderRadius: 15, backgroundColor: Colors.orangeDim, marginBottom: 9 }, detailLoadingText: { color: Colors.orange, fontFamily: 'Inter-SemiBold', fontSize: 9 },
   info: { borderRadius: 18, padding: 15, backgroundColor: '#1B1B1F', marginBottom: 9 }, infoTitle: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8, marginBottom: 7 }, infoStrong: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 12 }, infoText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 16, marginTop: 2 }, sectionLabel: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.8, marginTop: 15, marginBottom: 8 }, items: { overflow: 'hidden', borderRadius: 18, backgroundColor: '#1B1B1F' }, item: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#343137', padding: 11 }, itemQty: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: Colors.orangeDim }, itemQtyText: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 10 }, itemCopy: { flex: 1 }, itemName: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 10 }, itemSku: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 3 }, itemTotal: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 },
-  totals: { borderRadius: 18, padding: 14, backgroundColor: '#252329', marginTop: 9 }, grandTotal: { borderTopWidth: 1, borderTopColor: '#3A363D', marginTop: 8, paddingTop: 9 }, chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, chip: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: '#413D45', borderRadius: 999, paddingHorizontal: 12, backgroundColor: '#1B1B1F' }, chipActive: { borderColor: Colors.orange, backgroundColor: Colors.orangeDim }, chipText: { color: Colors.textSecondary, fontFamily: 'Inter-SemiBold', fontSize: 9 }, chipTextActive: { color: Colors.orange }, notes: { minHeight: 100, borderWidth: 1, borderColor: '#49454F', borderRadius: 15, padding: 13, color: Colors.textPrimary, backgroundColor: '#161519', fontFamily: 'Inter-Regular', fontSize: 11, textAlignVertical: 'top' },
+  totals: { borderRadius: 18, padding: 14, backgroundColor: '#252329', marginTop: 9 }, grandTotal: { borderTopWidth: 1, borderTopColor: '#3A363D', marginTop: 8, paddingTop: 9 },
+  timeline: { overflow: 'hidden', borderRadius: 22, padding: 14, backgroundColor: '#1B1B1F' }, timelineRow: { flexDirection: 'row', alignItems: 'stretch', gap: 11 }, timelineRail: { width: 38, alignItems: 'center' }, timelineDot: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#403C43', borderRadius: 12, backgroundColor: '#242228' }, timelineDotCurrent: { shadowColor: '#FF7A00', shadowOpacity: 0.28, shadowRadius: 9, shadowOffset: { width: 0, height: 4 }, elevation: 3 }, timelineLine: { width: 2, flex: 1, minHeight: 30, borderRadius: 99, backgroundColor: '#343138', marginVertical: 4 }, timelineCard: { flex: 1, minHeight: 78, borderWidth: 1, borderColor: 'transparent', borderRadius: 17, padding: 12, marginBottom: 8, backgroundColor: '#232126' }, timelineTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }, timelineTitle: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 11 }, timelineCurrent: { fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8 }, timelineDescription: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 14, marginTop: 4 }, timelineMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }, timelineDate: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 8 }, timelineMail: { flexDirection: 'row', alignItems: 'center', gap: 4 }, timelineMailText: { color: '#34D399', fontFamily: 'Inter-Bold', fontSize: 6, letterSpacing: 0.45 }, timelinePending: { color: Colors.textMuted, fontFamily: 'Inter-SemiBold', fontSize: 7, marginTop: 8 },
+  statusPicker: { gap: 7 }, statusOption: { minHeight: 66, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#36333A', borderRadius: 18, padding: 10, backgroundColor: '#1B1B1F' }, statusOptionIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }, statusOptionCopy: { flex: 1, minWidth: 0 }, statusOptionTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 }, statusOptionText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 13, marginTop: 3 }, radio: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#5A555E', borderRadius: 99 },
+  notifyCard: { minHeight: 84, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#433B32', borderRadius: 20, padding: 12, backgroundColor: '#211D18', marginTop: 10 }, notifyCardActive: { borderColor: Colors.orange, backgroundColor: '#2A1C11' }, notifyCardDisabled: { opacity: 0.5 }, notifyIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: Colors.orangeDim }, notifyCopy: { flex: 1, minWidth: 0 }, notifyTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 }, notifyText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 13, marginTop: 4 }, checkbox: { width: 25, height: 25, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#554E47', borderRadius: 8, backgroundColor: '#171513' }, checkboxActive: { borderColor: Colors.orange, backgroundColor: Colors.orange },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, chip: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: '#413D45', borderRadius: 999, paddingHorizontal: 12, backgroundColor: '#1B1B1F' }, chipActive: { borderColor: Colors.orange, backgroundColor: Colors.orangeDim }, chipText: { color: Colors.textSecondary, fontFamily: 'Inter-SemiBold', fontSize: 9 }, chipTextActive: { color: Colors.orange }, notes: { minHeight: 100, borderWidth: 1, borderColor: '#49454F', borderRadius: 15, padding: 13, color: Colors.textPrimary, backgroundColor: '#161519', fontFamily: 'Inter-Regular', fontSize: 11, textAlignVertical: 'top' },
 });

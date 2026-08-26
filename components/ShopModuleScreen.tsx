@@ -65,6 +65,15 @@ type PrimaryTab = 'home' | 'orders' | 'products' | 'inventory' | 'more';
 type ShopView = PrimaryTab | CatalogView | SettingsView;
 type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; item: ShopBrand } | { type: 'manufacturer'; item: ShopManufacturer };
 
+const orderStatusLabels: Record<string, string> = {
+  new: 'ÎN PROCESARE',
+  confirmed: 'CONFIRMATĂ',
+  processing: 'ÎN PREGĂTIRE',
+  shipped: 'PREDATĂ CURIERULUI',
+  completed: 'LIVRATĂ',
+  cancelled: 'COMANDĂ ANULATĂ',
+};
+
 const primaryTabs = [
   { key: 'home', title: 'Acasă', Icon: House },
   { key: 'orders', title: 'Comenzi', Icon: ShoppingCart },
@@ -372,11 +381,11 @@ export default function ShopModuleScreen() {
             <DashboardMetric title="ACHIZIȚII" value={formatShopMoney(dashboard?.acquisitions || 0)} color="#F59E0B" />
             <DashboardMetric title="PROFIT" value={formatShopMoney(dashboard?.profit || 0)} color="#22C55E" />
           </View>}
-          <View style={styles.newOrdersBanner}><View style={styles.newOrdersIcon}><ShoppingCart size={21} color="#38BDF8" /></View><View style={styles.newOrdersCopy}><Text style={styles.newOrdersValue}>{dashboard?.new_orders_count || 0}</Text><Text style={styles.newOrdersLabel}>comenzi noi care așteaptă procesarea</Text></View><TouchableOpacity style={styles.newOrdersButton} onPress={() => setView('orders')}><Text style={styles.newOrdersButtonText}>Vezi comenzile</Text><ChevronRight size={16} color={Colors.white} /></TouchableOpacity></View>
+          <View style={styles.newOrdersBanner}><View style={styles.newOrdersIcon}><ShoppingCart size={21} color="#38BDF8" /></View><View style={styles.newOrdersCopy}><Text style={styles.newOrdersValue}>{dashboard?.new_orders_count || 0}</Text><Text style={styles.newOrdersLabel}>comenzi aflate în procesare</Text></View><TouchableOpacity style={styles.newOrdersButton} onPress={() => setView('orders')}><Text style={styles.newOrdersButtonText}>Vezi comenzile</Text><ChevronRight size={16} color={Colors.white} /></TouchableOpacity></View>
           <View style={styles.sectionHeader}><View><Text style={styles.sectionKicker}>SCURTATURI</Text><Text style={styles.sectionTitle}>Acțiuni rapide</Text></View></View>
           <View style={styles.quickActions}><TouchableOpacity style={styles.quickAction} onPress={() => setView('products')}><View style={[styles.cardIcon, { backgroundColor: '#A78BFA14' }]}><Package size={22} color="#A78BFA" /></View><View style={styles.quickActionCopy}><Text style={styles.quickActionTitle}>Produse</Text><Text style={styles.quickActionText}>Adaugă sau editează catalogul.</Text></View><ChevronRight size={18} color="#A78BFA" /></TouchableOpacity><TouchableOpacity style={styles.quickAction} onPress={() => setView('orders')}><View style={[styles.cardIcon, { backgroundColor: '#38BDF814' }]}><ShoppingCart size={22} color="#38BDF8" /></View><View style={styles.quickActionCopy}><Text style={styles.quickActionTitle}>Comenzi</Text><Text style={styles.quickActionText}>Verifică și procesează comenzile.</Text></View><ChevronRight size={18} color="#38BDF8" /></TouchableOpacity></View>
           <View style={styles.sectionHeader}><View><Text style={styles.sectionKicker}>ACTIVITATE RECENTA</Text><Text style={styles.sectionTitle}>Ultimele comenzi</Text></View></View>
-          <View style={styles.recentOrders}>{dashboard?.recent_orders?.length ? dashboard.recent_orders.slice(0, 5).map((order) => <TouchableOpacity key={order.id} style={styles.recentOrder} onPress={() => setView('orders')}><View><Text style={styles.recentOrderNumber}>{order.order_number}</Text><Text style={styles.recentOrderMeta}>{order.customer_name} · {order.created_at}</Text></View><View style={styles.recentOrderRight}><Text style={styles.recentOrderTotal}>{formatShopMoney(order.total)}</Text><Text style={[styles.recentOrderStatus, order.status === 'new' && styles.recentOrderNew]}>{order.status === 'new' ? 'NOUĂ' : order.status.toUpperCase()}</Text></View></TouchableOpacity>) : <Text style={styles.dashboardEmpty}>Nu există încă nicio comandă.</Text>}</View>
+          <View style={styles.recentOrders}>{dashboard?.recent_orders?.length ? dashboard.recent_orders.slice(0, 5).map((order) => <TouchableOpacity key={order.id} style={styles.recentOrder} onPress={() => setView('orders')}><View><Text style={styles.recentOrderNumber}>{order.order_number}</Text><Text style={styles.recentOrderMeta}>{order.customer_name} · {order.created_at}</Text></View><View style={styles.recentOrderRight}><Text style={styles.recentOrderTotal}>{formatShopMoney(order.total)}</Text><Text style={[styles.recentOrderStatus, order.status === 'new' && styles.recentOrderNew]}>{orderStatusLabels[order.status] || order.status.toUpperCase()}</Text></View></TouchableOpacity>) : <Text style={styles.dashboardEmpty}>Nu există încă nicio comandă.</Text>}</View>
         </ScrollView>
 
         <ShopBottomNavigation activeTab="home" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />

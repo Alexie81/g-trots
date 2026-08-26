@@ -210,6 +210,27 @@ export type ShopOrderItem = {
   quantity: number;
   unit_price: number;
   line_total: number;
+  image_url?: string;
+};
+
+export type ShopOrderStatusHistory = {
+  id: string;
+  order_id: string;
+  from_status: ShopOrder['status'] | null;
+  to_status: ShopOrder['status'];
+  changed_by: string | null;
+  customer_notified: boolean;
+  email_status: 'not_requested' | 'pending' | 'sent' | 'failed';
+  email_error: string | null;
+  created_at: string;
+};
+
+export type ShopOrderEmailNotification = {
+  requested?: boolean;
+  sent: boolean;
+  recipient?: string;
+  tracking_url?: string;
+  error?: string;
 };
 
 export type ShopOrder = {
@@ -233,6 +254,8 @@ export type ShopOrder = {
   total: number;
   currency: string;
   items: ShopOrderItem[];
+  status_history?: ShopOrderStatusHistory[];
+  email_notification?: ShopOrderEmailNotification;
   created_at: string;
   updated_at: string;
 };
@@ -372,7 +395,7 @@ export const shopApi = {
   adjustStock: (token: string, id: string, quantity: number, note: string) => shopCall<ShopProduct>('adjustStock', token, { method: 'POST', body: JSON.stringify({ quantity, note }) }, id),
   listOrders: (token: string) => shopCall<ShopOrder[]>('listOrders', token),
   getOrder: (token: string, id: string) => shopCall<ShopOrder>('getOrder', token, undefined, id),
-  updateOrder: (token: string, id: string, payload: Pick<ShopOrder, 'status' | 'payment_status'> & { admin_notes: string }) => shopCall<ShopOrder>('updateOrder', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
+  updateOrder: (token: string, id: string, payload: Pick<ShopOrder, 'status' | 'payment_status'> & { admin_notes: string; notify_customer: boolean }) => shopCall<ShopOrder>('updateOrder', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
   getPaymentSettings: (token: string) => shopCall<ShopPaymentSettings>('getPaymentSettings', token),
   updatePaymentSettings: (token: string, payload: ShopPaymentSettings) => shopCall<ShopPaymentSettings>('updatePaymentSettings', token, { method: 'PUT', body: JSON.stringify(payload) }),
   syncStripeCatalog: (token: string) => shopCall<ShopStripeSyncSummary>('syncStripeCatalog', token, { method: 'POST', body: '{}' }),

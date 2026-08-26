@@ -739,7 +739,7 @@ function CategoryTable({ categories, onEdit, onDelete }: { categories: ShopCateg
     <View style={styles.tableCard}><ScrollView horizontal showsHorizontalScrollIndicator><View style={styles.tableWide}>
       <View style={[styles.tableRow, styles.tableHead]}><Text style={[styles.th, styles.colImage]}>POZA</Text><Text style={[styles.th, styles.colName]}>CATEGORIE</Text><Text style={[styles.th, styles.colParent]}>PARINTE</Text><Text style={[styles.th, styles.colStatus]}>STATUS</Text><Text style={[styles.th, styles.colActions]}>ACTIUNI</Text></View>
       {categories.map((category) => <View key={category.id} style={styles.tableRow}>
-        <View style={styles.colImage}>{category.thumbnail_url ? <Image source={{ uri: category.thumbnail_url }} style={styles.tableImage} /> : <View style={styles.tableImageFallback}><ImageIcon size={18} color={Colors.textMuted} /></View>}</View>
+        <View style={styles.colImage}>{category.thumbnail_url ? <Image source={{ uri: category.thumbnail_url }} style={styles.tableImage} /> : category.parent_id ? <View style={styles.tableImageFallback}><ImageIcon size={18} color={Colors.textMuted} /></View> : null}</View>
         <View style={styles.colName}><Text style={styles.cellTitle}>{category.name}</Text><Text style={styles.cellSub} numberOfLines={1}>/{category.slug}</Text>{category.description ? <Text style={styles.cellDescription} numberOfLines={1}>{category.description}</Text> : null}</View>
         <View style={styles.colParent}><Text style={category.parent_name ? styles.cellText : styles.cellMuted}>{category.parent_name || 'Categorie principala'}</Text></View>
         <View style={styles.colStatus}><StatusBadge active={category.is_active} /></View>

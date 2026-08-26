@@ -4,6 +4,8 @@ declare(strict_types=1);
 return [
     'id' => '44133221-b4a8-58f2-82dc-564184cbb701',
     'supplier_external_id' => '57746',
+    'supplier_sku' => 'SE-EWF897',
+    'ean' => '8435764446733',
     'name' => 'Cauciuc plin 9×3.0-5.5 AMITOR pentru KuKirin G2 Pro 2024',
     'slug' => 'cauciuc-plin-9x3-5-5-kukirin-g2-pro-2024',
     'short_description' => 'Scapă de penele care îți întrerup traseul. Varianta AMITOR 9×3.0-5.5 are profil mixt și interior elastic, fiind destinată KuKirin G2 Pro 2024 după confirmarea jantei.',

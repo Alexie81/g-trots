@@ -4,6 +4,8 @@ declare(strict_types=1);
 return [
     'id' => 'ed987308-c069-53fb-8b82-acb09ccbf890',
     'supplier_external_id' => '59894',
+    'supplier_sku' => 'SE-EW5468',
+    'ean' => '8435764454684',
     'name' => 'Disc de frână 140 mm 6H albastru pentru trotinetă electrică',
     'slug' => 'disc-frana-140mm-6h-albastru-trotineta-electrica',
     'short_description' => 'Înlocuiește rotorul uzat cu un disc ventilat de 140 mm, grosime 1,8 mm și prindere în 6 șuruburi. Centrul albastru personalizează roata, iar G‑Trots poate verifica montajul după cotele piesei vechi.',

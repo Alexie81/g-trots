@@ -70,7 +70,8 @@ const products = {
 const params = new URLSearchParams(window.location.search);
 const pathMatch = window.location.pathname.match(/\/magazin\/produs\/([^/]+)\/?$/i);
 const productId = (pathMatch ? decodeURIComponent(pathMatch[1]) : null) || params.get("slug") || params.get("id") || document.body.dataset.productId || "anvelopa-g10-all-terrain";
-const product = products[productId] || products["anvelopa-g10-all-terrain"];
+const staticProduct = products[productId] || null;
+const product = staticProduct || products["anvelopa-g10-all-terrain"];
 
 const setText = (selector, value) => {
   const element = document.querySelector(selector);
@@ -78,7 +79,12 @@ const setText = (selector, value) => {
 };
 
 setText("[data-product-breadcrumb]", product.name);
-setText("[data-product-badge]", product.badge);
+const productDetailBadge = document.querySelector("[data-product-badge]");
+if (productDetailBadge) {
+  const isRecommended = Boolean(staticProduct && product.badge === "Recomandat");
+  productDetailBadge.hidden = !isRecommended;
+  productDetailBadge.textContent = isRecommended ? "Recomandat" : "";
+}
 setText("[data-product-stock]", product.stock);
 setText("[data-product-category]", product.category);
 setText("[data-product-title]", product.name);
@@ -185,7 +191,7 @@ function initializeProductImageViewer() {
   openButton.className = "product-gallery-open";
   openButton.type = "button";
   openButton.setAttribute("aria-label", `Mărește imaginea pentru ${product.name}`);
-  openButton.innerHTML = '<span aria-hidden="true"></span>';
+  openButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.25"></circle><path d="m15.25 15.25 5 5"></path></svg>';
   productVisual.append(openButton);
 
   const viewer = document.createElement("div");
@@ -511,6 +517,33 @@ const productSections = productTabs
   .map(tab => document.querySelector(tab.getAttribute("href")))
   .filter(Boolean);
 
+function setActiveProductTab(sectionId) {
+  productTabs.forEach(tab => {
+    const isActive = !tab.hidden && tab.getAttribute("href") === `#${sectionId}`;
+    tab.classList.toggle("active", isActive);
+    tab.toggleAttribute("aria-current", isActive);
+  });
+}
+
+let productTabFrame = 0;
+function syncActiveProductTab() {
+  window.cancelAnimationFrame(productTabFrame);
+  productTabFrame = window.requestAnimationFrame(() => {
+    const tabsBar = document.querySelector(".product-content-tabs");
+    const stickyTop = tabsBar ? Number.parseFloat(getComputedStyle(tabsBar).top) || 0 : 0;
+    const readingLine = stickyTop + (tabsBar?.offsetHeight || 0) + 24;
+    const availableSections = productSections.filter(section => !section.hidden && getComputedStyle(section).display !== "none");
+    if (!availableSections.length) return;
+
+    let activeSection = availableSections.find(section => section.getBoundingClientRect().bottom > readingLine) || availableSections.at(-1);
+    for (const section of availableSections) {
+      if (section.getBoundingClientRect().top <= readingLine) activeSection = section;
+      else break;
+    }
+    setActiveProductTab(activeSection.id);
+  });
+}
+
 document.querySelectorAll('a[href^="#"]:not([data-product-tab])').forEach(link => {
   link.addEventListener("click", event => {
     const selector = link.getAttribute("href");
@@ -530,20 +563,20 @@ productTabs.forEach(tab => {
     const target = document.querySelector(tab.getAttribute("href"));
     if (!target) return;
     event.preventDefault();
+    setActiveProductTab(target.id);
     target.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
     history.replaceState(null, "", `${window.location.pathname}${window.location.search}${tab.getAttribute("href")}`);
   });
 });
 
-if ("IntersectionObserver" in window && productSections.length) {
-  const sectionObserver = new IntersectionObserver(entries => {
-    const visible = entries
-      .filter(entry => entry.isIntersecting)
-      .sort((first, second) => second.intersectionRatio - first.intersectionRatio)[0];
-    if (!visible) return;
-    productTabs.forEach(tab => tab.classList.toggle("active", tab.getAttribute("href") === `#${visible.target.id}`));
-  }, { rootMargin: "-28% 0px -58%", threshold: [0.05, 0.25, 0.5] });
-  productSections.forEach(section => sectionObserver.observe(section));
+if (productSections.length) {
+  window.addEventListener("scroll", syncActiveProductTab, { passive: true });
+  window.addEventListener("resize", syncActiveProductTab);
+  window.addEventListener("hashchange", syncActiveProductTab);
+  document.addEventListener("g-trots:live-products", syncActiveProductTab);
+  const visibilityObserver = new MutationObserver(syncActiveProductTab);
+  productSections.forEach(section => visibilityObserver.observe(section, { attributes: true, attributeFilter: ["hidden", "style"] }));
+  syncActiveProductTab();
 }
 
 const expandableSections = [...document.querySelectorAll("[data-expand-section]")];

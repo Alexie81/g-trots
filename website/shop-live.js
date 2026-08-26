@@ -15,7 +15,7 @@
     if (document.querySelector('link[href*="shop-live.css"]')) return;
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "/shop-live.css?v=20260826-6";
+    link.href = "/shop-live.css?v=20260826-14";
     document.head.append(link);
   }
 
@@ -144,11 +144,15 @@
     })).filter(image => image.url) : [];
 
     let activeIndex = 0;
-    function showImage(index) {
+    let galleryAnimationTimer = 0;
+    function showImage(index, requestedDirection = 0) {
+      const previousIndex = activeIndex;
       activeIndex = Math.max(0, Math.min(images.length - 1, index));
+      const direction = requestedDirection || (activeIndex > previousIndex ? 1 : activeIndex < previousIndex ? -1 : 0);
       const selected = images[activeIndex];
       mainImage.className = `product-detail-image${selected ? " product-detail-image-live" : normalized.image ? ` product-image-${normalized.image}` : ""}`;
       mainImage.style.backgroundImage = selected ? "none" : "";
+      mainImage.style.removeProperty("--gallery-drag-x");
       let semanticImage = mainImage.querySelector("img.product-detail-image-seo");
       if (selected) {
         if (!semanticImage) {
@@ -161,8 +165,18 @@
         }
         semanticImage.src = selected.url;
         semanticImage.alt = selected.alt || normalized.name;
+        semanticImage.draggable = false;
         mainImage.removeAttribute("role");
         mainImage.removeAttribute("aria-label");
+        window.clearTimeout(galleryAnimationTimer);
+        mainImage.classList.remove("is-gallery-enter-next", "is-gallery-enter-previous", "is-gallery-dragging");
+        if (direction) {
+          void semanticImage.offsetWidth;
+          mainImage.classList.add(direction > 0 ? "is-gallery-enter-next" : "is-gallery-enter-previous");
+          galleryAnimationTimer = window.setTimeout(() => {
+            mainImage.classList.remove("is-gallery-enter-next", "is-gallery-enter-previous");
+          }, 420);
+        }
       } else {
         semanticImage?.remove();
         mainImage.setAttribute("role", "img");
@@ -173,7 +187,8 @@
         viewerArt.className = `product-image-viewer__art${selected ? " product-detail-image-live" : normalized.image ? ` product-image-${normalized.image}` : ""}`;
         viewerArt.style.backgroundImage = selected ? `url("${selected.url.replace(/"/g, "%22")}")` : "";
       }
-      visual.querySelectorAll("[data-live-gallery-index]").forEach((button, buttonIndex) => {
+      document.querySelectorAll(".product-detail-gallery [data-live-gallery-index]").forEach(button => {
+        const buttonIndex = Number(button.dataset.liveGalleryIndex || 0);
         button.classList.toggle("active", buttonIndex === activeIndex);
         button.setAttribute("aria-current", buttonIndex === activeIndex ? "true" : "false");
       });
@@ -189,7 +204,7 @@
         button.style.backgroundImage = `url("${image.url.replace(/"/g, "%22")}")`;
         button.style.backgroundSize = "cover";
         button.style.backgroundPosition = "center";
-        button.addEventListener("click", () => showImage(index));
+        button.addEventListener("click", () => showImage(index, index >= activeIndex ? 1 : -1));
         return button;
       }));
       legacyThumbs.hidden = false;
@@ -198,13 +213,25 @@
       legacyThumbs.hidden = true;
       legacyThumbs.style.display = "none";
     }
+    if (legacyDots) {
+      legacyDots.replaceChildren(...images.map((image, index) => {
+        const dot = document.createElement("button");
+        dot.type = "button";
+        dot.dataset.liveGalleryIndex = String(index);
+        dot.setAttribute("aria-label", `Imaginea ${index + 1}`);
+        dot.addEventListener("click", () => showImage(index, index >= activeIndex ? 1 : -1));
+        return dot;
+      }));
+      legacyDots.hidden = images.length <= 1;
+      legacyDots.style.removeProperty("display");
+    }
     if (legacyNavigation) {
       if (images.length > 1) {
         const previous = legacyNavigation.querySelector("[data-gallery-previous]")?.cloneNode(true);
         const next = legacyNavigation.querySelector("[data-gallery-next]")?.cloneNode(true);
         legacyNavigation.replaceChildren(...[previous, next].filter(Boolean));
-        previous?.addEventListener("click", () => showImage((activeIndex - 1 + images.length) % images.length));
-        next?.addEventListener("click", () => showImage((activeIndex + 1) % images.length));
+        previous?.addEventListener("click", () => showImage((activeIndex - 1 + images.length) % images.length, -1));
+        next?.addEventListener("click", () => showImage((activeIndex + 1) % images.length, 1));
         legacyNavigation.hidden = false;
         legacyNavigation.style.display = "flex";
       } else {
@@ -222,11 +249,41 @@
         button.dataset.liveGalleryIndex = String(index);
         button.setAttribute("aria-label", `Arată fotografia ${index + 1}`);
         button.style.backgroundImage = `url("${image.url.replace(/"/g, "%22")}")`;
-        button.addEventListener("click", () => showImage(index));
+        button.addEventListener("click", () => showImage(index, index >= activeIndex ? 1 : -1));
         gallery.append(button);
       });
       visual.append(gallery);
     }
+    let swipe = null;
+    const resetSwipe = () => {
+      swipe = null;
+      mainImage.classList.remove("is-gallery-dragging");
+      mainImage.style.removeProperty("--gallery-drag-x");
+    };
+    visual.onpointerdown = event => {
+      if (event.pointerType !== "touch" || images.length <= 1) return;
+      swipe = { id: event.pointerId, startX: event.clientX, startY: event.clientY, deltaX: 0, deltaY: 0 };
+      visual.setPointerCapture?.(event.pointerId);
+    };
+    visual.onpointermove = event => {
+      if (!swipe || event.pointerId !== swipe.id) return;
+      swipe.deltaX = event.clientX - swipe.startX;
+      swipe.deltaY = event.clientY - swipe.startY;
+      if (Math.abs(swipe.deltaX) <= Math.abs(swipe.deltaY) || Math.abs(swipe.deltaX) < 8) return;
+      event.preventDefault();
+      const drag = Math.max(-72, Math.min(72, swipe.deltaX));
+      mainImage.classList.add("is-gallery-dragging");
+      mainImage.style.setProperty("--gallery-drag-x", `${drag}px`);
+    };
+    visual.onpointerup = event => {
+      if (!swipe || event.pointerId !== swipe.id) return;
+      const { deltaX, deltaY } = swipe;
+      resetSwipe();
+      if (Math.abs(deltaX) < 42 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.15) return;
+      if (deltaX < 0) showImage((activeIndex + 1) % images.length, 1);
+      else showImage((activeIndex - 1 + images.length) % images.length, -1);
+    };
+    visual.onpointercancel = resetSwipe;
     const viewer = document.querySelector(".product-image-viewer");
     viewer?.classList.add("has-single-image");
     setText("[data-viewer-total]", "1");
@@ -288,12 +345,13 @@
     if (heading) {
       const title = heading.querySelector("h2");
       if (title) title.textContent = String(product.description_title || "").trim() || `Detalii complete pentru ${normalized.name}.`;
-      const currentCopy = heading.querySelector(".product-rich-copy, p");
+      const currentCopy = heading.querySelector("p");
       const richCopy = document.createElement("div");
       richCopy.className = "product-rich-copy";
+      richCopy.dataset.liveProductDescription = "";
       richCopy.innerHTML = description;
-      if (currentCopy) currentCopy.replaceWith(richCopy);
-      else heading.append(richCopy);
+      currentCopy?.remove();
+      heading.insertAdjacentElement("afterend", richCopy);
     }
 
     const brandNames = Array.isArray(product.brands) ? product.brands.map(brand => brand.name).filter(Boolean) : [];
@@ -365,6 +423,8 @@
       questionTab.hidden = !hasQuestions;
       questionTab.style.display = hasQuestions ? "" : "none";
     }
+
+    window.requestAnimationFrame(() => window.GTrotsSyncExpandableSections?.());
     const questionList = document.querySelector("#intrebari .product-faq-list");
     if (questionList && hasQuestions) {
       questionList.replaceChildren(...questions.map(([title, answer], index) => {
@@ -491,10 +551,16 @@
 
   function applyLiveProduct(product) {
     const normalized = normalizeProduct(product);
-    window.GTrotsFavorites?.registerProducts?.([normalized]);
     document.body.dataset.productId = normalized.id;
+    const favoriteButton = document.querySelector(".product-detail-favorite");
+    if (favoriteButton) favoriteButton.dataset.favoriteId = normalized.id;
+    window.GTrotsFavorites?.registerProducts?.([normalized]);
     setText("[data-product-breadcrumb]", normalized.name);
-    setText("[data-product-badge]", product.is_featured ? "Recomandat" : "G-Trots");
+    const featuredBadge = document.querySelector("[data-product-badge]");
+    if (featuredBadge) {
+      featuredBadge.hidden = !product.is_featured;
+      featuredBadge.textContent = product.is_featured ? "Recomandat" : "";
+    }
     setText("[data-product-stock]", normalized.stock);
     setText("[data-product-category]", normalized.category);
     setText("[data-product-title]", normalized.name);
@@ -744,15 +810,8 @@
 
   async function initialize() {
     ensureStyles();
-    let products = [];
-    try {
-      products = await api("publicProducts");
-      if (Array.isArray(products)) registerProducts(products);
-    } catch {
-      // Păstrăm catalogul local existent ca rezervă.
-    }
-
-    if (document.body.classList.contains("product-page")) {
+    const isProductPage = document.body.classList.contains("product-page");
+    if (isProductPage) {
       const params = new URLSearchParams(window.location.search);
       const pathMatch = window.location.pathname.match(/\/magazin\/produs\/([^/]+)\/?$/i);
       const identifier = pathMatch ? decodeURIComponent(pathMatch[1]) : (params.get("slug") || params.get("id") || document.body.dataset.productId);
@@ -762,8 +821,25 @@
           applyLiveProduct(product);
         } catch {
           // Pagina statică a produsului rămâne disponibilă.
+        } finally {
+          document.body.classList.remove("is-live-product-loading");
+          window.requestAnimationFrame(() => {
+            window.dispatchEvent(new Event("resize"));
+            window.dispatchEvent(new Event("scroll"));
+          });
         }
+      } else {
+        document.body.classList.remove("is-live-product-loading");
+        window.dispatchEvent(new Event("resize"));
       }
+    }
+
+    let products = [];
+    try {
+      products = await api("publicProducts");
+      if (Array.isArray(products)) registerProducts(products);
+    } catch {
+      // Păstrăm catalogul local existent ca rezervă.
     }
 
     // Checkout-ul are acum o pagină dedicată. Coșul rămâne o etapă separată,

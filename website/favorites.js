@@ -291,6 +291,9 @@
   }
 
   function productIdForButton(button) {
+    if (button.classList.contains("product-detail-favorite")) {
+      return document.body.dataset.productId || button.dataset.favoriteId || "";
+    }
     return button.dataset.favoriteId || button.closest("[data-product-id]")?.dataset.productId || document.body.dataset.productId || "";
   }
 

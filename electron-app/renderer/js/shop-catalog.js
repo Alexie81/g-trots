@@ -318,7 +318,7 @@
 
   function openManufacturer(manufacturer = null) {
     state.editingManufacturer = manufacturer;
-    byId('shop-manufacturer-modal-title').textContent = manufacturer ? 'Editeaza producatorul' : 'Producator nou';
+    byId('shop-manufacturer-modal-title').textContent = manufacturer ? 'Editează producătorul' : 'Producător nou';
     byId('shop-manufacturer-name').value = manufacturer?.name || '';
     byId('shop-manufacturer-website').value = manufacturer?.website_url || '';
     byId('shop-manufacturer-active').checked = manufacturer?.is_active ?? true;

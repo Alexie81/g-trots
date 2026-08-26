@@ -1569,15 +1569,27 @@
 </div>
 
 <div class="business-modal-overlay shop-modal-overlay" id="shop-manufacturer-modal" hidden>
-  <form class="business-modal shop-editor-modal shop-brand-editor" id="shop-manufacturer-form">
+  <form class="business-modal shop-editor-modal shop-brand-editor shop-manufacturer-editor" id="shop-manufacturer-form">
     <div class="business-modal-head">
-      <div><span class="business-modal-icon shop-indigo"><svg viewBox="0 0 24 24"><path d="M3 21V8l6 4V8l6 4V3h6v18H3Z"/><path d="M7 17h2M13 17h2M19 17h2"/></svg></span><span><strong id="shop-manufacturer-modal-title">Producator nou</strong><small>Companie producatoare SHOP</small></span></div>
-      <button type="button" class="business-close-btn" data-shop-modal-close="shop-manufacturer-modal" title="Inchide"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      <div><span class="business-modal-icon shop-indigo"><svg viewBox="0 0 24 24"><path d="M3 21V8l6 4V8l6 4V3h6v18H3Z"/><path d="M7 17h2M13 17h2M19 17h2"/></svg></span><span><small class="shop-manufacturer-kicker">CATALOG / PRODUCĂTORI</small><strong id="shop-manufacturer-modal-title">Producător nou</strong><small>Adaugă firma care produce sau furnizează articolele din catalog.</small></span></div>
+      <button type="button" class="business-close-btn" data-shop-modal-close="shop-manufacturer-modal" title="Închide" aria-label="Închide panoul"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
-    <div class="field"><label for="shop-manufacturer-name">Nume *</label><input type="text" id="shop-manufacturer-name" maxlength="120" placeholder="Ex: Bosch" required /></div>
-    <div class="field"><label for="shop-manufacturer-website">Site web</label><input type="url" id="shop-manufacturer-website" maxlength="255" placeholder="https://..." /></div>
-    <label class="shop-active-toggle"><span><strong>Producator activ</strong><small>Poate fi asociat produselor.</small></span><input type="checkbox" id="shop-manufacturer-active" checked /><i></i></label>
-    <div class="business-modal-actions"><button type="button" class="btn-ghost" data-shop-modal-close="shop-manufacturer-modal">Anuleaza</button><button type="submit" class="btn-primary" id="shop-manufacturer-save">Salveaza producatorul</button></div>
+    <div class="shop-manufacturer-body">
+      <div class="shop-manufacturer-fields">
+        <div class="field shop-manufacturer-field">
+          <label for="shop-manufacturer-name"><span>Nume producător</span><em>Obligatoriu</em></label>
+          <div class="shop-manufacturer-input"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V9l5 3V9l5 3V4h6v17H4Z"/><path d="M8 17h2M14 17h2"/></svg><input type="text" id="shop-manufacturer-name" maxlength="120" placeholder="Ex: Bosch, OEM, Xiaomi" required /></div>
+          <small>Numele va fi afișat în administrarea catalogului.</small>
+        </div>
+        <div class="field shop-manufacturer-field">
+          <label for="shop-manufacturer-website"><span>Site web</span><em>Opțional</em></label>
+          <div class="shop-manufacturer-input"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg><input type="url" id="shop-manufacturer-website" maxlength="255" placeholder="https://exemplu.ro" /></div>
+          <small>Folosit doar intern pentru identificare rapidă.</small>
+        </div>
+      </div>
+      <label class="shop-active-toggle shop-manufacturer-active"><span class="shop-manufacturer-toggle-copy"><span class="shop-manufacturer-toggle-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></span><span><strong>Producător activ</strong><small>Poate fi selectat și asociat produselor din catalog.</small></span></span><input type="checkbox" id="shop-manufacturer-active" checked /><i></i></label>
+    </div>
+    <div class="business-modal-actions shop-manufacturer-actions"><span>Modificările se aplică imediat în catalog.</span><div><button type="button" class="btn-ghost" data-shop-modal-close="shop-manufacturer-modal">Anulează</button><button type="submit" class="btn-primary" id="shop-manufacturer-save">Salvează producătorul</button></div></div>
   </form>
 </div>
 

@@ -13395,9 +13395,10 @@ body::after {
 .shop-order-status-option small { color: #807980; font-size: 9px; font-weight: 500; line-height: 1.35; letter-spacing: 0; }
 .shop-order-status-option > i { width: 23px; height: 23px; display: grid; place-items: center; border: 1px solid #55515a; border-radius: 50%; color: transparent; font-size: 11px; font-style: normal; }
 .shop-order-status-option.selected > i { border-color: var(--status-color); color: #171411; background: var(--status-color); }
-.shop-order-notify { min-height: 86px; display: grid !important; grid-template-columns: 48px minmax(0, 1fr) 26px; align-items: center; gap: 12px; margin: 12px 0 16px !important; border: 1px solid #4a3a29; border-radius: 21px; padding: 13px 15px; background: linear-gradient(135deg, rgba(255,138,39,.1), rgba(255,255,255,.018)); cursor: pointer; }
-.shop-order-notify > input { position: absolute; width: 1px !important; min-height: 1px !important; opacity: 0; }
+.shop-order-notify { position: relative; min-height: 86px; display: grid !important; grid-template-columns: 48px minmax(0, 1fr) 26px; align-items: center; gap: 12px; margin: 12px 0 16px !important; border: 1px solid #4a3a29; border-radius: 21px; padding: 13px 15px; background: linear-gradient(135deg, rgba(255,138,39,.1), rgba(255,255,255,.018)); cursor: pointer; overflow: hidden; }
+.shop-order-notify > input { position: absolute; z-index: 2; inset: 0; width: 100% !important; height: 100%; min-height: 0 !important; margin: 0; padding: 0; border: 0; border-radius: inherit; opacity: 0; cursor: inherit; }
 .shop-order-notify:has(input:disabled) { opacity: .48; cursor: default; }
+.shop-order-notify:has(input:focus-visible) { outline: 2px solid #ff9c4d; outline-offset: 3px; }
 .shop-order-notify-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 16px; color: #ff9c4d; background: rgba(255,138,39,.13); font-size: 18px; }
 .shop-order-notify > span:nth-of-type(2) { min-width: 0; display: grid; gap: 5px; }
 .shop-order-notify strong { color: #f2ede8; font-size: 12px; }
@@ -13416,14 +13417,20 @@ body::after {
 /* Order dialog: compact Material 3 layout that keeps every action visible. */
 #shop-order-modal .shop-commerce-modal.compact {
   height: min(900px, calc(100vh - 32px));
+  height: min(900px, calc(100dvh - 32px));
   max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   border-color: #45414a;
   border-radius: 30px;
   background: #1d1b20;
 }
 #shop-order-modal .shop-commerce-modal-scroll {
-  flex: 1 1 auto;
   min-height: 0;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
@@ -13453,7 +13460,7 @@ body::after {
   .shop-order-status-picker { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 @media (max-width: 560px) {
-  #shop-order-modal .shop-commerce-modal.compact { height: calc(100vh - 12px); max-height: calc(100vh - 12px); width: calc(100vw - 12px); border-radius: 24px; }
+  #shop-order-modal .shop-commerce-modal.compact { height: calc(100vh - 12px); height: calc(100dvh - 12px); max-height: calc(100vh - 12px); max-height: calc(100dvh - 12px); width: calc(100vw - 12px); border-radius: 24px; }
   .shop-order-timeline-flow,
   .shop-order-status-picker { grid-template-columns: 1fr; }
   .shop-order-timeline-step { min-height: 82px; }

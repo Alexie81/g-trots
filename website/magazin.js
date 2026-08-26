@@ -218,6 +218,7 @@ const filtersStickyColumn = document.querySelector(".filters-sticky-column");
 const filtersOverlay = document.querySelector(".filters-overlay");
 const filtersClose = document.querySelector(".filters-close");
 const applyMobileFilters = document.querySelector(".apply-mobile-filters");
+const collapsibleFilterGroups = [...document.querySelectorAll("[data-collapsible-filter]")];
 const productPagination = document.querySelector("#product-pagination");
 const productsPerPage = document.querySelector("#products-per-page");
 const pageSizeControl = document.querySelector(".pagination-select-wrap");
@@ -629,6 +630,39 @@ function getSelectedManufacturers() {
   return manufacturerInputs.filter(input => input.checked).map(input => input.value);
 }
 
+function updateCollapsibleFilterBadges() {
+  collapsibleFilterGroups.forEach(group => {
+    const toggle = group.querySelector(".filter-collapse-toggle");
+    const badge = group.querySelector(".filter-selected-count");
+    if (!toggle || !badge) return;
+    const selectedCount = group.querySelectorAll('input[type="checkbox"]:checked').length;
+    const isCollapsed = toggle.getAttribute("aria-expanded") === "false";
+    badge.textContent = `${selectedCount} ${selectedCount === 1 ? "selectat" : "selectate"}`;
+    badge.hidden = !isCollapsed || selectedCount === 0;
+  });
+}
+
+function setCollapsibleFilterState(group, collapsed) {
+  const toggle = group.querySelector(".filter-collapse-toggle");
+  const body = group.querySelector(".filter-collapse-body");
+  const options = group.querySelector(".filter-options-scroll");
+  if (!toggle || !body) return;
+  group.classList.toggle("is-collapsed", collapsed);
+  toggle.setAttribute("aria-expanded", String(!collapsed));
+  body.setAttribute("aria-hidden", String(collapsed));
+  body.inert = collapsed;
+  if (options) options.tabIndex = collapsed ? -1 : 0;
+  updateCollapsibleFilterBadges();
+}
+
+collapsibleFilterGroups.forEach(group => {
+  const toggle = group.querySelector(".filter-collapse-toggle");
+  if (!toggle) return;
+  toggle.addEventListener("click", () => {
+    setCollapsibleFilterState(group, toggle.getAttribute("aria-expanded") === "true");
+  });
+});
+
 function updateMobileFilterCount() {
   if (!mobileFilterCount) return;
   const brandCount = getSelectedBrands().length;
@@ -732,6 +766,7 @@ function applyFilters({ resetPage = true } = {}) {
   if (noResults) noResults.hidden = count !== 0;
   renderPagination(count);
   updateMobileFilterCount();
+  updateCollapsibleFilterBadges();
 }
 
 function resetFilters() {

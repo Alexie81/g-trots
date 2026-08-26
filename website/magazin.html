@@ -21,7 +21,7 @@
     <meta property="og:image" content="https://g-trots.ro/assets/vehicle-performance-scooter.png">
     <link rel="preload" href="assets/magazin-produse-v1.png" as="image" type="image/png">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="magazin.css?v=20260826-5">
+    <link rel="stylesheet" href="magazin.css?v=20260826-6">
     <link rel="stylesheet" href="favorites.css?v=20260825-2">
   </head>
   <body class="shop-page">
@@ -192,13 +192,19 @@
               <div class="price-scale"><span>100 lei</span><span>2.600 lei</span></div>
             </div>
 
-            <div class="filter-group brand-filter compatibility-filter" role="group" aria-labelledby="brand-filter-title">
-              <strong class="brand-filter-title" id="brand-filter-title">Compatibilitate marcă</strong>
-              <div class="filter-options-scroll" tabindex="0" aria-label="Lista mărcilor compatibile">
-                <label><input type="checkbox" value="universal"><span>Universal</span></label>
-                <label><input type="checkbox" value="kukirin"><span>KuKirin</span></label>
-                <label><input type="checkbox" value="xiaomi"><span>Xiaomi</span></label>
-                <label><input type="checkbox" value="ninebot"><span>Ninebot</span></label>
+            <div class="filter-group brand-filter compatibility-filter collapsible-filter" role="group" aria-labelledby="brand-filter-title" data-collapsible-filter="compatibility">
+              <button class="filter-collapse-toggle" type="button" aria-expanded="true" aria-controls="compatibility-filter-options">
+                <span class="filter-collapse-title" id="brand-filter-title">Mărci compatibile</span>
+                <span class="filter-selected-count" aria-live="polite" hidden>0 selectate</span>
+                <span class="filter-collapse-chevron" aria-hidden="true"></span>
+              </button>
+              <div class="filter-collapse-body">
+                <div class="filter-options-scroll" id="compatibility-filter-options" tabindex="0" aria-label="Lista mărcilor compatibile">
+                  <label><input type="checkbox" value="universal"><span>Universal</span></label>
+                  <label><input type="checkbox" value="kukirin"><span>KuKirin</span></label>
+                  <label><input type="checkbox" value="xiaomi"><span>Xiaomi</span></label>
+                  <label><input type="checkbox" value="ninebot"><span>Ninebot</span></label>
+                </div>
               </div>
             </div>
 
@@ -210,11 +216,17 @@
               </div>
             </div>
 
-            <div class="filter-group brand-filter manufacturer-filter" role="group" aria-labelledby="manufacturer-filter-title">
-              <strong class="brand-filter-title" id="manufacturer-filter-title">Producători</strong>
-              <div class="filter-options-scroll" tabindex="0" aria-label="Lista producătorilor">
-                <label><input type="checkbox" value="g-trots"><span>G-Trots</span></label>
-                <label><input type="checkbox" value="kukirin"><span>KuKirin</span></label>
+            <div class="filter-group brand-filter manufacturer-filter collapsible-filter" role="group" aria-labelledby="manufacturer-filter-title" data-collapsible-filter="manufacturers">
+              <button class="filter-collapse-toggle" type="button" aria-expanded="true" aria-controls="manufacturer-filter-options">
+                <span class="filter-collapse-title" id="manufacturer-filter-title">Producători</span>
+                <span class="filter-selected-count" aria-live="polite" hidden>0 selectate</span>
+                <span class="filter-collapse-chevron" aria-hidden="true"></span>
+              </button>
+              <div class="filter-collapse-body">
+                <div class="filter-options-scroll" id="manufacturer-filter-options" tabindex="0" aria-label="Lista producătorilor">
+                  <label><input type="checkbox" value="g-trots"><span>G-Trots</span></label>
+                  <label><input type="checkbox" value="kukirin"><span>KuKirin</span></label>
+                </div>
               </div>
             </div>
 
@@ -511,7 +523,7 @@
       <span>WhatsApp</span>
     </a>
     <script src="favorites.js?v=20260825-4" defer></script>
-    <script src="magazin.js?v=20260826-3" defer></script>
+    <script src="magazin.js?v=20260826-4" defer></script>
     <script src="shop-live.js?v=20260826-1" defer></script>
   </body>
 </html>

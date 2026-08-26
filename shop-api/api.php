@@ -448,17 +448,6 @@ function ensureShopSchema(PDO $db): void {
             ('00000000-0000-4000-8000-000000000011', 'Boomag', 'boomag.ro', 'https://boomag.ro', 0, 1, 1)"
     );
     $db->exec(
-        "INSERT IGNORE INTO shop_products
-            (id, source_id, sku, source_domain, name, slug, short_description, description_html, meta_title, meta_description, price, currency, stock_mode, stock_quantity, low_stock_threshold, is_active, is_featured)
-         VALUES
-            ('10000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000010', 'GT-WEB-001', 'g-trots.ro', 'Anvelopa G10 All-Terrain', 'anvelopa-g10-all-terrain', 'Profil aderent pentru asfalt si drum mixt.', '<p>Aderenta buna pe asfalt si drum mixt, cu profil anti-alunecare si constructie pregatita pentru utilizare zilnica.</p>', 'Anvelopa G10 All-Terrain | G-Trots', 'Anvelopa all-terrain de 10 inch pentru trotinete electrice.', 149, 'RON', 'unlimited', 0, 3, 1, 1),
-            ('10000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000010', 'GT-WEB-002', 'g-trots.ro', 'Display Smart Ride S3', 'display-smart-ride-s3', 'Ecran clar si comenzi intuitive in mers.', '<p>Ecran clar, lizibilitate ridicata si comenzi intuitive pentru informatiile importante din timpul deplasarii.</p>', 'Display Smart Ride S3 | G-Trots', 'Display digital pentru trotinete electrice.', 349, 'RON', 'unlimited', 0, 3, 1, 1),
-            ('10000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-000000000010', 'GT-WEB-003', 'g-trots.ro', 'Incarcator FastCharge 54.6V', 'incarcator-fastcharge-54-6v', 'Incarcare sigura si protectie integrata.', '<p>Protectie la supratensiune si racire eficienta pentru o incarcare sigura si constanta.</p>', 'Incarcator FastCharge 54.6V | G-Trots', 'Incarcator 54.6V pentru trotinete electrice.', 189, 'RON', 'unlimited', 0, 3, 1, 1),
-            ('10000000-0000-4000-8000-000000000004', '00000000-0000-4000-8000-000000000010', 'GT-WEB-004', 'g-trots.ro', 'Motor DualHub X2 2000W', 'motor-dualhub-x2-2000w', 'Cuplu ridicat si constructie robusta.', '<p>Cuplu ridicat, constructie robusta si raspuns prompt la acceleratie pentru configuratii compatibile.</p>', 'Motor DualHub X2 2000W | G-Trots', 'Motor electric DualHub X2 de 2000W.', 1899, 'RON', 'tracked', 3, 3, 1, 1),
-            ('10000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000010', 'GT-WEB-005', 'g-trots.ro', 'Baterie PowerCore 52V 23Ah', 'baterie-powercore-52v-23ah', 'Celule echilibrate si BMS protejat.', '<p>Celule echilibrate, BMS protejat si autonomie proiectata pentru trasee lungi si utilizare constanta.</p>', 'Baterie PowerCore 52V 23Ah | G-Trots', 'Baterie 52V 23Ah pentru trotinete electrice.', 2499, 'RON', 'unlimited', 0, 3, 1, 1),
-            ('10000000-0000-4000-8000-000000000006', '00000000-0000-4000-8000-000000000010', 'GT-WEB-006', 'g-trots.ro', 'Kit frana HydroStop Pro', 'kit-frana-hydrostop-pro', 'Franare precisa si control predictibil.', '<p>Dozaj precis si putere constanta de oprire pentru control mai bun si franare predictibila.</p>', 'Kit frana HydroStop Pro | G-Trots', 'Kit de frana hidraulica pentru trotinete electrice.', 399, 'RON', 'unlimited', 0, 3, 1, 1)"
-    );
-    $db->exec(
         "INSERT IGNORE INTO shop_shipping_methods
             (id, name, description, cost, free_above, eta_label, is_active, sort_order)
          VALUES

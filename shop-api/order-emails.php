@@ -5,39 +5,63 @@ function gtOrderStatuses(): array {
     return [
         'new' => [
             'label' => 'În procesare',
-            'title' => 'Comanda ta este în procesare',
-            'message' => 'Am primit comanda ta și verificăm toate detaliile înainte de pregătire.',
+            'title' => 'Am primit comanda ta',
+            'message' => 'Comanda este nouă și se află în procesare. Verificăm toate detaliile înainte să începem pregătirea.',
             'color' => '#38bdf8',
+            'eyebrow' => 'COMANDĂ NOUĂ',
+            'symbol' => '01',
+            'next_title' => 'Urmează verificarea comenzii',
+            'next_message' => 'Confirmăm produsele, stocul și datele de livrare.',
         ],
         'confirmed' => [
             'label' => 'Confirmată',
-            'title' => 'Plata a fost efectuată',
-            'message' => 'Plata cu cardul a fost confirmată, iar comanda ta este pregătită pentru următorul pas.',
+            'title' => 'Comanda a fost confirmată',
+            'message' => 'Am primit comanda ta, plata cu cardul a fost efectuată și comanda este confirmată.',
             'color' => '#34d399',
+            'eyebrow' => 'PLATĂ EFECTUATĂ',
+            'symbol' => '✓',
+            'next_title' => 'Urmează pregătirea produselor',
+            'next_message' => 'Nu mai ai nimic de făcut. Echipa noastră începe pregătirea comenzii.',
         ],
         'processing' => [
             'label' => 'În pregătire',
-            'title' => 'Am primit comanda ta',
-            'message' => 'Îți mulțumim pentru comandă. Comanda este în procesare și a intrat în pregătire.',
+            'title' => 'Comanda este în pregătire',
+            'message' => 'Produsele tale sunt pregătite și verificate înainte de predarea către curier.',
             'color' => '#fb923c',
+            'eyebrow' => 'ÎN PREGĂTIRE',
+            'symbol' => '02',
+            'next_title' => 'Pregătim predarea către curier',
+            'next_message' => 'Ambalăm produsele și pregătim documentele pentru expediere.',
         ],
         'shipped' => [
             'label' => 'Predată curierului',
             'title' => 'Comanda a fost predată curierului',
             'message' => 'Pachetul tău a plecat de la noi și se îndreaptă către adresa de livrare.',
             'color' => '#a78bfa',
+            'eyebrow' => 'COMANDA ESTE PE DRUM',
+            'symbol' => '03',
+            'next_title' => 'Urmează livrarea',
+            'next_message' => 'Curierul va continua transportul către adresa indicată în comandă.',
         ],
         'completed' => [
             'label' => 'Livrată',
             'title' => 'Comanda a fost livrată',
             'message' => 'Comanda a ajuns la destinație. Îți mulțumim că ai ales G-Trots România.',
             'color' => '#22c55e',
+            'eyebrow' => 'LIVRARE FINALIZATĂ',
+            'symbol' => '✓',
+            'next_title' => 'Totul este gata',
+            'next_message' => 'Îți mulțumim pentru încredere. Suntem aici dacă ai nevoie de ajutor.',
         ],
         'cancelled' => [
             'label' => 'Comandă anulată',
             'title' => 'Comanda a fost anulată',
             'message' => 'Comanda nu va mai fi procesată. Dacă ai nevoie de ajutor, răspunde direct la acest e-mail.',
             'color' => '#fb7185',
+            'eyebrow' => 'COMANDĂ OPRITĂ',
+            'symbol' => '×',
+            'next_title' => 'Ai nevoie de ajutor?',
+            'next_message' => 'Răspunde direct la acest mesaj și echipa G-Trots îți va oferi toate detaliile.',
         ],
     ];
 }
@@ -61,33 +85,37 @@ function gtEmailTrackingUrl(array $order, array $config): string {
 }
 
 function gtEmailStatusTimeline(string $status, string $paymentMethod = 'card'): string {
-    $flow = $paymentMethod === 'cash_on_delivery'
-        ? ['processing', 'shipped', 'completed']
-        : ['new', 'confirmed', 'processing', 'shipped', 'completed'];
+    $flow = ['new', 'confirmed', 'processing', 'shipped', 'completed'];
     $currentIndex = array_search($status, $flow, true);
     $cancelled = $status === 'cancelled';
     if ($currentIndex === false) $currentIndex = 0;
-    $cellWidth = 100 / max(1, count($flow));
-    $cells = '';
+    $rows = '';
     foreach ($flow as $index => $value) {
         $meta = gtOrderStatusMeta($value);
-        $active = !$cancelled && $index <= $currentIndex;
-        $circleColor = $active ? (string)$meta['color'] : '#35322f';
-        $textColor = $active ? '#f7f2eb' : '#77716b';
-        $line = $index < count($flow) - 1
-            ? '<span style="display:block;height:3px;background:' . ($active && $index < $currentIndex ? '#ff8a00' : '#35322f') . ';margin:9px 0 0 22px;border-radius:99px"></span>'
-            : '';
-        $cells .= '<td style="width:' . number_format($cellWidth, 2, '.', '') . '%;vertical-align:top;padding:0 3px;text-align:center">'
-            . '<span style="display:inline-block;width:20px;height:20px;line-height:20px;border-radius:99px;background:' . $circleColor . ';color:#0d0d0d;font-size:10px;font-weight:900">' . ($active ? '✓' : (string)($index + 1)) . '</span>'
-            . $line
-            . '<span style="display:block;margin-top:9px;color:' . $textColor . ';font-size:10px;font-weight:800;line-height:1.25">' . gtEmailEscape($meta['label']) . '</span>'
-            . '</td>';
+        $reached = !$cancelled && $index <= $currentIndex;
+        $current = !$cancelled && $index === $currentIndex;
+        $tone = $current ? (string)$meta['color'] : ($reached ? '#ff9a2f' : '#68635d');
+        $surface = $current ? (string)$meta['color'] . '18' : ($reached ? '#211d18' : '#191817');
+        $border = $current ? (string)$meta['color'] . '55' : '#302d29';
+        $stateLabel = $current ? 'ACUM' : ($reached ? 'FINALIZAT' : 'URMEAZĂ');
+        $rows .= '<tr><td style="padding:0 0 8px">'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:' . $surface . ';border:1px solid ' . $border . ';border-radius:18px">'
+            . '<tr><td style="width:48px;padding:11px 0 11px 12px">'
+            . '<span style="display:block;width:36px;height:36px;line-height:36px;text-align:center;border-radius:13px;background:' . $tone . ';color:#10100f;font-size:11px;font-weight:900">' . ($reached ? '✓' : str_pad((string)($index + 1), 2, '0', STR_PAD_LEFT)) . '</span></td>'
+            . '<td style="padding:11px 8px"><strong style="display:block;color:' . ($current ? '#ffffff' : '#ddd6ce') . ';font-size:13px;line-height:1.3">' . gtEmailEscape($meta['label']) . '</strong>'
+            . '<span style="display:block;margin-top:3px;color:#827b74;font-size:10px;line-height:1.35">' . gtEmailEscape($meta['next_message'] ?? $meta['message']) . '</span></td>'
+            . '<td align="right" style="width:72px;padding:11px 12px 11px 4px"><span style="display:inline-block;color:' . $tone . ';font-size:8px;font-weight:900;letter-spacing:.08em">' . $stateLabel . '</span></td></tr></table>'
+            . '</td></tr>';
     }
-    if ($cancelled) {
-        $meta = gtOrderStatusMeta('cancelled');
-        return '<div style="padding:16px 18px;border:1px solid rgba(251,113,133,.35);border-radius:18px;background:#261719;color:#fb7185;font-weight:900">×&nbsp;&nbsp;' . gtEmailEscape($meta['label']) . '</div>';
-    }
-    return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>' . $cells . '</tr></table>';
+    $cancelMeta = gtOrderStatusMeta('cancelled');
+    $cancelTone = $cancelled ? '#fb7185' : '#68635d';
+    $cancelSurface = $cancelled ? '#2a181c' : '#191817';
+    $cancelBorder = $cancelled ? '#fb718555' : '#302d29';
+    $rows .= '<tr><td style="padding:0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:' . $cancelSurface . ';border:1px solid ' . $cancelBorder . ';border-radius:18px">'
+        . '<tr><td style="width:48px;padding:11px 0 11px 12px"><span style="display:block;width:36px;height:36px;line-height:36px;text-align:center;border-radius:13px;background:' . $cancelTone . ';color:#160f10;font-size:18px;font-weight:900">×</span></td>'
+        . '<td style="padding:11px 8px"><strong style="display:block;color:' . ($cancelled ? '#fff' : '#aaa39c') . ';font-size:13px">' . gtEmailEscape($cancelMeta['label']) . '</strong><span style="display:block;margin-top:3px;color:#827b74;font-size:10px">Stare alternativă dacă fluxul comenzii este oprit.</span></td>'
+        . '<td align="right" style="width:72px;padding:11px 12px 11px 4px"><span style="color:' . $cancelTone . ';font-size:8px;font-weight:900;letter-spacing:.08em">' . ($cancelled ? 'ACUM' : 'ALTERNATIV') . '</span></td></tr></table></td></tr>';
+    return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' . $rows . '</table>';
 }
 
 function gtBuildOrderEmail(array $order, array $config, string $status): array {
@@ -102,50 +130,61 @@ function gtBuildOrderEmail(array $order, array $config, string $status): array {
         if (!is_array($item)) continue;
         $imageUrl = trim((string)($item['image_url'] ?? ''));
         $image = $imageUrl !== ''
-            ? '<img src="' . gtEmailEscape($imageUrl) . '" width="64" height="64" alt="" style="display:block;width:64px;height:64px;object-fit:cover;border-radius:16px;background:#f3f1ee">'
-            : '<span style="display:block;width:64px;height:64px;line-height:64px;text-align:center;border-radius:16px;background:#2c2824;color:#ff8a00;font-size:22px;font-weight:900">GT</span>';
+            ? '<img src="' . gtEmailEscape($imageUrl) . '" width="72" height="72" alt="" style="display:block;width:72px;height:72px;object-fit:contain;border-radius:20px;background:#f7f2ed">'
+            : '<span style="display:block;width:72px;height:72px;line-height:72px;text-align:center;border-radius:20px;background:#302d33;color:#ffb77a;font-size:21px;font-weight:900">GT</span>';
         $itemsHtml .= '<tr>'
-            . '<td style="padding:14px 0;border-bottom:1px solid #302d2a;width:76px;vertical-align:middle">' . $image . '</td>'
-            . '<td style="padding:14px 12px;border-bottom:1px solid #302d2a;vertical-align:middle">'
-            . '<strong style="display:block;color:#f7f2eb;font-size:14px;line-height:1.35">' . gtEmailEscape($item['product_name'] ?? '') . '</strong>'
-            . '<span style="display:block;color:#8e8881;font-size:11px;margin-top:4px">' . (int)($item['quantity'] ?? 0) . ' × ' . gtEmailMoney($item['unit_price'] ?? 0, $currency) . '</span>'
+            . '<td style="padding:14px 0;border-bottom:1px solid #39353d;width:84px;vertical-align:middle">' . $image . '</td>'
+            . '<td style="padding:14px 12px;border-bottom:1px solid #39353d;vertical-align:middle">'
+            . '<strong style="display:block;color:#fff8f3;font-size:14px;line-height:1.35">' . gtEmailEscape($item['product_name'] ?? '') . '</strong>'
+            . '<span style="display:block;color:#9d959f;font-size:11px;margin-top:5px">' . (int)($item['quantity'] ?? 0) . ' × ' . gtEmailMoney($item['unit_price'] ?? 0, $currency) . '</span>'
             . '</td>'
-            . '<td style="padding:14px 0;border-bottom:1px solid #302d2a;text-align:right;vertical-align:middle;color:#f7f2eb;font-size:13px;font-weight:900;white-space:nowrap">' . gtEmailMoney($item['line_total'] ?? 0, $currency) . '</td>'
+            . '<td style="padding:14px 0;border-bottom:1px solid #39353d;text-align:right;vertical-align:middle;color:#fff8f3;font-size:13px;font-weight:900;white-space:nowrap">' . gtEmailMoney($item['line_total'] ?? 0, $currency) . '</td>'
             . '</tr>';
     }
     $paymentLabel = ($order['payment_method'] ?? '') === 'card' ? 'Card online' : 'Ramburs la curier';
     $subject = (string)$meta['title'] . ' · ' . (string)($order['order_number'] ?? 'G-Trots');
     $preheader = gtEmailEscape((string)$meta['message']);
-    $html = '<!doctype html><html lang="ro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-        . '<style>@media(max-width:640px){.gt-wrap{padding:12px!important}.gt-card{border-radius:28px!important}.gt-body{padding:24px 18px!important}.gt-title{font-size:31px!important}.gt-receipt{padding:18px!important}.gt-action{display:block!important;width:auto!important;text-align:center!important}.gt-hide-mobile{display:none!important}}</style></head>'
-        . '<body style="margin:0;background:#090909;color:#f7f2eb;font-family:Arial,Helvetica,sans-serif">'
-        . '<div style="display:none;max-height:0;overflow:hidden;opacity:0">' . $preheader . '</div>'
-        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#090909"><tr><td class="gt-wrap" style="padding:34px 16px" align="center">'
-        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="gt-card" style="width:100%;max-width:680px;background:#151412;border:1px solid #302b25;border-radius:36px;overflow:hidden;box-shadow:0 28px 90px rgba(0,0,0,.48)">'
-        . '<tr><td style="height:7px;background:linear-gradient(90deg,#ff6b00,#ffb12b)"></td></tr>'
-        . '<tr><td class="gt-body" style="padding:32px 34px">'
-        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td>'
-        . '<img src="' . gtEmailEscape($logoUrl) . '" width="54" height="54" alt="G-Trots România" style="display:block;width:54px;height:54px;border-radius:17px">'
-        . '</td><td style="padding-left:12px"><strong style="display:block;color:#fff;font-size:17px">G-Trots România</strong><span style="color:#8f8881;font-size:10px;letter-spacing:.08em">SERVICE &amp; MAGAZIN</span></td>'
-        . '<td align="right"><span style="display:inline-block;padding:9px 13px;border-radius:99px;background:' . gtEmailEscape((string)$meta['color']) . '22;color:' . gtEmailEscape((string)$meta['color']) . ';font-size:11px;font-weight:900">' . gtEmailEscape((string)$meta['label']) . '</span></td></tr></table>'
-        . '<div style="padding:32px 0 28px"><span style="color:#ff8a00;font-size:10px;font-weight:900;letter-spacing:.14em">ACTUALIZARE COMANDĂ</span>'
-        . '<h1 class="gt-title" style="margin:10px 0 12px;color:#f8f4ee;font-size:42px;line-height:1.04;letter-spacing:-.04em">' . gtEmailEscape((string)$meta['title']) . '</h1>'
-        . '<p style="margin:0;color:#aaa39b;font-size:15px;line-height:1.65">' . $greeting . ' ' . gtEmailEscape((string)$meta['message']) . '</p></div>'
-        . '<div style="padding:18px;border-radius:22px;background:#1d1b18;border:1px solid #302d29">' . gtEmailStatusTimeline($status, (string)($order['payment_method'] ?? 'card')) . '</div>'
-        . '<div class="gt-receipt" style="margin-top:20px;padding:24px;border-radius:26px;background:#10100f;border:1px solid #302d29">'
-        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td><span style="display:block;color:#77716b;font-size:9px;font-weight:900;letter-spacing:.12em">BON COMANDĂ</span><strong style="display:block;margin-top:5px;color:#ff9a25;font-size:16px">' . gtEmailEscape($order['order_number'] ?? '') . '</strong></td>'
-        . '<td align="right"><span style="display:block;color:#77716b;font-size:9px;font-weight:900;letter-spacing:.12em">DATA</span><strong style="display:block;margin-top:5px;color:#d8d2ca;font-size:12px">' . gtEmailEscape(date('d.m.Y, H:i', strtotime((string)($order['created_at'] ?? 'now')))) . '</strong></td></tr></table>'
-        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px">' . $itemsHtml . '</table>'
-        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;color:#aaa39b;font-size:12px">'
-        . '<tr><td style="padding:6px 0">Subtotal</td><td align="right">' . gtEmailMoney($order['subtotal'] ?? 0, $currency) . '</td></tr>'
-        . '<tr><td style="padding:6px 0">Livrare · ' . gtEmailEscape($order['shipping_method_name'] ?? '') . '</td><td align="right">' . gtEmailMoney($order['shipping_cost'] ?? 0, $currency) . '</td></tr>'
-        . '<tr><td style="padding:6px 0">Plată</td><td align="right">' . gtEmailEscape($paymentLabel) . '</td></tr>'
-        . '<tr><td style="padding:18px 0 0;border-top:1px dashed #3a3631;color:#f7f2eb;font-size:16px;font-weight:900">Total</td><td align="right" style="padding:18px 0 0;border-top:1px dashed #3a3631;color:#f7f2eb;font-size:22px;font-weight:900">' . gtEmailMoney($order['total'] ?? 0, $currency) . '</td></tr>'
-        . '</table></div>'
-        . '<div style="padding:22px 0 8px;text-align:center"><a class="gt-action" href="' . gtEmailEscape($trackingUrl) . '" style="display:inline-block;padding:16px 28px;border-radius:18px;background:#ff8a00;color:#12100e;text-decoration:none;font-size:14px;font-weight:900;box-shadow:0 12px 30px rgba(255,138,0,.22)">Urmărește comanda&nbsp;&nbsp;→</a></div>'
-        . '<div style="margin-top:15px;padding:15px 17px;border-radius:18px;background:#211d18;border:1px solid #382f25;color:#a9a198;font-size:11px;line-height:1.55"><strong style="color:#f0e9df">Cum verifici comanda?</strong><br>Apasă butonul de mai sus pentru acces direct și securizat. O poți căuta și manual pe pagina „Urmărire comandă”, folosind codul <strong style="color:#ff9a25">' . gtEmailEscape($order['order_number'] ?? '') . '</strong> împreună cu adresa ta de e-mail.</div>'
-        . '<p style="margin:24px 0 0;text-align:center;color:#68635e;font-size:10px;line-height:1.6">Ai nevoie de ajutor? Răspunde direct la acest mesaj.<br>G-Trots România · g-trots.ro</p>'
-        . '</td></tr></table></td></tr></table></body></html>';
+    $statusColor = gtEmailEscape((string)$meta['color']);
+    $statusLabel = gtEmailEscape((string)$meta['label']);
+    $statusTitle = gtEmailEscape((string)$meta['title']);
+    $statusMessage = gtEmailEscape((string)$meta['message']);
+    $statusEyebrow = gtEmailEscape((string)$meta['eyebrow']);
+    $statusSymbol = gtEmailEscape((string)$meta['symbol']);
+    $nextTitle = gtEmailEscape((string)$meta['next_title']);
+    $nextMessage = gtEmailEscape((string)$meta['next_message']);
+    $safeTrackingUrl = gtEmailEscape($trackingUrl);
+    $safeLogoUrl = gtEmailEscape($logoUrl);
+    $orderNumber = gtEmailEscape($order['order_number'] ?? '');
+    $createdAt = gtEmailEscape(date('d.m.Y, H:i', strtotime((string)($order['created_at'] ?? 'now'))));
+    $shippingName = gtEmailEscape($order['shipping_method_name'] ?? 'Curier standard');
+    $paymentText = gtEmailEscape($paymentLabel);
+    $subtotal = gtEmailMoney($order['subtotal'] ?? 0, $currency);
+    $shippingCost = gtEmailMoney($order['shipping_cost'] ?? 0, $currency);
+    $total = gtEmailMoney($order['total'] ?? 0, $currency);
+    $timeline = gtEmailStatusTimeline($status, (string)($order['payment_method'] ?? 'card'));
+    $html = <<<HTML
+<!doctype html><html lang="ro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>@media(max-width:640px){.gt-wrap{padding:10px!important}.gt-shell{border-radius:28px!important}.gt-body{padding:22px 16px!important}.gt-title{font-size:32px!important}.gt-summary,.gt-timeline{padding:16px!important}.gt-action{display:block!important;text-align:center!important}.gt-status{display:none!important}.gt-next-icon{width:46px!important}.gt-next-copy{padding-left:10px!important}}</style></head>
+<body style="margin:0;background:#09090a;color:#fff8f3;font-family:Roboto,'Segoe UI',Arial,sans-serif;-webkit-font-smoothing:antialiased">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0">{$preheader}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#09090a"><tr><td class="gt-wrap" style="padding:34px 16px" align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="gt-shell" style="width:100%;max-width:700px;background:#1d1b20;border:1px solid #3a363e;border-radius:38px;overflow:hidden;box-shadow:0 30px 90px rgba(0,0,0,.45)">
+<tr><td style="height:8px;background:{$statusColor}"></td></tr>
+<tr><td class="gt-body" style="padding:30px 34px 34px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="width:58px"><img src="{$safeLogoUrl}" width="54" height="54" alt="G-Trots România" style="display:block;width:54px;height:54px;border-radius:18px"></td><td style="padding-left:12px"><strong style="display:block;color:#fff8f3;font-size:17px;line-height:1.2">G-Trots România</strong><span style="display:block;margin-top:4px;color:#9f979f;font-size:9px;font-weight:800;letter-spacing:.1em">SERVICE &amp; MAGAZIN</span></td><td class="gt-status" align="right"><span style="display:inline-block;padding:10px 14px;border:1px solid {$statusColor}55;border-radius:999px;background:{$statusColor}18;color:{$statusColor};font-size:11px;font-weight:900">●&nbsp;&nbsp;{$statusLabel}</span></td></tr></table>
+<div style="padding:34px 0 24px"><span style="color:{$statusColor};font-size:10px;font-weight:900;letter-spacing:.14em">{$statusEyebrow}</span><h1 class="gt-title" style="margin:10px 0 13px;color:#fff8f3;font-size:44px;line-height:1.02;letter-spacing:-.055em">{$statusTitle}</h1><p style="margin:0;color:#b1a9b2;font-size:15px;line-height:1.65">{$greeting} {$statusMessage}</p></div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;border:1px solid {$statusColor}55;border-radius:24px;background:{$statusColor}12"><tr><td class="gt-next-icon" style="width:64px;padding:15px 0 15px 15px"><span style="display:block;width:48px;height:48px;line-height:48px;text-align:center;border-radius:17px;background:{$statusColor};color:#151116;font-size:15px;font-weight:1000">{$statusSymbol}</span></td><td class="gt-next-copy" style="padding:15px"><span style="display:block;color:{$statusColor};font-size:8px;font-weight:900;letter-spacing:.12em">CE URMEAZĂ</span><strong style="display:block;margin-top:4px;color:#fff8f3;font-size:14px">{$nextTitle}</strong><span style="display:block;margin-top:4px;color:#9d959f;font-size:11px;line-height:1.45">{$nextMessage}</span></td></tr></table>
+<div class="gt-summary" style="padding:24px;border:1px solid #403b43;border-radius:28px;background:#151318">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td><span style="display:block;color:#9d959f;font-size:9px;font-weight:900;letter-spacing:.12em">REZUMAT COMANDĂ</span><strong style="display:block;margin-top:6px;color:#ffb77a;font-size:17px;overflow-wrap:anywhere">{$orderNumber}</strong></td><td align="right"><span style="display:block;color:#9d959f;font-size:9px;font-weight:900;letter-spacing:.12em">DATA</span><strong style="display:block;margin-top:6px;color:#d8d1d9;font-size:12px">{$createdAt}</strong></td></tr></table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px">{$itemsHtml}</table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:17px;color:#aaa2ac;font-size:12px"><tr><td style="padding:6px 0">Subtotal</td><td align="right">{$subtotal}</td></tr><tr><td style="padding:6px 0">Livrare · {$shippingName}</td><td align="right">{$shippingCost}</td></tr><tr><td style="padding:6px 0">Plată</td><td align="right">{$paymentText}</td></tr><tr><td style="padding:19px 0 0;border-top:1px solid #403b43;color:#fff8f3;font-size:15px;font-weight:900">Total de plată</td><td align="right" style="padding:19px 0 0;border-top:1px solid #403b43;color:#ffb77a;font-size:24px;font-weight:1000">{$total}</td></tr></table>
+</div>
+<div class="gt-timeline" style="margin-top:20px;padding:20px;border:1px solid #403b43;border-radius:28px;background:#211f24"><span style="display:block;margin-bottom:13px;color:#a49ca6;font-size:9px;font-weight:900;letter-spacing:.12em">EVOLUȚIA COMENZII</span>{$timeline}</div>
+<div style="padding:22px 0 6px;text-align:center"><a class="gt-action" href="{$safeTrackingUrl}" style="display:inline-block;padding:17px 30px;border-radius:20px;background:#ff8a00;color:#ffffff;text-decoration:none;font-size:14px;font-weight:900;box-shadow:0 13px 32px rgba(255,138,0,.25)">Urmărește comanda&nbsp;&nbsp;→</a></div>
+<div style="margin-top:15px;padding:15px 17px;border:1px solid #4a4035;border-radius:20px;background:#272018;color:#a9a1a9;font-size:11px;line-height:1.55"><strong style="display:block;margin-bottom:4px;color:#fff8f3">Acces direct și securizat</strong>Butonul deschide direct comanda, fără formular. Dacă intri manual pe pagina de urmărire, folosește codul <strong style="color:#ffb77a">{$orderNumber}</strong> și adresa de e-mail din comandă.</div>
+<p style="margin:25px 0 0;text-align:center;color:#756e77;font-size:10px;line-height:1.65">Ai nevoie de ajutor? Răspunde direct la acest mesaj.<br><strong style="color:#aaa2ac">G-Trots România</strong> · g-trots.ro</p>
+</td></tr></table></td></tr></table></body></html>
+HTML;
     return ['subject' => $subject, 'html' => $html, 'tracking_url' => $trackingUrl];
 }
 

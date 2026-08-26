@@ -820,6 +820,21 @@ function richDescriptionImagePaths(?string $html): array {
     return array_values(array_unique($paths));
 }
 
+function legacyProductImageUrl(array $product, array $config): string {
+    $legacyImages = [
+        'anvelopa-g10-all-terrain' => 'anvelopa-g10-all-terrain.png',
+        'display-smart-ride-s3' => 'display-smart-ride-s3.png',
+        'incarcator-fastcharge-54-6v' => 'incarcator-fastcharge-54-6v.png',
+        'motor-dualhub-x2-2000w' => 'motor-dualhub-x2-2000w.png',
+        'baterie-powercore-52v-23ah' => 'baterie-powercore-52v-23ah.png',
+        'kit-frana-hydrostop-pro' => 'kit-frana-hydrostop-pro.png',
+    ];
+    $slug = (string)($product['slug'] ?? '');
+    if (!isset($legacyImages[$slug])) return '';
+    $siteBaseUrl = preg_replace('#/shop-api/?$#', '', rtrim((string)($config['public_base_url'] ?? 'https://g-trots.ro/shop-api'), '/')) ?: 'https://g-trots.ro';
+    return rtrim($siteBaseUrl, '/') . '/assets/products/' . $legacyImages[$slug];
+}
+
 function productRow(PDO $db, array $row, array $config, bool $withDescription = true, bool $includeInternal = true): array {
     $productId = (string)$row['id'];
     $images = $db->prepare('SELECT id, image_path, alt_text, sort_order FROM shop_product_images WHERE product_id = ? ORDER BY sort_order ASC, created_at ASC');
@@ -834,20 +849,12 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
         ];
     }, $images->fetchAll());
     if (count($row['images']) === 0) {
-        $legacyImages = [
-            'anvelopa-g10-all-terrain' => 'anvelopa-g10-all-terrain.png',
-            'display-smart-ride-s3' => 'display-smart-ride-s3.png',
-            'incarcator-fastcharge-54-6v' => 'incarcator-fastcharge-54-6v.png',
-            'motor-dualhub-x2-2000w' => 'motor-dualhub-x2-2000w.png',
-            'baterie-powercore-52v-23ah' => 'baterie-powercore-52v-23ah.png',
-            'kit-frana-hydrostop-pro' => 'kit-frana-hydrostop-pro.png',
-        ];
         $slug = (string)($row['slug'] ?? '');
-        if (isset($legacyImages[$slug])) {
-            $siteBaseUrl = preg_replace('#/shop-api/?$#', '', rtrim((string)$config['public_base_url'], '/')) ?: 'https://g-trots.ro';
+        $legacyImageUrl = legacyProductImageUrl($row, $config);
+        if ($legacyImageUrl !== '') {
             $row['images'][] = [
                 'id' => 'legacy-image-' . $slug,
-                'url' => rtrim($siteBaseUrl, '/') . '/assets/products/' . $legacyImages[$slug],
+                'url' => $legacyImageUrl,
                 'alt_text' => (string)($row['name'] ?? 'Produs G-Trots'),
                 'sort_order' => 0,
                 'is_legacy' => true,
@@ -1168,8 +1175,10 @@ function updateOrderHistoryEmail(PDO $db, string $historyId, array $result): voi
 function orderRow(PDO $db, array $row, ?array $config = null, bool $withHistory = false): array {
     $items = $db->prepare(
         'SELECT oi.*,
+                p.slug AS product_slug,
                 (SELECT image_path FROM shop_product_images pi WHERE pi.product_id = oi.product_id ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS image_path
          FROM shop_order_items oi
+         LEFT JOIN shop_products p ON p.id = oi.product_id
          WHERE oi.order_id = ?
          ORDER BY oi.id ASC'
     );
@@ -1180,8 +1189,9 @@ function orderRow(PDO $db, array $row, ?array $config = null, bool $withHistory 
         $item['line_total'] = (float)$item['line_total'];
         $item['image_url'] = !empty($item['image_path']) && $config
             ? rtrim((string)$config['public_base_url'], '/') . '/' . ltrim((string)$item['image_path'], '/')
-            : '';
+            : ($config ? legacyProductImageUrl(['slug' => (string)($item['product_slug'] ?? '')], $config) : '');
         unset($item['image_path']);
+        unset($item['product_slug']);
         return $item;
     }, $items->fetchAll());
     $row['subtotal'] = (float)$row['subtotal'];
@@ -1274,7 +1284,8 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
         $total = round($subtotal + $shippingCost, 2);
         $orderId = uuidV4();
         $orderNumber = 'GT-' . date('Ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(4)), 0, 8));
-        $initialStatus = $paymentMethod === 'cash_on_delivery' ? 'processing' : 'new';
+        // Orice comandă abia primită este nouă; Stripe o confirmă automat numai după plata reușită.
+        $initialStatus = 'new';
         $trackingToken = bin2hex(random_bytes(24));
         $insertOrder = $db->prepare('INSERT INTO shop_orders (id, order_number, status, payment_status, payment_method, customer_name, customer_email, customer_phone, address, city, county, postal_code, customer_notes, shipping_method_id, shipping_method_name, subtotal, shipping_cost, total, currency, tracking_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $insertOrder->execute([

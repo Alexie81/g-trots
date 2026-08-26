@@ -4,6 +4,7 @@ import {
   Alert,
   Animated,
   Easing,
+  Image,
   Modal,
   ScrollView,
   StyleSheet,
@@ -20,13 +21,13 @@ import { shopApi, ShopOrder } from '@/services/shopApi';
 import ShopPagination from '@/components/ShopPagination';
 
 const orderStatuses = [
-  { value: 'new', label: 'În procesare', description: 'Comanda a intrat în fluxul de lucru.', color: '#38BDF8', icon: Clock3 },
+  { value: 'new', label: 'În procesare (Nouă)', shortLabel: 'Nouă', description: 'Comanda a fost primită și a intrat în procesare.', color: '#38BDF8', icon: Clock3 },
   { value: 'confirmed', label: 'Confirmată', description: 'Comanda și plata au fost confirmate.', color: '#34D399', icon: BadgeCheck },
   { value: 'processing', label: 'În pregătire', description: 'Produsele sunt pregătite pentru expediere.', color: '#FB923C', icon: PackageOpen },
   { value: 'shipped', label: 'Predată curierului', description: 'Pachetul a plecat către client.', color: '#A78BFA', icon: Truck },
   { value: 'completed', label: 'Livrată', description: 'Comanda a ajuns la destinație.', color: '#22C55E', icon: CircleCheckBig },
   { value: 'cancelled', label: 'Comandă anulată', description: 'Comanda nu mai este procesată.', color: '#FB7185', icon: Ban },
-] satisfies { value: ShopOrder['status']; label: string; description: string; color: string; icon: typeof Clock3 }[];
+] satisfies { value: ShopOrder['status']; label: string; shortLabel?: string; description: string; color: string; icon: typeof Clock3 }[];
 
 const paymentStatuses: { value: ShopOrder['payment_status']; label: string }[] = [
   { value: 'pending', label: 'In asteptare' },
@@ -133,7 +134,7 @@ export default function ShopOrdersManager() {
         <TouchableOpacity style={styles.refresh} onPress={() => void load()}><RefreshCw size={18} color={Colors.textSecondary} /></TouchableOpacity>
       </View>
       <View style={styles.stats}>
-        <View><Text style={styles.statValue}>{orders.filter((order) => order.status === 'new').length}</Text><Text style={styles.statLabel}>ÎN PROCESARE</Text></View>
+        <View><Text style={styles.statValue}>{orders.filter((order) => order.status === 'new').length}</Text><Text style={styles.statLabel}>COMENZI NOI</Text></View>
         <View><Text style={styles.statValue}>{orders.filter((order) => order.status === 'processing').length}</Text><Text style={styles.statLabel}>IN PREGATIRE</Text></View>
         <View><Text style={styles.statValue}>{money(orders.reduce((sum, order) => sum + (order.status !== 'cancelled' ? order.total : 0), 0))}</Text><Text style={styles.statLabel}>VALOARE</Text></View>
       </View>
@@ -142,7 +143,7 @@ export default function ShopOrdersManager() {
         return <TouchableOpacity key={order.id} style={styles.orderCard} activeOpacity={0.76} onPress={() => void open(order)}>
           <View style={[styles.orderIcon, { backgroundColor: `${statusMeta.color}15` }]}><ShoppingCart size={21} color={statusMeta.color} /></View>
           <View style={styles.orderCopy}>
-            <View style={styles.orderTop}><Text style={styles.orderNumber}>{order.order_number}</Text><Text style={[styles.status, { color: statusMeta.color }]}>{statusMeta.label.toUpperCase()}</Text></View>
+            <View style={styles.orderTop}><Text style={styles.orderNumber}>{order.order_number}</Text><Text style={[styles.status, { color: statusMeta.color }]}>{(statusMeta.shortLabel || statusMeta.label).toUpperCase()}</Text></View>
             <Text style={styles.customer}>{order.customer_name} · {order.customer_phone}</Text>
             <View style={styles.orderBottom}><Text style={styles.orderDate}>{dateTime(order.created_at)}</Text><Text style={styles.orderTotal}>{money(order.total)}</Text></View>
           </View>
@@ -159,7 +160,7 @@ export default function ShopOrdersManager() {
             <InfoBlock title="Client" lines={[selected.customer_name, selected.customer_phone, selected.customer_email || 'Fara e-mail']} />
             <InfoBlock title="Livrare" lines={[selected.address, `${selected.city}${selected.county ? `, ${selected.county}` : ''}`, selected.shipping_method_name]} />
             <Text style={styles.sectionLabel}>PRODUSE</Text>
-            <View style={styles.items}>{selected.items.map((item) => <View key={item.id} style={styles.item}><View style={styles.itemQty}><Text style={styles.itemQtyText}>{item.quantity}×</Text></View><View style={styles.itemCopy}><Text style={styles.itemName}>{item.product_name}</Text><Text style={styles.itemSku}>{item.product_sku || 'Fara SKU'}</Text></View><Text style={styles.itemTotal}>{money(item.line_total)}</Text></View>)}</View>
+            <View style={styles.items}>{selected.items.map((item) => <View key={item.id} style={styles.item}>{item.image_url ? <Image source={{ uri: item.image_url }} style={styles.itemImage} resizeMode="contain" /> : <View style={styles.itemQty}><Text style={styles.itemQtyText}>{item.quantity}×</Text></View>}<View style={styles.itemCopy}><Text style={styles.itemName}>{item.product_name}</Text><Text style={styles.itemSku}>{item.quantity} × {item.product_sku || 'Fara SKU'}</Text></View><Text style={styles.itemTotal}>{money(item.line_total)}</Text></View>)}</View>
             <View style={styles.totals}><View><Text>Produse</Text><Text>{money(selected.subtotal)}</Text></View><View><Text>Livrare</Text><Text>{money(selected.shipping_cost)}</Text></View><View style={styles.grandTotal}><Text>Total</Text><Text>{money(selected.total)}</Text></View></View>
             <Text style={styles.sectionLabel}>EVOLUȚIA COMENZII</Text>
             <OrderStatusTimeline order={selected} />
@@ -179,7 +180,7 @@ export default function ShopOrdersManager() {
               style={[styles.notifyCard, notifyCustomer && styles.notifyCardActive, (!selected.customer_email || status === selected.status) && styles.notifyCardDisabled]}
               onPress={() => setNotifyCustomer((current) => !current)}>
               <View style={styles.notifyIcon}><BellRing size={19} color={notifyCustomer ? '#15110D' : Colors.orange} /></View>
-              <View style={styles.notifyCopy}><Text style={styles.notifyTitle}>Trimite actualizarea pe e-mail</Text><Text style={styles.notifyText}>{!selected.customer_email ? 'Comanda nu are o adresă de e-mail.' : status === selected.status ? 'Selectează un status diferit pentru a putea notifica clientul.' : `Clientul va primi bonul și linkul de urmărire la ${selected.customer_email}.`}</Text></View>
+              <View style={styles.notifyCopy}><Text style={styles.notifyTitle}>Trimite actualizarea pe e-mail</Text><Text style={styles.notifyText}>{!selected.customer_email ? 'Comanda nu are o adresă de e-mail.' : status === selected.status ? 'Selectează un status diferit pentru a putea notifica clientul.' : `Clientul va primi rezumatul și linkul de urmărire la ${selected.customer_email}.`}</Text></View>
               <View style={[styles.checkbox, notifyCustomer && styles.checkboxActive]}>{notifyCustomer ? <Check size={13} color="#15110D" strokeWidth={3} /> : <Mail size={13} color={Colors.textMuted} />}</View>
             </TouchableOpacity>
             <Text style={styles.sectionLabel}>STATUS PLATA · {selected.payment_method === 'card' ? 'CARD' : 'RAMBURS'}</Text>
@@ -196,12 +197,9 @@ export default function ShopOrdersManager() {
 function OrderStatusTimeline({ order }: { order: ShopOrder }) {
   const reveal = useRef(new Animated.Value(0)).current;
   const history = order.status_history || [];
-  const regular = orderStatuses.filter((item) => item.value !== 'cancelled');
-  const recorded = new Set(history.map((entry) => entry.to_status));
-  const currentIndex = regular.findIndex((item) => item.value === order.status);
-  const visible = order.status === 'cancelled'
-    ? orderStatuses.filter((item) => recorded.has(item.value) || item.value === 'cancelled')
-    : regular.filter((item, index) => recorded.has(item.value) || index >= Math.max(0, currentIndex));
+  const visible = orderStatuses;
+  const flow = visible.filter((item) => item.value !== 'cancelled');
+  const currentFlowIndex = flow.findIndex((item) => item.value === order.status);
 
   useEffect(() => {
     reveal.setValue(0);
@@ -212,7 +210,8 @@ function OrderStatusTimeline({ order }: { order: ShopOrder }) {
     {visible.map((item, index) => {
       const StatusIcon = item.icon;
       const entry = [...history].reverse().find((historyEntry) => historyEntry.to_status === item.value);
-      const reached = Boolean(entry) || item.value === order.status;
+      const flowIndex = flow.findIndex((flowItem) => flowItem.value === item.value);
+      const reached = Boolean(entry) || item.value === order.status || (order.status !== 'cancelled' && flowIndex >= 0 && currentFlowIndex >= 0 && flowIndex <= currentFlowIndex);
       const current = item.value === order.status;
       return <View key={item.value} style={styles.timelineRow}>
         <View style={styles.timelineRail}>
@@ -243,7 +242,7 @@ const styles = StyleSheet.create({
   empty: { minHeight: 230, alignItems: 'center', justifyContent: 'center', borderRadius: 24, backgroundColor: '#1B1B1F' }, emptyTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 15, marginTop: 13 }, emptyText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, marginTop: 5 },
   modalSafe: { flex: 1, backgroundColor: Colors.bg }, modalHeader: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#29272B', paddingHorizontal: 12, backgroundColor: '#171513' }, close: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: '#27242A' }, modalHeaderCopy: { flex: 1 }, modalKicker: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 1 }, modalTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 15, marginTop: 2 }, save: { minWidth: 96, height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 13, backgroundColor: Colors.orange }, saveText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 }, disabled: { opacity: 0.55 }, modalContent: { width: '100%', maxWidth: 760, alignSelf: 'center', padding: 16 },
   detailLoading: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, borderRadius: 15, backgroundColor: Colors.orangeDim, marginBottom: 9 }, detailLoadingText: { color: Colors.orange, fontFamily: 'Inter-SemiBold', fontSize: 9 },
-  info: { borderRadius: 18, padding: 15, backgroundColor: '#1B1B1F', marginBottom: 9 }, infoTitle: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8, marginBottom: 7 }, infoStrong: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 12 }, infoText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 16, marginTop: 2 }, sectionLabel: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.8, marginTop: 15, marginBottom: 8 }, items: { overflow: 'hidden', borderRadius: 18, backgroundColor: '#1B1B1F' }, item: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#343137', padding: 11 }, itemQty: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: Colors.orangeDim }, itemQtyText: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 10 }, itemCopy: { flex: 1 }, itemName: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 10 }, itemSku: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 3 }, itemTotal: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 },
+  info: { borderRadius: 18, padding: 15, backgroundColor: '#1B1B1F', marginBottom: 9 }, infoTitle: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8, marginBottom: 7 }, infoStrong: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 12 }, infoText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 16, marginTop: 2 }, sectionLabel: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.8, marginTop: 15, marginBottom: 8 }, items: { overflow: 'hidden', borderRadius: 18, backgroundColor: '#1B1B1F' }, item: { minHeight: 70, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#343137', padding: 11 }, itemImage: { width: 48, height: 48, borderRadius: 15, backgroundColor: '#F7F2ED' }, itemQty: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: Colors.orangeDim }, itemQtyText: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 10 }, itemCopy: { flex: 1 }, itemName: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 10 }, itemSku: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 3 }, itemTotal: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 },
   totals: { borderRadius: 18, padding: 14, backgroundColor: '#252329', marginTop: 9 }, grandTotal: { borderTopWidth: 1, borderTopColor: '#3A363D', marginTop: 8, paddingTop: 9 },
   timeline: { overflow: 'hidden', borderRadius: 22, padding: 14, backgroundColor: '#1B1B1F' }, timelineRow: { flexDirection: 'row', alignItems: 'stretch', gap: 11 }, timelineRail: { width: 38, alignItems: 'center' }, timelineDot: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#403C43', borderRadius: 12, backgroundColor: '#242228' }, timelineDotCurrent: { shadowColor: '#FF7A00', shadowOpacity: 0.28, shadowRadius: 9, shadowOffset: { width: 0, height: 4 }, elevation: 3 }, timelineLine: { width: 2, flex: 1, minHeight: 30, borderRadius: 99, backgroundColor: '#343138', marginVertical: 4 }, timelineCard: { flex: 1, minHeight: 78, borderWidth: 1, borderColor: 'transparent', borderRadius: 17, padding: 12, marginBottom: 8, backgroundColor: '#232126' }, timelineTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }, timelineTitle: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 11 }, timelineCurrent: { fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8 }, timelineDescription: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 14, marginTop: 4 }, timelineMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }, timelineDate: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 8 }, timelineMail: { flexDirection: 'row', alignItems: 'center', gap: 4 }, timelineMailText: { color: '#34D399', fontFamily: 'Inter-Bold', fontSize: 6, letterSpacing: 0.45 }, timelinePending: { color: Colors.textMuted, fontFamily: 'Inter-SemiBold', fontSize: 7, marginTop: 8 },
   statusPicker: { gap: 7 }, statusOption: { minHeight: 66, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#36333A', borderRadius: 18, padding: 10, backgroundColor: '#1B1B1F' }, statusOptionIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }, statusOptionCopy: { flex: 1, minWidth: 0 }, statusOptionTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 }, statusOptionText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 13, marginTop: 3 }, radio: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#5A555E', borderRadius: 99 },

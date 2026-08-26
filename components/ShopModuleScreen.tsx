@@ -66,7 +66,7 @@ type ShopView = PrimaryTab | CatalogView | SettingsView;
 type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; item: ShopBrand } | { type: 'manufacturer'; item: ShopManufacturer };
 
 const orderStatusLabels: Record<string, string> = {
-  new: 'ÎN PROCESARE',
+  new: 'NOUĂ',
   confirmed: 'CONFIRMATĂ',
   processing: 'ÎN PREGĂTIRE',
   shipped: 'PREDATĂ CURIERULUI',

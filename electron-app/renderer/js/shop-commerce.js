@@ -12,10 +12,11 @@
   const money = value => `${new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0))} lei`;
   const slugify = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 200);
   const toast = (message, type = 'success') => window.BUSINESS_UI?.showToast?.(message, type);
-  const statusLabels = { new: 'În procesare', confirmed: 'Confirmată', processing: 'În pregătire', shipped: 'Predată curierului', completed: 'Livrată', cancelled: 'Comandă anulată' };
+  const statusLabels = { new: 'În procesare (Nouă)', confirmed: 'Confirmată', processing: 'În pregătire', shipped: 'Predată curierului', completed: 'Livrată', cancelled: 'Comandă anulată' };
+  const statusShortLabels = { new: 'Nouă', confirmed: 'Confirmată', processing: 'În pregătire', shipped: 'Predată curierului', completed: 'Livrată', cancelled: 'Anulată' };
   const statusColors = { new: '#38bdf8', confirmed: '#34d399', processing: '#fb923c', shipped: '#a78bfa', completed: '#22c55e', cancelled: '#fb7185' };
   const statusDefinitions = [
-    { value: 'new', description: 'Comanda a intrat în fluxul de lucru.' },
+    { value: 'new', description: 'Comanda a fost primită și a intrat în procesare.' },
     { value: 'confirmed', description: 'Comanda și plata au fost confirmate.' },
     { value: 'processing', description: 'Produsele sunt pregătite pentru expediere.' },
     { value: 'shipped', description: 'Pachetul a fost predat curierului.' },
@@ -655,22 +656,20 @@
   async function loadOrders() { loading('shop-orders-content', 'Se incarca comenzile...'); try { state.orders = await window.SHOP_API.listOrders(); renderOrders(); } catch (error) { failure('shop-orders-content', error); } }
   function renderOrders() {
     const page = pageData(state.orders, 'orders');
-    const rows = page.items.map(order => `<tr data-order-open="${order.id}"><td><strong>${esc(order.order_number)}</strong><small>${esc(new Date(order.created_at.replace(' ', 'T')).toLocaleString('ro-RO'))}</small></td><td><strong>${esc(order.customer_name)}</strong><small>${esc(order.customer_phone)}</small></td><td><span class="commerce-pill" style="--pill:${statusColors[order.status]}">${esc(statusLabels[order.status] || order.status)}</span></td><td>${order.payment_method === 'card' ? 'Card' : 'Ramburs'}<small>${esc(order.payment_status)}</small></td><td><b>${money(order.total)}</b></td><td>›</td></tr>`).join('');
+    const rows = page.items.map(order => `<tr data-order-open="${order.id}"><td><strong>${esc(order.order_number)}</strong><small>${esc(new Date(order.created_at.replace(' ', 'T')).toLocaleString('ro-RO'))}</small></td><td><strong>${esc(order.customer_name)}</strong><small>${esc(order.customer_phone)}</small></td><td><span class="commerce-pill" style="--pill:${statusColors[order.status]}">${esc(statusShortLabels[order.status] || order.status)}</span></td><td>${order.payment_method === 'card' ? 'Card' : 'Ramburs'}<small>${esc(order.payment_status)}</small></td><td><b>${money(order.total)}</b></td><td>›</td></tr>`).join('');
     $('shop-orders-content').innerHTML = rows ? `<div class="shop-commerce-summary"><span><b>${state.orders.filter(item => item.status === 'new').length}</b> în procesare</span><span><b>${state.orders.filter(item => item.status === 'processing').length}</b> în pregătire</span><span><b>${money(state.orders.filter(item => item.status !== 'cancelled').reduce((sum, item) => sum + Number(item.total), 0))}</b> valoare</span></div><div class="shop-commerce-table-wrap"><table class="shop-commerce-table orders"><thead><tr><th>Comanda</th><th>Client</th><th>Status</th><th>Plata</th><th>Total</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${pagination('orders', state.orders.length, page.page, page.pageCount, page.pageSize)}` : empty('Nicio comanda', 'Comenzile trimise de pe site vor aparea automat aici.');
     $('shop-orders-content').querySelectorAll('[data-order-open]').forEach(row => row.addEventListener('click', () => openOrder(row.dataset.orderOpen)));
     bindPagination('shop-orders-content', 'orders', renderOrders);
   }
   function orderTimeline(order) {
     const history = Array.isArray(order.status_history) ? order.status_history : [];
-    const recorded = new Set(history.map(item => item.to_status));
-    const regular = statusDefinitions.filter(item => item.value !== 'cancelled');
-    const currentIndex = regular.findIndex(item => item.value === order.status);
-    const visible = order.status === 'cancelled'
-      ? statusDefinitions.filter(item => recorded.has(item.value) || item.value === 'cancelled')
-      : regular.filter((item, index) => recorded.has(item.value) || index >= Math.max(0, currentIndex));
+    const visible = statusDefinitions;
+    const flow = visible.filter(item => item.value !== 'cancelled');
+    const currentFlowIndex = flow.findIndex(item => item.value === order.status);
     return `<section class="shop-order-timeline"><div class="shop-order-section-title"><span>EVOLUȚIA COMENZII</span><strong>Istoric status</strong></div><div class="shop-order-timeline-flow">${visible.map((item, index) => {
       const entry = [...history].reverse().find(historyItem => historyItem.to_status === item.value);
-      const reached = Boolean(entry) || item.value === order.status;
+      const flowIndex = flow.findIndex(flowItem => flowItem.value === item.value);
+      const reached = Boolean(entry) || item.value === order.status || (order.status !== 'cancelled' && flowIndex >= 0 && currentFlowIndex >= 0 && flowIndex <= currentFlowIndex);
       const current = item.value === order.status;
       const date = entry ? new Date(String(entry.created_at).replace(' ', 'T')).toLocaleString('ro-RO') : '';
       return `<div class="shop-order-timeline-step ${reached ? 'reached' : ''} ${current ? 'current' : ''}" style="--status-color:${statusColors[item.value]}"><div class="shop-order-timeline-rail"><span>${statusIcon(item.value)}</span>${index < visible.length - 1 ? '<i></i>' : ''}</div><div class="shop-order-timeline-card"><div><strong>${esc(statusLabels[item.value])}</strong>${current ? '<em>ACUM</em>' : ''}</div><p>${esc(item.description)}</p>${entry ? `<footer><time>${esc(date)}</time>${entry.customer_notified ? '<b>✉ CLIENT NOTIFICAT</b>' : ''}</footer>` : `<small>${current ? 'Statusul curent' : 'Pas următor'}</small>`}</div></div>`;
@@ -688,7 +687,7 @@
     const changed = status !== state.editingOrder.status;
     notify.disabled = !hasEmail || !changed;
     if (notify.disabled) notify.checked = false;
-    if (helper) helper.textContent = !hasEmail ? 'Comanda nu are o adresă de e-mail.' : !changed ? 'Alege un status diferit pentru a notifica clientul.' : `Bonul și linkul de urmărire vor fi trimise la ${state.editingOrder.customer_email}.`;
+    if (helper) helper.textContent = !hasEmail ? 'Comanda nu are o adresă de e-mail.' : !changed ? 'Alege un status diferit pentru a notifica clientul.' : `Rezumatul și linkul de urmărire vor fi trimise la ${state.editingOrder.customer_email}.`;
     document.querySelectorAll('.shop-order-status-option').forEach(label => label.classList.toggle('selected', label.querySelector('input')?.checked));
   }
   function renderOrderDetails(order) {

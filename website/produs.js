@@ -600,6 +600,25 @@ function productRoute(id) {
   return `/magazin/produs/${id}/`;
 }
 
+function escapeRelatedHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, character => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[character]);
+}
+
+function relatedImageUrl(value) {
+  try {
+    const url = new URL(String(value || ""), window.location.origin);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function relatedMoney(value) {
+  return new Intl.NumberFormat("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value) || 0);
+}
+
 function relatedProductCard([id, item]) {
   const favorites = new Set(window.GTrotsFavorites?.get?.() || []);
   const cart = new Set((window.GTrotsCart?.get?.() || []).map(entry => entry.id));
@@ -607,6 +626,7 @@ function relatedProductCard([id, item]) {
   const isInCart = cart.has(id);
   const badge = item.badge === "Recomandat" ? '<span class="product-badge">Recomandat</span>' : "";
   const brands = item.brands.slice(0, 3).map(brand => `<span>${brand}</span>`).join("");
+  const description = escapeRelatedHtml(item.description);
 
   return `<article class="product-card related-product-card" data-product-id="${id}">
     <div class="product-stage">
@@ -619,9 +639,13 @@ function relatedProductCard([id, item]) {
       <span class="product-quick-note"><i></i>${item.stock}</span>
     </div>
     <div class="product-info">
-      <span class="product-category">${item.category}</span>
-      <h3>${item.name}</h3>
-      <p>${item.description}</p>
+      <span class="product-category"><i></i>${escapeRelatedHtml(item.category)}</span>
+      <h3>${escapeRelatedHtml(item.name)}</h3>
+      <div class="product-summary" tabindex="0" aria-label="Pe scurt: ${description}">
+        <span class="product-summary-badge"><i aria-hidden="true"></i>Pe scurt</span>
+        <p>${description}</p>
+        <span class="product-summary-tooltip" aria-hidden="true">${description}</span>
+      </div>
       <div class="product-fit">${brands}</div>
     </div>
     <div class="product-bottom">
@@ -629,6 +653,63 @@ function relatedProductCard([id, item]) {
       <span class="product-open-hint" aria-hidden="true">›</span>
     </div>
     <a class="product-card-link" href="${productRoute(id)}" aria-label="Deschide pagina produsului ${item.name}"></a>
+  </article>`;
+}
+
+function relatedLiveProductCard(product) {
+  const id = String(product.slug || product.id || "");
+  const favorites = new Set(window.GTrotsFavorites?.get?.() || []);
+  const cart = new Set((window.GTrotsCart?.get?.() || []).map(entry => entry.id));
+  const isFavorite = favorites.has(id);
+  const isInCart = cart.has(id);
+  const legacyImage = Number(product.images?.[0]?.sprite_index || ({
+    "anvelopa-g10-all-terrain": 1,
+    "display-smart-ride-s3": 2,
+    "incarcator-fastcharge-54-6v": 3,
+    "motor-dualhub-x2-2000w": 4,
+    "baterie-powercore-52v-23ah": 5,
+    "kit-frana-hydrostop-pro": 6
+  })[id] || 0);
+  const imageUrl = product.images?.[0]?.sprite_index ? "" : relatedImageUrl(product.images?.[0]?.url);
+  const imageClasses = `product-image${legacyImage ? ` product-image-${legacyImage}` : ""}${imageUrl ? " product-image-live" : ""}`;
+  const imageStyle = imageUrl ? ` style="background-image:url('${escapeRelatedHtml(imageUrl)}')"` : "";
+  const brands = Array.isArray(product.brands) ? product.brands.map(brand => String(brand.name || "")).filter(Boolean) : [];
+  const label = brands[0] || String(product.manufacturer_name || "").trim() || String(product.category_name || "Produs G-Trots");
+  const brandBadges = brands.slice(0, 4).map(brand => `<span>${escapeRelatedHtml(brand)}</span>`).join("");
+  const description = escapeRelatedHtml(product.short_description || "Produs disponibil în magazinul G-Trots.");
+  const standardPrice = Number(product.price || 0);
+  const currentPrice = product.sale_price == null ? standardPrice : Number(product.sale_price || 0);
+  const oldPrice = product.sale_price == null ? "" : `<del>${relatedMoney(standardPrice)} lei</del>`;
+  const discount = product.sale_price == null || standardPrice <= 0 ? 0 : Math.max(0, Math.round((1 - currentPrice / standardPrice) * 100));
+  const discountBadge = discount ? `<em class="product-discount">-${discount}%</em>` : "";
+  const stockQuantity = Number(product.stock_quantity || 0);
+  const stockLabel = product.stock_mode === "unlimited" ? "În stoc" : stockQuantity <= 0 ? "Stoc epuizat" : stockQuantity <= Number(product.low_stock_threshold || 3) ? "Stoc limitat" : "În stoc";
+  const stockClass = stockLabel === "Stoc epuizat" ? " is-out" : stockLabel === "Stoc limitat" ? " is-low" : "";
+
+  return `<article class="product-card related-product-card live-product-card" data-product-id="${escapeRelatedHtml(id)}" data-api-product-id="${escapeRelatedHtml(product.id)}">
+    <div class="product-stage">
+      <div class="product-card-actions">
+        <button class="cart-button${isInCart ? " is-added" : ""}" type="button" data-add-cart aria-label="${isInCart ? "Elimină" : "Adaugă"} ${escapeRelatedHtml(product.name)} ${isInCart ? "din" : "în"} coș"><span class="global-cart-icon" aria-hidden="true"><i></i><i></i></span><b aria-hidden="true">${isInCart ? "✓" : "+"}</b></button>
+        <button class="favorite-button" type="button" aria-label="${isFavorite ? "Elimină" : "Adaugă"} ${escapeRelatedHtml(product.name)} ${isFavorite ? "din" : "la"} favorite" aria-pressed="${isFavorite}">${isFavorite ? "♥" : "♡"}</button>
+      </div>
+      <div class="${imageClasses}"${imageStyle} role="img" aria-label="${escapeRelatedHtml(product.name)}"></div>
+      <span class="product-quick-note${stockClass}"><i></i>${stockLabel}</span>
+    </div>
+    <div class="product-info">
+      <span class="product-category"><i></i>${escapeRelatedHtml(label)}</span>
+      <h3>${escapeRelatedHtml(product.name)}</h3>
+      <div class="product-summary" tabindex="0" aria-label="Pe scurt: ${description}">
+        <span class="product-summary-badge"><i aria-hidden="true"></i>Pe scurt</span>
+        <p>${description}</p>
+        <span class="product-summary-tooltip" aria-hidden="true">${description}</span>
+      </div>
+      ${brandBadges ? `<div class="product-fit" aria-label="Mărci compatibile">${brandBadges}</div>` : ""}
+    </div>
+    <div class="product-bottom">
+      <div class="product-price"><small>${product.sale_price == null ? "Preț" : "Preț promoțional"}</small><strong>${relatedMoney(currentPrice)} <span>lei</span></strong>${oldPrice}</div>
+      <div class="product-bottom-action">${discountBadge}<span class="product-open-hint" aria-hidden="true">›</span></div>
+    </div>
+    <a class="product-card-link" href="${productRoute(encodeURIComponent(id))}" aria-label="Deschide pagina produsului ${escapeRelatedHtml(product.name)}"></a>
   </article>`;
 }
 
@@ -652,6 +733,41 @@ function renderRelatedProducts() {
   if (questions) questions.insertAdjacentElement("afterend", section);
   else document.querySelector("main")?.append(section);
 
+  initializeRelatedCarousel(section);
+}
+
+function updateRelatedProductsFromLive(liveProducts) {
+  const section = document.querySelector("[data-related-products]");
+  if (!section || !Array.isArray(liveProducts)) return;
+  const rows = liveProducts.map(item => item?.raw || item).filter(item => item && (item.slug || item.id));
+  const current = rows.find(item => String(item.slug || item.id) === productId);
+  const currentBrands = new Set((current?.brands || []).map(brand => String(brand.id || brand.slug || brand.name || "")).filter(Boolean));
+  const recommendations = rows
+    .filter(item => String(item.slug || item.id) !== productId)
+    .map((item, index) => {
+      const brands = (item.brands || []).map(brand => String(brand.id || brand.slug || brand.name || "")).filter(Boolean);
+      const sharedBrand = brands.some(brand => currentBrands.has(brand));
+      const sameCategory = current?.category_id && item.category_id === current.category_id;
+      return { item, index, score: (sameCategory ? 6 : 0) + (sharedBrand ? 3 : 0) + (item.is_featured ? 1 : 0) };
+    })
+    .sort((first, second) => second.score - first.score || first.index - second.index)
+    .slice(0, 3)
+    .map(entry => entry.item);
+  if (!recommendations.length) return;
+
+  const oldTrack = section.querySelector("[data-related-track]");
+  const track = document.createElement("div");
+  track.className = "related-products-grid";
+  track.dataset.relatedTrack = "";
+  track.innerHTML = recommendations.map(relatedLiveProductCard).join("");
+  oldTrack?.replaceWith(track);
+
+  const oldControls = section.querySelector(".related-carousel-controls");
+  const controls = document.createElement("nav");
+  controls.className = "related-carousel-controls";
+  controls.setAttribute("aria-label", "Navigare produse recomandate");
+  controls.innerHTML = '<button type="button" data-related-previous aria-label="Produsul recomandat anterior">‹</button><div class="related-carousel-dots" data-related-dots></div><button type="button" data-related-next aria-label="Următorul produs recomandat">›</button>';
+  oldControls?.replaceWith(controls);
   initializeRelatedCarousel(section);
 }
 
@@ -707,6 +823,7 @@ function initializeRelatedCarousel(section) {
 }
 
 renderRelatedProducts();
+document.addEventListener("g-trots:live-products", event => updateRelatedProductsFromLive(event.detail));
 
 const productTabsBar = document.querySelector(".product-content-tabs");
 const relatedProductsSection = document.querySelector("[data-related-products]");

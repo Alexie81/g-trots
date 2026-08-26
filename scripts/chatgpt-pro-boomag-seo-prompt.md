@@ -110,6 +110,19 @@ Salvează periodic, după fiecare 5 produse finalizate, un fișier descărcabil 
 
 unde `XXXX` este numărul total de produse noi finalizate. După salvarea checkpoint-ului, continuă imediat cu produsul următor; nu încheia răspunsul, nu cere confirmare și nu aștepta intervenția mea. La o execuție ulterioară, continuă din starea cumulativă a conversației și nu relua produsele din `completed_ids`. Nu spune că ai terminat catalogul dacă numărul produselor validate nu corespunde numărului total de ID-uri unice din feed.
 
+### Protocol obligatoriu când conversația se apropie de limită
+
+O limită tehnică a conversației nu înseamnă terminarea proiectului. Aplică următorul protocol înainte ca spațiul conversației sau timpul execuției să se epuizeze:
+
+1. oprește numai produsul aflat în lucru și nu îl adăuga în `completed_ids` dacă nu este complet și validat;
+2. scrie pe disc starea cumulativă într-un nou `boomag-seo-checkpoint-XXXX.json`;
+3. verifică faptul că JSON-ul poate fi citit integral și că `completed_count` este egal cu numărul de ID-uri unice din `completed_ids`;
+4. include în checkpoint toate produsele noi finalizate, `needs_review`, erorile și `last_completed_external_id`;
+5. răspunde cu fișierul descărcabil și mesajul exact `CHECKPOINT PREGĂTIT PENTRU CHAT NOU`;
+6. nu declara catalogul finalizat și nu genera fișierul final cât timp `remaining_count` este mai mare decât zero.
+
+Într-o conversație nouă, când primești acest prompt împreună cu ultimul checkpoint, citește checkpoint-ul înaintea feedului, validează-l și continuă automat de la primul ID din feed care nu apare în `completed_ids`. Nu rescrie și nu recerceta produsele deja validate. Dacă execuția a fost întreruptă brusc înaintea unui checkpoint nou, reia de la cel mai recent checkpoint valid; deoarece checkpoint-ul se actualizează la fiecare 5 produse, se pot pierde cel mult cele maximum 4 produse neincluse încă în ultima copie de siguranță.
+
 ### Structura JSON obligatorie
 
 Fișierul trebuie să fie JSON valid, nu Markdown și nu JSONL:
@@ -227,3 +240,7 @@ Nu publica și nu modifica site-ul. Livrează numai fișierele JSON de conținut
 După ce trimiți promptul, spune-i în aceeași conversație:
 
 `Rulează acest proces continuu până când toate produsele sunt validate. Nu te opri după loturi și nu îmi cere confirmare între produse. Creează checkpoint-uri periodice doar ca protecție împotriva pierderii progresului și continuă imediat după fiecare checkpoint. Dacă o limită tehnică întrerupe execuția, reia automat de la primul produs nefinalizat la următoarea rulare. Oprește procesul numai după ce ai generat și validat boomag-seo-catalog-final.json.`
+
+Dacă ChatGPT afișează că ai atins limita conversației, deschide un chat nou, atașează ultimul fișier `boomag-seo-checkpoint-XXXX.json`, copiază din nou acest prompt și adaugă:
+
+`Continuă optimizarea catalogului Boomag folosind checkpoint-ul atașat ca stare principală. Validează completed_ids, nu reface produsele terminate și pornește direct de la primul produs absent din completed_ids. Continuă până la fișierul final, aplicând același protocol de checkpoint dacă noua conversație se apropie de limită.`

@@ -2544,10 +2544,8 @@
 }
 
 .order-receipt-products {
-  max-height: 23rem;
-  overflow: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #473a2d transparent;
+  max-height: none;
+  overflow: visible;
 }
 
 .order-receipt-product {

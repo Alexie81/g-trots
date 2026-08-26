@@ -60,11 +60,14 @@ function gtEmailTrackingUrl(array $order, array $config): string {
     return $base . '/urmarire-comanda?token=' . rawurlencode((string)($order['tracking_token'] ?? ''));
 }
 
-function gtEmailStatusTimeline(string $status): string {
-    $flow = ['new', 'confirmed', 'processing', 'shipped', 'completed'];
+function gtEmailStatusTimeline(string $status, string $paymentMethod = 'card'): string {
+    $flow = $paymentMethod === 'cash_on_delivery'
+        ? ['processing', 'shipped', 'completed']
+        : ['new', 'confirmed', 'processing', 'shipped', 'completed'];
     $currentIndex = array_search($status, $flow, true);
     $cancelled = $status === 'cancelled';
     if ($currentIndex === false) $currentIndex = 0;
+    $cellWidth = 100 / max(1, count($flow));
     $cells = '';
     foreach ($flow as $index => $value) {
         $meta = gtOrderStatusMeta($value);
@@ -74,7 +77,7 @@ function gtEmailStatusTimeline(string $status): string {
         $line = $index < count($flow) - 1
             ? '<span style="display:block;height:3px;background:' . ($active && $index < $currentIndex ? '#ff8a00' : '#35322f') . ';margin:9px 0 0 22px;border-radius:99px"></span>'
             : '';
-        $cells .= '<td style="width:20%;vertical-align:top;padding:0 3px;text-align:center">'
+        $cells .= '<td style="width:' . number_format($cellWidth, 2, '.', '') . '%;vertical-align:top;padding:0 3px;text-align:center">'
             . '<span style="display:inline-block;width:20px;height:20px;line-height:20px;border-radius:99px;background:' . $circleColor . ';color:#0d0d0d;font-size:10px;font-weight:900">' . ($active ? '✓' : (string)($index + 1)) . '</span>'
             . $line
             . '<span style="display:block;margin-top:9px;color:' . $textColor . ';font-size:10px;font-weight:800;line-height:1.25">' . gtEmailEscape($meta['label']) . '</span>'
@@ -128,7 +131,7 @@ function gtBuildOrderEmail(array $order, array $config, string $status): array {
         . '<div style="padding:32px 0 28px"><span style="color:#ff8a00;font-size:10px;font-weight:900;letter-spacing:.14em">ACTUALIZARE COMANDĂ</span>'
         . '<h1 class="gt-title" style="margin:10px 0 12px;color:#f8f4ee;font-size:42px;line-height:1.04;letter-spacing:-.04em">' . gtEmailEscape((string)$meta['title']) . '</h1>'
         . '<p style="margin:0;color:#aaa39b;font-size:15px;line-height:1.65">' . $greeting . ' ' . gtEmailEscape((string)$meta['message']) . '</p></div>'
-        . '<div style="padding:18px;border-radius:22px;background:#1d1b18;border:1px solid #302d29">' . gtEmailStatusTimeline($status) . '</div>'
+        . '<div style="padding:18px;border-radius:22px;background:#1d1b18;border:1px solid #302d29">' . gtEmailStatusTimeline($status, (string)($order['payment_method'] ?? 'card')) . '</div>'
         . '<div class="gt-receipt" style="margin-top:20px;padding:24px;border-radius:26px;background:#10100f;border:1px solid #302d29">'
         . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td><span style="display:block;color:#77716b;font-size:9px;font-weight:900;letter-spacing:.12em">BON COMANDĂ</span><strong style="display:block;margin-top:5px;color:#ff9a25;font-size:16px">' . gtEmailEscape($order['order_number'] ?? '') . '</strong></td>'
         . '<td align="right"><span style="display:block;color:#77716b;font-size:9px;font-weight:900;letter-spacing:.12em">DATA</span><strong style="display:block;margin-top:5px;color:#d8d2ca;font-size:12px">' . gtEmailEscape(date('d.m.Y, H:i', strtotime((string)($order['created_at'] ?? 'now')))) . '</strong></td></tr></table>'

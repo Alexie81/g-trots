@@ -1961,7 +1961,9 @@ try {
             richDescriptionImagePaths((string)($current['description_html'] ?? '')),
             richDescriptionImagePaths((string)$payload['description_html'])
         );
-        ensureUniqueProductName($db, $payload['name'], $id);
+        if (mb_strtolower(trim($payload['name'])) !== mb_strtolower(trim((string)$current['name']))) {
+            ensureUniqueProductName($db, $payload['name'], $id);
+        }
         $db->beginTransaction();
         try {
             $productSku = trim((string)($current['sku'] ?? '')) !== ''

@@ -853,6 +853,7 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
             $existing = $find->fetch();
             $productId = $existing ? (string)$existing['id'] : gomagStableUuid('product', $externalId);
             $contentStatus = $existing ? (string)($existing['content_status'] ?? 'manual') : 'baseline';
+            $refreshEditorialContent = !$existing || $contentStatus === 'baseline';
             $slug = uniqueSlug($db, 'shop_products', $content['name'], $existing ? $productId : null);
             $specificationsJson = json_encode($content['specifications'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             $questionsJson = json_encode($content['questions'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -876,9 +877,16 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
                 $stats['created']++;
             } else {
                 $update = $db->prepare(
-                    'UPDATE shop_products SET category_id = ?, manufacturer_id = ?, source_id = ?, supplier_external_id = ?, sku = ?, supplier_product_code = ?, ean = ?,
-                     source_domain = "boomag.ro", source_url = ?, price = ?, currency = "RON", stock_mode = "tracked", stock_quantity = ?,
-                     supplier_stock_quantity = ?, supplier_stock_status = ?, supplier_stock_updated_at = NOW(), is_active = 1,
+                    'UPDATE shop_products SET category_id = IF(content_status = "baseline", ?, category_id), manufacturer_id = IF(content_status = "baseline", ?, manufacturer_id),
+                     source_id = IF(content_status = "baseline", ?, source_id), supplier_external_id = ?, sku = ?,
+                     supplier_product_code = IF(content_status = "baseline", ?, supplier_product_code), ean = IF(content_status = "baseline", ?, ean),
+                     source_domain = IF(content_status = "baseline", "boomag.ro", source_domain), source_url = IF(content_status = "baseline", ?, source_url),
+                     price = IF(content_status = "baseline", ?, price), currency = IF(content_status = "baseline", "RON", currency),
+                     stock_mode = IF(LOWER(source_domain) = "boomag.ro", "tracked", stock_mode),
+                     stock_quantity = IF(LOWER(source_domain) = "boomag.ro", ?, stock_quantity),
+                     supplier_stock_quantity = IF(LOWER(source_domain) = "boomag.ro", ?, supplier_stock_quantity),
+                     supplier_stock_status = IF(LOWER(source_domain) = "boomag.ro", ?, supplier_stock_status),
+                     supplier_stock_updated_at = IF(LOWER(source_domain) = "boomag.ro", NOW(), supplier_stock_updated_at), is_active = 1,
                      name = IF(content_status = "baseline", ?, name), slug = IF(content_status = "baseline", ?, slug),
                      short_description = IF(content_status = "baseline", ?, short_description), description_title = IF(content_status = "baseline", ?, description_title),
                      description_html = IF(content_status = "baseline", ?, description_html), specifications_json = IF(content_status = "baseline", ?, specifications_json),
@@ -894,12 +902,16 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
                 ]);
                 $stats['updated']++;
             }
-            $db->prepare('DELETE FROM shop_product_brands WHERE product_id = ?')->execute([$productId]);
-            $brandInsert = $db->prepare('INSERT IGNORE INTO shop_product_brands (product_id, brand_id) VALUES (?, ?)');
-            foreach (array_values(array_unique($brandIds)) as $brandId) $brandInsert->execute([$productId, $brandId]);
+            if ($refreshEditorialContent) {
+                $db->prepare('DELETE FROM shop_product_brands WHERE product_id = ?')->execute([$productId]);
+                $brandInsert = $db->prepare('INSERT IGNORE INTO shop_product_brands (product_id, brand_id) VALUES (?, ?)');
+                foreach (array_values(array_unique($brandIds)) as $brandId) $brandInsert->execute([$productId, $brandId]);
+            }
             $db->commit();
 
-            $imageResult = boomagSyncImportedImages($db, $productId, $externalId, $content['name'], $row);
+            $imageResult = $refreshEditorialContent
+                ? boomagSyncImportedImages($db, $productId, $externalId, $content['name'], $row)
+                : ['saved' => 0, 'requested' => 0];
             $stats['images_saved'] += (int)$imageResult['saved'];
             if ((int)$imageResult['saved'] === 0) $stats['images_missing']++;
         } catch (Throwable $error) {

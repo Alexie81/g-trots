@@ -10,6 +10,7 @@ header('Access-Control-Allow-Headers: Content-Type, X-API-Key, X-Auth-Token');
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
+require_once __DIR__ . '/order-emails.php';
 require_once __DIR__ . '/stripe.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
@@ -30,6 +31,15 @@ function shopConfig(): array {
         'stripe_secret_key' => '',
         'stripe_publishable_key' => '',
         'stripe_webhook_secret' => '',
+        'order_email_from' => 'contact@g-trots.ro',
+        'order_email_from_name' => 'G-Trots România',
+        'order_email_reply_to' => 'contact@g-trots.ro',
+        'order_email_logo_url' => 'https://g-trots.ro/assets/logo.png',
+        'smtp_host' => '',
+        'smtp_port' => 465,
+        'smtp_encryption' => 'ssl',
+        'smtp_username' => '',
+        'smtp_password' => '',
     ];
 
     $config = $defaults;
@@ -366,13 +376,15 @@ function ensureShopSchema(PDO $db): void {
             stripe_payment_intent_id VARCHAR(255) NULL,
             stripe_payment_token VARCHAR(96) NULL,
             stripe_paid_at DATETIME NULL,
+            tracking_token VARCHAR(64) NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_shop_orders_number (order_number),
             INDEX idx_shop_orders_status (status, created_at),
             INDEX idx_shop_orders_customer (customer_phone, customer_email),
             UNIQUE INDEX idx_shop_orders_stripe_session (stripe_checkout_session_id),
-            INDEX idx_shop_orders_stripe_payment (stripe_payment_intent_id)
+            INDEX idx_shop_orders_stripe_payment (stripe_payment_intent_id),
+            UNIQUE INDEX idx_shop_orders_tracking_token (tracking_token)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     $stripeOrderColumns = [
@@ -391,6 +403,13 @@ function ensureShopSchema(PDO $db): void {
     }
     if (!$db->query("SHOW INDEX FROM shop_orders WHERE Key_name = 'idx_shop_orders_stripe_payment'")->fetch()) {
         $db->exec('ALTER TABLE shop_orders ADD INDEX idx_shop_orders_stripe_payment (stripe_payment_intent_id)');
+    }
+    if (!$db->query("SHOW COLUMNS FROM shop_orders LIKE 'tracking_token'")->fetch()) {
+        $db->exec('ALTER TABLE shop_orders ADD COLUMN tracking_token VARCHAR(64) NULL AFTER stripe_paid_at');
+    }
+    $db->exec("UPDATE shop_orders SET tracking_token = LOWER(REPLACE(UUID(), '-', '')) WHERE tracking_token IS NULL OR tracking_token = ''");
+    if (!$db->query("SHOW INDEX FROM shop_orders WHERE Key_name = 'idx_shop_orders_tracking_token'")->fetch()) {
+        $db->exec('ALTER TABLE shop_orders ADD UNIQUE INDEX idx_shop_orders_tracking_token (tracking_token)');
     }
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_stripe_events (
@@ -417,6 +436,27 @@ function ensureShopSchema(PDO $db): void {
             line_total DECIMAL(12,2) NOT NULL,
             INDEX idx_shop_order_items_order (order_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_order_status_history (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            order_id CHAR(36) NOT NULL,
+            from_status VARCHAR(30) NULL,
+            to_status VARCHAR(30) NOT NULL,
+            changed_by VARCHAR(180) NULL,
+            customer_notified TINYINT(1) NOT NULL DEFAULT 0,
+            email_status VARCHAR(30) NOT NULL DEFAULT 'not_requested',
+            email_error VARCHAR(500) NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_shop_order_history_order (order_id, created_at),
+            INDEX idx_shop_order_history_status (to_status, created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "INSERT INTO shop_order_status_history (id, order_id, from_status, to_status, changed_by, customer_notified, email_status, created_at)
+         SELECT UUID(), o.id, NULL, o.status, 'Sistem', 0, 'not_requested', o.created_at
+         FROM shop_orders o
+         WHERE NOT EXISTS (SELECT 1 FROM shop_order_status_history h WHERE h.order_id = o.id)"
     );
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_inventory_movements (
@@ -1097,19 +1137,89 @@ function sourcePayload(array $body): array {
     ];
 }
 
-function orderRow(PDO $db, array $row): array {
-    $items = $db->prepare('SELECT * FROM shop_order_items WHERE order_id = ? ORDER BY id ASC');
+function orderStatusHistory(PDO $db, string $orderId): array {
+    $stmt = $db->prepare('SELECT * FROM shop_order_status_history WHERE order_id = ? ORDER BY created_at ASC, id ASC');
+    $stmt->execute([$orderId]);
+    return array_map(function (array $entry): array {
+        $entry['customer_notified'] = (bool)$entry['customer_notified'];
+        return $entry;
+    }, $stmt->fetchAll());
+}
+
+function recordOrderStatusHistory(PDO $db, string $orderId, ?string $fromStatus, string $toStatus, string $changedBy, string $emailStatus = 'not_requested'): string {
+    $id = uuidV4();
+    $stmt = $db->prepare('INSERT INTO shop_order_status_history (id, order_id, from_status, to_status, changed_by, customer_notified, email_status) VALUES (?, ?, ?, ?, ?, 0, ?)');
+    $stmt->execute([$id, $orderId, $fromStatus, $toStatus, mb_substr($changedBy, 0, 180), $emailStatus]);
+    return $id;
+}
+
+function updateOrderHistoryEmail(PDO $db, string $historyId, array $result): void {
+    try {
+        $sent = (bool)($result['sent'] ?? false);
+        $error = $sent ? null : mb_substr((string)($result['error'] ?? 'Trimiterea e-mailului a eșuat.'), 0, 500);
+        $stmt = $db->prepare('UPDATE shop_order_status_history SET customer_notified = ?, email_status = ?, email_error = ? WHERE id = ?');
+        $stmt->execute([$sent ? 1 : 0, $sent ? 'sent' : 'failed', $error, $historyId]);
+    } catch (Throwable $error) {
+        // O problemă de jurnalizare nu trebuie să invalideze o comandă sau o plată deja salvată.
+        error_log('[G-Trots order email history] ' . $error->getMessage());
+    }
+}
+
+function orderRow(PDO $db, array $row, ?array $config = null, bool $withHistory = false): array {
+    $items = $db->prepare(
+        'SELECT oi.*,
+                (SELECT image_path FROM shop_product_images pi WHERE pi.product_id = oi.product_id ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS image_path
+         FROM shop_order_items oi
+         WHERE oi.order_id = ?
+         ORDER BY oi.id ASC'
+    );
     $items->execute([(string)$row['id']]);
-    $row['items'] = array_map(function (array $item): array {
+    $row['items'] = array_map(function (array $item) use ($config): array {
         $item['quantity'] = (int)$item['quantity'];
         $item['unit_price'] = (float)$item['unit_price'];
         $item['line_total'] = (float)$item['line_total'];
+        $item['image_url'] = !empty($item['image_path']) && $config
+            ? rtrim((string)$config['public_base_url'], '/') . '/' . ltrim((string)$item['image_path'], '/')
+            : '';
+        unset($item['image_path']);
         return $item;
     }, $items->fetchAll());
     $row['subtotal'] = (float)$row['subtotal'];
     $row['shipping_cost'] = (float)$row['shipping_cost'];
     $row['total'] = (float)$row['total'];
+    if ($withHistory) $row['status_history'] = orderStatusHistory($db, (string)$row['id']);
     return $row;
+}
+
+function publicTrackingOrder(array $order): array {
+    $items = array_map(fn(array $item): array => [
+        'product_name' => (string)($item['product_name'] ?? ''),
+        'product_sku' => (string)($item['product_sku'] ?? ''),
+        'quantity' => (int)($item['quantity'] ?? 0),
+        'unit_price' => (float)($item['unit_price'] ?? 0),
+        'line_total' => (float)($item['line_total'] ?? 0),
+        'image_url' => (string)($item['image_url'] ?? ''),
+    ], (array)($order['items'] ?? []));
+    $history = array_map(fn(array $entry): array => [
+        'to_status' => (string)($entry['to_status'] ?? ''),
+        'created_at' => (string)($entry['created_at'] ?? ''),
+    ], (array)($order['status_history'] ?? []));
+    return [
+        'order_number' => (string)$order['order_number'],
+        'status' => (string)$order['status'],
+        'status_label' => (string)gtOrderStatusMeta((string)$order['status'])['label'],
+        'payment_status' => (string)$order['payment_status'],
+        'payment_method' => (string)$order['payment_method'],
+        'shipping_method_name' => (string)$order['shipping_method_name'],
+        'subtotal' => (float)$order['subtotal'],
+        'shipping_cost' => (float)$order['shipping_cost'],
+        'total' => (float)$order['total'],
+        'currency' => (string)$order['currency'],
+        'items' => $items,
+        'status_history' => $history,
+        'created_at' => (string)$order['created_at'],
+        'updated_at' => (string)$order['updated_at'],
+    ];
 }
 
 function createPublicOrder(PDO $db, array $body, array $config): array {
@@ -1164,14 +1274,16 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
         $total = round($subtotal + $shippingCost, 2);
         $orderId = uuidV4();
         $orderNumber = 'GT-' . date('Ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(4)), 0, 8));
-        $insertOrder = $db->prepare('INSERT INTO shop_orders (id, order_number, status, payment_status, payment_method, customer_name, customer_email, customer_phone, address, city, county, postal_code, customer_notes, shipping_method_id, shipping_method_name, subtotal, shipping_cost, total, currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $initialStatus = $paymentMethod === 'cash_on_delivery' ? 'processing' : 'new';
+        $trackingToken = bin2hex(random_bytes(24));
+        $insertOrder = $db->prepare('INSERT INTO shop_orders (id, order_number, status, payment_status, payment_method, customer_name, customer_email, customer_phone, address, city, county, postal_code, customer_notes, shipping_method_id, shipping_method_name, subtotal, shipping_cost, total, currency, tracking_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $insertOrder->execute([
-            $orderId, $orderNumber, 'new', 'pending', $paymentMethod, $name,
+            $orderId, $orderNumber, $initialStatus, 'pending', $paymentMethod, $name,
             $customerEmail ?: null, $phone, $address, $city,
             mb_substr(trim((string)($body['county'] ?? '')), 0, 120) ?: null,
             mb_substr(trim((string)($body['postal_code'] ?? '')), 0, 30) ?: null,
             mb_substr(trim((string)($body['customer_notes'] ?? '')), 0, 3000) ?: null,
-            $shippingId, (string)$shipping['name'], $subtotal, $shippingCost, $total, 'RON'
+            $shippingId, (string)$shipping['name'], $subtotal, $shippingCost, $total, 'RON', $trackingToken
         ]);
         $insertItem = $db->prepare('INSERT INTO shop_order_items (id, order_id, product_id, product_name, product_sku, quantity, unit_price, line_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
         $updateStock = $db->prepare('UPDATE shop_products SET stock_quantity = stock_quantity - ? WHERE id = ?');
@@ -1185,10 +1297,25 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
                 $insertMovement->execute([uuidV4(), $product['id'], $orderId, 'sale', -$item['quantity'], $nextQuantity, 'Rezervare automata pentru ' . $orderNumber]);
             }
         }
+        $historyId = recordOrderStatusHistory(
+            $db,
+            $orderId,
+            null,
+            $initialStatus,
+            'Magazin online',
+            $paymentMethod === 'cash_on_delivery' ? 'pending' : 'not_requested'
+        );
         $db->commit();
         $stmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ?');
         $stmt->execute([$orderId]);
-        return orderRow($db, $stmt->fetch());
+        $order = orderRow($db, $stmt->fetch(), $config, true);
+        if ($paymentMethod === 'cash_on_delivery') {
+            $emailResult = gtSendOrderStatusEmail($order, $config, $initialStatus);
+            updateOrderHistoryEmail($db, $historyId, $emailResult);
+            $order['email_notification'] = $emailResult;
+            $order['status_history'] = orderStatusHistory($db, $orderId);
+        }
+        return $order;
     } catch (Throwable $error) {
         if ($db->inTransaction()) $db->rollBack();
         throw $error;
@@ -1310,6 +1437,26 @@ try {
         ]);
     }
 
+    if ($action === 'publicTrackOrder' && $method === 'GET') {
+        $token = strtolower(trim((string)($_GET['token'] ?? '')));
+        $orderNumber = strtoupper(trim((string)($_GET['order_number'] ?? '')));
+        $email = strtolower(trim((string)($_GET['email'] ?? '')));
+        if ($token !== '') {
+            if (!preg_match('/^[a-f0-9]{32,64}$/', $token)) throw new InvalidArgumentException('Linkul de urmărire nu este valid.');
+            $stmt = $db->prepare('SELECT * FROM shop_orders WHERE tracking_token = ? LIMIT 1');
+            $stmt->execute([$token]);
+        } else {
+            if ($orderNumber === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new InvalidArgumentException('Completează codul comenzii și adresa de e-mail folosită la comandă.');
+            }
+            $stmt = $db->prepare('SELECT * FROM shop_orders WHERE UPPER(order_number) = ? AND LOWER(customer_email) = ? LIMIT 1');
+            $stmt->execute([$orderNumber, $email]);
+        }
+        $order = $stmt->fetch();
+        if (!$order) jsonResponse(['error' => 'Nu am găsit o comandă pentru datele introduse. Verifică informațiile și încearcă din nou.'], 404);
+        jsonResponse(publicTrackingOrder(orderRow($db, $order, $config, true)));
+    }
+
     if ($action === 'createPublicOrder' && $method === 'POST') {
         $order = createPublicOrder($db, $body, $config);
         if (($order['payment_method'] ?? '') === 'card') {
@@ -1330,7 +1477,7 @@ try {
         $sessionId = trim((string)($_GET['session_id'] ?? ($body['session_id'] ?? '')));
         if (!preg_match('/^cs_(test|live)_[A-Za-z0-9]+$/', $sessionId)) throw new InvalidArgumentException('Sesiunea Stripe nu este valida.');
         $session = stripeRequest($config, 'GET', 'checkout/sessions/' . rawurlencode($sessionId));
-        $order = stripeApplyCheckoutSession($db, $session);
+        $order = stripeApplyCheckoutSession($db, $session, $config);
         if (!$order) jsonResponse(['error' => 'Comanda Stripe nu a fost gasita.'], 404);
         jsonResponse([
             'session_status' => (string)($session['status'] ?? ''),
@@ -1351,7 +1498,7 @@ try {
         if ($sessionId !== '') {
             $session = stripeRequest($config, 'GET', 'checkout/sessions/' . rawurlencode($sessionId));
             if (in_array((string)($session['payment_status'] ?? ''), ['paid', 'no_payment_required'], true)) {
-                stripeApplyCheckoutSession($db, $session);
+                stripeApplyCheckoutSession($db, $session, $config);
                 throw new InvalidArgumentException('Plata este deja confirmata si nu mai poate fi anulata.');
             }
             if (($session['status'] ?? '') === 'open') {
@@ -1493,7 +1640,7 @@ try {
             'acquisitions' => $acquisitions,
             'profit' => round($revenue - $acquisitions, 2),
             'products_count' => (int)$db->query('SELECT COUNT(*) FROM shop_products')->fetchColumn(),
-            'recent_orders' => array_map(fn(array $row): array => orderRow($db, $row), $recentRows),
+            'recent_orders' => array_map(fn(array $row): array => orderRow($db, $row, $config), $recentRows),
         ]);
     }
 
@@ -1764,7 +1911,7 @@ try {
 
     if ($action === 'listOrders' && $method === 'GET') {
         $rows = $db->query('SELECT * FROM shop_orders ORDER BY created_at DESC LIMIT 500')->fetchAll();
-        jsonResponse(array_map(fn(array $row): array => orderRow($db, $row), $rows));
+        jsonResponse(array_map(fn(array $row): array => orderRow($db, $row, $config), $rows));
     }
 
     if ($action === 'getOrder' && $method === 'GET') {
@@ -1773,7 +1920,7 @@ try {
         $stmt->execute([$id, $id]);
         $row = $stmt->fetch();
         if (!$row) jsonResponse(['error' => 'Comanda nu exista.'], 404);
-        jsonResponse(orderRow($db, $row));
+        jsonResponse(orderRow($db, $row, $config, true));
     }
 
     if ($action === 'updateOrder' && in_array($method, ['PUT', 'PATCH'], true)) {
@@ -1782,13 +1929,17 @@ try {
         $paymentStatuses = ['pending', 'paid', 'failed', 'refunded'];
         $status = trim((string)($body['status'] ?? ''));
         $paymentStatus = trim((string)($body['payment_status'] ?? ''));
+        $notifyCustomer = boolValue($body['notify_customer'] ?? false);
         if (!in_array($status, $statuses, true) || !in_array($paymentStatus, $paymentStatuses, true)) throw new InvalidArgumentException('Statusul comenzii nu este valid.');
+        $historyId = null;
+        $statusChanged = false;
         $db->beginTransaction();
         try {
             $stmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ? FOR UPDATE');
             $stmt->execute([$id]);
             $current = $stmt->fetch();
             if (!$current) throw new InvalidArgumentException('Comanda nu exista.');
+            $statusChanged = $status !== (string)$current['status'];
             if ($status === 'cancelled' && $current['status'] !== 'cancelled') {
                 $items = $db->prepare('SELECT * FROM shop_order_items WHERE order_id = ?');
                 $items->execute([$id]);
@@ -1806,6 +1957,16 @@ try {
             }
             $update = $db->prepare('UPDATE shop_orders SET status = ?, payment_status = ?, admin_notes = ? WHERE id = ?');
             $update->execute([$status, $paymentStatus, mb_substr(trim((string)($body['admin_notes'] ?? '')), 0, 5000), $id]);
+            if ($statusChanged) {
+                $historyId = recordOrderStatusHistory(
+                    $db,
+                    $id,
+                    (string)$current['status'],
+                    $status,
+                    (string)($currentUser['display_name'] ?? $currentUser['username'] ?? 'Administrator'),
+                    $notifyCustomer ? 'pending' : 'not_requested'
+                );
+            }
             $db->commit();
         } catch (Throwable $error) {
             if ($db->inTransaction()) $db->rollBack();
@@ -1813,7 +1974,22 @@ try {
         }
         $stmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ?');
         $stmt->execute([$id]);
-        jsonResponse(orderRow($db, $stmt->fetch()));
+        $order = orderRow($db, $stmt->fetch(), $config, true);
+        if ($notifyCustomer && $statusChanged && $historyId) {
+            $emailResult = gtSendOrderStatusEmail($order, $config, $status);
+            updateOrderHistoryEmail($db, $historyId, $emailResult);
+            $order['email_notification'] = array_merge(['requested' => true], $emailResult);
+            $order['status_history'] = orderStatusHistory($db, $id);
+        } elseif ($notifyCustomer) {
+            $order['email_notification'] = [
+                'requested' => true,
+                'sent' => false,
+                'error' => 'Statusul comenzii nu s-a schimbat, deci clientul nu a fost notificat.',
+            ];
+        } else {
+            $order['email_notification'] = ['requested' => false, 'sent' => false];
+        }
+        jsonResponse($order);
     }
 
     if ($action === 'getPaymentSettings' && $method === 'GET') jsonResponse(paymentSettings($db, $config));

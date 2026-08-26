@@ -375,6 +375,7 @@ function stripeRestoreOrderStock(PDO $db, string $orderId, string $reason): void
             $movement->execute([uuidV4(), $product['id'], $orderId, 'return', (int)$item['quantity'], $next, mb_substr($reason, 0, 500)]);
         }
         $db->prepare('UPDATE shop_orders SET status = "cancelled", payment_status = "failed", admin_notes = CONCAT_WS("\n", NULLIF(admin_notes, ""), ?) WHERE id = ?')->execute([mb_substr($reason, 0, 500), $orderId]);
+        recordOrderStatusHistory($db, $orderId, (string)$order['status'], 'cancelled', 'Stripe', 'not_requested');
         $db->commit();
     } catch (Throwable $error) {
         if ($db->inTransaction()) $db->rollBack();
@@ -382,22 +383,44 @@ function stripeRestoreOrderStock(PDO $db, string $orderId, string $reason): void
     }
 }
 
-function stripeApplyCheckoutSession(PDO $db, array $session): ?array {
+function stripeApplyCheckoutSession(PDO $db, array $session, ?array $config = null): ?array {
     $sessionId = trim((string)($session['id'] ?? ''));
     $orderId = trim((string)($session['metadata']['g_trots_order_id'] ?? $session['client_reference_id'] ?? ''));
-    $stmt = $db->prepare('SELECT * FROM shop_orders WHERE (id = ? AND ? <> "") OR (stripe_checkout_session_id = ? AND ? <> "") LIMIT 1');
-    $stmt->execute([$orderId, $orderId, $sessionId, $sessionId]);
-    $order = $stmt->fetch();
-    if (!$order) return null;
-
     $paymentStatus = (string)($session['payment_status'] ?? 'unpaid');
-    if ($paymentStatus === 'paid' || $paymentStatus === 'no_payment_required') {
-        $update = $db->prepare('UPDATE shop_orders SET status = IF(status = "new", "processing", status), payment_status = "paid", stripe_checkout_session_id = ?, stripe_payment_intent_id = ?, stripe_paid_at = COALESCE(stripe_paid_at, NOW()) WHERE id = ?');
-        $update->execute([$sessionId ?: null, empty($session['payment_intent']) ? null : (string)$session['payment_intent'], (string)$order['id']]);
+    $historyId = null;
+    $shouldNotify = false;
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare('SELECT * FROM shop_orders WHERE ((id = ? AND ? <> "") OR (stripe_checkout_session_id = ? AND ? <> "")) LIMIT 1 FOR UPDATE');
+        $stmt->execute([$orderId, $orderId, $sessionId, $sessionId]);
+        $order = $stmt->fetch();
+        if (!$order) {
+            $db->commit();
+            return null;
+        }
+        if ($paymentStatus === 'paid' || $paymentStatus === 'no_payment_required') {
+            $shouldNotify = (string)$order['payment_status'] !== 'paid';
+            $nextStatus = in_array((string)$order['status'], ['new', 'processing'], true) ? 'confirmed' : (string)$order['status'];
+            $update = $db->prepare('UPDATE shop_orders SET status = ?, payment_status = "paid", stripe_checkout_session_id = ?, stripe_payment_intent_id = ?, stripe_paid_at = COALESCE(stripe_paid_at, NOW()) WHERE id = ?');
+            $update->execute([$nextStatus, $sessionId ?: null, empty($session['payment_intent']) ? null : (string)$session['payment_intent'], (string)$order['id']]);
+            if ($shouldNotify) {
+                $historyId = recordOrderStatusHistory($db, (string)$order['id'], (string)$order['status'], 'confirmed', 'Stripe', 'pending');
+            }
+        }
+        $db->commit();
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $error;
     }
     $stmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ?');
     $stmt->execute([(string)$order['id']]);
-    return $stmt->fetch() ?: null;
+    $saved = $stmt->fetch() ?: null;
+    if ($saved && $shouldNotify && $historyId && $config) {
+        $emailOrder = orderRow($db, $saved, $config, true);
+        $emailResult = gtSendOrderStatusEmail($emailOrder, $config, 'confirmed');
+        updateOrderHistoryEmail($db, $historyId, $emailResult);
+    }
+    return $saved;
 }
 
 function stripePublicOrderReceipt(PDO $db, array $config, array $order): array {
@@ -471,7 +494,7 @@ function stripeProcessWebhook(PDO $db, array $config, string $payload, string $s
     try {
         $session = is_array($event['data']['object'] ?? null) ? $event['data']['object'] : [];
         if (in_array($eventType, ['checkout.session.completed', 'checkout.session.async_payment_succeeded'], true)) {
-            stripeApplyCheckoutSession($db, $session);
+            stripeApplyCheckoutSession($db, $session, $config);
         } elseif (in_array($eventType, ['checkout.session.async_payment_failed', 'checkout.session.expired'], true)) {
             $orderId = trim((string)($session['metadata']['g_trots_order_id'] ?? $session['client_reference_id'] ?? ''));
             if ($orderId !== '') stripeRestoreOrderStock($db, $orderId, 'Plata Stripe a esuat sau sesiunea a expirat.');

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0a09">
+  <meta name="robots" content="noindex,follow">
+  <title>Urmărire comandă | G-Trots România</title>
+  <meta name="description" content="Urmărește în siguranță statusul comenzii tale G-Trots România.">
+  <link rel="icon" type="image/png" href="assets/logo.png">
+  <link rel="stylesheet" href="urmarire-comanda.css">
+</head>
+<body>
+  <div class="tracking-ambient" aria-hidden="true"><i></i><i></i><i></i></div>
+  <header class="tracking-header">
+    <a class="tracking-brand" href="/" aria-label="G-Trots România, pagina principală">
+      <img src="assets/logo.png" alt="G-Trots România">
+      <span><strong>G-Trots România</strong><small>SERVICE &amp; MAGAZIN</small></span>
+    </a>
+    <a class="tracking-shop-link" href="/magazin.html"><span>Înapoi la magazin</span><b aria-hidden="true">→</b></a>
+  </header>
+
+  <main>
+    <section class="tracking-hero">
+      <div class="tracking-hero-copy">
+        <span class="tracking-eyebrow"><i></i> COMANDA TA, PAS CU PAS</span>
+        <h1>Vezi unde este<br><em>comanda ta.</em></h1>
+        <p>Primești statusul actual, istoricul și produsele comandate într-o singură pagină securizată.</p>
+        <div class="tracking-trust"><span>✓</span><p><strong>Date protejate</strong><small>Căutarea manuală verifică și adresa de e-mail.</small></p></div>
+      </div>
+      <form id="tracking-form" class="tracking-search" novalidate>
+        <div class="tracking-search-head"><span>01</span><div><small>CĂUTARE MANUALĂ</small><h2>Găsește comanda</h2></div></div>
+        <label for="tracking-order-number">Cod comandă <b>*</b></label>
+        <div class="tracking-field"><span aria-hidden="true">#</span><input id="tracking-order-number" name="order_number" autocomplete="off" placeholder="GT-20260826-AB12CD34" required></div>
+        <label for="tracking-email">E-mail <b>*</b></label>
+        <div class="tracking-field"><span aria-hidden="true">@</span><input id="tracking-email" name="email" type="email" autocomplete="email" placeholder="adresa@exemplu.ro" required></div>
+        <button id="tracking-submit" type="submit"><span>Verifică statusul</span><b aria-hidden="true">→</b></button>
+        <p class="tracking-form-note"><span>i</span> Ai primit un e-mail de la noi? Butonul „Urmărește comanda” te aduce aici automat, fără să mai completezi formularul.</p>
+      </form>
+    </section>
+
+    <section id="tracking-state" class="tracking-state" aria-live="polite" hidden></section>
+    <section id="tracking-result" class="tracking-result" hidden></section>
+  </main>
+
+  <footer class="tracking-footer"><img src="assets/logo.png" alt=""><p><strong>G-Trots România</strong><span>Ai o întrebare? Scrie-ne la contact@g-trots.ro</span></p><a href="/magazin.html">Continuă cumpărăturile →</a></footer>
+  <script src="urmarire-comanda.js" defer></script>
+</body>
+</html>

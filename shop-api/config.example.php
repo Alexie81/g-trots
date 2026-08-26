@@ -16,4 +16,14 @@ return [
     'stripe_publishable_key' => 'pk_test_replace_me',
     // Se primeste o singura data la crearea endpointului webhook Stripe.
     'stripe_webhook_secret' => 'whsec_replace_me',
+    // E-mailuri tranzactionale pentru comenzi. Parola ramane doar in config.local.php.
+    'order_email_from' => 'contact@g-trots.ro',
+    'order_email_from_name' => 'G-Trots România',
+    'order_email_reply_to' => 'contact@g-trots.ro',
+    'order_email_logo_url' => 'https://g-trots.ro/assets/logo.png',
+    'smtp_host' => 'mail.g-trots.ro',
+    'smtp_port' => 465,
+    'smtp_encryption' => 'ssl',
+    'smtp_username' => 'contact@g-trots.ro',
+    'smtp_password' => 'replace-with-email-password',
 ];

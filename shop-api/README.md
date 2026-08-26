@@ -31,12 +31,21 @@ compatibilitățile și producătorii activi și nu expune cheia administrativă
 - `createPublicOrder` — creează comanda și rezervă automat stocul urmărit.
 - `stripeCheckoutStatus` — confirmă plata direct la Stripe și întoarce bonul;
 - `stripeWebhook` — procesează idempotent confirmările și expirările Stripe.
+- `publicTrackOrder` — urmărește o comandă prin tokenul privat din e-mail sau,
+  manual, prin codul comenzii împreună cu adresa de e-mail.
 
 ## Administrare
 
 Rutele administrative cer cheia SHOP și tokenul utilizatorului autentificat.
 Sunt disponibile operații CRUD pentru produse și surse, gestiunea comenzilor,
 ajustări și istoric de stoc, metode de plată și livrări.
+
+Comenzile păstrează un istoric separat al statusurilor. Rambursul pornește în
+`processing` și trimite automat mesajul de primire; plata Stripe confirmată trece
+idempotent în `confirmed` și trimite bonul o singură dată. La schimbarea manuală
+a statusului, aplicațiile pot solicita opțional notificarea clientului. Mesajele
+HTML sunt trimise prin SMTP de la adresa configurată local, iar parola SMTP nu se
+salvează niciodată în Git.
 
 Catalogul CRM este sursa unică de adevăr. Stripe nu are un catalog administrat
 separat: fiecare produs local păstrează ID-ul copiei tehnice Stripe. La salvare

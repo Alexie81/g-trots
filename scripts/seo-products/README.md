@@ -1,13 +1,14 @@
 # Staging SEO catalog Boomag
 
-Acest director este zona locală de pregătire a fișelor SEO. Fișierele de aici nu se publică individual în baza online.
+Acest director este zona locală de pregătire a fișelor SEO. La cererea proprietarului, fișele validate pot fi publicate incremental în baza online.
 
 Reguli:
 
 - toate cele 1.627 de produse trebuie să aibă câte o fișă validă;
 - fiecare fișă păstrează produsul exact, sursele cercetării, conținutul, specificațiile, FAQ-urile, compatibilitățile și textele alternative;
-- nicio fișă nouă nu se trimite către `saveBoomagSeoProduct` în timpul pregătirii;
-- `scripts/validate-seo-staging.py --verify-feed` trebuie să raporteze `publish_allowed: true` înainte de publicarea catalogului; acest mod compară toate ID-urile, SKU-urile și EAN-urile cu feedul Boomag curent;
-- publicarea finală se face în loturi controlate, cu reluare, audit după fiecare lot și sincronizare Stripe numai după salvarea reușită.
+- nicio fișă invalidă nu se trimite către `saveBoomagSeoProduct`;
+- `scripts/validate-seo-staging.py --verify-feed` compară ID-urile, SKU-urile și EAN-urile pregătite cu feedul Boomag curent;
+- `scripts/publish-seo-staging.py` publică numai versiunile validate și modificate, verifică produsul public și memorează local versiunea trimisă;
+- publicarea se face în loturi controlate, cu reluare și sincronizare Stripe numai după salvarea reușită.
 
-Produsul Boomag `57746` este pilotul publicat anterior acestei reguli. Restul fișelor rămân în staging până la finalizarea și verificarea întregului catalog.
+Fișierele locale rămân sursa auditabilă a conținutului cercetat chiar și după publicare.

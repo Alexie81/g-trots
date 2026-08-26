@@ -129,3 +129,4 @@ website/.codex-local-server.cjs
 
 # historical deployment monitor contains machine-specific credentials
 scripts/monitor-eas-*.ps1
+scripts/seo-publish-state.json

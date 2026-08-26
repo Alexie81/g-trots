@@ -195,6 +195,7 @@ function ensureShopSchema(PDO $db): void {
             name VARCHAR(180) NOT NULL,
             slug VARCHAR(200) NOT NULL UNIQUE,
             short_description TEXT NULL,
+            description_title VARCHAR(220) NULL,
             description_html MEDIUMTEXT NULL,
             specifications_json MEDIUMTEXT NULL,
             questions_json MEDIUMTEXT NULL,
@@ -236,6 +237,11 @@ function ensureShopSchema(PDO $db): void {
     $discountValueColumn = $db->query("SHOW COLUMNS FROM shop_products LIKE 'discount_value'")->fetch();
     if (!$discountValueColumn) {
         $db->exec('ALTER TABLE shop_products ADD COLUMN discount_value DECIMAL(12,2) NULL AFTER discount_type');
+    }
+    $descriptionTitleColumn = $db->query("SHOW COLUMNS FROM shop_products LIKE 'description_title'")->fetch();
+    if (!$descriptionTitleColumn) {
+        $db->exec('ALTER TABLE shop_products ADD COLUMN description_title VARCHAR(220) NULL AFTER short_description');
+        $db->exec("UPDATE shop_products SET description_title = CONCAT('Detalii complete pentru ', name, '.') WHERE description_title IS NULL OR description_title = ''");
     }
     $specificationsColumn = $db->query("SHOW COLUMNS FROM shop_products LIKE 'specifications_json'")->fetch();
     if (!$specificationsColumn) {
@@ -956,6 +962,7 @@ function productPayload(PDO $db, array $body, bool $allowInactiveSource = false)
         'category_id' => existingReference($db, 'shop_categories', $body['category_id'] ?? null, 'Categoria'),
         'manufacturer_id' => existingReference($db, 'shop_manufacturers', $body['manufacturer_id'] ?? null, 'Producatorul'),
         'short_description' => mb_substr(trim((string)($body['short_description'] ?? '')), 0, 2000),
+        'description_title' => mb_substr(trim((string)($body['description_title'] ?? '')), 0, 220),
         'description_html' => cleanRichHtml($body['description_html'] ?? ''),
         'specifications_json' => json_encode($specifications, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         'questions_json' => json_encode($questions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
@@ -1574,10 +1581,10 @@ try {
         $id = uuidV4();
         $db->beginTransaction();
         try {
-            $stmt = $db->prepare('INSERT INTO shop_products (id, category_id, manufacturer_id, source_id, sku, source_domain, source_url, name, slug, short_description, description_html, specifications_json, questions_json, meta_title, meta_description, cost_price, price, sale_price, discount_type, discount_value, currency, stock_mode, stock_quantity, low_stock_threshold, is_active, is_featured) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt = $db->prepare('INSERT INTO shop_products (id, category_id, manufacturer_id, source_id, sku, source_domain, source_url, name, slug, short_description, description_title, description_html, specifications_json, questions_json, meta_title, meta_description, cost_price, price, sale_price, discount_type, discount_value, currency, stock_mode, stock_quantity, low_stock_threshold, is_active, is_featured) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
             $stmt->execute([
                 $id, $payload['category_id'], $payload['manufacturer_id'], $payload['source_id'], uniqueProductSku($db, $payload['sku']), $payload['source_domain'], $payload['source_url'],
-                $payload['name'], uniqueSlug($db, 'shop_products', $payload['slug_source']), $payload['short_description'], $payload['description_html'], $payload['specifications_json'], $payload['questions_json'],
+                $payload['name'], uniqueSlug($db, 'shop_products', $payload['slug_source']), $payload['short_description'], $payload['description_title'], $payload['description_html'], $payload['specifications_json'], $payload['questions_json'],
                 $payload['meta_title'], $payload['meta_description'], $payload['cost_price'], $payload['price'], $payload['sale_price'], $payload['discount_type'], $payload['discount_value'], $payload['currency'],
                 $payload['stock_mode'], $payload['stock_quantity'], $payload['low_stock_threshold'], $payload['is_active'] ? 1 : 0, $payload['is_featured'] ? 1 : 0
             ]);
@@ -1608,10 +1615,10 @@ try {
         ensureUniqueProductName($db, $payload['name'], $id);
         $db->beginTransaction();
         try {
-            $stmt = $db->prepare('UPDATE shop_products SET category_id = ?, manufacturer_id = ?, source_id = ?, sku = ?, source_domain = ?, source_url = ?, name = ?, slug = ?, short_description = ?, description_html = ?, specifications_json = ?, questions_json = ?, meta_title = ?, meta_description = ?, cost_price = ?, price = ?, sale_price = ?, discount_type = ?, discount_value = ?, currency = ?, stock_mode = ?, stock_quantity = ?, low_stock_threshold = ?, is_active = ?, is_featured = ? WHERE id = ?');
+            $stmt = $db->prepare('UPDATE shop_products SET category_id = ?, manufacturer_id = ?, source_id = ?, sku = ?, source_domain = ?, source_url = ?, name = ?, slug = ?, short_description = ?, description_title = ?, description_html = ?, specifications_json = ?, questions_json = ?, meta_title = ?, meta_description = ?, cost_price = ?, price = ?, sale_price = ?, discount_type = ?, discount_value = ?, currency = ?, stock_mode = ?, stock_quantity = ?, low_stock_threshold = ?, is_active = ?, is_featured = ? WHERE id = ?');
             $stmt->execute([
                 $payload['category_id'], $payload['manufacturer_id'], $payload['source_id'], uniqueProductSku($db, $payload['sku'], $id), $payload['source_domain'], $payload['source_url'],
-                $payload['name'], uniqueSlug($db, 'shop_products', $payload['slug_source'], $id), $payload['short_description'], $payload['description_html'], $payload['specifications_json'], $payload['questions_json'],
+                $payload['name'], uniqueSlug($db, 'shop_products', $payload['slug_source'], $id), $payload['short_description'], $payload['description_title'], $payload['description_html'], $payload['specifications_json'], $payload['questions_json'],
                 $payload['meta_title'], $payload['meta_description'], $payload['cost_price'], $payload['price'], $payload['sale_price'], $payload['discount_type'], $payload['discount_value'], $payload['currency'],
                 $payload['stock_mode'], $payload['stock_quantity'], $payload['low_stock_threshold'], $payload['is_active'] ? 1 : 0, $payload['is_featured'] ? 1 : 0, $id
             ]);

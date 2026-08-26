@@ -121,6 +121,7 @@ type FormState = {
   slug: string;
   sku: string;
   short_description: string;
+  description_title: string;
   description_html: string;
   meta_title: string;
   meta_description: string;
@@ -150,6 +151,7 @@ function emptyForm(): FormState {
     slug: '',
     sku: '',
     short_description: '',
+    description_title: '',
     description_html: '',
     meta_title: '',
     meta_description: '',
@@ -277,6 +279,7 @@ export default function ShopProductsManager() {
         slug: full.slug,
         sku: full.sku || '',
         short_description: full.short_description || '',
+        description_title: full.description_title || '',
         description_html: full.description_html || '',
         meta_title: full.meta_title || '',
         meta_description: full.meta_description || '',
@@ -430,6 +433,7 @@ export default function ShopProductsManager() {
       name: form.name.trim(),
       slug: form.slug.trim(),
       short_description: form.short_description.trim(),
+      description_title: form.description_title.trim(),
       description_html: form.description_html,
       meta_title: form.meta_title.trim(),
       meta_description: form.meta_description.trim(),
@@ -582,6 +586,7 @@ export default function ShopProductsManager() {
 
             <SectionTitle number="03" title="Descriere" text="Formatarea si stilurile lipite din alte pagini sunt pastrate." />
             <Field label="DESCRIERE SCURTA" value={form.short_description} onChangeText={(value) => patchForm('short_description', value)} placeholder="Rezumatul afisat in liste si in Google" multiline />
+            <Field label="TITLU DESCRIERE LUNGA" value={form.description_title} onChangeText={(value) => patchForm('description_title', value)} placeholder="Ex: Aderenta sigura pentru traseele tale zilnice." maxLength={220} />
             <Text style={styles.label}>DESCRIERE COMPLETA</Text>
             <RichTextEditor value={form.description_html} onChange={(value) => patchForm('description_html', value)} />
 

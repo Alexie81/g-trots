@@ -102,6 +102,7 @@ export type ShopProduct = {
   name: string;
   slug: string;
   short_description: string;
+  description_title: string;
   description_html?: string;
   meta_title: string;
   meta_description: string;
@@ -147,6 +148,7 @@ export type ShopProductPayload = {
   name: string;
   slug: string;
   short_description: string;
+  description_title: string;
   description_html: string;
   meta_title: string;
   meta_description: string;

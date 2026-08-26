@@ -269,7 +269,7 @@
     const heading = section.querySelector(".product-section-heading");
     if (heading) {
       const title = heading.querySelector("h2");
-      if (title) title.textContent = `Detalii complete pentru ${normalized.name}.`;
+      if (title) title.textContent = String(product.description_title || "").trim() || `Detalii complete pentru ${normalized.name}.`;
       const currentCopy = heading.querySelector(".product-rich-copy, p");
       const richCopy = document.createElement("div");
       richCopy.className = "product-rich-copy";

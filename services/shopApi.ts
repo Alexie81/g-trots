@@ -141,7 +141,7 @@ export type ShopProductPayload = {
   category_id: string | null;
   manufacturer_id: string | null;
   brand_ids: string[];
-  sku: string;
+  sku?: string;
   source_id: string | null;
   source_domain: string;
   source_url: string;
@@ -296,7 +296,10 @@ const SHOP_API_KEY = process.env.EXPO_PUBLIC_SHOP_API_KEY || process.env.EXPO_PU
 
 async function shopCall<T>(action: string, token: string, init?: RequestInit, id?: string, attempt = 0): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
+  // Stergerea sincronizeaza arhivarea cu Stripe inainte de eliminarea locala.
+  // O lasam sa se incheie si pe conexiuni mobile mai lente.
+  const timeoutMs = action === 'deleteProduct' ? 65000 : 20000;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const url = `${SHOP_API_BASE}/api-v2.php?action=${encodeURIComponent(action)}${id ? `&id=${encodeURIComponent(id)}` : ''}`;
 
   try {

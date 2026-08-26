@@ -233,8 +233,26 @@ function stripeArchiveProduct(PDO $db, array $config, string $productId): void {
     if (!$product) throw new InvalidArgumentException('Produsul nu exista.');
     $priceId = trim((string)($product['stripe_price_id'] ?? ''));
     $stripeProductId = trim((string)($product['stripe_product_id'] ?? ''));
-    if ($priceId !== '') stripeRequest($config, 'POST', 'prices/' . rawurlencode($priceId), ['active' => 'false']);
-    if ($stripeProductId !== '') stripeRequest($config, 'POST', 'products/' . rawurlencode($stripeProductId), ['active' => 'false']);
+    if ($stripeProductId !== '') {
+        try {
+            // Produsul trebuie arhivat primul. Stripe nu permite dezactivarea unui
+            // pret cat timp acesta este inca pretul implicit al unui produs activ.
+            stripeRequest($config, 'POST', 'products/' . rawurlencode($stripeProductId), ['active' => 'false']);
+        } catch (Throwable $error) {
+            // Daca produsul a fost eliminat manual din Stripe, catalogul local
+            // poate continua stergerea fara sa ramana o intrare activa in Stripe.
+            if (stripos($error->getMessage(), 'No such product') === false) throw $error;
+        }
+    }
+    if ($priceId !== '') {
+        try {
+            stripeRequest($config, 'POST', 'prices/' . rawurlencode($priceId), ['active' => 'false']);
+        } catch (Throwable $error) {
+            // Un pret implicit poate ramane arhivat logic prin produsul inactiv.
+            // Nu blocam stergerea catalogului local din acest motiv.
+            error_log('[G-Trots Stripe] Pretul ' . $priceId . ' nu a putut fi dezactivat dupa arhivarea produsului: ' . $error->getMessage());
+        }
+    }
 }
 
 function stripeSyncCatalog(PDO $db, array $config, ?string $sourceId = null): array {

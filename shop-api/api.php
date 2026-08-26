@@ -595,6 +595,13 @@ function uniqueProductSku(PDO $db, ?string $value, ?string $excludeId = null): ?
     throw new RuntimeException('Nu s-a putut genera un SKU unic.');
 }
 
+function generatedProductSku(string $name, string $sourceDomain): string {
+    $prefix = stripos($sourceDomain, 'boomag') !== false ? 'BOOM' : 'GT';
+    $parts = array_slice(array_values(array_filter(explode('-', slugBase($name)))), 0, 4);
+    $parts = array_map(static fn(string $part): string => strtoupper(mb_substr($part, 0, 4)), $parts);
+    return mb_substr($prefix . '-' . implode('-', $parts), 0, 80);
+}
+
 function ensureUniqueProductName(PDO $db, string $name, ?string $excludeId = null): void {
     $sql = 'SELECT id FROM shop_products WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))' . ($excludeId ? ' AND id <> ?' : '') . ' LIMIT 1';
     $stmt = $db->prepare($sql);
@@ -1615,9 +1622,10 @@ try {
         $id = uuidV4();
         $db->beginTransaction();
         try {
+            $productSku = uniqueProductSku($db, $payload['sku'] ?? generatedProductSku($payload['name'], $payload['source_domain']));
             $stmt = $db->prepare('INSERT INTO shop_products (id, category_id, manufacturer_id, source_id, sku, source_domain, source_url, name, slug, short_description, description_title, description_html, specifications_json, questions_json, meta_title, meta_description, cost_price, price, sale_price, discount_type, discount_value, currency, stock_mode, stock_quantity, low_stock_threshold, is_active, is_featured) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
             $stmt->execute([
-                $id, $payload['category_id'], $payload['manufacturer_id'], $payload['source_id'], uniqueProductSku($db, $payload['sku']), $payload['source_domain'], $payload['source_url'],
+                $id, $payload['category_id'], $payload['manufacturer_id'], $payload['source_id'], $productSku, $payload['source_domain'], $payload['source_url'],
                 $payload['name'], uniqueSlug($db, 'shop_products', $payload['slug_source']), $payload['short_description'], $payload['description_title'], $payload['description_html'], $payload['specifications_json'], $payload['questions_json'],
                 $payload['meta_title'], $payload['meta_description'], $payload['cost_price'], $payload['price'], $payload['sale_price'], $payload['discount_type'], $payload['discount_value'], $payload['currency'],
                 $payload['stock_mode'], $payload['stock_quantity'], $payload['low_stock_threshold'], $payload['is_active'] ? 1 : 0, $payload['is_featured'] ? 1 : 0
@@ -1653,9 +1661,12 @@ try {
         ensureUniqueProductName($db, $payload['name'], $id);
         $db->beginTransaction();
         try {
+            $productSku = trim((string)($current['sku'] ?? '')) !== ''
+                ? (string)$current['sku']
+                : uniqueProductSku($db, $payload['sku'] ?? generatedProductSku($payload['name'], $payload['source_domain']), $id);
             $stmt = $db->prepare('UPDATE shop_products SET category_id = ?, manufacturer_id = ?, source_id = ?, sku = ?, source_domain = ?, source_url = ?, name = ?, slug = ?, short_description = ?, description_title = ?, description_html = ?, specifications_json = ?, questions_json = ?, meta_title = ?, meta_description = ?, cost_price = ?, price = ?, sale_price = ?, discount_type = ?, discount_value = ?, currency = ?, stock_mode = ?, stock_quantity = ?, low_stock_threshold = ?, is_active = ?, is_featured = ? WHERE id = ?');
             $stmt->execute([
-                $payload['category_id'], $payload['manufacturer_id'], $payload['source_id'], uniqueProductSku($db, $payload['sku'], $id), $payload['source_domain'], $payload['source_url'],
+                $payload['category_id'], $payload['manufacturer_id'], $payload['source_id'], $productSku, $payload['source_domain'], $payload['source_url'],
                 $payload['name'], uniqueSlug($db, 'shop_products', $payload['slug_source'], $id), $payload['short_description'], $payload['description_title'], $payload['description_html'], $payload['specifications_json'], $payload['questions_json'],
                 $payload['meta_title'], $payload['meta_description'], $payload['cost_price'], $payload['price'], $payload['sale_price'], $payload['discount_type'], $payload['discount_value'], $payload['currency'],
                 $payload['stock_mode'], $payload['stock_quantity'], $payload['low_stock_threshold'], $payload['is_active'] ? 1 : 0, $payload['is_featured'] ? 1 : 0, $id

@@ -11,7 +11,7 @@
     const controller = new AbortController();
     // Stergerea arhiveaza mai intai produsul si pretul in Stripe, deci poate
     // dura mai mult decat o cerere obisnuita pe o conexiune lenta.
-    const timeoutMs = action === 'deleteProduct' ? 65000 : 20000;
+    const timeoutMs = action === 'syncBoomagTaxonomy' ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const isGet = !options.method || options.method === 'GET';
     const cacheBuster = isGet ? `&_=${Date.now()}` : '';
@@ -73,6 +73,7 @@
     createProductSource: (payload) => call('createProductSource', json('POST', payload)),
     updateProductSource: (id, payload) => call('updateProductSource', json('PUT', payload), id),
     deleteProductSource: (id) => call('deleteProductSource', { method: 'DELETE' }, id),
+    syncBoomagTaxonomy: () => call('syncBoomagTaxonomy', json('POST', {})),
     listProducts: () => call('listProducts'),
     getProduct: (id) => call('getProduct', {}, id),
     getProductStats: (id) => call('getProductStats', {}, id),

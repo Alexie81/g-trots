@@ -12,6 +12,7 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
 require_once __DIR__ . '/order-emails.php';
 require_once __DIR__ . '/stripe.php';
+require_once __DIR__ . '/gomag.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(204);
@@ -40,6 +41,8 @@ function shopConfig(): array {
         'smtp_encryption' => 'ssl',
         'smtp_username' => '',
         'smtp_password' => '',
+        'gomag_api_key' => '',
+        'gomag_shop_url' => 'https://www.boomag.ro',
     ];
 
     $config = $defaults;
@@ -61,6 +64,12 @@ function shopConfig(): array {
     if (is_file($localFile)) {
         $local = include $localFile;
         if (is_array($local)) $config = array_merge($config, $local);
+    }
+
+    $gomagFile = __DIR__ . '/gomag.local.php';
+    if (is_file($gomagFile)) {
+        $gomag = include $gomagFile;
+        if (is_array($gomag)) $config = array_merge($config, $gomag);
     }
 
     return $config;
@@ -644,7 +653,9 @@ function ensureUniqueProductName(PDO $db, string $name, ?string $excludeId = nul
 
 function categoryRow(array $row, array $config): array {
     $path = trim((string)($row['thumbnail_path'] ?? ''));
-    $row['thumbnail_url'] = $path === '' ? null : rtrim((string)$config['public_base_url'], '/') . '/' . ltrim($path, '/');
+    $row['thumbnail_url'] = $path === ''
+        ? null
+        : (preg_match('#^https?://#i', $path) ? $path : rtrim((string)$config['public_base_url'], '/') . '/' . ltrim($path, '/'));
     $row['is_active'] = (bool)$row['is_active'];
     $row['parent_id'] = empty($row['parent_id']) ? null : (string)$row['parent_id'];
     $row['parent_name'] = empty($row['parent_name']) ? null : (string)$row['parent_name'];
@@ -847,7 +858,7 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
         $path = (string)$image['image_path'];
         return [
             'id' => (string)$image['id'],
-            'url' => rtrim((string)$config['public_base_url'], '/') . '/' . ltrim($path, '/'),
+            'url' => preg_match('#^https?://#i', $path) ? $path : rtrim((string)$config['public_base_url'], '/') . '/' . ltrim($path, '/'),
             'alt_text' => (string)($image['alt_text'] ?? ''),
             'sort_order' => (int)$image['sort_order'],
         ];
@@ -1193,8 +1204,9 @@ function orderRow(PDO $db, array $row, ?array $config = null, bool $withHistory 
         $item['quantity'] = (int)$item['quantity'];
         $item['unit_price'] = (float)$item['unit_price'];
         $item['line_total'] = (float)$item['line_total'];
-        $item['image_url'] = !empty($item['image_path']) && $config
-            ? rtrim((string)$config['public_base_url'], '/') . '/' . ltrim((string)$item['image_path'], '/')
+        $imagePath = trim((string)($item['image_path'] ?? ''));
+        $item['image_url'] = $imagePath !== '' && $config
+            ? (preg_match('#^https?://#i', $imagePath) ? $imagePath : rtrim((string)$config['public_base_url'], '/') . '/' . ltrim($imagePath, '/'))
             : ($config ? legacyProductImageUrl(['slug' => (string)($item['product_slug'] ?? '')], $config) : '');
         unset($item['image_path']);
         unset($item['product_slug']);
@@ -1687,6 +1699,11 @@ try {
             'manufacturers' => array_map('brandRow', $manufacturers),
             'sources' => array_map('sourceRow', $sources),
         ]);
+    }
+
+    if ($action === 'syncBoomagTaxonomy' && $method === 'POST') {
+        set_time_limit(0);
+        jsonResponse(gomagSyncTaxonomy($db, $config));
     }
 
     if ($action === 'listProductSources' && $method === 'GET') {

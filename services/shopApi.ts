@@ -53,6 +53,21 @@ export type ShopProductSource = {
   updated_at?: string;
 };
 
+export type ShopTaxonomySyncResult = {
+  success: boolean;
+  categories: number;
+  root_categories: number;
+  subcategories: number;
+  subcategories_with_thumbnail: number;
+  subcategories_without_thumbnail: string[];
+  manufacturers: number;
+  compatibilities: number;
+  compatibility_names: string[];
+  products_scanned_temporarily: number;
+  products_imported: number;
+  crm_products_after_sync: number;
+};
+
 export type ShopProductImage = {
   id?: string;
   url?: string;
@@ -325,7 +340,7 @@ async function shopCall<T>(action: string, token: string, init?: RequestInit, id
   const controller = new AbortController();
   // Stergerea sincronizeaza arhivarea cu Stripe inainte de eliminarea locala.
   // O lasam sa se incheie si pe conexiuni mobile mai lente.
-  const timeoutMs = action === 'deleteProduct' ? 65000 : 20000;
+  const timeoutMs = action === 'syncBoomagTaxonomy' ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const isGet = !init?.method || init.method === 'GET';
   const cacheBuster = isGet ? `&_=${Date.now()}` : '';
@@ -387,6 +402,7 @@ export const shopApi = {
   createProductSource: (token: string, payload: Omit<ShopProductSource, 'id'>) => shopCall<ShopProductSource>('createProductSource', token, { method: 'POST', body: JSON.stringify(payload) }),
   updateProductSource: (token: string, id: string, payload: Omit<ShopProductSource, 'id'>) => shopCall<ShopProductSource>('updateProductSource', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
   deleteProductSource: (token: string, id: string) => shopCall<{ success: true }>('deleteProductSource', token, { method: 'DELETE' }, id),
+  syncBoomagTaxonomy: (token: string) => shopCall<ShopTaxonomySyncResult>('syncBoomagTaxonomy', token, { method: 'POST', body: '{}' }),
   listProducts: (token: string) => shopCall<ShopProduct[]>('listProducts', token),
   getProduct: (token: string, id: string) => shopCall<ShopProduct>('getProduct', token, undefined, id),
   getProductStats: (token: string, id: string) => shopCall<ShopProductStats>('getProductStats', token, undefined, id),

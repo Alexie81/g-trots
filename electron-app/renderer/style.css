@@ -13275,6 +13275,14 @@ body::after {
 .commerce-source-switch input:checked + span { background: #8b371b; }
 .commerce-source-switch input:checked + span::after { background: #ff6a32; transform: translateX(20px); }
 .commerce-source-switch input:focus-visible + span { outline: 2px solid #ff6a32; outline-offset: 2px; }
+.shop-source-block { margin-bottom: 12px; }
+.shop-source-block .shop-settings-row { margin-bottom: 7px; }
+.shop-taxonomy-sync { width: 100%; min-height: 58px; display: grid; grid-template-columns: 38px 1fr; grid-template-rows: auto auto; align-items: center; column-gap: 11px; padding: 9px 14px; border: 1px solid rgba(255, 106, 50, .24); border-radius: 17px; color: #eee9e5; background: rgba(255, 106, 50, .055); text-align: left; cursor: pointer; transition: border-color .2s ease, background .2s ease, transform .2s ease; }
+.shop-taxonomy-sync:hover { border-color: rgba(255, 106, 50, .55); background: rgba(255, 106, 50, .1); transform: translateY(-1px); }
+.shop-taxonomy-sync:disabled { cursor: wait; opacity: .65; transform: none; }
+.shop-taxonomy-sync > span { grid-row: 1 / 3; width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border-radius: 13px; color: #ff8126; background: rgba(255, 106, 50, .12); font-size: 20px; line-height: 1; }
+.shop-taxonomy-sync > b { color: #ff9a52; font-size: 11px; }
+.shop-taxonomy-sync > small { color: #77717b; font-size: 9px; }
 
 .shop-commerce-hero {
   --hero-accent: #ff6b00;

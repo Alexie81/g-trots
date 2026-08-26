@@ -5,6 +5,6 @@ Options -Indexes
   Header always set Referrer-Policy "same-origin"
 </IfModule>
 
-<FilesMatch "^(config\.local\.php|config\.example\.php)$">
+<FilesMatch "^(config\.local\.php|config\.example\.php|gomag\.local\.php|gomag\.local\.example\.php)$">
   Require all denied
 </FilesMatch>

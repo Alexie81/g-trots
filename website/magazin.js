@@ -312,7 +312,11 @@ function liveProductCard(product, index) {
     <div class="product-info">
       <span class="product-category"><i></i>${escapeCatalogHtml(cardLabel)}</span>
       <h3>${escapeCatalogHtml(product.name)}</h3>
-      <p>${escapeCatalogHtml(shortDescription)}</p>
+      <div class="product-summary" tabindex="0" aria-label="Pe scurt: ${escapeCatalogHtml(shortDescription)}">
+        <span class="product-summary-badge"><i aria-hidden="true"></i>Pe scurt</span>
+        <p>${escapeCatalogHtml(shortDescription)}</p>
+        <span class="product-summary-tooltip" aria-hidden="true">${escapeCatalogHtml(shortDescription)}</span>
+      </div>
       ${brandSection}
     </div>
     <div class="product-bottom">

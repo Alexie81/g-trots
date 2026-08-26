@@ -2430,8 +2430,8 @@ body.filters-open {
 .product-summary-tooltip {
   width: min(19rem, calc(100% + 2rem));
   max-width: calc(100vw - 2rem);
-  max-height: 8.8rem;
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
   padding: 0.7rem 0.78rem;
   position: absolute;
   left: 0;

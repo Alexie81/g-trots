@@ -146,6 +146,7 @@
 }
 
 .product-detail-copy {
+  min-width: 0;
   max-width: 39rem;
   padding: clamp(2rem, 5vw, 5rem) clamp(1rem, 4vw, 3.5rem) clamp(2rem, 5vw, 4rem) 0;
   align-self: center;
@@ -220,6 +221,8 @@
   font-size: clamp(2.5rem, 5vw, 5.25rem);
   letter-spacing: -0.075em;
   line-height: 0.94;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .product-detail-description {
@@ -228,6 +231,8 @@
   color: #99938c;
   font-size: clamp(0.88rem, 1.2vw, 1rem);
   line-height: 1.7;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .product-detail-price-row {
@@ -1462,6 +1467,8 @@ body.image-viewer-open {
   font-size: clamp(2rem, 4.8vw, 4.8rem);
   letter-spacing: -0.065em;
   line-height: 0.98;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 #descriere .product-section-heading h2 {
@@ -1491,6 +1498,7 @@ body.image-viewer-open {
 }
 
 .product-feature-grid article {
+  min-width: 0;
   min-height: 13rem;
   padding: 1.35rem;
   border-radius: 1.4rem;
@@ -1525,6 +1533,8 @@ body.image-viewer-open {
   color: #7f7973;
   font-size: 0.65rem;
   line-height: 1.65;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .product-fit-notice {

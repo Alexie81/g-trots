@@ -66,7 +66,10 @@ export default function ShopOrdersManager() {
     if (!token) return;
     setLoading(true);
     setError('');
-    try { setOrders(await shopApi.listOrders(token)); }
+    try {
+      const nextOrders = await shopApi.listOrders(token);
+      setOrders(Array.isArray(nextOrders) ? nextOrders : []);
+    }
     catch (loadError) { setError(loadError instanceof Error ? loadError.message : 'Comenzile nu au putut fi incarcate.'); }
     finally { setLoading(false); }
   }, [token]);
@@ -160,7 +163,7 @@ export default function ShopOrdersManager() {
             <InfoBlock title="Client" lines={[selected.customer_name, selected.customer_phone, selected.customer_email || 'Fara e-mail']} />
             <InfoBlock title="Livrare" lines={[selected.address, `${selected.city}${selected.county ? `, ${selected.county}` : ''}`, selected.shipping_method_name]} />
             <Text style={styles.sectionLabel}>PRODUSE</Text>
-            <View style={styles.items}>{selected.items.map((item) => <View key={item.id} style={styles.item}>{item.image_url ? <Image source={{ uri: item.image_url }} style={styles.itemImage} resizeMode="contain" /> : <View style={styles.itemQty}><Text style={styles.itemQtyText}>{item.quantity}×</Text></View>}<View style={styles.itemCopy}><Text style={styles.itemName}>{item.product_name}</Text><Text style={styles.itemSku}>{item.quantity} × {item.product_sku || 'Fara SKU'}</Text></View><Text style={styles.itemTotal}>{money(item.line_total)}</Text></View>)}</View>
+            <View style={styles.items}>{(Array.isArray(selected.items) ? selected.items : []).map((item) => <View key={item.id} style={styles.item}>{item.image_url ? <Image source={{ uri: item.image_url }} style={styles.itemImage} resizeMode="contain" /> : <View style={styles.itemQty}><Text style={styles.itemQtyText}>{item.quantity}×</Text></View>}<View style={styles.itemCopy}><Text style={styles.itemName}>{item.product_name}</Text><Text style={styles.itemSku}>{item.quantity} × {item.product_sku || 'Fara SKU'}</Text></View><Text style={styles.itemTotal}>{money(item.line_total)}</Text></View>)}</View>
             <View style={styles.totals}><View><Text>Produse</Text><Text>{money(selected.subtotal)}</Text></View><View><Text>Livrare</Text><Text>{money(selected.shipping_cost)}</Text></View><View style={styles.grandTotal}><Text>Total</Text><Text>{money(selected.total)}</Text></View></View>
             <Text style={styles.sectionLabel}>EVOLUȚIA COMENZII</Text>
             <OrderStatusTimeline order={selected} />
@@ -196,7 +199,7 @@ export default function ShopOrdersManager() {
 
 function OrderStatusTimeline({ order }: { order: ShopOrder }) {
   const reveal = useRef(new Animated.Value(0)).current;
-  const history = order.status_history || [];
+  const history = Array.isArray(order.status_history) ? order.status_history : [];
   const visible = orderStatuses;
   const flow = visible.filter((item) => item.value !== 'cancelled');
   const currentFlowIndex = flow.findIndex((item) => item.value === order.status);

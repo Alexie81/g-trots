@@ -36,6 +36,9 @@
         return call(action, options, id, attempt + 1);
       }
       if (!response.ok) throw new Error(result?.error || `Eroare SHOP (${response.status})`);
+      if (result === null || result === undefined) {
+        throw new Error('Serverul SHOP a trimis un raspuns incomplet. Reincearca actualizarea.');
+      }
       return result;
     } catch (error) {
       const retryable = !options.method || options.method === 'GET';

@@ -347,6 +347,9 @@ async function shopCall<T>(action: string, token: string, init?: RequestInit, id
       return shopCall<T>(action, token, init, id, attempt + 1);
     }
     if (!response.ok) throw new Error(result?.error || `Eroare SHOP (${response.status})`);
+    if (result === null || result === undefined) {
+      throw new Error('Serverul SHOP a trimis un raspuns incomplet. Reincearca actualizarea.');
+    }
     return result as T;
   } catch (error) {
     const retryable = !init?.method || init.method === 'GET';

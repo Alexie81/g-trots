@@ -16,7 +16,7 @@ export function ShopProductSourcesManager() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<SourceForm | null>(null);
-  const load = useCallback(async () => { if (!token) return; setLoading(true); try { setItems(await shopApi.listProductSources(token)); } catch (error) { Alert.alert('Eroare', error instanceof Error ? error.message : 'Sursele nu au putut fi incarcate.'); } finally { setLoading(false); } }, [token]);
+  const load = useCallback(async () => { if (!token) return; setLoading(true); try { const nextItems = await shopApi.listProductSources(token); setItems(Array.isArray(nextItems) ? nextItems : []); } catch (error) { Alert.alert('Eroare', error instanceof Error ? error.message : 'Sursele nu au putut fi incarcate.'); } finally { setLoading(false); } }, [token]);
   useEffect(() => { void load(); }, [load]);
   const save = async () => {
     if (!token || !form || saving) return;
@@ -84,7 +84,7 @@ export function ShopShippingManager() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<ShippingForm | null>(null);
-  const load = useCallback(async () => { if (!token) return; setLoading(true); try { setItems(await shopApi.listShippingMethods(token)); } catch (error) { Alert.alert('Eroare', error instanceof Error ? error.message : 'Livrarile nu au putut fi incarcate.'); } finally { setLoading(false); } }, [token]);
+  const load = useCallback(async () => { if (!token) return; setLoading(true); try { const nextItems = await shopApi.listShippingMethods(token); setItems(Array.isArray(nextItems) ? nextItems : []); } catch (error) { Alert.alert('Eroare', error instanceof Error ? error.message : 'Livrarile nu au putut fi incarcate.'); } finally { setLoading(false); } }, [token]);
   useEffect(() => { void load(); }, [load]);
   if (loading) return <Loading text="Se incarca livrarile..." />;
   const open = (item?: ShopShippingMethod) => setForm(item ? { ...item, costText: String(item.cost), freeAboveText: item.free_above === null ? '' : String(item.free_above) } : emptyShipping());

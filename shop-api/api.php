@@ -68,7 +68,17 @@ function shopConfig(): array {
 
 function jsonResponse($payload, int $status = 200): void {
     http_response_code($status);
-    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $json = json_encode(
+        $payload,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE
+    );
+    if ($json === false) {
+        http_response_code(500);
+        $json = json_encode([
+            'error' => 'Raspunsul SHOP nu a putut fi serializat.',
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+    echo $json;
     exit;
 }
 
@@ -1595,7 +1605,9 @@ try {
                     COALESCE(SUM(oi.line_total), 0) AS revenue
              FROM shop_order_items oi
              INNER JOIN shop_orders o ON o.id = oi.order_id
-             WHERE oi.product_id = ? AND o.status <> "cancelled"'
+             WHERE oi.product_id = ?
+               AND o.status <> "cancelled"
+               AND o.payment_status = "paid"'
         );
         $summary->execute([$product['id']]);
         $sales = $summary->fetch() ?: [];
@@ -1633,10 +1645,18 @@ try {
 
     if ($action === 'getDashboardStats' && $method === 'GET') {
         $summary = $db->query(
-            'SELECT COUNT(DISTINCT o.id) AS orders_count,
+            'SELECT COUNT(DISTINCT CASE
+                        WHEN o.payment_status = "paid" AND o.status <> "cancelled" THEN o.id
+                    END) AS orders_count,
                     COUNT(DISTINCT CASE WHEN o.status = "new" THEN o.id END) AS new_orders_count,
-                    COALESCE(SUM(CASE WHEN o.status <> "cancelled" THEN oi.line_total ELSE 0 END), 0) AS revenue,
-                    COALESCE(SUM(CASE WHEN o.status <> "cancelled" THEN oi.quantity * COALESCE(p.cost_price, 0) ELSE 0 END), 0) AS acquisitions
+                    COALESCE(SUM(CASE
+                        WHEN o.payment_status = "paid" AND o.status <> "cancelled" THEN oi.line_total
+                        ELSE 0
+                    END), 0) AS revenue,
+                    COALESCE(SUM(CASE
+                        WHEN o.payment_status = "paid" AND o.status <> "cancelled" THEN oi.quantity * COALESCE(p.cost_price, 0)
+                        ELSE 0
+                    END), 0) AS acquisitions
              FROM shop_orders o
              LEFT JOIN shop_order_items oi ON oi.order_id = o.id
              LEFT JOIN shop_products p ON p.id = oi.product_id'

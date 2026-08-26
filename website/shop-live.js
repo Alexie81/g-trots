@@ -15,7 +15,7 @@
     if (document.querySelector('link[href*="shop-live.css"]')) return;
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "/shop-live.css?v=20260826-4";
+    link.href = "/shop-live.css?v=20260826-6";
     document.head.append(link);
   }
 
@@ -148,8 +148,26 @@
       activeIndex = Math.max(0, Math.min(images.length - 1, index));
       const selected = images[activeIndex];
       mainImage.className = `product-detail-image${selected ? " product-detail-image-live" : normalized.image ? ` product-image-${normalized.image}` : ""}`;
-      mainImage.style.backgroundImage = selected ? `url("${selected.url.replace(/"/g, "%22")}")` : "";
-      mainImage.setAttribute("aria-label", selected?.alt || normalized.name);
+      mainImage.style.backgroundImage = selected ? "none" : "";
+      let semanticImage = mainImage.querySelector("img.product-detail-image-seo");
+      if (selected) {
+        if (!semanticImage) {
+          semanticImage = document.createElement("img");
+          semanticImage.className = "product-detail-image-seo";
+          semanticImage.decoding = "async";
+          semanticImage.loading = "eager";
+          semanticImage.setAttribute("fetchpriority", "high");
+          mainImage.append(semanticImage);
+        }
+        semanticImage.src = selected.url;
+        semanticImage.alt = selected.alt || normalized.name;
+        mainImage.removeAttribute("role");
+        mainImage.removeAttribute("aria-label");
+      } else {
+        semanticImage?.remove();
+        mainImage.setAttribute("role", "img");
+        mainImage.setAttribute("aria-label", normalized.name);
+      }
       const viewerArt = document.querySelector("[data-viewer-art]");
       if (viewerArt) {
         viewerArt.className = `product-image-viewer__art${selected ? " product-detail-image-live" : normalized.image ? ` product-image-${normalized.image}` : ""}`;
@@ -551,6 +569,8 @@
       image: (product.images || []).map(image => safeUrl(image.url)).filter(Boolean),
       url: canonicalUrl,
       sku: product.sku || undefined,
+      mpn: product.supplier_product_code || product.sku || undefined,
+      gtin13: String(product.gtin || "").length === 13 ? String(product.gtin) : undefined,
       category: product.category_name || undefined,
       brand: { "@type": "Brand", name: product.manufacturer_name || "G-Trots" },
       offers: {
@@ -563,7 +583,24 @@
       }
     });
     document.head.append(productSchema);
-    document.querySelector('meta[name="robots"]')?.setAttribute("content", "index, follow");
+    const faqQuestions = Array.isArray(product.questions)
+      ? product.questions.filter(item => item?.question && item?.answer).slice(0, 12)
+      : [];
+    if (faqQuestions.length) {
+      const faqSchema = document.createElement("script");
+      faqSchema.type = "application/ld+json";
+      faqSchema.textContent = JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        mainEntity: faqQuestions.map(item => ({
+          "@type": "Question",
+          name: String(item.question),
+          acceptedAnswer: { "@type": "Answer", text: String(item.answer) }
+        }))
+      });
+      document.head.append(faqSchema);
+    }
+    document.querySelector('meta[name="robots"]')?.setAttribute("content", product.seo_ready ? "index, follow, max-image-preview:large" : "noindex, follow");
     applyProductImages(product, normalized);
     ensureProductCommerce(product, normalized);
     ensureRichDescription(product, normalized);

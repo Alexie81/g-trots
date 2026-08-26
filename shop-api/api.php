@@ -256,6 +256,9 @@ function ensureShopSchema(PDO $db): void {
             stripe_synced_at DATETIME NULL,
             stripe_sync_error VARCHAR(500) NULL,
             content_status VARCHAR(20) NOT NULL DEFAULT 'manual',
+            seo_researched_at DATETIME NULL,
+            seo_word_count INT NOT NULL DEFAULT 0,
+            seo_sources_json MEDIUMTEXT NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_shop_products_name (name),
@@ -336,6 +339,16 @@ function ensureShopSchema(PDO $db): void {
     }
     if (!$db->query("SHOW COLUMNS FROM shop_products LIKE 'content_status'")->fetch()) {
         $db->exec("ALTER TABLE shop_products ADD COLUMN content_status VARCHAR(20) NOT NULL DEFAULT 'manual' AFTER stripe_sync_error");
+    }
+    $seoResearchColumns = [
+        'seo_researched_at' => 'DATETIME NULL AFTER content_status',
+        'seo_word_count' => 'INT NOT NULL DEFAULT 0 AFTER seo_researched_at',
+        'seo_sources_json' => 'MEDIUMTEXT NULL AFTER seo_word_count',
+    ];
+    foreach ($seoResearchColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_products LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_products ADD COLUMN {$column} {$definition}");
+        }
     }
     if (!$db->query("SHOW INDEX FROM shop_products WHERE Key_name = 'idx_shop_products_supplier_external'")->fetch()) {
         $db->exec('ALTER TABLE shop_products ADD UNIQUE INDEX idx_shop_products_supplier_external (source_id, supplier_external_id)');
@@ -580,10 +593,11 @@ function verifyApiKey(array $config): void {
     }
 }
 
-function verifyBoomagImportKey(array $config): void {
+function verifyBoomagImportKey(array $config, array $body = []): void {
     $expected = trim((string)($config['boomag_import_key'] ?? ''));
     if ($expected === '') $expected = trim((string)($config['gomag_api_key'] ?? ''));
     $provided = requestHeader('X-Import-Key');
+    if ($provided === '') $provided = trim((string)($body['import_key'] ?? ''));
     if ($expected === '' || $provided === '' || !hash_equals($expected, $provided)) {
         jsonResponse(['error' => 'Cheia importului Boomag este invalida.'], 401);
     }
@@ -937,8 +951,11 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['specifications'] = is_array($decodedSpecifications) ? array_values($decodedSpecifications) : [];
     $decodedQuestions = json_decode((string)($row['questions_json'] ?? ''), true);
     $row['questions'] = is_array($decodedQuestions) ? array_values($decodedQuestions) : [];
+    $decodedSeoSources = json_decode((string)($row['seo_sources_json'] ?? ''), true);
+    $row['seo_sources'] = is_array($decodedSeoSources) ? array_values($decodedSeoSources) : [];
     unset($row['specifications_json']);
     unset($row['questions_json']);
+    unset($row['seo_sources_json']);
     unset($row['_preloaded_images']);
     unset($row['_preloaded_brands']);
     $row['price'] = (float)$row['price'];
@@ -963,6 +980,7 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['is_active'] = (bool)$row['is_active'];
     $row['is_featured'] = (bool)$row['is_featured'];
     $row['view_count'] = (int)($row['view_count'] ?? 0);
+    $row['seo_word_count'] = (int)($row['seo_word_count'] ?? 0);
     $row['category_id'] = empty($row['category_id']) ? null : (string)$row['category_id'];
     $row['manufacturer_id'] = empty($row['manufacturer_id']) ? null : (string)$row['manufacturer_id'];
     $row['source_id'] = empty($row['source_id']) ? null : (string)$row['source_id'];
@@ -971,10 +989,12 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['stripe_price_id'] = empty($row['stripe_price_id']) ? null : (string)$row['stripe_price_id'];
     $row['stripe_sync_error'] = empty($row['stripe_sync_error']) ? null : (string)$row['stripe_sync_error'];
     $row['stripe_sync_status'] = $row['stripe_sync_error'] !== null ? 'error' : ($row['stripe_product_id'] !== null ? 'synced' : 'pending');
+    $row['seo_ready'] = (string)($row['content_status'] ?? '') === 'seo';
+    $row['gtin'] = preg_match('/^[0-9]{8,14}$/', (string)($row['ean'] ?? '')) ? (string)$row['ean'] : null;
     $row['stock_available'] = $row['stock_mode'] === 'unlimited' || $row['stock_quantity'] > 0;
     if (!$withDescription) unset($row['description_html']);
     if (!$includeInternal) {
-        unset($row['source_id'], $row['source_domain'], $row['source_url'], $row['source_name'], $row['source_is_active'], $row['supplier_external_id'], $row['supplier_product_code'], $row['ean'], $row['content_status']);
+        unset($row['source_id'], $row['source_domain'], $row['source_url'], $row['source_name'], $row['source_is_active'], $row['supplier_external_id'], $row['supplier_product_code'], $row['ean'], $row['content_status'], $row['seo_researched_at'], $row['seo_word_count'], $row['seo_sources']);
     }
     return $row;
 }
@@ -1171,6 +1191,255 @@ function syncProductBrands(PDO $db, string $productId, array $brandIds): void {
     $db->prepare('DELETE FROM shop_product_brands WHERE product_id = ?')->execute([$productId]);
     $insert = $db->prepare('INSERT INTO shop_product_brands (product_id, brand_id) VALUES (?, ?)');
     foreach ($brandIds as $brandId) $insert->execute([$productId, $brandId]);
+}
+
+function seoDescriptionWordCount(string $html): int {
+    $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $parts = preg_split('/[^\p{L}\p{N}]+/u', $text, -1, PREG_SPLIT_NO_EMPTY);
+    return is_array($parts) ? count($parts) : 0;
+}
+
+function seoCopyTokens(string $text): array {
+    $plain = mb_strtolower(html_entity_decode(strip_tags($text), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    $tokens = preg_split('/[^\p{L}\p{N}]+/u', $plain, -1, PREG_SPLIT_NO_EMPTY);
+    return is_array($tokens) ? array_values($tokens) : [];
+}
+
+function seoNormalizedCopy(string $text): string {
+    return implode(' ', seoCopyTokens($text));
+}
+
+function seoDuplicateSentenceIssues(string $descriptionHtml): array {
+    $withStops = preg_replace('#</(?:p|li|h[1-6]|blockquote|div)>#iu', '. ', $descriptionHtml) ?? $descriptionHtml;
+    $plain = html_entity_decode(strip_tags($withStops), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $sentences = preg_split('/(?<=[.!?])\s+/u', preg_replace('/\s+/u', ' ', trim($plain)) ?? trim($plain), -1, PREG_SPLIT_NO_EMPTY);
+    if (!is_array($sentences)) return [];
+    $counts = [];
+    $samples = [];
+    foreach ($sentences as $sentence) {
+        $tokens = seoCopyTokens($sentence);
+        if (count($tokens) < 9) continue;
+        $key = implode(' ', $tokens);
+        $counts[$key] = ($counts[$key] ?? 0) + 1;
+        $samples[$key] = trim($sentence);
+    }
+    $issues = [];
+    foreach ($counts as $key => $count) {
+        if ($count < 2) continue;
+        $sample = mb_substr($samples[$key] ?? $key, 0, 150);
+        $issues[] = 'Descrierea lunga repeta aceeasi propozitie de ' . $count . ' ori: „' . $sample . '”.';
+        if (count($issues) >= 4) break;
+    }
+    return $issues;
+}
+
+function seoCrossProductIssues(PDO $db, string $productId, array $payload): array {
+    $stmt = $db->prepare(
+        'SELECT id, name, short_description, meta_title, meta_description FROM shop_products WHERE id <> ? AND content_status = "seo"'
+    );
+    $stmt->execute([$productId]);
+    $candidateFields = [
+        'titlul SEO' => seoNormalizedCopy((string)($payload['name'] ?? '')),
+        'descrierea scurta' => seoNormalizedCopy((string)($payload['short_description'] ?? '')),
+        'meta titlul' => seoNormalizedCopy((string)($payload['meta_title'] ?? '')),
+        'meta descrierea' => seoNormalizedCopy((string)($payload['meta_description'] ?? '')),
+    ];
+    $issues = [];
+    foreach ($stmt->fetchAll() as $other) {
+        $otherFields = [
+            'titlul SEO' => seoNormalizedCopy((string)($other['name'] ?? '')),
+            'descrierea scurta' => seoNormalizedCopy((string)($other['short_description'] ?? '')),
+            'meta titlul' => seoNormalizedCopy((string)($other['meta_title'] ?? '')),
+            'meta descrierea' => seoNormalizedCopy((string)($other['meta_description'] ?? '')),
+        ];
+        foreach ($candidateFields as $label => $candidate) {
+            if ($candidate === '' || $candidate !== $otherFields[$label]) continue;
+            $issues[] = 'Campul „' . $label . '” este identic cu cel al produsului „' . (string)($other['name'] ?? '') . '”.';
+        }
+        if (count($issues) >= 4) break;
+    }
+    return array_values(array_unique($issues));
+}
+
+function seoRepetitionIssues(string $shortDescription, string $metaDescription, string $descriptionHtml): array {
+    $issues = [];
+    $stopWords = array_fill_keys([
+        'acest', 'aceasta', 'această', 'aceste', 'acestea', 'acela', 'aceea', 'care', 'este', 'sunt', 'pentru',
+        'prin', 'dintr', 'dintre', 'intr', 'într', 'fara', 'fără', 'dupa', 'după', 'daca', 'dacă', 'cand', 'când',
+        'unei', 'unui', 'este', 'fiind', 'poate', 'trebuie', 'foarte', 'mult', 'mai', 'nici', 'doar', 'toate',
+        'atunci', 'pana', 'până', 'spre', 'intre', 'între', 'asupra', 'despre', 'inainte', 'înainte', 'produs',
+        'produsul', 'trotineta', 'trotinetei', 'electrica', 'electrică', 'anvelopa', 'anvelopă', 'cauciucul',
+    ], true);
+
+    foreach (['descrierea scurta' => $shortDescription, 'meta descrierea' => $metaDescription] as $label => $copy) {
+        $counts = [];
+        foreach (seoCopyTokens($copy) as $token) {
+            if (mb_strlen($token) < 5 || isset($stopWords[$token])) continue;
+            $counts[$token] = ($counts[$token] ?? 0) + 1;
+        }
+        foreach ($counts as $token => $count) {
+            if ($count > 2) $issues[] = ucfirst($label) . ' repeta excesiv termenul „' . $token . '”.';
+        }
+    }
+
+    $tokens = seoCopyTokens($descriptionHtml);
+    $meaningful = [];
+    foreach ($tokens as $token) {
+        if (mb_strlen($token) < 5 || isset($stopWords[$token])) continue;
+        $meaningful[$token] = ($meaningful[$token] ?? 0) + 1;
+    }
+    $total = max(1, count($tokens));
+    foreach ($meaningful as $token => $count) {
+        $density = $count / $total;
+        if ($count >= 18 && $density > 0.035) {
+            $issues[] = 'Descrierea lunga foloseste prea des termenul „' . $token . '” (' . round($density * 100, 2) . '%).';
+        }
+    }
+
+    for ($index = 1, $limit = count($tokens); $index < $limit; $index++) {
+        if ($tokens[$index] !== $tokens[$index - 1] || mb_strlen($tokens[$index]) < 4) continue;
+        $issues[] = 'Descrierea lunga contine termenul duplicat consecutiv „' . $tokens[$index] . '”.';
+        break;
+    }
+
+    $phrases = [];
+    for ($index = 0, $limit = count($tokens) - 5; $index <= $limit; $index++) {
+        $phraseTokens = array_slice($tokens, $index, 5);
+        if (count(array_filter($phraseTokens, static fn(string $token): bool => preg_match('/^\d+$/', $token) === 1)) === 5) continue;
+        $phrase = implode(' ', $phraseTokens);
+        $phrases[$phrase] = ($phrases[$phrase] ?? 0) + 1;
+    }
+    foreach ($phrases as $phrase => $count) {
+        if ($count > 3) {
+            $issues[] = 'Descrierea lunga repeta de ' . $count . ' ori formularea „' . $phrase . '”.';
+            if (count($issues) >= 8) break;
+        }
+    }
+    $issues = array_merge($issues, seoDuplicateSentenceIssues($descriptionHtml));
+    return array_values(array_unique($issues));
+}
+
+function seoResearchPayload(array $body): array {
+    $name = mb_substr(trim((string)($body['name'] ?? '')), 0, 180);
+    $shortDescription = trim((string)($body['short_description'] ?? ''));
+    $descriptionTitle = mb_substr(trim((string)($body['description_title'] ?? '')), 0, 220);
+    $descriptionHtml = cleanRichHtml($body['description_html'] ?? '');
+    $metaTitle = mb_substr(trim((string)($body['meta_title'] ?? '')), 0, 180);
+    $metaDescription = mb_substr(trim((string)($body['meta_description'] ?? '')), 0, 320);
+    if ($name === '') throw new InvalidArgumentException('Titlul SEO al produsului este obligatoriu.');
+    if (mb_strlen($shortDescription) < 90 || mb_strlen($shortDescription) > 420) {
+        throw new InvalidArgumentException('Descrierea scurta trebuie sa aiba intre 90 si 420 de caractere.');
+    }
+    if ($descriptionTitle === '') throw new InvalidArgumentException('Titlul descrierii lungi este obligatoriu.');
+    $wordCount = seoDescriptionWordCount($descriptionHtml);
+    if ($wordCount < 2500 || $wordCount > 3400) {
+        throw new InvalidArgumentException('Descrierea lunga trebuie sa aiba intre 2500 si 3400 de cuvinte; continutul primit are ' . $wordCount . '.');
+    }
+    if (mb_strlen($metaTitle) < 35 || mb_strlen($metaTitle) > 70) {
+        throw new InvalidArgumentException('Meta titlul trebuie sa aiba intre 35 si 70 de caractere.');
+    }
+    if (mb_strlen($metaDescription) < 120 || mb_strlen($metaDescription) > 180) {
+        throw new InvalidArgumentException('Meta descrierea trebuie sa aiba intre 120 si 180 de caractere.');
+    }
+    $repetitionIssues = seoRepetitionIssues($shortDescription, $metaDescription, $descriptionHtml);
+    if ($repetitionIssues) {
+        throw new InvalidArgumentException('Continutul nu a trecut verificarea anti-repetitie: ' . implode(' ', $repetitionIssues));
+    }
+
+    $specifications = [];
+    foreach (array_values(is_array($body['specifications'] ?? null) ? $body['specifications'] : []) as $item) {
+        if (!is_array($item)) continue;
+        $group = mb_substr(trim((string)($item['group'] ?? 'Specificatii')), 0, 100);
+        $label = mb_substr(trim((string)($item['label'] ?? '')), 0, 120);
+        $value = mb_substr(trim((string)($item['value'] ?? '')), 0, 500);
+        if ($label === '' || $value === '') continue;
+        $specifications[] = ['group' => $group ?: 'Specificatii', 'label' => $label, 'value' => $value];
+        if (count($specifications) >= 60) break;
+    }
+    if (count($specifications) < 8) throw new InvalidArgumentException('O fisa SEO finalizata trebuie sa aiba minimum 8 specificatii verificate.');
+
+    $questions = [];
+    $questionKeys = [];
+    foreach (array_values(is_array($body['questions'] ?? null) ? $body['questions'] : []) as $item) {
+        if (!is_array($item)) continue;
+        $question = mb_substr(trim((string)($item['question'] ?? '')), 0, 320);
+        $answer = mb_substr(trim((string)($item['answer'] ?? '')), 0, 1600);
+        if ($question === '' || $answer === '') continue;
+        $key = mb_strtolower(preg_replace('/\s+/u', ' ', $question) ?? $question);
+        if (isset($questionKeys[$key])) continue;
+        if (mb_strlen($question) < 18 || mb_strlen($answer) < 60) {
+            throw new InvalidArgumentException('Intrebarile si raspunsurile SEO trebuie sa fie complete si utile clientului.');
+        }
+        $questionKeys[$key] = true;
+        $questions[] = ['question' => $question, 'answer' => $answer];
+        if (count($questions) >= 8) break;
+    }
+    if (count($questions) < 5) throw new InvalidArgumentException('O fisa SEO finalizata trebuie sa aiba intre 5 si 8 intrebari specifice produsului.');
+
+    $sources = [];
+    foreach (array_values(is_array($body['research_sources'] ?? null) ? $body['research_sources'] : []) as $source) {
+        if (is_array($source)) {
+            $url = trim((string)($source['url'] ?? ''));
+            $label = mb_substr(trim((string)($source['label'] ?? '')), 0, 180);
+        } else {
+            $url = trim((string)$source);
+            $label = '';
+        }
+        if (!filter_var($url, FILTER_VALIDATE_URL) || !preg_match('#^https://#i', $url)) continue;
+        $sources[$url] = ['url' => mb_substr($url, 0, 1000), 'label' => $label];
+        if (count($sources) >= 15) break;
+    }
+    if (count($sources) < 2) throw new InvalidArgumentException('Salveaza minimum doua surse folosite in cercetarea produsului.');
+
+    $compatibilities = [];
+    foreach (array_values(is_array($body['compatibility_names'] ?? null) ? $body['compatibility_names'] : []) as $nameValue) {
+        $compatibility = mb_substr(trim((string)$nameValue), 0, 120);
+        if ($compatibility !== '') $compatibilities[mb_strtolower($compatibility)] = $compatibility;
+    }
+    $imageAltTexts = [];
+    foreach (array_values(is_array($body['image_alt_texts'] ?? null) ? $body['image_alt_texts'] : []) as $altValue) {
+        $alt = mb_substr(trim((string)$altValue), 0, 180);
+        if ($alt !== '') $imageAltTexts[] = $alt;
+        if (count($imageAltTexts) >= 12) break;
+    }
+    if (!$imageAltTexts) throw new InvalidArgumentException('Adauga texte alternative specifice pentru imaginile produsului.');
+
+    return [
+        'name' => $name,
+        'slug_source' => trim((string)($body['slug'] ?? '')) ?: $name,
+        'short_description' => $shortDescription,
+        'description_title' => $descriptionTitle,
+        'description_html' => $descriptionHtml,
+        'meta_title' => $metaTitle,
+        'meta_description' => $metaDescription,
+        'specifications_json' => json_encode($specifications, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        'questions_json' => json_encode($questions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        'sources_json' => json_encode(array_values($sources), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        'compatibility_names' => array_values($compatibilities),
+        'image_alt_texts' => $imageAltTexts,
+        'word_count' => $wordCount,
+    ];
+}
+
+function seoProductRemainsReady(array $payload, ?PDO $db = null, string $productId = ''): bool {
+    $wordCount = seoDescriptionWordCount((string)($payload['description_html'] ?? ''));
+    $questions = json_decode((string)($payload['questions_json'] ?? ''), true);
+    $specifications = json_decode((string)($payload['specifications_json'] ?? ''), true);
+    $shortLength = mb_strlen(trim((string)($payload['short_description'] ?? '')));
+    $metaTitleLength = mb_strlen(trim((string)($payload['meta_title'] ?? '')));
+    $metaDescriptionLength = mb_strlen(trim((string)($payload['meta_description'] ?? '')));
+    if ($wordCount < 2500 || $wordCount > 3400) return false;
+    if (!is_array($questions) || count($questions) < 5 || count($questions) > 8) return false;
+    if (!is_array($specifications) || count($specifications) < 8) return false;
+    if ($shortLength < 90 || $shortLength > 420) return false;
+    if ($metaTitleLength < 35 || $metaTitleLength > 70) return false;
+    if ($metaDescriptionLength < 120 || $metaDescriptionLength > 180) return false;
+    if (seoRepetitionIssues(
+        (string)$payload['short_description'],
+        (string)$payload['meta_description'],
+        (string)$payload['description_html']
+    ) !== []) return false;
+    return $db === null || seoCrossProductIssues($db, $productId, $payload) === [];
 }
 
 function syncProductImages(PDO $db, string $productId, array $images, string $defaultAlt): void {
@@ -1661,7 +1930,7 @@ try {
     }
 
     if ($action === 'importBoomagProductsBatch' && $method === 'POST') {
-        verifyBoomagImportKey($config);
+        verifyBoomagImportKey($config, $body);
         set_time_limit(0);
         $offset = max(0, (int)($body['offset'] ?? 0));
         $limit = max(1, min(10, (int)($body['limit'] ?? 5)));
@@ -1670,8 +1939,66 @@ try {
     }
 
     if ($action === 'auditBoomagImport' && in_array($method, ['GET', 'POST'], true)) {
-        verifyBoomagImportKey($config);
+        verifyBoomagImportKey($config, $body);
         jsonResponse(boomagImportAudit($db, $config));
+    }
+
+    if ($action === 'saveBoomagSeoProduct' && $method === 'POST') {
+        verifyBoomagImportKey($config, $body);
+        $id = trim((string)($body['id'] ?? ''));
+        $externalId = trim((string)($body['supplier_external_id'] ?? ''));
+        $stmt = $db->prepare(
+            "SELECT p.* FROM shop_products p
+             INNER JOIN shop_product_sources s ON s.id = p.source_id
+             WHERE LOWER(s.domain) = 'boomag.ro' AND ((? <> '' AND p.id = ?) OR (? <> '' AND p.supplier_external_id = ?))
+             LIMIT 1"
+        );
+        $stmt->execute([$id, $id, $externalId, $externalId]);
+        $current = $stmt->fetch();
+        if (!$current) jsonResponse(['error' => 'Produsul Boomag nu a fost gasit.'], 404);
+        $payload = seoResearchPayload($body);
+        if (mb_strtolower(trim($payload['name'])) !== mb_strtolower(trim((string)$current['name']))) {
+            ensureUniqueProductName($db, $payload['name'], (string)$current['id']);
+        }
+        $crossProductIssues = seoCrossProductIssues($db, (string)$current['id'], $payload);
+        if ($crossProductIssues) {
+            throw new InvalidArgumentException('Continutul nu este suficient de unic fata de celelalte produse: ' . implode(' ', $crossProductIssues));
+        }
+
+        $brandIds = [];
+        foreach ($payload['compatibility_names'] as $compatibility) {
+            $brandId = boomagFindOrCreateTaxonomy($db, 'shop_brands', 'compatibility', $compatibility);
+            if ($brandId !== null) $brandIds[] = $brandId;
+        }
+        $db->beginTransaction();
+        try {
+            $update = $db->prepare(
+                'UPDATE shop_products SET name = ?, slug = ?, short_description = ?, description_title = ?, description_html = ?, specifications_json = ?, questions_json = ?, meta_title = ?, meta_description = ?, content_status = "seo", seo_researched_at = NOW(), seo_word_count = ?, seo_sources_json = ? WHERE id = ?'
+            );
+            $update->execute([
+                $payload['name'], uniqueSlug($db, 'shop_products', $payload['slug_source'], (string)$current['id']),
+                $payload['short_description'], $payload['description_title'], $payload['description_html'],
+                $payload['specifications_json'], $payload['questions_json'], $payload['meta_title'], $payload['meta_description'],
+                $payload['word_count'], $payload['sources_json'], (string)$current['id'],
+            ]);
+            syncProductBrands($db, (string)$current['id'], array_values(array_unique($brandIds)));
+            $imageStmt = $db->prepare('SELECT id FROM shop_product_images WHERE product_id = ? ORDER BY sort_order ASC, created_at ASC');
+            $imageStmt->execute([(string)$current['id']]);
+            $imageIds = array_values(array_map('strval', $imageStmt->fetchAll(PDO::FETCH_COLUMN)));
+            $updateAlt = $db->prepare('UPDATE shop_product_images SET alt_text = ? WHERE id = ? AND product_id = ?');
+            foreach ($imageIds as $imageIndex => $imageId) {
+                $alt = $payload['image_alt_texts'][$imageIndex] ?? ($payload['name'] . ' - fotografia ' . ($imageIndex + 1));
+                $updateAlt->execute([$alt, $imageId, (string)$current['id']]);
+            }
+            $db->commit();
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
+        $stripeSync = stripeSyncProductSafe($db, $config, (string)$current['id']);
+        $product = findProduct($db, (string)$current['id'], $config, false);
+        $product['stripe_sync'] = $stripeSync;
+        jsonResponse($product);
     }
 
     $currentUser = validateAuthToken($config, $body);
@@ -1964,17 +2291,20 @@ try {
         if (mb_strtolower(trim($payload['name'])) !== mb_strtolower(trim((string)$current['name']))) {
             ensureUniqueProductName($db, $payload['name'], $id);
         }
+        $nextContentStatus = (string)($current['content_status'] ?? '') === 'seo' && seoProductRemainsReady($payload, $db, $id)
+            ? 'seo'
+            : 'manual';
         $db->beginTransaction();
         try {
             $productSku = trim((string)($current['sku'] ?? '')) !== ''
                 ? (string)$current['sku']
                 : uniqueProductSku($db, $payload['sku'] ?? generatedProductSku($payload['name'], $payload['source_domain']), $id);
-            $stmt = $db->prepare('UPDATE shop_products SET category_id = ?, manufacturer_id = ?, source_id = ?, sku = ?, supplier_product_code = ?, ean = ?, source_domain = ?, source_url = ?, name = ?, slug = ?, short_description = ?, description_title = ?, description_html = ?, specifications_json = ?, questions_json = ?, meta_title = ?, meta_description = ?, cost_price = ?, price = ?, sale_price = ?, discount_type = ?, discount_value = ?, currency = ?, stock_mode = ?, stock_quantity = ?, low_stock_threshold = ?, is_active = ?, is_featured = ?, content_status = "manual" WHERE id = ?');
+            $stmt = $db->prepare('UPDATE shop_products SET category_id = ?, manufacturer_id = ?, source_id = ?, sku = ?, supplier_product_code = ?, ean = ?, source_domain = ?, source_url = ?, name = ?, slug = ?, short_description = ?, description_title = ?, description_html = ?, specifications_json = ?, questions_json = ?, meta_title = ?, meta_description = ?, cost_price = ?, price = ?, sale_price = ?, discount_type = ?, discount_value = ?, currency = ?, stock_mode = ?, stock_quantity = ?, low_stock_threshold = ?, is_active = ?, is_featured = ?, content_status = ? WHERE id = ?');
             $stmt->execute([
                 $payload['category_id'], $payload['manufacturer_id'], $payload['source_id'], $productSku, $payload['supplier_product_code'], $payload['ean'], $payload['source_domain'], $payload['source_url'],
                 $payload['name'], uniqueSlug($db, 'shop_products', $payload['slug_source'], $id), $payload['short_description'], $payload['description_title'], $payload['description_html'], $payload['specifications_json'], $payload['questions_json'],
                 $payload['meta_title'], $payload['meta_description'], $payload['cost_price'], $payload['price'], $payload['sale_price'], $payload['discount_type'], $payload['discount_value'], $payload['currency'],
-                $payload['stock_mode'], $payload['stock_quantity'], $payload['low_stock_threshold'], $payload['is_active'] ? 1 : 0, $payload['is_featured'] ? 1 : 0, $id
+                $payload['stock_mode'], $payload['stock_quantity'], $payload['low_stock_threshold'], $payload['is_active'] ? 1 : 0, $payload['is_featured'] ? 1 : 0, $nextContentStatus, $id
             ]);
             syncProductBrands($db, $id, $payload['brand_ids']);
             syncProductImages($db, $id, $payload['images'], $payload['name']);

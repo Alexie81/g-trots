@@ -689,13 +689,12 @@ function boomagProductQuestions(array $row, array $compatibilities): array {
 function boomagProductContent(array $row, string $categoryName, string $manufacturerName, array $compatibilities): array {
     $name = boomagCleanTitle((string)($row['name'] ?? ''));
     $sourceDescription = boomagPlainText((string)($row['description'] ?? ''));
-    $fallback = $name . ' este un produs pentru trotinete electrice din categoria ' . ($categoryName ?: 'piese si accesorii') . '.';
-    $short = boomagExcerpt($sourceDescription !== '' ? $sourceDescription : $fallback, 240);
-    if (mb_strlen($short) < 70) $short = boomagExcerpt($short . ' ' . $fallback, 240);
-    $descriptionTitle = boomagExcerpt('Detalii complete despre ' . $name, 210);
+    $fallback = $name;
+    $short = boomagExcerpt($sourceDescription !== '' ? $sourceDescription : $fallback, 320);
+    $descriptionTitle = boomagExcerpt($name, 210);
     $metaBase = $name . ($categoryName !== '' ? ' - ' . $categoryName : '') . ' | G-Trots';
     $metaTitle = boomagExcerpt($metaBase, 60);
-    $metaDescription = boomagExcerpt(($short ?: $fallback) . ' Vezi specificatiile si compatibilitatea la G-Trots.', 158);
+    $metaDescription = boomagExcerpt($short ?: $fallback, 158);
 
     $paragraphs = [];
     foreach (preg_split('/\n+/u', $sourceDescription) ?: [] as $paragraph) {
@@ -703,12 +702,7 @@ function boomagProductContent(array $row, string $categoryName, string $manufact
         if ($paragraph !== '') $paragraphs[] = '<p>' . htmlspecialchars($paragraph, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>';
     }
     if (!$paragraphs) $paragraphs[] = '<p>' . htmlspecialchars($fallback, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>';
-    $compatibilityText = $compatibilities
-        ? 'Compatibilitatile identificate in datele produsului includ: ' . implode(', ', $compatibilities) . '.'
-        : 'Compatibilitatea se confirma dupa modelul complet, revizia, mufele si dimensiunile piesei originale.';
-    $details = '<h2>Informatii despre produs</h2>' . implode("\n", $paragraphs)
-        . '<h2>Compatibilitate si alegere corecta</h2><p>' . htmlspecialchars($compatibilityText, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . ' Verifica toate caracteristicile inainte de montaj.</p>'
-        . '<h2>Recomandari de montaj si utilizare</h2><p>Pentru componentele electrice, de franare sau de structura, montajul si verificarea finala trebuie facute corect. Daca exista diferente intre piesa originala si produs, solicita confirmarea echipei G-Trots inainte de utilizare.</p>';
+    $details = implode("\n", $paragraphs);
     return [
         'name' => $name,
         'short_description' => $short,
@@ -717,7 +711,7 @@ function boomagProductContent(array $row, string $categoryName, string $manufact
         'meta_title' => $metaTitle,
         'meta_description' => $metaDescription,
         'specifications' => boomagProductSpecifications($row, $categoryName, $manufacturerName),
-        'questions' => boomagProductQuestions($row, $compatibilities),
+        'questions' => [],
     ];
 }
 

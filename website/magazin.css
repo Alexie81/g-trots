@@ -2349,6 +2349,7 @@ body.filters-open {
   font-size: clamp(1.08rem, 1.35vw, 1.28rem);
   letter-spacing: -0.055em;
   line-height: 1.04;
+  overflow-wrap: anywhere;
 }
 
 .product-info h3 br {
@@ -2356,6 +2357,9 @@ body.filters-open {
 }
 
 .product-summary {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 2.8rem;
   margin-top: 0.65rem;
   padding: 0.48rem 0.58rem;
@@ -2419,10 +2423,15 @@ body.filters-open {
   line-height: 1.4;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .product-summary-tooltip {
   width: min(19rem, calc(100% + 2rem));
+  max-width: calc(100vw - 2rem);
+  max-height: 8.8rem;
+  overflow: auto;
   padding: 0.7rem 0.78rem;
   position: absolute;
   left: 0;
@@ -2436,6 +2445,9 @@ body.filters-open {
   color: #e7e1da;
   font-size: 0.64rem;
   line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
   opacity: 0;
   pointer-events: none;
   transform: translateY(0.3rem);

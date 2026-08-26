@@ -71,6 +71,7 @@ const orderStatusLabels: Record<string, string> = {
   processing: 'ÎN PREGĂTIRE',
   shipped: 'PREDATĂ CURIERULUI',
   completed: 'LIVRATĂ',
+  refunded: 'RAMBURSATĂ',
   cancelled: 'COMANDĂ ANULATĂ',
 };
 
@@ -145,6 +146,8 @@ export default function ShopModuleScreen() {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
   const [view, setView] = useState<ShopView>('home');
+  const [ordersInitialFilter, setOrdersInitialFilter] = useState<'all' | 'new'>('all');
+  const [initialOrderId, setInitialOrderId] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<ShopDashboardStats | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [categories, setCategories] = useState<ShopCategory[]>([]);
@@ -207,6 +210,12 @@ export default function ShopModuleScreen() {
   const openCatalog = (next: CatalogView) => {
     setView(next);
     void loadCatalog();
+  };
+
+  const openOrders = (filter: 'all' | 'new' = 'all', orderId: string | null = null) => {
+    setOrdersInitialFilter(filter);
+    setInitialOrderId(orderId);
+    setView('orders');
   };
 
   const openCategoryForm = (category?: ShopCategory) => {
@@ -381,14 +390,14 @@ export default function ShopModuleScreen() {
             <DashboardMetric title="ACHIZIȚII" value={formatShopMoney(dashboard?.acquisitions || 0)} color="#F59E0B" />
             <DashboardMetric title="PROFIT" value={formatShopMoney(dashboard?.profit || 0)} color="#22C55E" />
           </View>}
-          <View style={styles.newOrdersBanner}><View style={styles.newOrdersIcon}><ShoppingCart size={21} color="#38BDF8" /></View><View style={styles.newOrdersCopy}><Text style={styles.newOrdersValue}>{dashboard?.new_orders_count || 0}</Text><Text style={styles.newOrdersLabel}>comenzi aflate în procesare</Text></View><TouchableOpacity style={styles.newOrdersButton} onPress={() => setView('orders')}><Text style={styles.newOrdersButtonText}>Vezi comenzile</Text><ChevronRight size={16} color={Colors.white} /></TouchableOpacity></View>
+          <View style={styles.newOrdersBanner}><View style={styles.newOrdersIcon}><ShoppingCart size={21} color="#38BDF8" /></View><View style={styles.newOrdersCopy}><Text style={styles.newOrdersValue}>{dashboard?.new_orders_count || 0}</Text><Text style={styles.newOrdersLabel}>comenzi noi</Text></View><TouchableOpacity style={styles.newOrdersButton} onPress={() => openOrders('new')}><Text style={styles.newOrdersButtonText}>Vezi comenzile</Text><ChevronRight size={16} color={Colors.white} /></TouchableOpacity></View>
           <View style={styles.sectionHeader}><View><Text style={styles.sectionKicker}>SCURTATURI</Text><Text style={styles.sectionTitle}>Acțiuni rapide</Text></View></View>
-          <View style={styles.quickActions}><TouchableOpacity style={styles.quickAction} onPress={() => setView('products')}><View style={[styles.cardIcon, { backgroundColor: '#A78BFA14' }]}><Package size={22} color="#A78BFA" /></View><View style={styles.quickActionCopy}><Text style={styles.quickActionTitle}>Produse</Text><Text style={styles.quickActionText}>Adaugă sau editează catalogul.</Text></View><ChevronRight size={18} color="#A78BFA" /></TouchableOpacity><TouchableOpacity style={styles.quickAction} onPress={() => setView('orders')}><View style={[styles.cardIcon, { backgroundColor: '#38BDF814' }]}><ShoppingCart size={22} color="#38BDF8" /></View><View style={styles.quickActionCopy}><Text style={styles.quickActionTitle}>Comenzi</Text><Text style={styles.quickActionText}>Verifică și procesează comenzile.</Text></View><ChevronRight size={18} color="#38BDF8" /></TouchableOpacity></View>
-          <View style={styles.sectionHeader}><View><Text style={styles.sectionKicker}>ACTIVITATE RECENTA</Text><Text style={styles.sectionTitle}>Ultimele comenzi</Text></View></View>
-          <View style={styles.recentOrders}>{dashboard?.recent_orders?.length ? dashboard.recent_orders.slice(0, 5).map((order) => <TouchableOpacity key={order.id} style={styles.recentOrder} onPress={() => setView('orders')}><View><Text style={styles.recentOrderNumber}>{order.order_number}</Text><Text style={styles.recentOrderMeta}>{order.customer_name} · {order.created_at}</Text></View><View style={styles.recentOrderRight}><Text style={styles.recentOrderTotal}>{formatShopMoney(order.total)}</Text><Text style={[styles.recentOrderStatus, order.status === 'new' && styles.recentOrderNew]}>{orderStatusLabels[order.status] || order.status.toUpperCase()}</Text></View></TouchableOpacity>) : <Text style={styles.dashboardEmpty}>Nu există încă nicio comandă.</Text>}</View>
+          <View style={styles.quickActions}><TouchableOpacity style={styles.quickAction} onPress={() => setView('products')}><View style={[styles.cardIcon, { backgroundColor: '#A78BFA14' }]}><Package size={22} color="#A78BFA" /></View><View style={styles.quickActionCopy}><Text style={styles.quickActionTitle}>Produse</Text><Text style={styles.quickActionText}>Adaugă sau editează catalogul.</Text></View><ChevronRight size={18} color="#A78BFA" /></TouchableOpacity><TouchableOpacity style={styles.quickAction} onPress={() => openOrders()}><View style={[styles.cardIcon, { backgroundColor: '#38BDF814' }]}><ShoppingCart size={22} color="#38BDF8" /></View><View style={styles.quickActionCopy}><Text style={styles.quickActionTitle}>Comenzi</Text><Text style={styles.quickActionText}>Verifică și procesează comenzile.</Text></View><ChevronRight size={18} color="#38BDF8" /></TouchableOpacity></View>
+          <View style={styles.sectionHeader}><View><Text style={styles.sectionKicker}>ACTIVITATE RECENTA</Text><Text style={styles.sectionTitle}>Ultimele comenzi</Text></View><TouchableOpacity style={styles.sectionSeeAll} onPress={() => openOrders('new')}><Text style={styles.sectionSeeAllText}>Vezi toate</Text><ChevronRight size={15} color={Colors.white} /></TouchableOpacity></View>
+          <View style={styles.recentOrders}>{dashboard?.recent_orders?.filter((order) => order.status === 'new').length ? dashboard.recent_orders.filter((order) => order.status === 'new').slice(0, 5).map((order) => <TouchableOpacity key={order.id} style={styles.recentOrder} onPress={() => openOrders('new', order.id)}><View><Text style={styles.recentOrderNumber}>{order.order_number}</Text><Text style={styles.recentOrderMeta}>{order.customer_name} · {order.created_at}</Text></View><View style={styles.recentOrderRight}><Text style={styles.recentOrderTotal}>{formatShopMoney(order.total)}</Text><Text style={[styles.recentOrderStatus, styles.recentOrderNew]}>{orderStatusLabels[order.status] || order.status.toUpperCase()}</Text></View></TouchableOpacity>) : <Text style={styles.dashboardEmpty}>Nu există comenzi noi.</Text>}</View>
         </ScrollView>
 
-        <ShopBottomNavigation activeTab="home" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
+        <ShopBottomNavigation activeTab="home" onSelect={(tab) => tab === 'orders' ? openOrders() : setView(tab)} bottomInset={insets.bottom} />
       </View>
     );
   }
@@ -414,9 +423,9 @@ export default function ShopModuleScreen() {
           </View> : null}
 
           {view === 'orders' ? (
-            <ShopOrdersManager />
+            <ShopOrdersManager initialStatusFilter={ordersInitialFilter} initialOrderId={initialOrderId} onInitialOrderHandled={() => setInitialOrderId(null)} />
           ) : view === 'products' ? (
-            <ShopProductsManager />
+            <ShopProductsManager onOpenOrder={(orderId) => openOrders('all', orderId)} />
           ) : view === 'inventory' ? (
             <ShopInventoryManager />
           ) : isMore ? (
@@ -474,7 +483,7 @@ export default function ShopModuleScreen() {
           )}
         </ScrollView>
 
-        <ShopBottomNavigation activeTab={view} onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
+        <ShopBottomNavigation activeTab={view} onSelect={(tab) => tab === 'orders' ? openOrders() : setView(tab)} bottomInset={insets.bottom} />
       </View>
     );
   }
@@ -804,6 +813,8 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 26, marginBottom: 13, paddingHorizontal: 2 },
   sectionKicker: { color: Colors.orange, fontSize: 8, fontFamily: 'Inter-Bold', letterSpacing: 1.3 },
   sectionTitle: { color: Colors.textPrimary, fontSize: 17, fontFamily: 'Inter-Bold', marginTop: 4 },
+  sectionSeeAll: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, borderWidth: 1, borderColor: '#4A4650', borderRadius: 999, paddingHorizontal: 13, backgroundColor: '#343139' },
+  sectionSeeAllText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 },
   dashboardLoading: { minHeight: 120, alignItems: 'center', justifyContent: 'center', gap: 10, borderRadius: 22, backgroundColor: '#1B1B1F' }, dashboardLoadingText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10 }, dashboardMetrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, dashboardMetric: { width: '48%', minHeight: 112, flexGrow: 1, borderRadius: 22, padding: 16, backgroundColor: '#1B1B1F' }, dashboardMetricDot: { width: 8, height: 8, borderRadius: 4 }, dashboardMetricTitle: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.9, marginTop: 12 }, dashboardMetricValue: { fontFamily: 'Inter-Bold', fontSize: 18, marginTop: 7 },
   newOrdersBanner: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: 'rgba(56,189,248,0.16)', borderRadius: 22, padding: 13, backgroundColor: 'rgba(56,189,248,0.07)', marginTop: 11 }, newOrdersIcon: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: 'rgba(56,189,248,0.11)' }, newOrdersCopy: { flex: 1 }, newOrdersValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 20 }, newOrdersLabel: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 13, marginTop: 2 }, newOrdersButton: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 13, paddingHorizontal: 11, backgroundColor: '#1684B4' }, newOrdersButtonText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 },
   quickActions: { gap: 9 }, quickAction: { minHeight: 80, flexDirection: 'row', alignItems: 'center', gap: 13, borderRadius: 20, padding: 13, backgroundColor: '#1B1B1F' }, quickActionCopy: { flex: 1 }, quickActionTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 13 }, quickActionText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 9, marginTop: 3 }, recentOrders: { overflow: 'hidden', borderRadius: 21, backgroundColor: '#1B1B1F' }, recentOrder: { minHeight: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#353137', paddingHorizontal: 14 }, recentOrderNumber: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 11 }, recentOrderMeta: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 4 }, recentOrderRight: { alignItems: 'flex-end' }, recentOrderTotal: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 11 }, recentOrderStatus: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, marginTop: 4 }, recentOrderNew: { color: '#38BDF8' }, dashboardEmpty: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 10, padding: 22, textAlign: 'center' },

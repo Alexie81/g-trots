@@ -53,6 +53,16 @@ function gtOrderStatuses(): array {
             'next_title' => 'Totul este gata',
             'next_message' => 'Îți mulțumim pentru încredere. Suntem aici dacă ai nevoie de ajutor.',
         ],
+        'refunded' => [
+            'label' => 'Rambursată',
+            'title' => 'Comanda a fost rambursată',
+            'message' => 'Comanda a fost returnată, iar rambursarea a fost înregistrată. Dacă ai întrebări, răspunde direct la acest e-mail.',
+            'color' => '#f59e0b',
+            'eyebrow' => 'RAMBURSARE ÎNREGISTRATĂ',
+            'symbol' => '↶',
+            'next_title' => 'Rambursarea este înregistrată',
+            'next_message' => 'Păstrează acest mesaj pentru evidență și contactează-ne dacă ai nevoie de detalii.',
+        ],
         'cancelled' => [
             'label' => 'Comandă anulată',
             'title' => 'Comanda a fost anulată',
@@ -87,13 +97,13 @@ function gtEmailTrackingUrl(array $order, array $config): string {
 function gtEmailStatusTimeline(string $status, string $paymentMethod = 'card'): string {
     $flow = ['new', 'confirmed', 'processing', 'shipped', 'completed'];
     $currentIndex = array_search($status, $flow, true);
-    $cancelled = $status === 'cancelled';
+    $terminal = in_array($status, ['refunded', 'cancelled'], true);
     if ($currentIndex === false) $currentIndex = 0;
     $rows = '';
     foreach ($flow as $index => $value) {
         $meta = gtOrderStatusMeta($value);
-        $reached = !$cancelled && $index <= $currentIndex;
-        $current = !$cancelled && $index === $currentIndex;
+        $reached = !$terminal && $index <= $currentIndex;
+        $current = !$terminal && $index === $currentIndex;
         $tone = $current ? (string)$meta['color'] : ($reached ? '#ff9a2f' : '#68635d');
         $surface = $current ? (string)$meta['color'] . '18' : ($reached ? '#211d18' : '#191817');
         $border = $current ? (string)$meta['color'] . '55' : '#302d29';
@@ -107,14 +117,14 @@ function gtEmailStatusTimeline(string $status, string $paymentMethod = 'card'): 
             . '<td align="right" style="width:72px;padding:11px 12px 11px 4px"><span style="display:inline-block;color:' . $tone . ';font-size:8px;font-weight:900;letter-spacing:.08em">' . $stateLabel . '</span></td></tr></table>'
             . '</td></tr>';
     }
-    $cancelMeta = gtOrderStatusMeta('cancelled');
-    $cancelTone = $cancelled ? '#fb7185' : '#68635d';
-    $cancelSurface = $cancelled ? '#2a181c' : '#191817';
-    $cancelBorder = $cancelled ? '#fb718555' : '#302d29';
-    $rows .= '<tr><td style="padding:0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:' . $cancelSurface . ';border:1px solid ' . $cancelBorder . ';border-radius:18px">'
-        . '<tr><td style="width:48px;padding:11px 0 11px 12px"><span style="display:block;width:36px;height:36px;line-height:36px;text-align:center;border-radius:13px;background:' . $cancelTone . ';color:#160f10;font-size:18px;font-weight:900">×</span></td>'
-        . '<td style="padding:11px 8px"><strong style="display:block;color:' . ($cancelled ? '#fff' : '#aaa39c') . ';font-size:13px">' . gtEmailEscape($cancelMeta['label']) . '</strong><span style="display:block;margin-top:3px;color:#827b74;font-size:10px">Stare alternativă dacă fluxul comenzii este oprit.</span></td>'
-        . '<td align="right" style="width:72px;padding:11px 12px 11px 4px"><span style="color:' . $cancelTone . ';font-size:8px;font-weight:900;letter-spacing:.08em">' . ($cancelled ? 'ACUM' : 'ALTERNATIV') . '</span></td></tr></table></td></tr>';
+    if ($terminal) {
+        $terminalMeta = gtOrderStatusMeta($status);
+        $terminalTone = (string)$terminalMeta['color'];
+        $rows .= '<tr><td style="padding:0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:' . $terminalTone . '18;border:1px solid ' . $terminalTone . '55;border-radius:18px">'
+            . '<tr><td style="width:48px;padding:11px 0 11px 12px"><span style="display:block;width:36px;height:36px;line-height:36px;text-align:center;border-radius:13px;background:' . $terminalTone . ';color:#160f10;font-size:17px;font-weight:900">' . gtEmailEscape($terminalMeta['symbol']) . '</span></td>'
+            . '<td style="padding:11px 8px"><strong style="display:block;color:#fff;font-size:13px">' . gtEmailEscape($terminalMeta['label']) . '</strong><span style="display:block;margin-top:3px;color:#aaa39c;font-size:10px">' . gtEmailEscape($terminalMeta['message']) . '</span></td>'
+            . '<td align="right" style="width:72px;padding:11px 12px 11px 4px"><span style="color:' . $terminalTone . ';font-size:8px;font-weight:900;letter-spacing:.08em">ACUM</span></td></tr></table></td></tr>';
+    }
     return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' . $rows . '</table>';
 }
 

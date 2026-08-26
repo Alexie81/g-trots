@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BadgeCheck, Ban, BellRing, Check, ChevronRight, CircleCheckBig, Clock3, Mail, MessageCircle, PackageCheck, PackageOpen, Phone, RefreshCw, Save, Search, ShoppingCart, Truck, X } from 'lucide-react-native';
+import { BadgeCheck, Ban, BellRing, Check, ChevronRight, CircleCheckBig, Clock3, CreditCard, HandCoins, Mail, MessageCircle, PackageCheck, PackageOpen, Phone, RefreshCw, RotateCcw, Save, Search, ShoppingCart, SlidersHorizontal, Truck, WalletCards, X } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { shopApi, ShopOrder } from '@/services/shopApi';
@@ -27,6 +27,7 @@ const orderStatuses = [
   { value: 'processing', label: 'În pregătire', description: 'Produsele sunt pregătite pentru expediere.', color: '#FB923C', icon: PackageOpen },
   { value: 'shipped', label: 'Predată curierului', description: 'Pachetul a plecat către client.', color: '#A78BFA', icon: Truck },
   { value: 'completed', label: 'Livrată', description: 'Comanda a ajuns la destinație.', color: '#22C55E', icon: CircleCheckBig },
+  { value: 'refunded', label: 'Rambursată', description: 'Comanda a fost returnată și rambursată.', color: '#F59E0B', icon: RotateCcw },
   { value: 'cancelled', label: 'Comandă anulată', description: 'Comanda nu mai este procesată.', color: '#FB7185', icon: Ban },
 ] satisfies { value: ShopOrder['status']; label: string; shortLabel?: string; description: string; color: string; icon: typeof Clock3 }[];
 
@@ -44,6 +45,48 @@ function money(value: number) {
 function dateTime(value: string) {
   const date = new Date(value.replace(' ', 'T') + (value.includes('T') ? '' : 'Z'));
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('ro-RO', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function normalizeSearch(value: unknown) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+function orderSearchText(order: ShopOrder) {
+  const created = new Date(order.created_at.replace(' ', 'T'));
+  const status = orderStatuses.find((item) => item.value === order.status);
+  const payment = paymentStatuses.find((item) => item.value === order.payment_status);
+  const createdLabels = Number.isNaN(created.getTime()) ? [] : [
+    created.toLocaleDateString('ro-RO'),
+    created.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' }),
+    created.toLocaleString('ro-RO'),
+  ];
+  return normalizeSearch([
+    order.order_number,
+    order.customer_name,
+    order.customer_phone,
+    order.customer_email,
+    order.created_at,
+    ...createdLabels,
+    order.status,
+    status?.label,
+    status?.shortLabel,
+    order.payment_method,
+    order.payment_method === 'card' ? 'card online plata cu cardul' : 'ramburs la curier plata ramburs numerar cash',
+    order.payment_status,
+    payment?.label,
+  ].join(' '));
+}
+
+const mainOrderFlow: ShopOrder['status'][] = ['new', 'confirmed', 'processing', 'shipped', 'completed'];
+const terminalOrderStatuses: ShopOrder['status'][] = ['refunded', 'cancelled'];
+
+function isStatusTransitionLocked(current: ShopOrder['status'], candidate: ShopOrder['status']) {
+  if (candidate === current) return false;
+  if (terminalOrderStatuses.includes(current)) return true;
+  if (terminalOrderStatuses.includes(candidate)) return false;
+  const currentIndex = mainOrderFlow.indexOf(current);
+  const candidateIndex = mainOrderFlow.indexOf(candidate);
+  return currentIndex >= 0 && candidateIndex >= 0 && candidateIndex < currentIndex;
 }
 
 function whatsappPhone(value: string) {
@@ -70,11 +113,15 @@ async function openCustomerWhatsApp(phone: string) {
   catch { Alert.alert('WhatsApp', 'Conversația nu a putut fi deschisă.'); }
 }
 
-export default function ShopOrdersManager() {
+export default function ShopOrdersManager({ initialStatusFilter = 'all', initialOrderId = null, onInitialOrderHandled }: { initialStatusFilter?: 'all' | ShopOrder['status']; initialOrderId?: string | null; onInitialOrderHandled?: () => void }) {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
   const [orders, setOrders] = useState<ShopOrder[]>([]);
   const [query, setQuery] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | ShopOrder['status']>(initialStatusFilter);
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<'all' | 'card' | 'cash'>('all');
+  const [paymentStateFilter, setPaymentStateFilter] = useState<'all' | ShopOrder['payment_status']>('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [loading, setLoading] = useState(true);
@@ -86,6 +133,7 @@ export default function ShopOrdersManager() {
   const [adminNotes, setAdminNotes] = useState('');
   const [notifyCustomer, setNotifyCustomer] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const initialOpenedOrderId = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -101,11 +149,32 @@ export default function ShopOrdersManager() {
 
   useEffect(() => { void load(); }, [load]);
 
+  const financials = useMemo(() => {
+    const active = orders.filter((order) => !terminalOrderStatuses.includes(order.status));
+    const collected = active.filter((order) => order.payment_status === 'paid').reduce((sum, order) => sum + Number(order.total || 0), 0);
+    const pendingCash = active.filter((order) => order.payment_method !== 'card' && order.payment_status === 'pending').reduce((sum, order) => sum + Number(order.total || 0), 0);
+    return { collected, pendingCash, total: collected + pendingCash };
+  }, [orders]);
+
   const filtered = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    if (!term) return orders;
-    return orders.filter((order) => `${order.order_number} ${order.customer_name} ${order.customer_phone} ${order.customer_email || ''}`.toLowerCase().includes(term));
-  }, [orders, query]);
+    const term = normalizeSearch(query.trim());
+    return orders.filter((order) => {
+      if (term && !orderSearchText(order).includes(term)) return false;
+      if (statusFilter !== 'all' && order.status !== statusFilter) return false;
+      if (paymentMethodFilter === 'card' && order.payment_method !== 'card') return false;
+      if (paymentMethodFilter === 'cash' && order.payment_method === 'card') return false;
+      if (paymentStateFilter !== 'all' && order.payment_status !== paymentStateFilter) return false;
+      return true;
+    });
+  }, [orders, paymentMethodFilter, paymentStateFilter, query, statusFilter]);
+  const activeFilterCount = Number(statusFilter !== 'all') + Number(paymentMethodFilter !== 'all') + Number(paymentStateFilter !== 'all');
+  const resetFilters = () => {
+    setQuery('');
+    setStatusFilter('all');
+    setPaymentMethodFilter('all');
+    setPaymentStateFilter('all');
+    setPage(1);
+  };
   const safePage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
   const pagedOrders = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
@@ -127,6 +196,15 @@ export default function ShopOrdersManager() {
       Alert.alert('Detaliile nu s-au putut actualiza', detailError instanceof Error ? detailError.message : 'Încearcă din nou.');
     } finally { setDetailLoading(false); }
   };
+
+  useEffect(() => {
+    if (!initialOrderId || loading || initialOpenedOrderId.current === initialOrderId) return;
+    const order = orders.find((item) => item.id === initialOrderId);
+    if (!order) return;
+    initialOpenedOrderId.current = initialOrderId;
+    onInitialOrderHandled?.();
+    void open(order);
+  }, [initialOrderId, loading, onInitialOrderHandled, orders]);
 
   const save = async () => {
     if (!token || !selected || saving) return;
@@ -157,15 +235,36 @@ export default function ShopOrdersManager() {
 
   return (
     <View style={styles.wrap}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroller} contentContainerStyle={styles.stats}>
+        <OrderMetricCard icon={Clock3} color="#38BDF8" label="În procesare" value={String(orders.filter((order) => order.status === 'new').length)} help="Comenzi noi" />
+        <OrderMetricCard icon={PackageOpen} color="#FB923C" label="În pregătire" value={String(orders.filter((order) => order.status === 'processing').length)} help="Se pregătesc" />
+        <OrderMetricCard icon={WalletCards} color="#A78BFA" label="Total" value={money(financials.total)} help="Încasat + ramburs" />
+        <OrderMetricCard icon={CreditCard} color="#34D399" label="Încasat" value={money(financials.collected)} help="Plăți încasate" />
+        <OrderMetricCard icon={HandCoins} color="#FBBF24" label="De încasat" value={money(financials.pendingCash)} help="Ramburs în așteptare" />
+      </ScrollView>
       <View style={styles.actions}>
-        <View style={styles.search}><Search size={17} color={Colors.textMuted} /><TextInput value={query} onChangeText={(value) => { setQuery(value); setPage(1); }} placeholder="Numar, client sau telefon" placeholderTextColor={Colors.textMuted} style={styles.searchInput} /></View>
+        <View style={styles.search}><Search size={17} color={Colors.textMuted} /><TextInput value={query} onChangeText={(value) => { setQuery(value); setPage(1); }} placeholder="Client, dată, oră, telefon, status, plată sau număr" placeholderTextColor={Colors.textMuted} style={styles.searchInput} /></View>
+        <TouchableOpacity style={[styles.filterButton, (filtersOpen || activeFilterCount > 0) && styles.filterButtonActive]} onPress={() => setFiltersOpen((current) => !current)}>
+          <SlidersHorizontal size={18} color={(filtersOpen || activeFilterCount > 0) ? Colors.orange : Colors.textSecondary} />
+          {activeFilterCount ? <View style={styles.filterBadge}><Text style={styles.filterBadgeText}>{activeFilterCount}</Text></View> : null}
+        </TouchableOpacity>
         <TouchableOpacity style={styles.refresh} onPress={() => void load()}><RefreshCw size={18} color={Colors.textSecondary} /></TouchableOpacity>
       </View>
-      <View style={styles.stats}>
-        <View><Text style={styles.statValue}>{orders.filter((order) => order.status === 'new').length}</Text><Text style={styles.statLabel}>COMENZI NOI</Text></View>
-        <View><Text style={styles.statValue}>{orders.filter((order) => order.status === 'processing').length}</Text><Text style={styles.statLabel}>IN PREGATIRE</Text></View>
-        <View><Text style={styles.statValue}>{money(orders.reduce((sum, order) => sum + (order.status !== 'cancelled' ? order.total : 0), 0))}</Text><Text style={styles.statLabel}>VALOARE</Text></View>
-      </View>
+      {filtersOpen ? <View style={styles.filtersPanel}>
+        <View style={styles.filtersHead}><View><Text style={styles.filtersTitle}>Filtre comenzi</Text><Text style={styles.filtersResult}>{filtered.length} {filtered.length === 1 ? 'rezultat' : 'rezultate'}</Text></View><TouchableOpacity onPress={resetFilters} disabled={!query && activeFilterCount === 0}><Text style={[styles.resetFilters, !query && activeFilterCount === 0 && styles.resetFiltersDisabled]}>Resetează</Text></TouchableOpacity></View>
+        <Text style={styles.filterGroupLabel}>STATUS COMANDĂ</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsContent}>
+          <FilterChip label="Toate" active={statusFilter === 'all'} onPress={() => { setStatusFilter('all'); setPage(1); }} />
+          {orderStatuses.map((item) => <FilterChip key={item.value} label={item.label} active={statusFilter === item.value} color={item.color} onPress={() => { setStatusFilter(item.value); setPage(1); }} />)}
+        </ScrollView>
+        <Text style={styles.filterGroupLabel}>METODĂ DE PLATĂ</Text>
+        <View style={styles.filterChipsWrap}><FilterChip label="Toate" active={paymentMethodFilter === 'all'} onPress={() => { setPaymentMethodFilter('all'); setPage(1); }} /><FilterChip label="Card online" active={paymentMethodFilter === 'card'} color="#A78BFA" onPress={() => { setPaymentMethodFilter('card'); setPage(1); }} /><FilterChip label="Ramburs" active={paymentMethodFilter === 'cash'} color="#FBBF24" onPress={() => { setPaymentMethodFilter('cash'); setPage(1); }} /></View>
+        <Text style={styles.filterGroupLabel}>STATUS PLATĂ</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsContent}>
+          <FilterChip label="Toate" active={paymentStateFilter === 'all'} onPress={() => { setPaymentStateFilter('all'); setPage(1); }} />
+          {paymentStatuses.map((item) => <FilterChip key={item.value} label={item.label} active={paymentStateFilter === item.value} color={item.value === 'paid' ? '#34D399' : item.value === 'failed' ? '#FB7185' : '#FBBF24'} onPress={() => { setPaymentStateFilter(item.value); setPage(1); }} />)}
+        </ScrollView>
+      </View> : null}
       {filtered.length ? pagedOrders.map((order) => {
         const statusMeta = orderStatuses.find((item) => item.value === order.status) || orderStatuses[0];
         return <TouchableOpacity key={order.id} style={styles.orderCard} activeOpacity={0.76} onPress={() => void open(order)}>
@@ -175,9 +274,9 @@ export default function ShopOrdersManager() {
             <Text style={styles.customer}>{order.customer_name} · {order.customer_phone}</Text>
             <View style={styles.orderBottom}><Text style={styles.orderDate}>{dateTime(order.created_at)}</Text><Text style={styles.orderTotal}>{money(order.total)}</Text></View>
           </View>
-          <ChevronRight size={18} color={Colors.textMuted} />
+          <View style={styles.orderArrow}><ChevronRight size={19} color="#FFFFFF" strokeWidth={2.5} /></View>
         </TouchableOpacity>;
-      }) : <View style={styles.empty}><PackageCheck size={34} color="#38BDF8" /><Text style={styles.emptyTitle}>Nicio comanda</Text><Text style={styles.emptyText}>Comenzile trimise de pe site vor aparea automat aici.</Text></View>}
+      }) : <View style={styles.empty}><PackageCheck size={34} color="#38BDF8" /><Text style={styles.emptyTitle}>{orders.length ? 'Nicio comandă găsită' : 'Nicio comandă'}</Text><Text style={styles.emptyText}>{orders.length ? 'Schimbă căutarea sau resetează filtrele.' : 'Comenzile trimise de pe site vor apărea automat aici.'}</Text>{orders.length ? <TouchableOpacity style={styles.emptyReset} onPress={resetFilters}><Text style={styles.emptyResetText}>Resetează filtrele</Text></TouchableOpacity> : null}</View>}
       <ShopPagination page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} onPageSizeChange={setPageSize} />
 
       <Modal visible={Boolean(selected)} animationType="slide" onRequestClose={() => !saving && setSelected(null)}>
@@ -197,14 +296,18 @@ export default function ShopOrdersManager() {
             <Text style={styles.sectionLabel}>EVOLUȚIA COMENZII</Text>
             <OrderStatusTimeline order={selected} />
             <Text style={styles.sectionLabel}>STATUS COMANDA</Text>
-            <View style={styles.statusPicker}>{orderStatuses.map((item) => {
+            <View style={styles.statusPicker}>{orderStatuses.map((item, index) => {
               const StatusIcon = item.icon;
               const active = status === item.value;
-              return <TouchableOpacity key={item.value} activeOpacity={0.76} style={[styles.statusOption, active && { borderColor: item.color, backgroundColor: `${item.color}12` }]} onPress={() => { setStatus(item.value); if (item.value === selected.status) setNotifyCustomer(false); }}>
-                <View style={[styles.statusOptionIcon, { backgroundColor: `${item.color}18` }]}><StatusIcon size={18} color={item.color} /></View>
-                <View style={styles.statusOptionCopy}><Text style={[styles.statusOptionTitle, active && { color: item.color }]}>{item.label}</Text><Text style={styles.statusOptionText}>{item.description}</Text></View>
-                <View style={[styles.radio, active && { borderColor: item.color, backgroundColor: item.color }]}>{active ? <Check size={12} color="#14110F" strokeWidth={3} /> : null}</View>
-              </TouchableOpacity>;
+              const locked = isStatusTransitionLocked(selected.status, item.value);
+              return <View key={item.value} style={styles.statusTrackRow}>
+                <View style={styles.statusTrackRail}><View style={[styles.statusTrackDot, active && { borderColor: item.color, backgroundColor: item.color }]}>{active ? <Check size={12} color="#15110D" strokeWidth={3} /> : <Text style={styles.statusTrackIndex}>{String(index + 1).padStart(2, '0')}</Text>}</View>{index < orderStatuses.length - 1 ? <View style={styles.statusTrackLine} /> : null}</View>
+                <TouchableOpacity disabled={locked} activeOpacity={0.76} style={[styles.statusOption, active && { borderColor: item.color, backgroundColor: `${item.color}12` }, locked && styles.statusOptionLocked]} onPress={() => { setStatus(item.value); if (item.value === selected.status) setNotifyCustomer(false); }}>
+                  <View style={[styles.statusOptionIcon, { backgroundColor: `${item.color}18` }]}><StatusIcon size={17} color={item.color} /></View>
+                  <View style={styles.statusOptionCopy}><Text style={[styles.statusOptionTitle, active && { color: item.color }]}>{item.label}</Text><Text style={styles.statusOptionText}>{locked ? 'Etapă finalizată · nu se poate reveni' : item.description}</Text></View>
+                  <View style={[styles.radio, active && { borderColor: item.color, backgroundColor: item.color }]}>{active ? <Check size={12} color="#14110F" strokeWidth={3} /> : null}</View>
+                </TouchableOpacity>
+              </View>;
             })}</View>
             <TouchableOpacity
               activeOpacity={0.78}
@@ -229,8 +332,9 @@ export default function ShopOrdersManager() {
 function OrderStatusTimeline({ order }: { order: ShopOrder }) {
   const reveal = useRef(new Animated.Value(0)).current;
   const history = Array.isArray(order.status_history) ? order.status_history : [];
-  const visible = orderStatuses;
-  const flow = visible.filter((item) => item.value !== 'cancelled');
+  const terminalCurrent = terminalOrderStatuses.includes(order.status) ? orderStatuses.find((item) => item.value === order.status) : null;
+  const visible = orderStatuses.filter((item) => mainOrderFlow.includes(item.value)).concat(terminalCurrent ? [terminalCurrent] : []);
+  const flow = visible.filter((item) => mainOrderFlow.includes(item.value));
   const currentFlowIndex = flow.findIndex((item) => item.value === order.status);
 
   useEffect(() => {
@@ -243,7 +347,7 @@ function OrderStatusTimeline({ order }: { order: ShopOrder }) {
       const StatusIcon = item.icon;
       const entry = [...history].reverse().find((historyEntry) => historyEntry.to_status === item.value);
       const flowIndex = flow.findIndex((flowItem) => flowItem.value === item.value);
-      const reached = Boolean(entry) || item.value === order.status || (order.status !== 'cancelled' && flowIndex >= 0 && currentFlowIndex >= 0 && flowIndex <= currentFlowIndex);
+      const reached = Boolean(entry) || item.value === order.status || (!terminalOrderStatuses.includes(order.status) && flowIndex >= 0 && currentFlowIndex >= 0 && flowIndex <= currentFlowIndex);
       const current = item.value === order.status;
       return <View key={item.value} style={styles.timelineRow}>
         <View style={styles.timelineRail}>
@@ -260,6 +364,20 @@ function OrderStatusTimeline({ order }: { order: ShopOrder }) {
       </View>;
     })}
   </Animated.View>;
+}
+
+function OrderMetricCard({ icon: Icon, color, label, value, help }: { icon: typeof Clock3; color: string; label: string; value: string; help: string }) {
+  return <View style={[styles.metricCard, { borderColor: `${color}3D`, backgroundColor: `${color}0D` }]}>
+    <View style={[styles.metricIcon, { backgroundColor: `${color}1C` }]}><Icon size={17} color={color} strokeWidth={2.2} /></View>
+    <View style={styles.metricCopy}><Text style={[styles.metricLabel, { color }]}>{label.toUpperCase()}</Text><Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit>{value}</Text><Text style={styles.metricHelp} numberOfLines={2}>{help}</Text></View>
+  </View>;
+}
+
+function FilterChip({ label, active, onPress, color = Colors.orange }: { label: string; active: boolean; onPress: () => void; color?: string }) {
+  return <TouchableOpacity activeOpacity={0.76} onPress={onPress} style={[styles.filterChip, active && { borderColor: color, backgroundColor: `${color}18` }]}>
+    {active ? <Check size={12} color={color} strokeWidth={3} /> : null}
+    <Text style={[styles.filterChipText, active && { color }]}>{label}</Text>
+  </TouchableOpacity>;
 }
 
 function InfoBlock({ title, lines }: { title: string; lines: string[] }) {
@@ -297,10 +415,12 @@ function DeliveryInfoBlock({ order }: { order: ShopOrder }) {
 
 const styles = StyleSheet.create({
   wrap: { marginTop: 16 }, state: { minHeight: 260, alignItems: 'center', justifyContent: 'center', gap: 12, borderRadius: 24, backgroundColor: '#1B1B1F', marginTop: 16 }, stateText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 11 }, error: { color: '#FCA5A5', fontFamily: 'Inter-Regular', fontSize: 11, textAlign: 'center', paddingHorizontal: 22 }, retry: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: Colors.orangeDim }, retryText: { color: Colors.orange, fontFamily: 'Inter-SemiBold', fontSize: 10 },
-  actions: { flexDirection: 'row', gap: 7, marginBottom: 10 }, search: { flex: 1, minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 15, paddingHorizontal: 12, backgroundColor: '#1B1B1F' }, searchInput: { flex: 1, color: Colors.textPrimary, fontFamily: 'Inter-Regular', fontSize: 11 }, refresh: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: '#1B1B1F' },
-  stats: { flexDirection: 'row', gap: 7, marginBottom: 11 }, statValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 13 }, statLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 6, letterSpacing: 0.6, marginTop: 2 },
-  orderCard: { minHeight: 86, flexDirection: 'row', alignItems: 'center', gap: 11, borderRadius: 19, padding: 11, backgroundColor: '#1B1B1F', marginBottom: 8 }, orderIcon: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15 }, orderCopy: { flex: 1, minWidth: 0 }, orderTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }, orderNumber: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 11 }, status: { fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.5 }, customer: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 9, marginTop: 5 }, orderBottom: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginTop: 7 }, orderDate: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8 }, orderTotal: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 10 },
-  empty: { minHeight: 230, alignItems: 'center', justifyContent: 'center', borderRadius: 24, backgroundColor: '#1B1B1F' }, emptyTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 15, marginTop: 13 }, emptyText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, marginTop: 5 },
+  actions: { flexDirection: 'row', gap: 7, marginBottom: 10 }, search: { flex: 1, minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#343138', borderRadius: 17, paddingHorizontal: 13, backgroundColor: '#1B1B1F' }, searchInput: { flex: 1, color: Colors.textPrimary, fontFamily: 'Inter-Regular', fontSize: 11 }, refresh: { width: 50, height: 50, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#343138', borderRadius: 17, backgroundColor: '#222126' },
+  filterButton: { width: 50, height: 50, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#343138', borderRadius: 17, backgroundColor: '#222126' }, filterButtonActive: { borderColor: '#A54E16', backgroundColor: Colors.orangeDim }, filterBadge: { position: 'absolute', top: 5, right: 5, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', borderRadius: 8, paddingHorizontal: 4, backgroundColor: Colors.orange }, filterBadgeText: { color: '#17110D', fontFamily: 'Inter-Bold', fontSize: 8 },
+  filtersPanel: { overflow: 'hidden', borderWidth: 1, borderColor: '#38343D', borderRadius: 24, padding: 15, backgroundColor: '#1B1B1F', marginBottom: 11 }, filtersHead: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#343138', paddingBottom: 10, marginBottom: 12 }, filtersTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 13 }, filtersResult: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 9, marginTop: 3 }, resetFilters: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 10, paddingVertical: 8 }, resetFiltersDisabled: { color: Colors.textMuted, opacity: 0.45 }, filterGroupLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8, marginTop: 4, marginBottom: 8 }, filterChipsContent: { gap: 7, paddingRight: 12, paddingBottom: 12 }, filterChipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, paddingBottom: 12 }, filterChip: { minHeight: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderWidth: 1, borderColor: '#3A363E', borderRadius: 999, paddingHorizontal: 12, backgroundColor: '#242228' }, filterChipText: { color: Colors.textSecondary, fontFamily: 'Inter-SemiBold', fontSize: 9 },
+  statsScroller: { marginBottom: 10 }, stats: { flexDirection: 'row', gap: 7, paddingRight: 10 }, metricCard: { width: 156, minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: 8, overflow: 'hidden', borderWidth: 1, borderRadius: 18, paddingHorizontal: 10, paddingVertical: 9 }, metricIcon: { width: 36, height: 36, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 12 }, metricCopy: { flex: 1, minWidth: 0 }, metricLabel: { fontFamily: 'Inter-Bold', fontSize: 6.5, letterSpacing: 0.65 }, metricValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 13, marginTop: 2 }, metricHelp: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 7.5, lineHeight: 10, marginTop: 2 },
+  orderCard: { minHeight: 92, flexDirection: 'row', alignItems: 'center', gap: 11, borderWidth: 1, borderColor: '#2D2A30', borderRadius: 21, padding: 11, backgroundColor: '#1B1B1F', marginBottom: 8 }, orderIcon: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15 }, orderCopy: { flex: 1, minWidth: 0 }, orderTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }, orderNumber: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 11 }, status: { fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.5 }, customer: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 9, marginTop: 5 }, orderBottom: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginTop: 7 }, orderDate: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8 }, orderTotal: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 10 }, orderArrow: { width: 42, height: 42, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#48454E', borderRadius: 15, backgroundColor: '#323037' },
+  empty: { minHeight: 230, alignItems: 'center', justifyContent: 'center', borderRadius: 24, backgroundColor: '#1B1B1F' }, emptyTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 15, marginTop: 13 }, emptyText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, marginTop: 5 }, emptyReset: { minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 999, paddingHorizontal: 15, backgroundColor: Colors.orangeDim, marginTop: 13 }, emptyResetText: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 9 },
   modalSafe: { flex: 1, backgroundColor: Colors.bg }, modalHeader: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#29272B', paddingHorizontal: 12, backgroundColor: '#171513' }, close: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: '#27242A' }, modalHeaderCopy: { flex: 1 }, modalKicker: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 1 }, modalTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 15, marginTop: 2 }, save: { minWidth: 96, height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 13, backgroundColor: Colors.orange }, saveText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 }, disabled: { opacity: 0.55 }, modalContent: { width: '100%', maxWidth: 760, alignSelf: 'center', padding: 16 },
   detailLoading: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, borderRadius: 15, backgroundColor: Colors.orangeDim, marginBottom: 9 }, detailLoadingText: { color: Colors.orange, fontFamily: 'Inter-SemiBold', fontSize: 9 },
   info: { borderWidth: 1, borderColor: '#302D34', borderRadius: 20, padding: 15, backgroundColor: '#1B1B1F', marginBottom: 9 },
@@ -326,7 +446,7 @@ const styles = StyleSheet.create({
   grandTotalLabel: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 13 },
   grandTotalValue: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 17, fontVariant: ['tabular-nums'] },
   timeline: { overflow: 'hidden', borderRadius: 22, padding: 14, backgroundColor: '#1B1B1F' }, timelineRow: { flexDirection: 'row', alignItems: 'stretch', gap: 11 }, timelineRail: { width: 38, alignItems: 'center' }, timelineDot: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#403C43', borderRadius: 12, backgroundColor: '#242228' }, timelineDotCurrent: { shadowColor: '#FF7A00', shadowOpacity: 0.28, shadowRadius: 9, shadowOffset: { width: 0, height: 4 }, elevation: 3 }, timelineLine: { width: 2, flex: 1, minHeight: 30, borderRadius: 99, backgroundColor: '#343138', marginVertical: 4 }, timelineCard: { flex: 1, minHeight: 78, borderWidth: 1, borderColor: 'transparent', borderRadius: 17, padding: 12, marginBottom: 8, backgroundColor: '#232126' }, timelineTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }, timelineTitle: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 11 }, timelineCurrent: { fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8 }, timelineDescription: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 14, marginTop: 4 }, timelineMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }, timelineDate: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 8 }, timelineMail: { flexDirection: 'row', alignItems: 'center', gap: 4 }, timelineMailText: { color: '#34D399', fontFamily: 'Inter-Bold', fontSize: 6, letterSpacing: 0.45 }, timelinePending: { color: Colors.textMuted, fontFamily: 'Inter-SemiBold', fontSize: 7, marginTop: 8 },
-  statusPicker: { gap: 7 }, statusOption: { minHeight: 66, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#36333A', borderRadius: 18, padding: 10, backgroundColor: '#1B1B1F' }, statusOptionIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }, statusOptionCopy: { flex: 1, minWidth: 0 }, statusOptionTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 }, statusOptionText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 13, marginTop: 3 }, radio: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#5A555E', borderRadius: 99 },
+  statusPicker: { overflow: 'hidden', borderWidth: 1, borderColor: '#37343B', borderRadius: 22, padding: 12, backgroundColor: '#1B1B1F' }, statusTrackRow: { minHeight: 64, flexDirection: 'row', alignItems: 'stretch', gap: 9 }, statusTrackRail: { width: 28, alignItems: 'center' }, statusTrackDot: { width: 27, height: 27, alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderWidth: 1, borderColor: '#4A4650', borderRadius: 10, backgroundColor: '#29272D' }, statusTrackIndex: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7 }, statusTrackLine: { width: 2, flex: 1, minHeight: 25, borderRadius: 99, backgroundColor: '#37343B', marginVertical: 3 }, statusOption: { flex: 1, minHeight: 55, flexDirection: 'row', alignItems: 'center', gap: 9, alignSelf: 'flex-start', borderWidth: 1, borderColor: '#36333A', borderRadius: 16, padding: 8, backgroundColor: '#211F24', marginBottom: 7 }, statusOptionLocked: { opacity: 0.46 }, statusOptionIcon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 12 }, statusOptionCopy: { flex: 1, minWidth: 0 }, statusOptionTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 }, statusOptionText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 12, marginTop: 2 }, radio: { width: 21, height: 21, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#5A555E', borderRadius: 99 },
   notifyCard: { minHeight: 84, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#433B32', borderRadius: 20, padding: 12, backgroundColor: '#211D18', marginTop: 10 }, notifyCardActive: { borderColor: Colors.orange, backgroundColor: '#2A1C11' }, notifyCardDisabled: { opacity: 0.5 }, notifyIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: Colors.orangeDim }, notifyCopy: { flex: 1, minWidth: 0 }, notifyTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 }, notifyText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 13, marginTop: 4 }, checkbox: { width: 25, height: 25, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#554E47', borderRadius: 8, backgroundColor: '#171513' }, checkboxActive: { borderColor: Colors.orange, backgroundColor: Colors.orange },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, chip: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: '#413D45', borderRadius: 999, paddingHorizontal: 12, backgroundColor: '#1B1B1F' }, chipActive: { borderColor: Colors.orange, backgroundColor: Colors.orangeDim }, chipText: { color: Colors.textSecondary, fontFamily: 'Inter-SemiBold', fontSize: 9 }, chipTextActive: { color: Colors.orange }, notes: { minHeight: 100, borderWidth: 1, borderColor: '#49454F', borderRadius: 15, padding: 13, color: Colors.textPrimary, backgroundColor: '#161519', fontFamily: 'Inter-Regular', fontSize: 11, textAlignVertical: 'top' },
 });

@@ -6,6 +6,7 @@
     processing: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 8 8-4 8 4-8 4Z"/><path d="M4 8v8l8 4 8-4V8M12 12v8"/></svg>',
     shipped: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h11v11H3zM14 10h4l3 3v4h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
     completed: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/><circle cx="12" cy="12" r="10"/></svg>',
+    refunded: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7v5h5"/><path d="M5.6 16a8 8 0 1 0 .2-8.2L4 12"/></svg>',
     cancelled: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></svg>'
   };
   const statuses = [
@@ -14,6 +15,7 @@
     { value: "processing", label: "În pregătire", description: "Produsele sunt pregătite pentru expediere.", color: "#fb923c", icon: icons.processing },
     { value: "shipped", label: "Predată curierului", description: "Pachetul a plecat către adresa de livrare.", color: "#a78bfa", icon: icons.shipped },
     { value: "completed", label: "Livrată", description: "Comanda a ajuns la destinație.", color: "#22c55e", icon: icons.completed },
+    { value: "refunded", label: "Rambursată", description: "Comanda a fost returnată și rambursată.", color: "#f59e0b", icon: icons.refunded },
     { value: "cancelled", label: "Comandă anulată", description: "Comanda nu mai este procesată.", color: "#fb7185", icon: icons.cancelled },
   ];
   const resultHost = document.getElementById("tracking-result");
@@ -38,20 +40,21 @@
   function render(order) {
     const current = statuses.find(item => item.value === order.status) || statuses[0];
     const history = Array.isArray(order.status_history) ? order.status_history : [];
-    const flowStatuses = visibleStatuses(order).filter(item => item.value !== "cancelled");
+    const terminalValues = ["refunded", "cancelled"];
+    const terminalCurrent = terminalValues.includes(order.status);
+    const flowStatuses = visibleStatuses(order).filter(item => !terminalValues.includes(item.value));
     const currentFlowIndex = flowStatuses.findIndex(item => item.value === order.status);
     const timeline = flowStatuses.map((item, index) => {
       const entry = [...history].reverse().find(historyItem => historyItem.to_status === item.value);
-      const reached = order.status !== "cancelled" && (Boolean(entry) || (currentFlowIndex >= 0 && index <= currentFlowIndex));
+      const reached = Boolean(entry) || (!terminalCurrent && currentFlowIndex >= 0 && index <= currentFlowIndex);
       const isCurrent = item.value === order.status;
       return `<article class="tracking-step ${reached ? "reached" : ""} ${isCurrent ? "current" : ""}" style="--status-color:${item.color}"><div class="tracking-step-rail"><span>${item.icon}</span></div><div class="tracking-step-copy"><small>${isCurrent ? "STATUS ACTUAL" : reached ? "FINALIZAT" : "URMEAZĂ"}</small><strong>${esc(item.label)}</strong><p>${esc(item.description)}</p>${entry ? `<time>${esc(date(entry.created_at))}</time>` : ""}</div></article>`;
     }).join("");
-    const cancelledMeta = statuses.find(item => item.value === "cancelled");
-    const cancelledEntry = [...history].reverse().find(historyItem => historyItem.to_status === "cancelled");
-    const cancelledCurrent = order.status === "cancelled";
-    const cancelled = `<article class="tracking-cancel-state ${cancelledCurrent ? "current" : ""}" style="--status-color:${cancelledMeta.color}"><span>${cancelledMeta.icon}</span><div><small>${cancelledCurrent ? "STATUS ACTUAL" : "STARE ALTERNATIVĂ"}</small><strong>${esc(cancelledMeta.label)}</strong><p>${esc(cancelledMeta.description)}</p>${cancelledEntry ? `<time>${esc(date(cancelledEntry.created_at))}</time>` : ""}</div></article>`;
+    const terminalMeta = terminalCurrent ? statuses.find(item => item.value === order.status) : null;
+    const terminalEntry = terminalMeta ? [...history].reverse().find(historyItem => historyItem.to_status === terminalMeta.value) : null;
+    const terminalState = terminalMeta ? `<article class="tracking-cancel-state current" style="--status-color:${terminalMeta.color}"><span>${terminalMeta.icon}</span><div><small>STATUS ACTUAL</small><strong>${esc(terminalMeta.label)}</strong><p>${esc(terminalMeta.description)}</p>${terminalEntry ? `<time>${esc(date(terminalEntry.created_at))}</time>` : ""}</div></article>` : "";
     const items = (order.items || []).map(item => `<article class="tracking-item">${item.image_url ? `<img src="${esc(item.image_url)}" alt="">` : '<span class="tracking-item-placeholder">GT</span>'}<span><strong>${esc(item.product_name)}</strong><small>${Number(item.quantity)} × ${money(item.unit_price, order.currency)}</small></span><b>${money(item.line_total, order.currency)}</b></article>`).join("");
-    resultHost.innerHTML = `<section class="tracking-progress"><header class="tracking-result-head"><div class="tracking-current-icon" style="--status-color:${current.color}">${current.icon}</div><div><small>COMANDA ${esc(order.order_number)}</small><h2>${esc(current.label)}</h2><p>${esc(current.description)}</p></div><span class="tracking-status-pill" style="--status-color:${current.color}"><i></i>${esc(current.label)}</span></header><div class="tracking-timeline"><div class="tracking-timeline-flow">${timeline}</div>${cancelled}</div></section><aside class="tracking-receipt"><div class="tracking-receipt-brand"><img src="assets/logo.png" alt=""><span><strong>G-Trots România</strong><small>REZUMAT COMANDĂ</small></span><b>Actualizat acum</b></div><div class="tracking-receipt-code"><span><small>COD COMANDĂ</small><strong>${esc(order.order_number)}</strong></span><span><small>DATA</small><strong>${esc(date(order.created_at))}</strong></span></div><div class="tracking-items">${items}</div><div class="tracking-totals"><p><span>Subtotal</span><b>${money(order.subtotal, order.currency)}</b></p><p><span>Livrare · ${esc(order.shipping_method_name)}</span><b>${money(order.shipping_cost, order.currency)}</b></p><p><span>Plată</span><b>${order.payment_method === "card" ? "Card online" : "Ramburs la curier"}</b></p><p class="total"><span>Total de plată</span><strong>${money(order.total, order.currency)}</strong></p></div><div class="tracking-help"><span>${icons.new}</span><p><strong>Actualizare automată</strong>Vezi aici ultimul status salvat de echipa G-Trots. Nu este nevoie să reintroduci datele comenzii.</p></div></aside>`;
+    resultHost.innerHTML = `<section class="tracking-progress"><header class="tracking-result-head"><div class="tracking-current-icon" style="--status-color:${current.color}">${current.icon}</div><div><small>COMANDA ${esc(order.order_number)}</small><h2>${esc(current.label)}</h2><p>${esc(current.description)}</p></div><span class="tracking-status-pill" style="--status-color:${current.color}"><i></i>${esc(current.label)}</span></header><div class="tracking-timeline"><div class="tracking-timeline-flow">${timeline}</div>${terminalState}</div></section><aside class="tracking-receipt"><div class="tracking-receipt-brand"><img src="assets/logo.png" alt=""><span><strong>G-Trots România</strong><small>REZUMAT COMANDĂ</small></span><b>Actualizat acum</b></div><div class="tracking-receipt-code"><span><small>COD COMANDĂ</small><strong>${esc(order.order_number)}</strong></span><span><small>DATA</small><strong>${esc(date(order.created_at))}</strong></span></div><div class="tracking-items">${items}</div><div class="tracking-totals"><p><span>Subtotal</span><b>${money(order.subtotal, order.currency)}</b></p><p><span>Livrare · ${esc(order.shipping_method_name)}</span><b>${money(order.shipping_cost, order.currency)}</b></p><p><span>Plată</span><b>${order.payment_method === "card" ? "Card online" : "Ramburs la curier"}</b></p><p class="total"><span>Total de plată</span><strong>${money(order.total, order.currency)}</strong></p></div><div class="tracking-help"><span>${icons.new}</span><p><strong>Actualizare automată</strong>Vezi aici ultimul status salvat de echipa G-Trots. Nu este nevoie să reintroduci datele comenzii.</p></div></aside>`;
     resultHost.querySelectorAll(".tracking-item img").forEach(image => image.addEventListener("error", () => {
       image.replaceWith(Object.assign(document.createElement("span"), { className: "tracking-item-placeholder", textContent: "GT" }));
     }, { once: true }));

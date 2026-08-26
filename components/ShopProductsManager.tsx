@@ -187,7 +187,9 @@ function money(value: number) {
   return new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value) + ' lei';
 }
 
-export default function ShopProductsManager() {
+const PRODUCT_SALES_PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25, 50, 75, 100] as const;
+
+export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (orderId: string) => void }) {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
   const [products, setProducts] = useState<ShopProduct[]>([]);
@@ -205,6 +207,8 @@ export default function ShopProductsManager() {
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState<ShopProductStats | null>(null);
+  const [detailSalesPage, setDetailSalesPage] = useState(1);
+  const [detailSalesPageSize, setDetailSalesPageSize] = useState(5);
   const [reviewReplies, setReviewReplies] = useState<Record<string, string>>({});
   const [galleryDragging, setGalleryDragging] = useState(false);
   const [slugTouched, setSlugTouched] = useState(false);
@@ -239,6 +243,9 @@ export default function ShopProductsManager() {
   }, [products, query]);
   const safePage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
   const pagedProducts = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const detailSalesTotal = detail?.orders.length || 0;
+  const detailSalesSafePage = Math.min(detailSalesPage, Math.max(1, Math.ceil(detailSalesTotal / detailSalesPageSize)));
+  const pagedDetailSales = detail?.orders.slice((detailSalesSafePage - 1) * detailSalesPageSize, detailSalesSafePage * detailSalesPageSize) || [];
   const normalizedFormName = form.name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ro-RO');
   const duplicateProductName = normalizedFormName
     ? products.find((product) => product.id !== form.id && product.name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ro-RO') === normalizedFormName)
@@ -307,6 +314,8 @@ export default function ShopProductsManager() {
     setDetailVisible(true);
     setDetailLoading(true);
     setDetail(null);
+    setDetailSalesPage(1);
+    setDetailSalesPageSize(5);
     try {
       const next = await shopApi.getProductStats(token, product.id);
       setDetail(next);
@@ -531,21 +540,21 @@ export default function ShopProductsManager() {
           {detailLoading || !detail ? <View style={styles.detailLoading}><ActivityIndicator color={Colors.orange} /><Text style={styles.stateText}>Se incarca fisa produsului...</Text></View> : <ScrollView contentContainerStyle={[styles.detailContent, { paddingBottom: Math.max(insets.bottom, 24) + 30 }]} showsVerticalScrollIndicator={false}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.detailGallery}>{detail.product.images.map((image, index) => <View key={image.id || index} style={styles.detailImage}><ShopProductPicture image={image} width={210} height={190} borderRadius={20} />{index === 0 ? <View style={styles.mainBadge}><Text style={styles.mainBadgeText}>PRINCIPALA</Text></View> : null}</View>)}</ScrollView>
             <View style={styles.metricGrid}>
-              <Metric label="VANZARI" value={money(detail.revenue)} />
-              <Metric label="COMENZI" value={String(detail.orders_count)} />
-              <Metric label="BUCATI VANDUTE" value={String(detail.units_sold)} />
-              <Metric label="VIZUALIZARI SITE" value={String(detail.product.view_count)} icon="eye" />
-              <Metric label="PRET ACHIZITIE" value={money(detail.product.cost_price)} />
-              <Metric label="PRET VANZARE" value={money(detail.product.sale_price ?? detail.product.price)} />
-              <Metric label="PROFIT ESTIMAT" value={money(detail.profit)} accent />
-              <Metric label="RECENZII" value={`${detail.reviews.length}${detail.product.review_average ? ` · ${detail.product.review_average.toFixed(1)}★` : ''}`} />
+              <Metric label="TOTAL VÂNZĂRI" value={money(detail.revenue)} />
+              <Metric label="PREȚ VÂNZARE MEDIU" value={money(detail.units_sold ? detail.revenue / detail.units_sold : 0)} />
+              <Metric label="PREȚ ACHIZIȚIE MEDIU" value={money(detail.units_sold ? detail.acquisition_total / detail.units_sold : 0)} />
+              <Metric label="PROFIT MEDIU" value={money(detail.units_sold ? detail.profit / detail.units_sold : 0)} accent />
+              <Metric label="BUCĂȚI VÂNDUTE" value={String(detail.units_sold)} />
+              <Metric label="VIZUALIZĂRI PE SITE" value={String(detail.product.view_count)} icon="eye" />
+              <Metric label="NUMĂR RECENZII" value={String(detail.reviews.length)} />
+              <Metric label="MEDIA RECENZIILOR" value={detail.product.review_average ? `${detail.product.review_average.toFixed(1)} ★` : '—'} />
             </View>
             <SectionTitle number="01" title="Comenzi si vanzari" text="Comenzile in care apare acest produs." />
-            {detail.orders.length ? detail.orders.map((order) => {
+            {detail.orders.length ? pagedDetailSales.map((order) => {
               const acquisitionPrice = Number(detail.product.cost_price || 0);
               const salePrice = Number(order.unit_price || 0);
               const orderProfit = Number(order.line_total || 0) - (acquisitionPrice * Number(order.quantity || 0));
-              return <View key={order.id} style={styles.saleCard}>
+              return <TouchableOpacity key={order.id} activeOpacity={0.76} style={styles.saleCard} onPress={() => { setDetailVisible(false); onOpenOrder?.(order.id); }}>
                 <View style={styles.saleHead}><View><Text style={styles.saleLabel}>NUMAR COMANDA</Text><Text style={styles.saleNumber}>{order.order_number}</Text></View><View style={styles.saleStatus}><Text style={styles.saleStatusText}>{order.status}</Text></View></View>
                 <Text style={styles.saleMeta}>{order.customer_name} · {order.created_at} · {order.quantity} buc.</Text>
                 <View style={styles.saleStats}>
@@ -553,8 +562,9 @@ export default function ShopProductsManager() {
                   <View style={styles.saleStat}><Text style={styles.saleLabel}>PRET VANZARE</Text><Text style={styles.saleValue}>{money(salePrice)}</Text></View>
                   <View style={styles.saleStat}><Text style={styles.saleLabel}>PROFIT</Text><Text style={styles.saleProfit}>{money(orderProfit)}</Text></View>
                 </View>
-              </View>;
+              </TouchableOpacity>;
             }) : <Text style={styles.detailEmpty}>Produsul nu apare in nicio comanda.</Text>}
+            <ShopPagination page={detailSalesSafePage} pageSize={detailSalesPageSize} total={detailSalesTotal} pageSizeOptions={PRODUCT_SALES_PAGE_SIZE_OPTIONS} onPageChange={setDetailSalesPage} onPageSizeChange={setDetailSalesPageSize} />
             <SectionTitle number="02" title="Recenzii" text="Raspunde clientilor sau sterge recenziile direct de aici." />
             {detail.reviews.length ? detail.reviews.map((review) => <View key={review.id} style={styles.reviewCard}><View style={styles.reviewHead}><View><Text style={styles.reviewName}>{review.customer_name}</Text><Text style={styles.reviewMeta}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)} · {review.created_at}</Text></View><TouchableOpacity style={styles.reviewDelete} onPress={() => removeReview(review)}><Trash2 size={16} color={Colors.error} /></TouchableOpacity></View><Text style={styles.reviewMessage}>{review.message}</Text><TextInput value={reviewReplies[review.id] || ''} onChangeText={(value) => setReviewReplies((current) => ({ ...current, [review.id]: value }))} placeholder="Scrie raspunsul magazinului..." placeholderTextColor={Colors.textMuted} multiline style={styles.reviewReply} /><TouchableOpacity style={styles.reviewSave} onPress={() => void saveReviewReply(review)}><MessageSquare size={15} color={Colors.white} /><Text style={styles.reviewSaveText}>Salveaza raspunsul</Text></TouchableOpacity></View>) : <Text style={styles.detailEmpty}>Produsul nu are inca recenzii.</Text>}
           </ScrollView>}
@@ -698,7 +708,7 @@ const styles = StyleSheet.create({
   editorSafe: { flex: 1, backgroundColor: Colors.bg }, editorHeader: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#29272B', paddingHorizontal: 12, backgroundColor: '#171513' }, close: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#27242A' }, editorHeaderCopy: { flex: 1 }, editorKicker: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 1 }, editorTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 16, marginTop: 2 }, saveTop: { minWidth: 96, height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 13, backgroundColor: Colors.orange }, saveTopText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 }, disabled: { opacity: 0.55 },
   form: { width: '100%', maxWidth: 920, alignSelf: 'center', padding: 16 },
   detailLoading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }, detailContent: { width: '100%', maxWidth: 920, alignSelf: 'center', padding: 16 }, detailGallery: { gap: 10, paddingBottom: 12 }, detailImage: { width: 210, height: 190, overflow: 'hidden', borderRadius: 20, backgroundColor: '#211F24' },
-  metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9, marginTop: 8 }, metricCard: { width: '48%', minHeight: 82, justifyContent: 'space-between', borderWidth: 1, borderColor: '#343137', borderRadius: 17, padding: 13, backgroundColor: '#1B1B1F' }, metricCardAccent: { borderColor: 'rgba(34,197,94,0.35)', backgroundColor: 'rgba(34,197,94,0.07)' }, metricLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5 }, metricLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.6 }, metricValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 16, marginTop: 8 }, metricValueAccent: { color: '#9CD9AE' },
+  metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }, metricCard: { width: '48%', minHeight: 72, justifyContent: 'space-between', borderWidth: 1, borderColor: '#343137', borderRadius: 16, padding: 11, backgroundColor: '#1B1B1F' }, metricCardAccent: { borderColor: 'rgba(34,197,94,0.35)', backgroundColor: 'rgba(34,197,94,0.07)' }, metricLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5 }, metricLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.55 }, metricValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 14, marginTop: 6 }, metricValueAccent: { color: '#9CD9AE' },
   saleCard: { marginTop: 10, padding: 14, borderRadius: 16, backgroundColor: '#201E23', borderWidth: 1, borderColor: '#343137' }, saleHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, saleLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.6 }, saleNumber: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 12, marginTop: 3 }, saleMeta: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 6 }, saleStatus: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5, backgroundColor: '#33251C' }, saleStatusText: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, textTransform: 'uppercase' }, saleStats: { flexDirection: 'row', gap: 7, marginTop: 12 }, saleStat: { flex: 1, minWidth: 0, padding: 9, borderRadius: 11, backgroundColor: '#17161A' }, saleValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10, marginTop: 5 }, saleProfit: { color: '#28D16F', fontFamily: 'Inter-Bold', fontSize: 10, marginTop: 5 }, detailEmpty: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 10, paddingVertical: 18 },
   reviewCard: { borderWidth: 1, borderColor: '#37343B', borderRadius: 18, padding: 14, backgroundColor: '#1B1B1F', marginBottom: 10 }, reviewHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, reviewName: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 11 }, reviewMeta: { color: '#F59E0B', fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 3 }, reviewDelete: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: 'rgba(239,68,68,0.1)' }, reviewMessage: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 16, marginVertical: 12 }, reviewReply: { minHeight: 74, borderWidth: 1, borderColor: '#49454F', borderRadius: 13, padding: 11, color: Colors.textPrimary, backgroundColor: '#161519', fontFamily: 'Inter-Regular', fontSize: 10, textAlignVertical: 'top' }, reviewSave: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 13, backgroundColor: Colors.orange, marginTop: 8 }, reviewSaveText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 },
   sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: 11, borderTopWidth: 1, borderTopColor: '#2D2A30', paddingTop: 20, marginTop: 12, marginBottom: 16 }, sectionNumber: { width: 38, height: 38, textAlign: 'center', textAlignVertical: 'center', borderRadius: 12, color: Colors.orange, backgroundColor: Colors.orangeDim, fontFamily: 'Inter-Bold', fontSize: 10 }, sectionName: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 15 }, sectionText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 9, marginTop: 2, maxWidth: 650 },

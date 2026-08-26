@@ -3,33 +3,46 @@
   const state = {
     products: [], orders: [], inventory: [], sources: [], categories: [], brands: [], manufacturers: [], shipping: [],
     editingProduct: null, editingOrder: null, editingStock: null, editingSource: null, editingShipping: null,
-    productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, slugTouched: false, productQuery: '', richRange: null, richImage: null, richDragging: null, richResize: null,
-    pages: { products: 1, orders: 1, inventory: 1 },
-    pageSizes: { products: 10, orders: 10, inventory: 10 },
+    productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, slugTouched: false, productQuery: '', orderQuery: '', orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
+    pages: { products: 1, orders: 1, inventory: 1, productSales: 1 },
+    pageSizes: { products: 10, orders: 10, inventory: 10, productSales: 5 },
   };
   const PAGE_SIZE_OPTIONS = [10, 25, 50];
+  const PRODUCT_SALES_PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25, 50, 75, 100];
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
   const money = value => `${new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0))} lei`;
   const slugify = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 200);
   const toast = (message, type = 'success') => window.BUSINESS_UI?.showToast?.(message, type);
-  const statusLabels = { new: 'În procesare (Nouă)', confirmed: 'Confirmată', processing: 'În pregătire', shipped: 'Predată curierului', completed: 'Livrată', cancelled: 'Comandă anulată' };
-  const statusShortLabels = { new: 'Nouă', confirmed: 'Confirmată', processing: 'În pregătire', shipped: 'Predată curierului', completed: 'Livrată', cancelled: 'Anulată' };
-  const statusColors = { new: '#38bdf8', confirmed: '#34d399', processing: '#fb923c', shipped: '#a78bfa', completed: '#22c55e', cancelled: '#fb7185' };
+  const statusLabels = { new: 'În procesare (Nouă)', confirmed: 'Confirmată', processing: 'În pregătire', shipped: 'Predată curierului', completed: 'Livrată', refunded: 'Rambursată', cancelled: 'Comandă anulată' };
+  const statusShortLabels = { new: 'Nouă', confirmed: 'Confirmată', processing: 'În pregătire', shipped: 'Predată curierului', completed: 'Livrată', refunded: 'Rambursată', cancelled: 'Anulată' };
+  const statusColors = { new: '#38bdf8', confirmed: '#34d399', processing: '#fb923c', shipped: '#a78bfa', completed: '#22c55e', refunded: '#f59e0b', cancelled: '#fb7185' };
   const statusDefinitions = [
     { value: 'new', description: 'Comanda a fost primită și a intrat în procesare.' },
     { value: 'confirmed', description: 'Comanda și plata au fost confirmate.' },
     { value: 'processing', description: 'Produsele sunt pregătite pentru expediere.' },
     { value: 'shipped', description: 'Pachetul a fost predat curierului.' },
     { value: 'completed', description: 'Comanda a ajuns la destinație.' },
+    { value: 'refunded', description: 'Comanda a fost returnată și rambursată.' },
     { value: 'cancelled', description: 'Comanda nu mai este procesată.' },
   ];
+  const mainStatusFlow = ['new', 'confirmed', 'processing', 'shipped', 'completed'];
+  const terminalStatuses = ['refunded', 'cancelled'];
+  const statusTransitionLocked = (current, candidate) => {
+    if (candidate === current) return false;
+    if (terminalStatuses.includes(current)) return true;
+    if (terminalStatuses.includes(candidate)) return false;
+    const currentIndex = mainStatusFlow.indexOf(current);
+    const candidateIndex = mainStatusFlow.indexOf(candidate);
+    return currentIndex >= 0 && candidateIndex >= 0 && candidateIndex < currentIndex;
+  };
   const statusIcon = status => ({
     new: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg>',
     confirmed: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>',
     processing: '<svg viewBox="0 0 24 24"><path d="m4 8 8-4 8 4-8 4Z"/><path d="M4 8v8l8 4 8-4V8M12 12v8"/></svg>',
     shipped: '<svg viewBox="0 0 24 24"><path d="M3 6h11v11H3zM14 10h4l3 3v4h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
     completed: '<svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/><circle cx="12" cy="12" r="10"/></svg>',
+    refunded: '<svg viewBox="0 0 24 24"><path d="M4 7v5h5"/><path d="M5.6 16a8 8 0 1 0 .2-8.2L4 12"/></svg>',
     cancelled: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></svg>',
   }[status] || '');
 
@@ -122,6 +135,12 @@
     document.querySelectorAll('.shop-commerce-overlay').forEach(overlay => overlay.addEventListener('mousedown', event => { if (event.target === overlay) closeModal(overlay.id); }));
     document.querySelectorAll('[data-commerce-refresh]').forEach(button => button.addEventListener('click', () => ({ 'shop-products-content': loadProducts, 'shop-orders-content': loadOrders, 'shop-inventory-content': loadInventory, 'shop-sources-content': loadSourcesPage, 'shop-shipping-content': loadShippingPage })[button.dataset.commerceRefresh]?.()));
     document.querySelectorAll('[data-commerce-add]').forEach(button => button.addEventListener('click', () => ({ 'shop-products-content': openProduct, 'shop-sources-content': openSource, 'shop-shipping-content': openShipping })[button.dataset.commerceAdd]?.()));
+    document.addEventListener('click', event => {
+      const trigger = event.target.closest('[data-shop-order-filter]');
+      if (!trigger) return;
+      state.orderStatusFilter = trigger.dataset.shopOrderFilter || 'all';
+      state.pages.orders = 1;
+    });
     $('shop-product-form').addEventListener('submit', saveProduct);
     $('shop-order-form').addEventListener('submit', saveOrder);
     $('shop-stock-form').addEventListener('submit', saveStock);
@@ -442,28 +461,28 @@
   }
   function loading(id, text) { $(id).innerHTML = `<div class="shop-commerce-loading">${esc(text)}</div>`; }
   function failure(id, error) { $(id).innerHTML = `<div class="shop-commerce-error">${esc(error.message || 'Datele nu au putut fi incarcate.')}</div>`; }
-  function pageData(items, key) {
-    const pageSize = PAGE_SIZE_OPTIONS.includes(state.pageSizes[key]) ? state.pageSizes[key] : PAGE_SIZE_OPTIONS[0];
+  function pageData(items, key, pageSizeOptions = PAGE_SIZE_OPTIONS) {
+    const pageSize = pageSizeOptions.includes(state.pageSizes[key]) ? state.pageSizes[key] : pageSizeOptions[0];
     const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
     const page = Math.min(Math.max(1, state.pages[key] || 1), pageCount);
     state.pages[key] = page;
     state.pageSizes[key] = pageSize;
     return { page, pageCount, pageSize, items: items.slice((page - 1) * pageSize, page * pageSize) };
   }
-  function pagination(key, total, page, pageCount, pageSize) {
+  function pagination(key, total, page, pageCount, pageSize, pageSizeOptions = PAGE_SIZE_OPTIONS) {
     if (!total) return '';
     const first = (page - 1) * pageSize + 1;
     const last = Math.min(total, page * pageSize);
     const selectId = `shop-${key}-page-size`;
-    const options = PAGE_SIZE_OPTIONS.map(value => `<option value="${value}" ${value === pageSize ? 'selected' : ''}>${value}</option>`).join('');
+    const options = pageSizeOptions.map(value => `<option value="${value}" ${value === pageSize ? 'selected' : ''}>${value}</option>`).join('');
     const chevron = direction => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${direction === 'left' ? 'm15 18-6-6 6-6' : 'm9 18 6-6-6-6'}"/></svg>`;
     return `<nav class="shop-commerce-pagination" aria-label="Paginare"><div class="shop-commerce-page-size"><label for="${selectId}">Randuri pe pagina:</label><span><select id="${selectId}" data-page-size-key="${key}" aria-label="Randuri pe pagina">${options}</select><i aria-hidden="true">⌄</i></span></div><span class="shop-commerce-pagination-range" aria-live="polite">${first}–${last} din ${total}</span><div class="shop-commerce-pagination-arrows"><button type="button" data-page-key="${key}" data-page="${page - 1}" aria-label="Pagina anterioara" title="Pagina anterioara" ${page === 1 ? 'disabled' : ''}>${chevron('left')}</button><button type="button" data-page-key="${key}" data-page="${page + 1}" aria-label="Pagina urmatoare" title="Pagina urmatoare" ${page === pageCount ? 'disabled' : ''}>${chevron('right')}</button></div></nav>`;
   }
-  function bindPagination(containerId, key, render) {
+  function bindPagination(containerId, key, render, pageSizeOptions = PAGE_SIZE_OPTIONS) {
     $(containerId).querySelectorAll(`[data-page-key="${key}"]`).forEach(button => button.addEventListener('click', () => { state.pages[key] = Number(button.dataset.page); render(); $(containerId).scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
     $(containerId).querySelector(`[data-page-size-key="${key}"]`)?.addEventListener('change', event => {
       const pageSize = Number(event.target.value);
-      if (!PAGE_SIZE_OPTIONS.includes(pageSize)) return;
+      if (!pageSizeOptions.includes(pageSize)) return;
       state.pageSizes[key] = pageSize;
       state.pages[key] = 1;
       render();
@@ -486,8 +505,16 @@
     host.innerHTML = '<div class="shop-commerce-loading">Se actualizeaza dashboardul...</div>';
     try {
       const dashboard = await window.SHOP_API.getDashboardStats();
-      const recent = dashboard.recent_orders?.map(order => `<button type="button" class="shop-dashboard-order" data-shop-open="shop-orders"><span><strong>${esc(order.order_number)}</strong><small>${esc(order.customer_name)} · ${esc(order.created_at)}</small></span><span><b>${money(order.total)}</b><em class="${order.status === 'new' ? 'new' : ''}">${esc(statusLabels[order.status] || order.status)}</em></span></button>`).join('') || '<p class="shop-dashboard-empty">Nu exista inca nicio comanda.</p>';
-      host.innerHTML = `<section class="shop-dashboard-hero"><div><span>DASHBOARD COMERCIAL</span><h1>Magazinul tau, pe scurt.</h1><p>Vanzari, comenzi, achizitii si profit sincronizate direct cu magazinul online.</p><b><i></i>Date sincronizate cu baza de date</b></div><div class="shop-dashboard-orbit" aria-hidden="true"><strong>↗</strong><span>${Number(dashboard.new_orders_count || 0)}</span><small>COMENZI NOI</small></div></section><section class="shop-dashboard-metrics">${dashboardMetric('Vanzari', money(dashboard.revenue), '#38bdf8')}${dashboardMetric('Comenzi', dashboard.orders_count, '#a78bfa')}${dashboardMetric('Achizitii', money(dashboard.acquisitions), '#f59e0b')}${dashboardMetric('Profit', money(dashboard.profit), '#22c55e')}</section><section class="shop-dashboard-columns"><div><div class="shop-section-head"><div><span>ACTIUNI RAPIDE</span><h2>Administreaza magazinul</h2></div></div><div class="shop-dashboard-actions"><button type="button" data-shop-open="shop-products"><span>◇</span><strong>Produse</strong><small>Adauga sau editeaza catalogul.</small><b>Deschide →</b></button><button type="button" data-shop-open="shop-orders"><span>✓</span><strong>Comenzi</strong><small>Verifica si proceseaza comenzile.</small><b>Deschide →</b></button></div></div><div><div class="shop-section-head"><div><span>ACTIVITATE RECENTA</span><h2>Ultimele comenzi</h2></div><small>${Number(dashboard.new_orders_count || 0)} noi</small></div><div class="shop-dashboard-orders">${recent}</div></div></section>`;
+      const recentNewOrders = (Array.isArray(dashboard.recent_orders) ? dashboard.recent_orders : []).filter(order => order.status === 'new');
+      const recent = recentNewOrders.map(order => `<button type="button" class="shop-dashboard-order" data-dashboard-order-open="${esc(order.id)}"><span><strong>${esc(order.order_number)}</strong><small>${esc(order.customer_name)} · ${esc(order.created_at)}</small></span><span><b>${money(order.total)}</b><em class="new">${esc(statusLabels[order.status] || order.status)}</em></span></button>`).join('') || '<p class="shop-dashboard-empty">Nu există comenzi noi.</p>';
+      host.innerHTML = `<section class="shop-dashboard-hero"><div><span>DASHBOARD COMERCIAL</span><h1>Magazinul tau, pe scurt.</h1><p>Vanzari, comenzi, achizitii si profit sincronizate direct cu magazinul online.</p><b><i></i>Date sincronizate cu baza de date</b></div><div class="shop-dashboard-orbit" aria-hidden="true"><strong>↗</strong><span>${Number(dashboard.new_orders_count || 0)}</span><small>COMENZI NOI</small></div></section><section class="shop-dashboard-metrics">${dashboardMetric('Vanzari', money(dashboard.revenue), '#38bdf8')}${dashboardMetric('Comenzi', dashboard.orders_count, '#a78bfa')}${dashboardMetric('Achizitii', money(dashboard.acquisitions), '#f59e0b')}${dashboardMetric('Profit', money(dashboard.profit), '#22c55e')}</section><section class="shop-dashboard-columns"><div><div class="shop-section-head"><div><span>ACTIUNI RAPIDE</span><h2>Administreaza magazinul</h2></div></div><div class="shop-dashboard-actions"><button type="button" data-shop-open="shop-products"><span>◇</span><strong>Produse</strong><small>Adauga sau editeaza catalogul.</small><b>Deschide →</b></button><button type="button" data-shop-open="shop-orders" data-shop-order-filter="all"><span>✓</span><strong>Comenzi</strong><small>Verifica si proceseaza comenzile.</small><b>Deschide →</b></button></div></div><div><div class="shop-section-head"><div><span>ACTIVITATE RECENTA</span><h2>Ultimele comenzi</h2></div><button type="button" class="shop-dashboard-see-all" data-shop-open="shop-orders" data-shop-order-filter="new">Vezi toate <b>→</b></button></div><div class="shop-dashboard-orders">${recent}</div></div></section>`;
+      host.querySelectorAll('[data-dashboard-order-open]').forEach(button => button.addEventListener('click', async () => {
+        state.orderStatusFilter = 'new';
+        state.pages.orders = 1;
+        window.switchTab('shop-orders');
+        await loadOrders();
+        await openOrder(button.dataset.dashboardOrderOpen);
+      }));
     } catch (error) {
       host.innerHTML = `<div class="shop-commerce-error">${esc(error.message || 'Dashboardul nu a putut fi incarcat.')}</div>`;
     }
@@ -529,6 +556,7 @@
   function stockBadge(product) { if (product.stock_mode === 'unlimited') return '<span class="commerce-stock unlimited">NELIMITAT</span>'; const low = product.stock_quantity <= product.low_stock_threshold; return `<span class="commerce-stock ${low ? 'low' : ''}">${product.stock_quantity} BUC.${low ? ' · STOC MIC' : ''}</span>`; }
 
   async function openProductDetail(id) {
+    state.pages.productSales = 1;
     $('shop-product-detail-title').textContent = 'Se incarca...';
     $('shop-product-detail-content').innerHTML = '<div class="shop-commerce-loading">Se incarca fisa produsului...</div>';
     openModal('shop-product-detail-modal');
@@ -544,14 +572,23 @@
     if (!detail) return;
     const product = detail.product;
     const gallery = product.images.map((image, index) => `<div class="shop-detail-image ${index === 0 ? 'main' : ''}">${productPicture(image, 'shop-detail-image-photo')}${index === 0 ? '<small>PRINCIPALA</small>' : ''}</div>`).join('') || '<p>Produsul nu are imagini.</p>';
-    const orders = detail.orders.map(order => {
+    const salesPage = pageData(Array.isArray(detail.orders) ? detail.orders : [], 'productSales', PRODUCT_SALES_PAGE_SIZE_OPTIONS);
+    const orders = salesPage.items.map(order => {
       const acquisitionPrice = Number(product.cost_price || 0);
       const salePrice = Number(order.unit_price || 0);
       const orderProfit = Number(order.line_total || 0) - (acquisitionPrice * Number(order.quantity || 0));
-      return `<tr><td><strong>${esc(order.order_number)}</strong><small>${esc(order.created_at)}</small><em>${esc(order.customer_name)}</em></td><td>${order.quantity} buc.</td><td><b>${money(acquisitionPrice)}</b><small>pe bucata</small></td><td><b>${money(salePrice)}</b><small>pe bucata</small></td><td><b class="shop-profit-value">${money(orderProfit)}</b><small>total comanda</small></td><td><span class="commerce-pill" style="--pill:${statusColors[order.status] || '#aaa'}">${esc(statusLabels[order.status] || order.status)}</span></td></tr>`;
+      return `<tr data-product-sale-order="${esc(order.id)}"><td><strong>${esc(order.order_number)}</strong><small>${esc(order.created_at)}</small><em>${esc(order.customer_name)}</em></td><td>${order.quantity} buc.</td><td><b>${money(acquisitionPrice)}</b><small>pe bucata</small></td><td><b>${money(salePrice)}</b><small>pe bucata</small></td><td><b class="shop-profit-value">${money(orderProfit)}</b><small>total comanda</small></td><td><span class="commerce-pill" style="--pill:${statusColors[order.status] || '#aaa'}">${esc(statusLabels[order.status] || order.status)}</span></td></tr>`;
     }).join('');
     const reviews = detail.reviews.map(review => `<article class="shop-detail-review"><header><div><strong>${esc(review.customer_name)}</strong><small>${'★'.repeat(review.rating)}${'☆'.repeat(5 - review.rating)} · ${esc(review.created_at)}</small></div><button type="button" class="danger" data-detail-review-delete="${review.id}">×</button></header><p>${esc(review.message)}</p><label>Raspunsul magazinului<textarea rows="3" data-detail-review-reply="${review.id}">${esc(review.admin_reply || '')}</textarea></label><button type="button" class="btn-primary" data-detail-review-save="${review.id}">Salveaza raspunsul</button></article>`).join('') || '<p class="shop-detail-empty">Produsul nu are inca recenzii.</p>';
-    $('shop-product-detail-content').innerHTML = `<div class="shop-detail-gallery">${gallery}</div><div class="shop-detail-metrics">${detailMetric('Vanzari', money(detail.revenue))}${detailMetric('Comenzi', detail.orders_count)}${detailMetric('Bucati vandute', detail.units_sold)}${detailMetric('Vizualizari pe site', product.view_count)}${detailMetric('Pret achizitie', money(product.cost_price))}${detailMetric('Pret vanzare', money(product.sale_price ?? product.price))}${detailMetric('Profit estimat', money(detail.profit), true)}${detailMetric('Recenzii', `${detail.reviews.length}${product.review_average ? ` · ${Number(product.review_average).toFixed(1)}★` : ''}`)}</div>${section('01', 'Comenzi si vanzari', 'Istoricul comenzilor care contin acest produs.')}<div class="shop-commerce-table-wrap"><table class="shop-commerce-table shop-product-sales-table"><thead><tr><th>Numar comanda</th><th>Cantitate</th><th>Pret achizitie</th><th>Pret vanzare</th><th>Profit</th><th>Status</th></tr></thead><tbody>${orders || '<tr><td colspan="6">Produsul nu apare in nicio comanda.</td></tr>'}</tbody></table></div>${section('02', 'Recenzii', 'Raspunde clientilor sau sterge recenziile direct de aici.')}<div class="shop-detail-reviews">${reviews}</div>`;
+    const soldUnits = Number(detail.units_sold || 0);
+    const averageSalePrice = soldUnits ? Number(detail.revenue || 0) / soldUnits : 0;
+    const averageAcquisitionPrice = soldUnits ? Number(detail.acquisition_total || 0) / soldUnits : 0;
+    const averageProfit = soldUnits ? Number(detail.profit || 0) / soldUnits : 0;
+    const reviewAverage = Number(product.review_average || 0);
+    const salesPagination = pagination('productSales', detail.orders.length, salesPage.page, salesPage.pageCount, salesPage.pageSize, PRODUCT_SALES_PAGE_SIZE_OPTIONS);
+    $('shop-product-detail-content').innerHTML = `<div class="shop-detail-gallery">${gallery}</div><div class="shop-detail-metrics compact">${detailMetric('Total vânzări', money(detail.revenue))}${detailMetric('Preț vânzare mediu', money(averageSalePrice))}${detailMetric('Preț achiziție mediu', money(averageAcquisitionPrice))}${detailMetric('Profit mediu', money(averageProfit), true)}${detailMetric('Bucăți vândute', soldUnits)}${detailMetric('Vizualizări pe site', product.view_count)}${detailMetric('Număr recenzii', detail.reviews.length)}${detailMetric('Media recenziilor', reviewAverage ? `${reviewAverage.toFixed(1)} ★` : '—')}</div>${section('01', 'Comenzi si vanzari', 'Istoricul comenzilor care contin acest produs.')}<div class="shop-commerce-table-wrap"><table class="shop-commerce-table shop-product-sales-table"><thead><tr><th>Numar comanda</th><th>Cantitate</th><th>Pret achizitie</th><th>Pret vanzare</th><th>Profit</th><th>Status</th></tr></thead><tbody>${orders || '<tr><td colspan="6">Produsul nu apare in nicio comanda.</td></tr>'}</tbody></table></div>${salesPagination}${section('02', 'Recenzii', 'Raspunde clientilor sau sterge recenziile direct de aici.')}<div class="shop-detail-reviews">${reviews}</div>`;
+    bindPagination('shop-product-detail-content', 'productSales', renderProductDetail, PRODUCT_SALES_PAGE_SIZE_OPTIONS);
+    $('shop-product-detail-content').querySelectorAll('[data-product-sale-order]').forEach(row => row.addEventListener('click', () => { closeModal('shop-product-detail-modal'); setTimeout(() => openOrder(row.dataset.productSaleOrder), 190); }));
     $('shop-product-detail-content').querySelectorAll('[data-detail-review-save]').forEach(button => button.addEventListener('click', async () => { try { const id = button.dataset.detailReviewSave; const reply = $(`shop-product-detail-content`).querySelector(`[data-detail-review-reply="${id}"]`).value; await window.SHOP_API.replyProductReview(id, reply); toast('Raspunsul a fost salvat.'); await openProductDetail(product.id); } catch (error) { toast(error.message, 'error'); } }));
     $('shop-product-detail-content').querySelectorAll('[data-detail-review-delete]').forEach(button => button.addEventListener('click', async () => { if (!confirm('Stergi aceasta recenzie de pe site?')) return; try { await window.SHOP_API.deleteProductReview(button.dataset.detailReviewDelete); toast('Recenzia a fost stearsa.'); await openProductDetail(product.id); } catch (error) { toast(error.message, 'error'); } }));
   }
@@ -656,28 +693,71 @@
 
   async function loadOrders() { loading('shop-orders-content', 'Se incarca comenzile...'); try { const orders = await window.SHOP_API.listOrders(); state.orders = Array.isArray(orders) ? orders : []; renderOrders(); } catch (error) { failure('shop-orders-content', error); } }
   function renderOrders() {
-    const page = pageData(state.orders, 'orders');
-    const rows = page.items.map(order => `<tr data-order-open="${order.id}"><td><strong>${esc(order.order_number)}</strong><small>${esc(new Date(order.created_at.replace(' ', 'T')).toLocaleString('ro-RO'))}</small></td><td><strong>${esc(order.customer_name)}</strong><small>${esc(order.customer_phone)}</small></td><td><span class="commerce-pill" style="--pill:${statusColors[order.status]}">${esc(statusShortLabels[order.status] || order.status)}</span></td><td>${order.payment_method === 'card' ? 'Card' : 'Ramburs'}<small>${esc(order.payment_status)}</small></td><td><b>${money(order.total)}</b></td><td>›</td></tr>`).join('');
-    $('shop-orders-content').innerHTML = rows ? `<div class="shop-commerce-summary"><span><b>${state.orders.filter(item => item.status === 'new').length}</b> în procesare</span><span><b>${state.orders.filter(item => item.status === 'processing').length}</b> în pregătire</span><span><b>${money(state.orders.filter(item => item.status !== 'cancelled').reduce((sum, item) => sum + Number(item.total), 0))}</b> valoare</span></div><div class="shop-commerce-table-wrap"><table class="shop-commerce-table orders"><thead><tr><th>Comanda</th><th>Client</th><th>Status</th><th>Plata</th><th>Total</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${pagination('orders', state.orders.length, page.page, page.pageCount, page.pageSize)}` : empty('Nicio comanda', 'Comenzile trimise de pe site vor aparea automat aici.');
+    const normalizeSearch = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const paymentStatusLabels = { pending: 'În așteptare', paid: 'Plătită', failed: 'Eșuată', refunded: 'Rambursată' };
+    const term = normalizeSearch(state.orderQuery.trim());
+    const filtered = state.orders.filter(order => {
+      const created = new Date(String(order.created_at || '').replace(' ', 'T'));
+      const createdLabels = Number.isNaN(created.getTime()) ? [] : [created.toLocaleDateString('ro-RO'), created.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' }), created.toLocaleString('ro-RO')];
+      const searchText = normalizeSearch([order.order_number, order.customer_name, order.customer_phone, order.customer_email, order.created_at, ...createdLabels, order.status, statusLabels[order.status], statusShortLabels[order.status], order.payment_method, order.payment_method === 'card' ? 'card online plata cu cardul' : 'ramburs la curier plata ramburs numerar cash', order.payment_status, paymentStatusLabels[order.payment_status]].join(' '));
+      if (term && !searchText.includes(term)) return false;
+      if (state.orderStatusFilter !== 'all' && order.status !== state.orderStatusFilter) return false;
+      if (state.orderPaymentMethodFilter === 'card' && order.payment_method !== 'card') return false;
+      if (state.orderPaymentMethodFilter === 'cash' && order.payment_method === 'card') return false;
+      if (state.orderPaymentStatusFilter !== 'all' && order.payment_status !== state.orderPaymentStatusFilter) return false;
+      return true;
+    });
+    const page = pageData(filtered, 'orders');
+    const rows = page.items.map(order => `<tr data-order-open="${order.id}"><td><strong>${esc(order.order_number)}</strong><small>${esc(new Date(order.created_at.replace(' ', 'T')).toLocaleString('ro-RO'))}</small></td><td><strong>${esc(order.customer_name)}</strong><small>${esc(order.customer_phone)}</small></td><td><span class="commerce-pill" style="--pill:${statusColors[order.status]}">${esc(statusShortLabels[order.status] || order.status)}</span></td><td>${order.payment_method === 'card' ? 'Card' : 'Ramburs'}<small>${esc(paymentStatusLabels[order.payment_status] || order.payment_status)}</small></td><td><b>${money(order.total)}</b></td><td><span class="shop-order-open-indicator" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span></td></tr>`).join('');
+    const activeOrders = state.orders.filter(item => !terminalStatuses.includes(item.status));
+    const collected = activeOrders.filter(item => item.payment_status === 'paid').reduce((sum, item) => sum + Number(item.total || 0), 0);
+    const pendingCash = activeOrders.filter(item => item.payment_method !== 'card' && item.payment_status === 'pending').reduce((sum, item) => sum + Number(item.total || 0), 0);
+    const orderMetrics = [
+      { tone: 'blue', icon: statusIcon('new'), label: 'În procesare', value: String(state.orders.filter(item => item.status === 'new').length), help: 'Comenzi noi' },
+      { tone: 'orange', icon: statusIcon('processing'), label: 'În pregătire', value: String(state.orders.filter(item => item.status === 'processing').length), help: 'Se pregătesc pentru livrare' },
+      { tone: 'purple', icon: '<svg viewBox="0 0 24 24"><path d="M4 7h16v11H4z"/><path d="M7 7V5h10v2M8 13h4"/></svg>', label: 'Total', value: money(collected + pendingCash), help: 'Încasări + ramburs în așteptare' },
+      { tone: 'green', icon: statusIcon('completed'), label: 'Încasat', value: money(collected), help: 'Toate plățile încasate' },
+      { tone: 'amber', icon: statusIcon('new'), label: 'De încasat', value: money(pendingCash), help: 'Ramburs în așteptare' },
+    ];
+    const metricsHtml = `<div class="shop-order-kpi-strip">${orderMetrics.map(item => `<article class="shop-order-kpi ${item.tone}"><span class="shop-order-kpi-icon">${item.icon}</span><div><small>${esc(item.label)}</small><strong>${esc(item.value)}</strong><em>${esc(item.help)}</em></div></article>`).join('')}</div>`;
+    const option = (value, label, selected) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${esc(label)}</option>`;
+    const filtersHtml = `<section class="shop-order-filters"><header><div><strong>Căutare și filtre</strong><span>${filtered.length} ${filtered.length === 1 ? 'rezultat' : 'rezultate'}</span></div><button type="button" id="shop-orders-filter-reset" ${(term || state.orderStatusFilter !== 'all' || state.orderPaymentMethodFilter !== 'all' || state.orderPaymentStatusFilter !== 'all') ? '' : 'disabled'}>Resetează filtrele</button></header><div class="shop-order-filter-grid"><label class="search"><small>Caută în toate datele comenzii</small><input id="shop-orders-search" value="${esc(state.orderQuery)}" placeholder="Client, dată, oră, telefon, status, plată sau număr comandă" /></label><label><small>Status comandă</small><select id="shop-orders-status-filter">${option('all', 'Toate statusurile', state.orderStatusFilter)}${Object.entries(statusLabels).map(([value, label]) => option(value, label, state.orderStatusFilter)).join('')}</select></label><label><small>Metodă de plată</small><select id="shop-orders-payment-method-filter">${option('all', 'Toate metodele', state.orderPaymentMethodFilter)}${option('card', 'Card online', state.orderPaymentMethodFilter)}${option('cash', 'Ramburs la curier', state.orderPaymentMethodFilter)}</select></label><label><small>Status plată</small><select id="shop-orders-payment-status-filter">${option('all', 'Toate plățile', state.orderPaymentStatusFilter)}${option('pending', 'În așteptare', state.orderPaymentStatusFilter)}${option('paid', 'Plătită', state.orderPaymentStatusFilter)}${option('failed', 'Eșuată', state.orderPaymentStatusFilter)}${option('refunded', 'Rambursată', state.orderPaymentStatusFilter)}</select></label></div></section>`;
+    const tableHtml = rows ? `<div class="shop-commerce-table-wrap"><table class="shop-commerce-table orders"><thead><tr><th>Comanda</th><th>Client</th><th>Status</th><th>Plata</th><th>Total</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${pagination('orders', filtered.length, page.page, page.pageCount, page.pageSize)}` : empty('Nicio comandă găsită', 'Schimbă sau resetează filtrele pentru a vedea alte comenzi.');
+    $('shop-orders-content').innerHTML = state.orders.length ? `${metricsHtml}${filtersHtml}${tableHtml}` : empty('Nicio comanda', 'Comenzile trimise de pe site vor aparea automat aici.');
     $('shop-orders-content').querySelectorAll('[data-order-open]').forEach(row => row.addEventListener('click', () => openOrder(row.dataset.orderOpen)));
+    $('shop-orders-search')?.addEventListener('input', event => {
+      state.orderQuery = event.target.value;
+      state.pages.orders = 1;
+      const caret = event.target.selectionStart ?? state.orderQuery.length;
+      renderOrders();
+      const nextInput = $('shop-orders-search');
+      nextInput?.focus();
+      nextInput?.setSelectionRange?.(caret, caret);
+    });
+    [['shop-orders-status-filter', 'orderStatusFilter'], ['shop-orders-payment-method-filter', 'orderPaymentMethodFilter'], ['shop-orders-payment-status-filter', 'orderPaymentStatusFilter']].forEach(([id, key]) => $(id)?.addEventListener('change', event => { state[key] = event.target.value; state.pages.orders = 1; renderOrders(); }));
+    $('shop-orders-filter-reset')?.addEventListener('click', () => { state.orderQuery = ''; state.orderStatusFilter = 'all'; state.orderPaymentMethodFilter = 'all'; state.orderPaymentStatusFilter = 'all'; state.pages.orders = 1; renderOrders(); });
     bindPagination('shop-orders-content', 'orders', renderOrders);
   }
   function orderTimeline(order) {
     const history = Array.isArray(order.status_history) ? order.status_history : [];
-    const visible = statusDefinitions;
-    const flow = visible.filter(item => item.value !== 'cancelled');
+    const terminalCurrent = terminalStatuses.includes(order.status) ? statusDefinitions.find(item => item.value === order.status) : null;
+    const flow = statusDefinitions.filter(item => mainStatusFlow.includes(item.value));
+    const visible = terminalCurrent ? [...flow, terminalCurrent] : flow;
     const currentFlowIndex = flow.findIndex(item => item.value === order.status);
     return `<section class="shop-order-timeline"><div class="shop-order-section-title"><span>EVOLUȚIA COMENZII</span><strong>Istoric status</strong></div><div class="shop-order-timeline-flow">${visible.map((item, index) => {
       const entry = [...history].reverse().find(historyItem => historyItem.to_status === item.value);
       const flowIndex = flow.findIndex(flowItem => flowItem.value === item.value);
-      const reached = Boolean(entry) || item.value === order.status || (order.status !== 'cancelled' && flowIndex >= 0 && currentFlowIndex >= 0 && flowIndex <= currentFlowIndex);
+      const reached = Boolean(entry) || item.value === order.status || (!terminalStatuses.includes(order.status) && flowIndex >= 0 && currentFlowIndex >= 0 && flowIndex <= currentFlowIndex);
       const current = item.value === order.status;
       const date = entry ? new Date(String(entry.created_at).replace(' ', 'T')).toLocaleString('ro-RO') : '';
       return `<div class="shop-order-timeline-step ${reached ? 'reached' : ''} ${current ? 'current' : ''}" style="--status-color:${statusColors[item.value]}"><div class="shop-order-timeline-rail"><span>${statusIcon(item.value)}</span>${index < visible.length - 1 ? '<i></i>' : ''}</div><div class="shop-order-timeline-card"><div><strong>${esc(statusLabels[item.value])}</strong>${current ? '<em>ACUM</em>' : ''}</div><p>${esc(item.description)}</p>${entry ? `<footer><time>${esc(date)}</time>${entry.customer_notified ? '<b>✉ CLIENT NOTIFICAT</b>' : ''}</footer>` : `<small>${current ? 'Statusul curent' : 'Pas următor'}</small>`}</div></div>`;
     }).join('')}</div></section>`;
   }
   function orderStatusPicker(order) {
-    return `<section class="shop-order-status-section"><div class="shop-order-section-title"><span>ACTUALIZEAZĂ</span><strong>Alege statusul comenzii</strong></div><div class="shop-order-status-picker">${statusDefinitions.map(item => `<label class="shop-order-status-option ${order.status === item.value ? 'selected' : ''}" style="--status-color:${statusColors[item.value]}"><input type="radio" name="shop-order-status" value="${item.value}" ${order.status === item.value ? 'checked' : ''}><span class="shop-order-status-icon">${statusIcon(item.value)}</span><span><strong>${esc(statusLabels[item.value])}</strong><small>${esc(item.description)}</small></span><i>✓</i></label>`).join('')}</div></section>`;
+    return `<section class="shop-order-status-section"><div class="shop-order-section-title"><span>ACTUALIZEAZĂ</span><strong>Alege următorul status</strong></div><div class="shop-order-status-picker">${statusDefinitions.map((item, index) => {
+      const locked = statusTransitionLocked(order.status, item.value);
+      return `<label class="shop-order-status-option ${order.status === item.value ? 'selected' : ''} ${locked ? 'locked' : ''}" style="--status-color:${statusColors[item.value]}"><input type="radio" name="shop-order-status" value="${item.value}" ${order.status === item.value ? 'checked' : ''} ${locked ? 'disabled' : ''}><span class="shop-order-status-icon">${statusIcon(item.value)}<b>${String(index + 1).padStart(2, '0')}</b></span><span><strong>${esc(statusLabels[item.value])}</strong><small>${esc(locked ? 'Etapă finalizată · nu se poate reveni' : item.description)}</small></span><i>✓</i></label>`;
+    }).join('')}</div></section>`;
   }
   function normalizeWhatsAppPhone(value) {
     let digits = String(value || '').replace(/\D/g, '');

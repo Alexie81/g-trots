@@ -236,7 +236,7 @@ export type ShopOrderEmailNotification = {
 export type ShopOrder = {
   id: string;
   order_number: string;
-  status: 'new' | 'confirmed' | 'processing' | 'shipped' | 'completed' | 'cancelled';
+  status: 'new' | 'confirmed' | 'processing' | 'shipped' | 'completed' | 'refunded' | 'cancelled';
   payment_status: 'pending' | 'paid' | 'failed' | 'refunded';
   payment_method: 'card' | 'cash_on_delivery';
   customer_name: string;

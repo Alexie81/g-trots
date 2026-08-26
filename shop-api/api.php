@@ -1606,7 +1606,7 @@ try {
              FROM shop_order_items oi
              INNER JOIN shop_orders o ON o.id = oi.order_id
              WHERE oi.product_id = ?
-               AND o.status <> "cancelled"
+               AND o.status NOT IN ("cancelled", "refunded")
                AND o.payment_status = "paid"'
         );
         $summary->execute([$product['id']]);
@@ -1617,7 +1617,7 @@ try {
              FROM shop_order_items oi
              INNER JOIN shop_orders o ON o.id = oi.order_id
              WHERE oi.product_id = ?
-             ORDER BY o.created_at DESC LIMIT 100'
+             ORDER BY o.created_at DESC'
         );
         $orders->execute([$product['id']]);
         $orderRows = array_map(function (array $row): array {
@@ -1645,23 +1645,21 @@ try {
 
     if ($action === 'getDashboardStats' && $method === 'GET') {
         $summary = $db->query(
-            'SELECT COUNT(DISTINCT CASE
-                        WHEN o.payment_status = "paid" AND o.status <> "cancelled" THEN o.id
-                    END) AS orders_count,
+            'SELECT COUNT(DISTINCT o.id) AS orders_count,
                     COUNT(DISTINCT CASE WHEN o.status = "new" THEN o.id END) AS new_orders_count,
                     COALESCE(SUM(CASE
-                        WHEN o.payment_status = "paid" AND o.status <> "cancelled" THEN oi.line_total
+                        WHEN o.payment_status = "paid" AND o.status NOT IN ("cancelled", "refunded") THEN oi.line_total
                         ELSE 0
                     END), 0) AS revenue,
                     COALESCE(SUM(CASE
-                        WHEN o.payment_status = "paid" AND o.status <> "cancelled" THEN oi.quantity * COALESCE(p.cost_price, 0)
+                        WHEN o.payment_status = "paid" AND o.status NOT IN ("cancelled", "refunded") THEN oi.quantity * COALESCE(p.cost_price, 0)
                         ELSE 0
                     END), 0) AS acquisitions
              FROM shop_orders o
              LEFT JOIN shop_order_items oi ON oi.order_id = o.id
              LEFT JOIN shop_products p ON p.id = oi.product_id'
         )->fetch() ?: [];
-        $recentRows = $db->query('SELECT * FROM shop_orders ORDER BY (status = "new") DESC, created_at DESC LIMIT 8')->fetchAll();
+        $recentRows = $db->query('SELECT * FROM shop_orders WHERE status = "new" ORDER BY created_at DESC LIMIT 8')->fetchAll();
         $revenue = round((float)($summary['revenue'] ?? 0), 2);
         $acquisitions = round((float)($summary['acquisitions'] ?? 0), 2);
         jsonResponse([
@@ -1956,7 +1954,7 @@ try {
 
     if ($action === 'updateOrder' && in_array($method, ['PUT', 'PATCH'], true)) {
         $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
-        $statuses = ['new', 'confirmed', 'processing', 'shipped', 'completed', 'cancelled'];
+        $statuses = ['new', 'confirmed', 'processing', 'shipped', 'completed', 'refunded', 'cancelled'];
         $paymentStatuses = ['pending', 'paid', 'failed', 'refunded'];
         $status = trim((string)($body['status'] ?? ''));
         $paymentStatus = trim((string)($body['payment_status'] ?? ''));
@@ -1970,8 +1968,20 @@ try {
             $stmt->execute([$id]);
             $current = $stmt->fetch();
             if (!$current) throw new InvalidArgumentException('Comanda nu exista.');
+            $mainStatusFlow = ['new', 'confirmed', 'processing', 'shipped', 'completed'];
+            $terminalStatuses = ['refunded', 'cancelled'];
+            $currentStatus = (string)$current['status'];
+            if ($status !== $currentStatus && in_array($currentStatus, $terminalStatuses, true)) {
+                throw new InvalidArgumentException('O comandă rambursată sau anulată nu mai poate reveni în fluxul de procesare.');
+            }
+            $currentIndex = array_search($currentStatus, $mainStatusFlow, true);
+            $nextIndex = array_search($status, $mainStatusFlow, true);
+            if ($status !== $currentStatus && $currentIndex !== false && $nextIndex !== false && $nextIndex < $currentIndex) {
+                throw new InvalidArgumentException('Statusul comenzii nu poate reveni la o etapă anterioară.');
+            }
+            if ($status === 'refunded') $paymentStatus = 'refunded';
             $statusChanged = $status !== (string)$current['status'];
-            if ($status === 'cancelled' && $current['status'] !== 'cancelled') {
+            if (in_array($status, $terminalStatuses, true) && !in_array($currentStatus, $terminalStatuses, true)) {
                 $items = $db->prepare('SELECT * FROM shop_order_items WHERE order_id = ?');
                 $items->execute([$id]);
                 foreach ($items->fetchAll() as $item) {
@@ -1983,7 +1993,8 @@ try {
                     $next = (int)$product['stock_quantity'] + (int)$item['quantity'];
                     $db->prepare('UPDATE shop_products SET stock_quantity = ? WHERE id = ?')->execute([$next, $product['id']]);
                     $movement = $db->prepare('INSERT INTO shop_inventory_movements (id, product_id, order_id, movement_type, quantity_delta, quantity_after, note, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-                    $movement->execute([uuidV4(), $product['id'], $id, 'return', (int)$item['quantity'], $next, 'Stoc returnat prin anularea comenzii', (string)($currentUser['display_name'] ?? $currentUser['username'] ?? '')]);
+                    $movementNote = $status === 'refunded' ? 'Stoc returnat prin rambursarea comenzii' : 'Stoc returnat prin anularea comenzii';
+                    $movement->execute([uuidV4(), $product['id'], $id, 'return', (int)$item['quantity'], $next, $movementNote, (string)($currentUser['display_name'] ?? $currentUser['username'] ?? '')]);
                 }
             }
             $update = $db->prepare('UPDATE shop_orders SET status = ?, payment_status = ?, admin_notes = ? WHERE id = ?');

@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "feed_url": "https://www.boomag.ro/feed/doctor-trotineta.csv",
+  "catalog_total": 1627,
+  "completed_count": 3,
+  "remaining_count": 1624,
+  "completed_ids": [
+    "57746",
+    "59894",
+    "59895"
+  ],
+  "completed_products": [
+    {
+      "supplier_external_id": "57746",
+      "supplier_sku": "SE-EWF897",
+      "ean": "8435764446733",
+      "name": "Cauciuc plin 9×3.0-5.5 AMITOR pentru KuKirin G2 Pro 2024",
+      "slug": "cauciuc-plin-9x3-5-5-kukirin-g2-pro-2024",
+      "description_word_count": 2680,
+      "faq_count": 8,
+      "specification_count": 17,
+      "source_count": 4,
+      "status": "published_and_validated"
+    },
+    {
+      "supplier_external_id": "59894",
+      "supplier_sku": "SE-EW5465",
+      "ean": "8435764454653",
+      "name": "Disc de frână 140 mm 6H albastru pentru trotinetă electrică",
+      "slug": "disc-frana-140mm-6h-albastru-trotineta-electrica",
+      "description_word_count": 2533,
+      "faq_count": 8,
+      "specification_count": 18,
+      "source_count": 4,
+      "status": "published_and_validated"
+    },
+    {
+      "supplier_external_id": "59895",
+      "supplier_sku": "SE-EW5466",
+      "ean": "8435764454660",
+      "name": "Disc de frână 140 mm 6H mov pentru trotinetă electrică",
+      "slug": "disc-frana-140mm-6h-mov-trotineta-electrica",
+      "description_word_count": 2558,
+      "faq_count": 8,
+      "specification_count": 18,
+      "source_count": 4,
+      "status": "published_and_validated"
+    }
+  ]
+}

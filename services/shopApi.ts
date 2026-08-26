@@ -132,6 +132,9 @@ export type ShopProduct = {
   currency: string;
   stock_mode: 'tracked' | 'unlimited';
   stock_quantity: number;
+  supplier_stock_quantity: number;
+  supplier_stock_status: boolean;
+  supplier_stock_updated_at: string | null;
   accounting_stock_quantity: number;
   low_stock_threshold: number;
   stock_available: boolean;
@@ -340,7 +343,7 @@ async function shopCall<T>(action: string, token: string, init?: RequestInit, id
   const controller = new AbortController();
   // Stergerea sincronizeaza arhivarea cu Stripe inainte de eliminarea locala.
   // O lasam sa se incheie si pe conexiuni mobile mai lente.
-  const timeoutMs = action === 'syncBoomagTaxonomy' ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
+  const timeoutMs = ['syncBoomagTaxonomy', 'syncBoomagStock'].includes(action) ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const isGet = !init?.method || init.method === 'GET';
   const cacheBuster = isGet ? `&_=${Date.now()}` : '';
@@ -403,6 +406,7 @@ export const shopApi = {
   updateProductSource: (token: string, id: string, payload: Omit<ShopProductSource, 'id'>) => shopCall<ShopProductSource>('updateProductSource', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
   deleteProductSource: (token: string, id: string) => shopCall<{ success: true }>('deleteProductSource', token, { method: 'DELETE' }, id),
   syncBoomagTaxonomy: (token: string) => shopCall<ShopTaxonomySyncResult>('syncBoomagTaxonomy', token, { method: 'POST', body: '{}' }),
+  syncBoomagStock: (token: string) => shopCall<{ success: true; feed_products: number; matched_products: number; synced_at: string }>('syncBoomagStock', token, { method: 'POST', body: '{}' }),
   listProducts: (token: string) => shopCall<ShopProduct[]>('listProducts', token),
   getProduct: (token: string, id: string) => shopCall<ShopProduct>('getProduct', token, undefined, id),
   getProductStats: (token: string, id: string) => shopCall<ShopProductStats>('getProductStats', token, undefined, id),

@@ -2,11 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Integrarea Boomag/Gomag pentru taxonomia SHOP.
- *
- * Important: acest modul nu scrie niciodata in shop_products. Produsele sunt
- * citite temporar doar pentru a identifica producatorii, compatibilitatile si
- * o fotografie reprezentativa pentru fiecare subcategorie.
+ * Integrarea Boomag/Gomag pentru taxonomia, produsele si stocul SHOP.
  */
 
 function gomagRequest(array $config, string $endpoint, array $query = []): array {
@@ -60,6 +56,15 @@ function gomagRequest(array $config, string $endpoint, array $query = []): array
                     ? (string)($decoded['error']['message'] ?? $decoded['error']['description'] ?? 'Eroare Gomag')
                     : (string)$decoded['error'];
                 throw new RuntimeException('Gomag: ' . $message);
+            }
+            $payload = $decoded['data'] ?? $decoded;
+            if (is_array($payload)) {
+                foreach (['page', 'pages', 'total', 'limit'] as $metaKey) {
+                    if (!array_key_exists($metaKey, $payload) && array_key_exists($metaKey, $decoded)) {
+                        $payload[$metaKey] = $decoded[$metaKey];
+                    }
+                }
+                return $payload;
             }
             return $decoded;
         }
@@ -348,4 +353,178 @@ function gomagSyncTaxonomy(PDO $db, array $config): array {
         'products_imported' => 0,
         'crm_products_after_sync' => $productCount,
     ];
+}
+
+function boomagFeedContents(array $config): string {
+    $url = trim((string)($config['boomag_feed_url'] ?? 'https://www.boomag.ro/feed/doctor-trotineta.csv'));
+    if (!preg_match('#^https://#i', $url)) throw new RuntimeException('Feedul Boomag nu este configurat corect.');
+
+    $raw = false;
+    $status = 0;
+    if (function_exists('curl_init')) {
+        $curl = curl_init($url);
+        curl_setopt_array($curl, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_CONNECTTIMEOUT => 12,
+            CURLOPT_TIMEOUT => 60,
+            CURLOPT_MAXREDIRS => 4,
+            CURLOPT_USERAGENT => 'G-Trots-Shop/1.0',
+        ]);
+        $raw = curl_exec($curl);
+        $status = (int)curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $error = curl_error($curl);
+        curl_close($curl);
+        if ($status < 200 || $status >= 300) {
+            throw new RuntimeException('Feedul Boomag nu a raspuns corect' . ($error ? ': ' . $error : '.'));
+        }
+    } else {
+        $context = stream_context_create(['http' => [
+            'timeout' => 60,
+            'ignore_errors' => true,
+            'header' => "User-Agent: G-Trots-Shop/1.0\r\nAccept: text/csv\r\n",
+        ]]);
+        $raw = @file_get_contents($url, false, $context);
+    }
+
+    if (!is_string($raw) || strlen($raw) < 100) throw new RuntimeException('Feedul Boomag este gol sau incomplet.');
+    if (strlen($raw) > 20 * 1024 * 1024) throw new RuntimeException('Feedul Boomag depaseste limita de siguranta.');
+    return $raw;
+}
+
+function boomagFeedRows(array $config): array {
+    $stream = fopen('php://temp', 'w+b');
+    if ($stream === false) throw new RuntimeException('Feedul Boomag nu a putut fi procesat.');
+    fwrite($stream, boomagFeedContents($config));
+    rewind($stream);
+
+    $headers = fgetcsv($stream, 0, '|', '"', '\\');
+    if (!is_array($headers)) {
+        fclose($stream);
+        throw new RuntimeException('Antetul feedului Boomag lipseste.');
+    }
+    $headers = array_map(static function ($value): string {
+        return trim(preg_replace('/^\xEF\xBB\xBF/', '', (string)$value) ?? '');
+    }, $headers);
+    foreach (['id', 'sku', 'name', 'stock_status', 'stock'] as $required) {
+        if (!in_array($required, $headers, true)) {
+            fclose($stream);
+            throw new RuntimeException('Feedul Boomag nu contine coloana ' . $required . '.');
+        }
+    }
+
+    $rows = [];
+    while (($values = fgetcsv($stream, 0, '|', '"', '\\')) !== false) {
+        if (count($values) !== count($headers)) continue;
+        $row = array_combine($headers, $values);
+        if (!is_array($row)) continue;
+        $sku = trim((string)($row['sku'] ?? ''));
+        $externalId = trim((string)($row['id'] ?? ''));
+        if ($sku === '' && $externalId === '') continue;
+        $rows[] = $row;
+    }
+    fclose($stream);
+    if (count($rows) < 100) throw new RuntimeException('Feedul Boomag pare incomplet; sincronizarea a fost oprita preventiv.');
+    return $rows;
+}
+
+function boomagStockAvailable($value): bool {
+    return in_array(mb_strtolower(trim((string)$value)), ['1', 'true', 'yes', 'da', 'in_stock', 'instock', 'in stoc'], true);
+}
+
+function gomagSyncSupplierStock(PDO $db, array $config): array {
+    $rows = boomagFeedRows($config);
+    $source = $db->query("SELECT id FROM shop_product_sources WHERE domain = 'boomag.ro' LIMIT 1")->fetchColumn();
+    if (!$source) throw new RuntimeException('Sursa boomag.ro nu exista in catalog.');
+
+    $products = $db->prepare(
+        'SELECT p.id, p.sku, p.supplier_product_code
+         FROM shop_products p
+         WHERE p.source_id = ? OR LOWER(p.source_domain) = "boomag.ro"'
+    );
+    $products->execute([(string)$source]);
+    $byCode = [];
+    foreach ($products->fetchAll() as $product) {
+        foreach ([$product['sku'] ?? '', $product['supplier_product_code'] ?? ''] as $code) {
+            $key = mb_strtolower(trim((string)$code));
+            if ($key !== '') $byCode[$key] = (string)$product['id'];
+        }
+    }
+
+    $matched = [];
+    $db->beginTransaction();
+    try {
+        $reset = $db->prepare(
+            'UPDATE shop_products
+             SET supplier_stock_quantity = 0, supplier_stock_status = 0,
+                 supplier_stock_updated_at = NOW(), stock_mode = "tracked", stock_quantity = 0,
+                 updated_at = updated_at
+             WHERE source_id = ? OR LOWER(source_domain) = "boomag.ro"'
+        );
+        $reset->execute([(string)$source]);
+        $update = $db->prepare(
+            'UPDATE shop_products
+             SET supplier_stock_quantity = ?, supplier_stock_status = ?,
+                 supplier_stock_updated_at = NOW(), stock_mode = "tracked", stock_quantity = ?,
+                 updated_at = updated_at
+             WHERE id = ?'
+        );
+        foreach ($rows as $row) {
+            $key = mb_strtolower(trim((string)($row['sku'] ?? '')));
+            if ($key === '' || !isset($byCode[$key])) continue;
+            $productId = $byCode[$key];
+            $available = boomagStockAvailable($row['stock_status'] ?? '0');
+            $quantity = max(0, (int)floor((float)str_replace(',', '.', trim((string)($row['stock'] ?? '0')))));
+            if (!$available) $quantity = 0;
+            $update->execute([$quantity, $available ? 1 : 0, $quantity, $productId]);
+            $matched[$productId] = true;
+        }
+        $state = $db->prepare(
+            'INSERT INTO shop_supplier_sync_state (source_domain, last_attempt_at, last_synced_at, row_count, matched_products, last_error)
+             VALUES ("boomag.ro", NOW(), NOW(), ?, ?, NULL)
+             ON DUPLICATE KEY UPDATE last_attempt_at = NOW(), last_synced_at = NOW(), row_count = VALUES(row_count), matched_products = VALUES(matched_products), last_error = NULL'
+        );
+        $state->execute([count($rows), count($matched)]);
+        $db->commit();
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $error;
+    }
+
+    return [
+        'success' => true,
+        'source' => 'boomag.ro',
+        'feed_products' => count($rows),
+        'matched_products' => count($matched),
+        'synced_at' => date(DATE_ATOM),
+    ];
+}
+
+function gomagMaybeSyncSupplierStock(PDO $db, array $config, int $maxAgeHours = 20): ?array {
+    $state = $db->query("SELECT last_synced_at FROM shop_supplier_sync_state WHERE source_domain = 'boomag.ro' LIMIT 1")->fetch();
+    $lastSyncedAt = trim((string)($state['last_synced_at'] ?? ''));
+    if ($lastSyncedAt !== '' && strtotime($lastSyncedAt) >= time() - ($maxAgeHours * 3600)) return null;
+
+    $lockName = 'g-trots-boomag-stock-sync';
+    $lock = $db->prepare('SELECT GET_LOCK(?, 0)');
+    $lock->execute([$lockName]);
+    if ((int)$lock->fetchColumn() !== 1) return null;
+    try {
+        $state = $db->query("SELECT last_synced_at FROM shop_supplier_sync_state WHERE source_domain = 'boomag.ro' LIMIT 1")->fetch();
+        $lastSyncedAt = trim((string)($state['last_synced_at'] ?? ''));
+        if ($lastSyncedAt !== '' && strtotime($lastSyncedAt) >= time() - ($maxAgeHours * 3600)) return null;
+        return gomagSyncSupplierStock($db, $config);
+    } catch (Throwable $error) {
+        error_log('[G-Trots Boomag stock] ' . $error->getMessage());
+        $failure = $db->prepare(
+            'INSERT INTO shop_supplier_sync_state (source_domain, last_attempt_at, last_error)
+             VALUES ("boomag.ro", NOW(), ?)
+             ON DUPLICATE KEY UPDATE last_attempt_at = NOW(), last_error = VALUES(last_error)'
+        );
+        $failure->execute([mb_substr($error->getMessage(), 0, 1000)]);
+        return null;
+    } finally {
+        $release = $db->prepare('SELECT RELEASE_LOCK(?)');
+        $release->execute([$lockName]);
+    }
 }

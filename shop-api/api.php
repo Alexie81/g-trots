@@ -6,7 +6,7 @@ ini_set('log_errors', '1');
 
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, X-API-Key, X-Auth-Token');
+header('Access-Control-Allow-Headers: Content-Type, X-API-Key, X-Auth-Token, X-Import-Key');
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
@@ -43,6 +43,7 @@ function shopConfig(): array {
         'smtp_password' => '',
         'gomag_api_key' => '',
         'gomag_shop_url' => 'https://www.boomag.ro',
+        'boomag_feed_url' => 'https://www.boomag.ro/feed/doctor-trotineta.csv',
     ];
 
     $config = $defaults;
@@ -240,6 +241,9 @@ function ensureShopSchema(PDO $db): void {
             currency CHAR(3) NOT NULL DEFAULT 'RON',
             stock_mode VARCHAR(20) NOT NULL DEFAULT 'tracked',
             stock_quantity INT NOT NULL DEFAULT 0,
+            supplier_stock_quantity INT NOT NULL DEFAULT 0,
+            supplier_stock_status TINYINT(1) NOT NULL DEFAULT 0,
+            supplier_stock_updated_at DATETIME NULL,
             accounting_stock_quantity INT NOT NULL DEFAULT 0,
             low_stock_threshold INT NOT NULL DEFAULT 3,
             is_active TINYINT(1) NOT NULL DEFAULT 1,
@@ -304,6 +308,16 @@ function ensureShopSchema(PDO $db): void {
         $db->exec('ALTER TABLE shop_products ADD COLUMN accounting_stock_quantity INT NOT NULL DEFAULT 0 AFTER stock_quantity');
         $db->exec('UPDATE shop_products SET accounting_stock_quantity = stock_quantity WHERE stock_mode = "tracked"');
     }
+    $supplierStockColumns = [
+        'supplier_stock_quantity' => 'INT NOT NULL DEFAULT 0 AFTER stock_quantity',
+        'supplier_stock_status' => 'TINYINT(1) NOT NULL DEFAULT 0 AFTER supplier_stock_quantity',
+        'supplier_stock_updated_at' => 'DATETIME NULL AFTER supplier_stock_status',
+    ];
+    foreach ($supplierStockColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_products LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_products ADD COLUMN {$column} {$definition}");
+        }
+    }
     $stripeProductColumns = [
         'stripe_product_id' => 'VARCHAR(80) NULL AFTER view_count',
         'stripe_price_id' => 'VARCHAR(80) NULL AFTER stripe_product_id',
@@ -321,6 +335,17 @@ function ensureShopSchema(PDO $db): void {
     if (!$db->query("SHOW INDEX FROM shop_products WHERE Key_name = 'idx_shop_products_stripe_price'")->fetch()) {
         $db->exec('ALTER TABLE shop_products ADD INDEX idx_shop_products_stripe_price (stripe_price_id)');
     }
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_supplier_sync_state (
+            source_domain VARCHAR(120) NOT NULL PRIMARY KEY,
+            last_attempt_at DATETIME NULL,
+            last_synced_at DATETIME NULL,
+            row_count INT NOT NULL DEFAULT 0,
+            matched_products INT NOT NULL DEFAULT 0,
+            last_error VARCHAR(1000) NULL,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_product_brands (
             product_id CHAR(36) NOT NULL,
@@ -901,6 +926,8 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['review_count'] = (int)($row['review_count'] ?? 0);
     $row['review_average'] = $row['review_average'] === null ? null : round((float)$row['review_average'], 2);
     $row['stock_quantity'] = (int)$row['stock_quantity'];
+    $row['supplier_stock_quantity'] = (int)($row['supplier_stock_quantity'] ?? 0);
+    $row['supplier_stock_status'] = (bool)($row['supplier_stock_status'] ?? false);
     $row['accounting_stock_quantity'] = (int)($row['accounting_stock_quantity'] ?? 0);
     $row['low_stock_threshold'] = (int)$row['low_stock_threshold'];
     $row['is_active'] = (bool)$row['is_active'];
@@ -1035,6 +1062,10 @@ function productPayload(PDO $db, array $body, bool $allowInactiveSource = false)
     if (!$source) throw new InvalidArgumentException($allowInactiveSource ? 'Sursa produsului nu exista.' : 'Sursa produsului nu este activa.');
     $sourceId = (string)$source['id'];
     $sourceDomain = (string)$source['domain'];
+    if (mb_strtolower(trim($sourceDomain)) === 'boomag.ro') {
+        $stockMode = 'tracked';
+        $stockQuantity = 0;
+    }
     return [
         'name' => mb_substr($name, 0, 180),
         'slug_source' => mb_substr(trim((string)($body['slug'] ?? $name)), 0, 200),
@@ -1357,6 +1388,10 @@ try {
     $action = trim((string)($_GET['action'] ?? 'health'));
     $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     $db = shopDb($config);
+
+    if (in_array($action, ['publicProducts', 'publicProduct', 'publicShopConfig', 'productManagerBootstrap', 'listProducts', 'listInventory', 'getDashboardStats'], true)) {
+        gomagMaybeSyncSupplierStock($db, $config);
+    }
 
     if ($action === 'stripeWebhook' && $method === 'POST') {
         jsonResponse(stripeProcessWebhook($db, $config, rawRequestBody(), requestHeader('Stripe-Signature')));
@@ -1706,6 +1741,11 @@ try {
         jsonResponse(gomagSyncTaxonomy($db, $config));
     }
 
+    if ($action === 'syncBoomagStock' && $method === 'POST') {
+        set_time_limit(0);
+        jsonResponse(gomagSyncSupplierStock($db, $config));
+    }
+
     if ($action === 'listProductSources' && $method === 'GET') {
         jsonResponse(array_map('sourceRow', $db->query(
             'SELECT s.*,
@@ -1832,6 +1872,10 @@ try {
         $current = $currentStmt->fetch();
         if (!$current) jsonResponse(['error' => 'Produsul nu exista.'], 404);
         $payload = productPayload($db, $body, true);
+        if (mb_strtolower(trim((string)$payload['source_domain'])) === 'boomag.ro') {
+            $payload['stock_mode'] = 'tracked';
+            $payload['stock_quantity'] = (int)($current['supplier_stock_quantity'] ?? $current['stock_quantity'] ?? 0);
+        }
         $removedDescriptionImages = array_diff(
             richDescriptionImagePaths((string)($current['description_html'] ?? '')),
             richDescriptionImagePaths((string)$payload['description_html'])
@@ -1935,6 +1979,9 @@ try {
             $stmt->execute([$id]);
             $product = $stmt->fetch();
             if (!$product) throw new InvalidArgumentException('Produsul nu exista.');
+            if (mb_strtolower(trim((string)($product['source_domain'] ?? ''))) === 'boomag.ro') {
+                throw new InvalidArgumentException('Stocul online al produselor Boomag este preluat automat din stocul furnizorului si nu poate fi modificat manual.');
+            }
             $currentQuantity = (int)$product['stock_quantity'];
             $nextQuantity = $product['stock_mode'] === 'tracked'
                 ? (array_key_exists('quantity', $body) ? max(0, (int)$body['quantity']) : max(0, $currentQuantity + (int)($body['delta'] ?? 0)))

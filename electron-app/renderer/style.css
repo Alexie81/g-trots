@@ -13217,6 +13217,7 @@ body::after {
 .shop-stock-history > div > span { display: flex; flex-direction: column; gap: 3px; }
 .shop-stock-history strong { color: #ddd7d2; font-size: 9px; }
 .shop-stock-history small { color: #6e6762; font-size: 7px; }
+.commerce-supplier-stock { color: #ff8a21; }
 
 .shop-settings-row { min-height: 82px; display: flex; align-items: center; gap: 11px; border-radius: 19px; padding: 11px 13px; background: #1d1b20; margin-bottom: 8px; }
 .shop-settings-icon { width: 46px; height: 46px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 14px; color: #56caf9; background: rgba(56,189,248,.1); font-size: 18px; }

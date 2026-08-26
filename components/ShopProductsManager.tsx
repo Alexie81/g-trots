@@ -136,6 +136,7 @@ type FormState = {
   brand_ids: string[];
   stock_mode: 'tracked' | 'unlimited';
   stock_quantity: string;
+  supplier_stock_quantity: string;
   low_stock_threshold: string;
   is_active: boolean;
   is_featured: boolean;
@@ -168,6 +169,7 @@ function emptyForm(): FormState {
     brand_ids: [],
     stock_mode: 'tracked',
     stock_quantity: '0',
+    supplier_stock_quantity: '0',
     low_stock_threshold: '3',
     is_active: true,
     is_featured: false,
@@ -299,6 +301,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
         brand_ids: full.brand_ids || [],
         stock_mode: full.stock_mode,
         stock_quantity: String(full.stock_quantity),
+        supplier_stock_quantity: String(full.supplier_stock_quantity || 0),
         low_stock_threshold: String(full.low_stock_threshold),
         is_active: full.is_active,
         is_featured: full.is_featured,
@@ -642,9 +645,8 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
             <Text style={styles.label}>COMPATIBILITATI</Text>
             <MultiSelectDropdown items={brands} selectedIds={form.brand_ids} onChange={(ids) => patchForm('brand_ids', ids)} />
 
-            <SectionTitle number="08" title="Stoc" text="Alege stoc online nelimitat sau cantitate urmarita automat." />
-            <View style={styles.sourceRow}><Choice label="Stoc cu numar" selected={form.stock_mode === 'tracked'} onPress={() => patchForm('stock_mode', 'tracked')} /><Choice label="Stoc nelimitat" selected={form.stock_mode === 'unlimited'} onPress={() => patchForm('stock_mode', 'unlimited')} /></View>
-            {form.stock_mode === 'tracked' ? <View style={styles.twoColumns}><View style={styles.column}><Field label="CANTITATE" value={form.stock_quantity} onChangeText={(value) => patchForm('stock_quantity', value)} placeholder="0" keyboardType="number-pad" /></View><View style={styles.column}><Field label="ALERTA SUB" value={form.low_stock_threshold} onChangeText={(value) => patchForm('low_stock_threshold', value)} placeholder="3" keyboardType="number-pad" /></View></View> : null}
+            <SectionTitle number="08" title="Stoc" text={form.source_domain.toLowerCase() === 'boomag.ro' ? 'Stocul online este egal cu stocul furnizorului si se actualizeaza zilnic din feed.' : 'Alege stoc online nelimitat sau cantitate urmarita automat.'} />
+            {form.source_domain.toLowerCase() === 'boomag.ro' ? <View style={styles.nirNote}><Text style={styles.nirNoteTitle}>Stoc furnizor: {form.supplier_stock_quantity} buc.</Text><Text style={styles.nirNoteText}>Stoc online: {form.stock_quantity} buc. · Actualizare automata Boomag · Stocul conta ramane separat si va fi calculat din facturi.</Text></View> : <><View style={styles.sourceRow}><Choice label="Stoc cu numar" selected={form.stock_mode === 'tracked'} onPress={() => patchForm('stock_mode', 'tracked')} /><Choice label="Stoc nelimitat" selected={form.stock_mode === 'unlimited'} onPress={() => patchForm('stock_mode', 'unlimited')} /></View>{form.stock_mode === 'tracked' ? <View style={styles.twoColumns}><View style={styles.column}><Field label="CANTITATE" value={form.stock_quantity} onChangeText={(value) => patchForm('stock_quantity', value)} placeholder="0" keyboardType="number-pad" /></View><View style={styles.column}><Field label="ALERTA SUB" value={form.low_stock_threshold} onChangeText={(value) => patchForm('low_stock_threshold', value)} placeholder="3" keyboardType="number-pad" /></View></View> : null}</>}
 
             <SectionTitle number="09" title="SEO si Google" text="Controleaza titlul si descrierea din rezultatele cautarii." />
             <Field label="META TITLU" value={form.meta_title} onChangeText={(value) => patchForm('meta_title', value)} placeholder={form.name || 'Titlul produsului'} />

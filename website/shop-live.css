@@ -8,6 +8,10 @@
   background-size: contain;
 }
 
+.product-card .product-image-live {
+  background-size: cover;
+}
+
 .product-price del,
 .product-detail-price-row del {
   color: #8b8b87;

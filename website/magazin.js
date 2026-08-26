@@ -258,11 +258,13 @@ function liveProductCard(product, index) {
   const imageClasses = `product-image${legacyImage ? ` product-image-${legacyImage}` : ""}${imageUrl ? " product-image-live" : ""}`;
   const imageStyle = imageUrl ? ` style="background-image:url('${escapeCatalogHtml(imageUrl)}')"` : "";
   const categorySlug = String(product.category_slug || "produse");
-  const categoryName = String(product.category_name || "Produs G-Trots");
-  const manufacturerSlug = String(product.manufacturer_slug || "g-trots");
+  const categoryName = String(product.category_name || "Produs");
+  const manufacturerSlug = String(product.manufacturer_slug || "");
   const brands = Array.isArray(product.brands) ? product.brands : [];
   const brandSlugs = brands.map(brand => String(brand.slug || "")).filter(Boolean);
   const brandNames = brands.map(brand => String(brand.name || "")).filter(Boolean);
+  const manufacturerName = String(product.manufacturer_name || "").trim();
+  const cardLabel = brandNames[0] || manufacturerName || categoryName;
   const currentPrice = product.sale_price == null ? Number(product.price || 0) : Number(product.sale_price || 0);
   const standardPrice = Number(product.price || 0);
   const stockLabel = productStockLabel(product);
@@ -270,13 +272,20 @@ function liveProductCard(product, index) {
   const stockClass = stockKey === "out-of-stock" ? " is-out" : stockLabel === "Stoc limitat" ? " is-low" : "";
   const shortDescription = String(product.short_description || "Produs disponibil în magazinul G-Trots.");
   const route = `/magazin/produs/${encodeURIComponent(slug)}/`;
-  const brandBadges = (brandNames.length ? brandNames : [String(product.manufacturer_name || "G-Trots")])
+  const brandBadges = brandNames
     .slice(0, 4)
     .map(name => `<span>${escapeCatalogHtml(name)}</span>`)
     .join("");
+  const brandSection = brandBadges
+    ? `<div class="product-fit" aria-label="Mărci compatibile">${brandBadges}</div>`
+    : "";
   const oldPrice = product.sale_price == null
     ? ""
     : `<del>${new Intl.NumberFormat("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(standardPrice)} lei</del>`;
+  const discountPercent = product.sale_price == null || standardPrice <= 0
+    ? 0
+    : Math.max(0, Math.round((1 - currentPrice / standardPrice) * 100));
+  const discountBadge = discountPercent > 0 ? `<em class="product-discount">-${discountPercent}%</em>` : "";
 
   const article = document.createElement("article");
   article.className = "product-card reveal visible live-product-card";
@@ -301,14 +310,14 @@ function liveProductCard(product, index) {
       <span class="product-quick-note${stockClass}"><i></i>${stockLabel}</span>
     </div>
     <div class="product-info">
-      <span class="product-category">${escapeCatalogHtml(categoryName)}</span>
+      <span class="product-category"><i></i>${escapeCatalogHtml(cardLabel)}</span>
       <h3>${escapeCatalogHtml(product.name)}</h3>
       <p>${escapeCatalogHtml(shortDescription)}</p>
-      <div class="product-fit">${brandBadges}</div>
+      ${brandSection}
     </div>
     <div class="product-bottom">
-      <div class="product-price"><small>Preț</small><strong>${new Intl.NumberFormat("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(currentPrice)} <span>lei</span></strong>${oldPrice}</div>
-      <span class="product-open-hint" aria-hidden="true">›</span>
+      <div class="product-price"><small>${product.sale_price == null ? "Preț" : "Preț promoțional"}</small><strong>${new Intl.NumberFormat("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(currentPrice)} <span>lei</span></strong>${oldPrice}</div>
+      <div class="product-bottom-action">${discountBadge}<span class="product-open-hint" aria-hidden="true">›</span></div>
     </div>
     <a class="product-card-link" href="${route}" aria-label="Deschide pagina produsului ${escapeCatalogHtml(product.name)}"></a>`;
   return article;

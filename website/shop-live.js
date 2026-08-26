@@ -15,7 +15,7 @@
     if (document.querySelector('link[href*="shop-live.css"]')) return;
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "/shop-live.css?v=20260825-3";
+    link.href = "/shop-live.css?v=20260826-1";
     document.head.append(link);
   }
 

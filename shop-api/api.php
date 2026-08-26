@@ -753,7 +753,7 @@ function removeShopImage(?string $path): bool {
     return is_file($absolute) ? @unlink($absolute) : false;
 }
 
-function productRow(PDO $db, array $row, array $config, bool $withDescription = true): array {
+function productRow(PDO $db, array $row, array $config, bool $withDescription = true, bool $includeInternal = true): array {
     $productId = (string)$row['id'];
     $images = $db->prepare('SELECT id, image_path, alt_text, sort_order FROM shop_product_images WHERE product_id = ? ORDER BY sort_order ASC, created_at ASC');
     $images->execute([$productId]);
@@ -827,6 +827,9 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['stripe_sync_status'] = $row['stripe_sync_error'] !== null ? 'error' : ($row['stripe_product_id'] !== null ? 'synced' : 'pending');
     $row['stock_available'] = $row['stock_mode'] === 'unlimited' || $row['stock_quantity'] > 0;
     if (!$withDescription) unset($row['description_html']);
+    if (!$includeInternal) {
+        unset($row['source_id'], $row['source_domain'], $row['source_url'], $row['source_name'], $row['source_is_active']);
+    }
     return $row;
 }
 
@@ -864,7 +867,7 @@ function findProduct(PDO $db, string $idOrSlug, array $config, bool $publicOnly 
     $stmt->execute([$idOrSlug, $idOrSlug]);
     $row = $stmt->fetch();
     if (!$row) throw new InvalidArgumentException('Produsul nu exista.');
-    return productRow($db, $row, $config, true);
+    return productRow($db, $row, $config, true, !$publicOnly);
 }
 
 function productPayload(PDO $db, array $body, bool $allowInactiveSource = false): array {
@@ -1217,7 +1220,7 @@ try {
         $sql = productSelectSql() . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY p.is_featured DESC, p.created_at DESC LIMIT 300';
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
-        jsonResponse(array_map(fn(array $row): array => productRow($db, $row, $config, false), $stmt->fetchAll()));
+        jsonResponse(array_map(fn(array $row): array => productRow($db, $row, $config, false, false), $stmt->fetchAll()));
     }
 
     if ($action === 'publicProduct' && $method === 'GET') {

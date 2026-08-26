@@ -2105,18 +2105,19 @@ body.filters-open {
   flex-direction: column;
   position: relative;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.085);
-  border-radius: 1.75rem;
-  background: #161513;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1.9rem;
+  background: linear-gradient(160deg, #1b1917 0%, #11100f 70%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055), 0 1.1rem 2.6rem rgba(0, 0, 0, 0.22);
   cursor: pointer;
   transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 200ms ease, background 200ms ease;
 }
 
 .product-card:hover {
-  border-color: rgba(240, 127, 0, 0.24);
-  background: #1b1916;
-  transform: translateY(-0.2rem);
+  border-color: rgba(240, 127, 0, 0.38);
+  background: linear-gradient(160deg, #211d19 0%, #141210 70%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 1.35rem 3rem rgba(0, 0, 0, 0.3);
+  transform: translateY(-0.28rem);
 }
 
 .product-card:has(.product-card-link:focus-visible) {
@@ -2131,11 +2132,22 @@ body.filters-open {
 
 .product-stage {
   aspect-ratio: 1.22;
-  margin: 0.45rem 0.45rem 0;
+  margin: 0.55rem 0.55rem 0;
   position: relative;
   overflow: hidden;
-  border-radius: 1.4rem;
-  background: #f3f0ec;
+  border-radius: 1.5rem;
+  background: radial-gradient(circle at 50% 36%, #fff 0%, #f2eee8 72%, #e9e3dc 100%);
+  box-shadow: inset 0 0 0 1px rgba(24, 19, 14, 0.035);
+}
+
+.product-stage::before {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: inset 0 0 2.2rem rgba(87, 58, 28, 0.05);
 }
 
 .product-stage::after {
@@ -2302,20 +2314,37 @@ body.filters-open {
 }
 
 .product-info {
-  padding: 1rem 1rem 0;
+  padding: 1.05rem 1.1rem 0;
   flex: 1;
 }
 
 .product-category {
-  color: var(--orange);
-  font-size: 0.52rem;
+  width: fit-content;
+  min-height: 1.55rem;
+  padding: 0.28rem 0.55rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  border: 1px solid rgba(240, 127, 0, 0.2);
+  border-radius: 999px;
+  background: rgba(240, 127, 0, 0.08);
+  color: #ff9a32;
+  font-size: 0.5rem;
   font-weight: 800;
-  letter-spacing: 0.085em;
+  letter-spacing: 0.075em;
   text-transform: uppercase;
 }
 
+.product-category i {
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  background: var(--orange);
+  box-shadow: 0 0 0 0.22rem rgba(240, 127, 0, 0.1);
+}
+
 .product-info h3 {
-  margin: 0.42rem 0 0;
+  margin: 0.58rem 0 0;
   color: #f3efea;
   font-size: clamp(1.08rem, 1.35vw, 1.28rem);
   letter-spacing: -0.055em;
@@ -2346,22 +2375,47 @@ body.filters-open {
 }
 
 .product-fit span {
-  padding: 0.28rem 0.48rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  min-height: 1.6rem;
+  padding: 0.3rem 0.58rem;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.105);
   border-radius: 999px;
-  color: #8e8a85;
-  font-size: 0.48rem;
-  font-weight: 700;
+  background: rgba(255, 255, 255, 0.04);
+  color: #bbb5ae;
+  font-size: 0.5rem;
+  font-weight: 750;
 }
 
 .product-bottom {
   margin-top: 0.8rem;
-  padding: 0.8rem 1rem 1rem;
+  padding: 0.9rem 1.1rem 1.05rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   border-top: 1px solid rgba(255, 255, 255, 0.075);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(240, 127, 0, 0.025));
+}
+
+.product-bottom-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.product-discount {
+  min-height: 1.65rem;
+  padding: 0.3rem 0.48rem;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(255, 157, 66, 0.22);
+  border-radius: 999px;
+  background: rgba(240, 127, 0, 0.1);
+  color: #ff9d42;
+  font-size: 0.52rem;
+  font-style: normal;
+  font-weight: 900;
 }
 
 .product-price {

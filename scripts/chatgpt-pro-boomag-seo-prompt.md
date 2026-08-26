@@ -16,7 +16,7 @@ Descarcă feedul CSV, care folosește separatorul `|`, și optimizează toate pr
 
 `boomag-seo-catalog-final.json`
 
-Nu te opri după plan sau după câteva exemple. Începe efectiv lucrul. Dacă limita unei execuții nu permite terminarea, salvează un checkpoint JSON complet și continuă în următoarea execuție de la primul produs nefinalizat. Nu rescrie produsele deja validate.
+Nu te opri după plan, după câteva exemple sau după un lot. Începe efectiv lucrul și continuă automat, produs după produs, până când întregul catalog este finalizat. Nu cere confirmare între produse și nu aștepta un mesaj nou din partea mea pentru a continua. Checkpoint-urile sunt doar copii de siguranță și nu reprezintă un motiv de oprire. Dacă platforma întrerupe forțat execuția din cauza unei limite tehnice, salvează mai întâi checkpoint-ul cumulativ, iar la următoarea execuție reia automat de la primul produs nefinalizat. Nu rescrie produsele deja validate.
 
 ### Produse deja finalizate — NU le reface
 
@@ -92,9 +92,9 @@ Pentru fiecare produs rămas:
 6. Marchează `validated: true` numai dacă toate regulile sunt respectate.
 7. Dacă informațiile sunt insuficiente, adaugă produsul în `needs_review`, explică exact ce lipsește și nu inventa completări.
 
-### Checkpoint și reluare
+### Checkpoint și reluare fără oprirea procesului
 
-Lucrează în loturi mici, de maximum 3 produse cercetate complet într-o execuție. După fiecare produs, actualizează imediat:
+Lucrează continuu până la terminarea tuturor produselor. După fiecare produs, actualizează imediat starea cumulativă:
 
 - `completed_ids`
 - `completed_count`
@@ -104,11 +104,11 @@ Lucrează în loturi mici, de maximum 3 produse cercetate complet într-o execu�
 - `needs_review`
 - `errors`
 
-Salvează după fiecare lot un fișier descărcabil numit:
+Salvează periodic, după fiecare 5 produse finalizate, un fișier descărcabil numit:
 
 `boomag-seo-checkpoint-XXXX.json`
 
-unde `XXXX` este numărul total de produse noi finalizate. La o execuție ulterioară, continuă din starea cumulativă a conversației și nu relua produsele din `completed_ids`. Nu spune că ai terminat catalogul dacă numărul produselor validate nu corespunde numărului total de ID-uri unice din feed.
+unde `XXXX` este numărul total de produse noi finalizate. După salvarea checkpoint-ului, continuă imediat cu produsul următor; nu încheia răspunsul, nu cere confirmare și nu aștepta intervenția mea. La o execuție ulterioară, continuă din starea cumulativă a conversației și nu relua produsele din `completed_ids`. Nu spune că ai terminat catalogul dacă numărul produselor validate nu corespunde numărului total de ID-uri unice din feed.
 
 ### Structura JSON obligatorie
 
@@ -211,11 +211,12 @@ Fișierul trebuie să fie JSON valid, nu Markdown și nu JSONL:
 
 La finalul fiecărei execuții:
 
-1. atașează checkpoint-ul JSON descărcabil;
-2. afișează ID-urile și numele produselor finalizate în acea execuție;
+1. atașează cel mai recent checkpoint JSON descărcabil;
+2. afișează ID-urile și numele produselor finalizate;
 3. afișează totalul cumulat finalizat și numărul rămas;
 4. afișează produsele trimise la verificare manuală și motivul;
-5. continuă automat la următoarea execuție până când toate ID-urile unice din feed sunt fie `validated`, fie în `needs_review` cu motiv concret.
+5. continuă automat, fără oprire între checkpoint-uri, până când toate ID-urile unice din feed sunt fie `validated`, fie în `needs_review` cu motiv concret;
+6. încheie procesul numai după generarea și validarea fișierului `boomag-seo-catalog-final.json`.
 
 Nu publica și nu modifica site-ul. Livrează numai fișierele JSON de conținut și audit.
 
@@ -225,5 +226,4 @@ Nu publica și nu modifica site-ul. Livrează numai fișierele JSON de conținut
 
 După ce trimiți promptul, spune-i în aceeași conversație:
 
-`Rulează acest proces periodic, continuând de la checkpoint, până când toate produsele sunt validate. Procesează maximum 3 produse complete la fiecare execuție și anunță-mă după fiecare lot.`
-
+`Rulează acest proces continuu până când toate produsele sunt validate. Nu te opri după loturi și nu îmi cere confirmare între produse. Creează checkpoint-uri periodice doar ca protecție împotriva pierderii progresului și continuă imediat după fiecare checkpoint. Dacă o limită tehnică întrerupe execuția, reia automat de la primul produs nefinalizat la următoarea rulare. Oprește procesul numai după ce ai generat și validat boomag-seo-catalog-final.json.`

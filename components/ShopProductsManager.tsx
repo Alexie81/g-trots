@@ -221,8 +221,10 @@ export default function ShopProductsManager() {
       setBrands(bootstrap.brands);
       setManufacturers(bootstrap.manufacturers);
       setSources(bootstrap.sources);
+      return bootstrap;
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Produsele nu au putut fi incarcate.');
+      return undefined;
     } finally {
       setLoading(false);
     }
@@ -466,7 +468,13 @@ export default function ShopProductsManager() {
       { text: 'Renunta', style: 'cancel' },
       {
         text: 'Sterge', style: 'destructive', onPress: async () => {
-          try { await shopApi.deleteProduct(token, product.id); await load(true); }
+          try {
+            const result = await shopApi.deleteProduct(token, product.id);
+            if (!result.success || result.deleted_id !== product.id) throw new Error('Serverul nu a confirmat stergerea produsului.');
+            setProducts((current) => current.filter((item) => item.id !== product.id));
+            const refreshed = await load(true);
+            if (refreshed?.products.some((item) => item.id === product.id)) throw new Error('Produsul apare inca in catalog dupa stergere. Reincarca si incearca din nou.');
+          }
           catch (deleteError) { Alert.alert('Nu s-a putut sterge', deleteError instanceof Error ? deleteError.message : 'Incearca din nou.'); }
         },
       },

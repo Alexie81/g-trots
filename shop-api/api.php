@@ -1719,7 +1719,17 @@ try {
         foreach ($paths as $path) {
             if (removeShopImage((string)$path)) $deletedFiles++;
         }
-        jsonResponse(['success' => true, 'deleted_files' => $deletedFiles]);
+        $verifyStmt = $db->prepare('SELECT COUNT(*) FROM shop_products WHERE id = ?');
+        $verifyStmt->execute([$id]);
+        if ((int)$verifyStmt->fetchColumn() !== 0) {
+            throw new RuntimeException('Produsul nu a fost eliminat complet din catalog.');
+        }
+        jsonResponse([
+            'success' => true,
+            'deleted_id' => $id,
+            'deleted_files' => $deletedFiles,
+            'remaining_products' => (int)$db->query('SELECT COUNT(*) FROM shop_products')->fetchColumn(),
+        ]);
     }
 
     if ($action === 'listInventory' && $method === 'GET') {

@@ -634,7 +634,7 @@
       await loadProducts();
     } catch (error) { toast(error.message || 'Produsul nu a putut fi salvat.', 'error'); } finally { button.disabled = false; }
   }
-  async function deleteProduct(id) { const product = state.products.find(item => item.id === id); if (!product || !confirm(`Stergi definitiv produsul „${product.name}”? Toate pozele lui vor fi sterse de pe server.`)) return; try { const result = await window.SHOP_API.deleteProduct(id); toast(`Produsul a fost sters${result.deleted_files ? ` impreuna cu ${result.deleted_files} fisiere` : ''}.`); await loadProducts(); } catch (error) { toast(error.message, 'error'); } }
+  async function deleteProduct(id) { const product = state.products.find(item => item.id === id); if (!product || !confirm(`Stergi definitiv produsul „${product.name}”? Toate pozele lui vor fi sterse de pe server.`)) return; try { const result = await window.SHOP_API.deleteProduct(id); if (!result?.success || result.deleted_id !== id) throw new Error('Serverul nu a confirmat stergerea produsului.'); state.products = state.products.filter(item => item.id !== id); renderProducts(); await loadProducts(); if (state.products.some(item => item.id === id)) throw new Error('Produsul apare inca in catalog dupa stergere. Reincarca si incearca din nou.'); toast(`Produsul a fost sters definitiv${result.deleted_files ? ` impreuna cu ${result.deleted_files} fisiere` : ''}.`); } catch (error) { toast(error.message, 'error'); } }
 
   async function loadOrders() { loading('shop-orders-content', 'Se incarca comenzile...'); try { state.orders = await window.SHOP_API.listOrders(); renderOrders(); } catch (error) { failure('shop-orders-content', error); } }
   function renderOrders() {

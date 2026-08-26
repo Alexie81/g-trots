@@ -13,11 +13,14 @@
     // dura mai mult decat o cerere obisnuita pe o conexiune lenta.
     const timeoutMs = action === 'deleteProduct' ? 65000 : 20000;
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    const url = `${baseUrl}/api-v2.php?action=${encodeURIComponent(action)}${id ? `&id=${encodeURIComponent(id)}` : ''}`;
+    const isGet = !options.method || options.method === 'GET';
+    const cacheBuster = isGet ? `&_=${Date.now()}` : '';
+    const url = `${baseUrl}/api-v2.php?action=${encodeURIComponent(action)}${id ? `&id=${encodeURIComponent(id)}` : ''}${cacheBuster}`;
     try {
       const response = await fetch(url, {
         ...options,
         signal: controller.signal,
+        cache: 'no-store',
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',

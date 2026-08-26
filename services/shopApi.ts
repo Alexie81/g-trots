@@ -300,12 +300,15 @@ async function shopCall<T>(action: string, token: string, init?: RequestInit, id
   // O lasam sa se incheie si pe conexiuni mobile mai lente.
   const timeoutMs = action === 'deleteProduct' ? 65000 : 20000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const url = `${SHOP_API_BASE}/api-v2.php?action=${encodeURIComponent(action)}${id ? `&id=${encodeURIComponent(id)}` : ''}`;
+  const isGet = !init?.method || init.method === 'GET';
+  const cacheBuster = isGet ? `&_=${Date.now()}` : '';
+  const url = `${SHOP_API_BASE}/api-v2.php?action=${encodeURIComponent(action)}${id ? `&id=${encodeURIComponent(id)}` : ''}${cacheBuster}`;
 
   try {
     const response = await fetch(url, {
       ...init,
       signal: controller.signal,
+      cache: 'no-store',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
@@ -360,7 +363,7 @@ export const shopApi = {
   createProduct: (token: string, payload: ShopProductPayload) => shopCall<ShopProduct>('createProduct', token, { method: 'POST', body: JSON.stringify(payload) }),
   updateProduct: (token: string, id: string, payload: ShopProductPayload) => shopCall<ShopProduct>('updateProduct', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
   uploadRichDescriptionImage: (token: string, base64: string) => shopCall<{ url: string; path: string }>('uploadRichDescriptionImage', token, { method: 'POST', body: JSON.stringify({ base64 }) }),
-  deleteProduct: (token: string, id: string) => shopCall<{ success: true; deleted_files: number }>('deleteProduct', token, { method: 'DELETE' }, id),
+  deleteProduct: (token: string, id: string) => shopCall<{ success: true; deleted_id: string; deleted_files: number; remaining_products: number }>('deleteProduct', token, { method: 'DELETE' }, id),
   listProductReviews: (token: string, productId?: string) => shopCall<ShopProductReview[]>('listProductReviews', token, undefined, productId),
   replyProductReview: (token: string, id: string, adminReply: string) => shopCall<ShopProductReview>('replyProductReview', token, { method: 'PATCH', body: JSON.stringify({ admin_reply: adminReply }) }, id),
   deleteProductReview: (token: string, id: string) => shopCall<{ success: true }>('deleteProductReview', token, { method: 'DELETE' }, id),

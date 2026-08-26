@@ -5,6 +5,7 @@ import {
   Animated,
   Easing,
   Image,
+  Linking,
   Modal,
   ScrollView,
   StyleSheet,
@@ -14,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BadgeCheck, Ban, BellRing, Check, ChevronRight, CircleCheckBig, Clock3, Mail, PackageCheck, PackageOpen, RefreshCw, Save, Search, ShoppingCart, Truck, X } from 'lucide-react-native';
+import { BadgeCheck, Ban, BellRing, Check, ChevronRight, CircleCheckBig, Clock3, Mail, MessageCircle, PackageCheck, PackageOpen, Phone, RefreshCw, Save, Search, ShoppingCart, Truck, X } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { shopApi, ShopOrder } from '@/services/shopApi';
@@ -43,6 +44,30 @@ function money(value: number) {
 function dateTime(value: string) {
   const date = new Date(value.replace(' ', 'T') + (value.includes('T') ? '' : 'Z'));
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('ro-RO', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function whatsappPhone(value: string) {
+  let digits = String(value || '').replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.startsWith('0') && digits.length === 10) digits = `40${digits.slice(1)}`;
+  if (digits.length === 9) digits = `40${digits}`;
+  return digits;
+}
+
+async function callCustomer(phone: string) {
+  const target = String(phone || '').replace(/[^\d+]/g, '');
+  if (!target) return Alert.alert('Apelare', 'Comanda nu are un număr de telefon valid.');
+  try { await Linking.openURL(`tel:${target}`); }
+  catch { Alert.alert('Apelare', 'Apelul nu a putut fi inițiat pe acest dispozitiv.'); }
+}
+
+async function openCustomerWhatsApp(phone: string) {
+  const target = whatsappPhone(phone);
+  if (!target) return Alert.alert('WhatsApp', 'Comanda nu are un număr de telefon valid.');
+  const appUrl = `whatsapp://send?phone=${target}`;
+  const webUrl = `https://wa.me/${target}`;
+  try { await Linking.openURL((await Linking.canOpenURL(appUrl)) ? appUrl : webUrl); }
+  catch { Alert.alert('WhatsApp', 'Conversația nu a putut fi deschisă.'); }
 }
 
 export default function ShopOrdersManager() {
@@ -160,8 +185,8 @@ export default function ShopOrdersManager() {
           <View style={styles.modalHeader}><TouchableOpacity style={styles.close} onPress={() => setSelected(null)}><X size={21} color={Colors.textSecondary} /></TouchableOpacity><View style={styles.modalHeaderCopy}><Text style={styles.modalKicker}>COMANDA SHOP</Text><Text style={styles.modalTitle}>{selected?.order_number}</Text></View><TouchableOpacity style={[styles.save, saving && styles.disabled]} onPress={() => void save()} disabled={saving}>{saving ? <ActivityIndicator color={Colors.white} /> : <><Save size={17} color={Colors.white} /><Text style={styles.saveText}>Salveaza</Text></>}</TouchableOpacity></View>
           {selected ? <ScrollView contentContainerStyle={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 20) + 30 }]} showsVerticalScrollIndicator={false}>
             {detailLoading ? <View style={styles.detailLoading}><ActivityIndicator color={Colors.orange} /><Text style={styles.detailLoadingText}>Actualizăm istoricul comenzii...</Text></View> : null}
-            <InfoBlock title="Client" lines={[selected.customer_name, selected.customer_phone, selected.customer_email || 'Fara e-mail']} />
-            <InfoBlock title="Livrare" lines={[selected.address, `${selected.city}${selected.county ? `, ${selected.county}` : ''}`, selected.shipping_method_name]} />
+            <ClientInfoBlock order={selected} />
+            <DeliveryInfoBlock order={selected} />
             <Text style={styles.sectionLabel}>PRODUSE</Text>
             <View style={styles.items}>{(Array.isArray(selected.items) ? selected.items : []).map((item) => <View key={item.id} style={styles.item}>{item.image_url ? <Image source={{ uri: item.image_url }} style={styles.itemImage} resizeMode="contain" /> : <View style={styles.itemQty}><Text style={styles.itemQtyText}>{item.quantity}×</Text></View>}<View style={styles.itemCopy}><Text style={styles.itemName}>{item.product_name}</Text><Text style={styles.itemSku}>{item.quantity} × {item.product_sku || 'Fara SKU'}</Text></View><Text style={styles.itemTotal}>{money(item.line_total)}</Text></View>)}</View>
             <View style={styles.totals}>
@@ -238,7 +263,36 @@ function OrderStatusTimeline({ order }: { order: ShopOrder }) {
 }
 
 function InfoBlock({ title, lines }: { title: string; lines: string[] }) {
-  return <View style={styles.info}><Text style={styles.infoTitle}>{title.toUpperCase()}</Text>{lines.map((line, index) => <Text key={`${line}-${index}`} style={index === 0 ? styles.infoStrong : styles.infoText}>{line}</Text>)}</View>;
+  return <View style={styles.info}><View style={styles.infoHead}><Text style={styles.infoTitle}>{title.toUpperCase()}</Text></View>{lines.map((line, index) => <Text key={`${line}-${index}`} style={index === 0 ? styles.infoStrong : styles.infoText}>{line}</Text>)}</View>;
+}
+
+function DetailInfoRow({ label, value, strong = false }: { label: string; value?: string | null; strong?: boolean }) {
+  return <View style={styles.detailInfoRow}><Text style={styles.detailInfoLabel}>{label}</Text><Text style={[styles.detailInfoValue, strong && styles.detailInfoValueStrong]}>{String(value || '').trim() || '—'}</Text></View>;
+}
+
+function ClientInfoBlock({ order }: { order: ShopOrder }) {
+  return <View style={styles.info}>
+    <View style={styles.infoHead}><Text style={styles.infoTitle}>CLIENT</Text><Text style={styles.infoHeadHint}>DATE CONTACT</Text></View>
+    <DetailInfoRow label="Nume" value={order.customer_name} strong />
+    <DetailInfoRow label="Telefon" value={order.customer_phone} />
+    <DetailInfoRow label="E-mail" value={order.customer_email || 'Fără e-mail'} />
+    <View style={styles.contactActions}>
+      <TouchableOpacity style={styles.contactCall} activeOpacity={0.78} onPress={() => void callCustomer(order.customer_phone)}><Phone size={16} color="#EDE7E1" /><Text style={styles.contactCallText}>Apelează</Text></TouchableOpacity>
+      <TouchableOpacity style={styles.contactWhatsApp} activeOpacity={0.78} onPress={() => void openCustomerWhatsApp(order.customer_phone)}><MessageCircle size={16} color="#51D88A" /><Text style={styles.contactWhatsAppText}>WhatsApp</Text></TouchableOpacity>
+    </View>
+  </View>;
+}
+
+function DeliveryInfoBlock({ order }: { order: ShopOrder }) {
+  return <View style={styles.info}>
+    <View style={styles.infoHead}><Text style={styles.infoTitle}>LIVRARE</Text><Truck size={17} color={Colors.orange} /></View>
+    <DetailInfoRow label="Adresă completă" value={order.address} strong />
+    <DetailInfoRow label="Localitate" value={order.city} />
+    <DetailInfoRow label="Județ" value={order.county} />
+    <DetailInfoRow label="Cod poștal" value={order.postal_code} />
+    <DetailInfoRow label="Metodă" value={order.shipping_method_name} />
+    <DetailInfoRow label="Cost livrare" value={money(order.shipping_cost)} />
+  </View>;
 }
 
 const styles = StyleSheet.create({
@@ -249,7 +303,21 @@ const styles = StyleSheet.create({
   empty: { minHeight: 230, alignItems: 'center', justifyContent: 'center', borderRadius: 24, backgroundColor: '#1B1B1F' }, emptyTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 15, marginTop: 13 }, emptyText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, marginTop: 5 },
   modalSafe: { flex: 1, backgroundColor: Colors.bg }, modalHeader: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#29272B', paddingHorizontal: 12, backgroundColor: '#171513' }, close: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: '#27242A' }, modalHeaderCopy: { flex: 1 }, modalKicker: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 1 }, modalTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 15, marginTop: 2 }, save: { minWidth: 96, height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 13, backgroundColor: Colors.orange }, saveText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 }, disabled: { opacity: 0.55 }, modalContent: { width: '100%', maxWidth: 760, alignSelf: 'center', padding: 16 },
   detailLoading: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, borderRadius: 15, backgroundColor: Colors.orangeDim, marginBottom: 9 }, detailLoadingText: { color: Colors.orange, fontFamily: 'Inter-SemiBold', fontSize: 9 },
-  info: { borderRadius: 18, padding: 15, backgroundColor: '#1B1B1F', marginBottom: 9 }, infoTitle: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8, marginBottom: 7 }, infoStrong: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 12 }, infoText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 16, marginTop: 2 }, sectionLabel: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.8, marginTop: 15, marginBottom: 8 }, items: { overflow: 'hidden', borderRadius: 18, backgroundColor: '#1B1B1F' }, item: { minHeight: 70, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#343137', padding: 11 }, itemImage: { width: 48, height: 48, borderRadius: 15, backgroundColor: '#F7F2ED' }, itemQty: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: Colors.orangeDim }, itemQtyText: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 10 }, itemCopy: { flex: 1 }, itemName: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 10 }, itemSku: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 3 }, itemTotal: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 },
+  info: { borderWidth: 1, borderColor: '#302D34', borderRadius: 20, padding: 15, backgroundColor: '#1B1B1F', marginBottom: 9 },
+  infoHead: { minHeight: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#343137', paddingBottom: 8, marginBottom: 4 },
+  infoTitle: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.9 },
+  infoHeadHint: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.6 },
+  infoStrong: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 12 }, infoText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 16, marginTop: 2 },
+  detailInfoRow: { minHeight: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#2D2A30', paddingVertical: 8 },
+  detailInfoLabel: { flexShrink: 0, color: Colors.textMuted, fontFamily: 'Inter-Medium', fontSize: 9 },
+  detailInfoValue: { flex: 1, color: Colors.textSecondary, fontFamily: 'Inter-SemiBold', fontSize: 10, lineHeight: 15, textAlign: 'right' },
+  detailInfoValueStrong: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 11 },
+  contactActions: { flexDirection: 'row', gap: 8, paddingTop: 12 },
+  contactCall: { flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 14, backgroundColor: '#343138' },
+  contactCallText: { color: '#EDE7E1', fontFamily: 'Inter-Bold', fontSize: 10 },
+  contactWhatsApp: { flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderWidth: 1, borderColor: '#255B3D', borderRadius: 14, backgroundColor: '#163323' },
+  contactWhatsAppText: { color: '#51D88A', fontFamily: 'Inter-Bold', fontSize: 10 },
+  sectionLabel: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.8, marginTop: 15, marginBottom: 8 }, items: { overflow: 'hidden', borderRadius: 18, backgroundColor: '#1B1B1F' }, item: { minHeight: 70, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#343137', padding: 11 }, itemImage: { width: 48, height: 48, borderRadius: 15, backgroundColor: '#F7F2ED' }, itemQty: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: Colors.orangeDim }, itemQtyText: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 10 }, itemCopy: { flex: 1 }, itemName: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 10 }, itemSku: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 3 }, itemTotal: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 },
   totals: { gap: 9, borderWidth: 1, borderColor: '#38343C', borderRadius: 20, padding: 15, backgroundColor: '#211F24', marginTop: 9 },
   totalRow: { minHeight: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
   totalLabel: { color: Colors.textSecondary, fontFamily: 'Inter-Medium', fontSize: 11 },

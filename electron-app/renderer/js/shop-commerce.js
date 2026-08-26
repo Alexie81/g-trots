@@ -1,4 +1,5 @@
 (function () {
+  const { shell } = require('electron');
   const state = {
     products: [], orders: [], inventory: [], sources: [], categories: [], brands: [], manufacturers: [], shipping: [],
     editingProduct: null, editingOrder: null, editingStock: null, editingSource: null, editingShipping: null,
@@ -678,6 +679,30 @@
   function orderStatusPicker(order) {
     return `<section class="shop-order-status-section"><div class="shop-order-section-title"><span>ACTUALIZEAZĂ</span><strong>Alege statusul comenzii</strong></div><div class="shop-order-status-picker">${statusDefinitions.map(item => `<label class="shop-order-status-option ${order.status === item.value ? 'selected' : ''}" style="--status-color:${statusColors[item.value]}"><input type="radio" name="shop-order-status" value="${item.value}" ${order.status === item.value ? 'checked' : ''}><span class="shop-order-status-icon">${statusIcon(item.value)}</span><span><strong>${esc(statusLabels[item.value])}</strong><small>${esc(item.description)}</small></span><i>✓</i></label>`).join('')}</div></section>`;
   }
+  function normalizeWhatsAppPhone(value) {
+    let digits = String(value || '').replace(/\D/g, '');
+    if (digits.startsWith('00')) digits = digits.slice(2);
+    if (digits.startsWith('0') && digits.length === 10) digits = `40${digits.slice(1)}`;
+    if (digits.length === 9) digits = `40${digits}`;
+    return digits;
+  }
+  function orderDetailRow(label, value, strong = false) {
+    return `<div class="shop-order-detail-row"><small>${esc(label)}</small><span class="${strong ? 'strong' : ''}">${esc(String(value || '').trim() || '—')}</span></div>`;
+  }
+  async function openOrderContact(kind, phone) {
+    try {
+      if (kind === 'call') {
+        const target = String(phone || '').replace(/[^\d+]/g, '');
+        if (!target) throw new Error('Comanda nu are un număr de telefon valid.');
+        await shell.openExternal(`tel:${target}`);
+        return;
+      }
+      const target = normalizeWhatsAppPhone(phone);
+      if (!target) throw new Error('Comanda nu are un număr de telefon valid.');
+      try { await shell.openExternal(`whatsapp://send?phone=${target}`); }
+      catch (_error) { await shell.openExternal(`https://web.whatsapp.com/send?phone=${target}&type=phone_number&app_absent=0`); }
+    } catch (error) { toast(error.message || 'Acțiunea nu a putut fi deschisă.', 'error'); }
+  }
   function syncOrderNotify() {
     const notify = $('shop-order-notify');
     const helper = $('shop-order-notify-helper');
@@ -694,7 +719,13 @@
     state.editingOrder = order;
     $('shop-order-title').textContent = order.order_number;
     const orderItems = Array.isArray(order.items) ? order.items : [];
-    $('shop-order-details').innerHTML = `<div class="shop-order-grid"><section><small>CLIENT</small><strong>${esc(order.customer_name)}</strong><span>${esc(order.customer_phone)}</span><span>${esc(order.customer_email || 'Fără e-mail')}</span></section><section><small>LIVRARE</small><strong>${esc(order.address)}</strong><span>${esc(order.city)}${order.county ? `, ${esc(order.county)}` : ''}</span><span>${esc(order.shipping_method_name)}</span></section></div><div class="shop-order-items">${orderItems.map(item => `<div>${item.image_url ? `<img src="${esc(item.image_url)}" alt="">` : `<b>${item.quantity}×</b>`}<span><strong>${esc(item.product_name)}</strong><small>${item.quantity} × ${money(item.unit_price)} · ${esc(item.product_sku || 'Fără SKU')}</small></span><em>${money(item.line_total)}</em></div>`).join('')}</div><div class="shop-order-total"><span>Produse ${money(order.subtotal)} · Livrare ${money(order.shipping_cost)}</span><strong>Total ${money(order.total)}</strong></div>${orderTimeline(order)}${orderStatusPicker(order)}<label class="shop-order-notify"><input id="shop-order-notify" type="checkbox"><span class="shop-order-notify-icon">✉</span><span><strong>Trimite actualizarea pe e-mail</strong><small id="shop-order-notify-helper"></small></span><i>✓</i></label><div class="shop-commerce-columns"><label>Status plată<select id="shop-order-payment-status">${['pending', 'paid', 'failed', 'refunded'].map(value => `<option value="${value}" ${order.payment_status === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label><label>Metodă de plată<input value="${order.payment_method === 'card' ? 'Card online' : 'Ramburs la curier'}" disabled></label></div><label>Notițe interne<textarea id="shop-order-admin-notes" rows="4">${esc(order.admin_notes || '')}</textarea></label>${order.customer_notes ? `<div class="shop-order-note"><small>OBSERVAȚII CLIENT</small>${esc(order.customer_notes)}</div>` : ''}`;
+    const contactIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h3l1.2 4-2 1.5a14 14 0 0 0 5.3 5.3l1.5-2L20 14v3c0 1.1-.9 2-2 2C10.8 19 5 13.2 5 6c0-1.1.9-2 2-2Z"/></svg>';
+    const whatsappIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.56 7.47L3 21l2.03-5.44A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8.5 8.4c.8 3.2 2.7 5.1 5.9 6"/></svg>';
+    const clientCard = `<section class="shop-order-summary-card"><div class="shop-order-card-head"><small>CLIENT</small><em>DATE CONTACT</em></div>${orderDetailRow('Nume', order.customer_name, true)}${orderDetailRow('Telefon', order.customer_phone)}${orderDetailRow('E-mail', order.customer_email || 'Fără e-mail')}<div class="shop-order-contact-actions"><button type="button" data-order-call>${contactIcon}<span>Apelează</span></button><button type="button" class="whatsapp" data-order-whatsapp>${whatsappIcon}<span>WhatsApp</span></button></div></section>`;
+    const deliveryCard = `<section class="shop-order-summary-card"><div class="shop-order-card-head"><small>LIVRARE</small><em>DATE COMPLETE</em></div>${orderDetailRow('Adresă completă', order.address, true)}${orderDetailRow('Localitate', order.city)}${orderDetailRow('Județ', order.county)}${orderDetailRow('Cod poștal', order.postal_code)}${orderDetailRow('Metodă', order.shipping_method_name)}${orderDetailRow('Cost livrare', money(order.shipping_cost))}</section>`;
+    $('shop-order-details').innerHTML = `<div class="shop-order-grid">${clientCard}${deliveryCard}</div><div class="shop-order-items">${orderItems.map(item => `<div>${item.image_url ? `<img src="${esc(item.image_url)}" alt="">` : `<b>${item.quantity}×</b>`}<span><strong>${esc(item.product_name)}</strong><small>${item.quantity} × ${money(item.unit_price)} · ${esc(item.product_sku || 'Fără SKU')}</small></span><em>${money(item.line_total)}</em></div>`).join('')}</div><div class="shop-order-total"><span>Produse ${money(order.subtotal)} · Livrare ${money(order.shipping_cost)}</span><strong>Total ${money(order.total)}</strong></div>${orderTimeline(order)}${orderStatusPicker(order)}<label class="shop-order-notify"><input id="shop-order-notify" type="checkbox"><span class="shop-order-notify-icon">✉</span><span><strong>Trimite actualizarea pe e-mail</strong><small id="shop-order-notify-helper"></small></span><i>✓</i></label><div class="shop-commerce-columns"><label>Status plată<select id="shop-order-payment-status">${['pending', 'paid', 'failed', 'refunded'].map(value => `<option value="${value}" ${order.payment_status === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label><label>Metodă de plată<input value="${order.payment_method === 'card' ? 'Card online' : 'Ramburs la curier'}" disabled></label></div><label>Notițe interne<textarea id="shop-order-admin-notes" rows="4">${esc(order.admin_notes || '')}</textarea></label>${order.customer_notes ? `<div class="shop-order-note"><small>OBSERVAȚII CLIENT</small>${esc(order.customer_notes)}</div>` : ''}`;
+    $('shop-order-details').querySelector('[data-order-call]')?.addEventListener('click', () => void openOrderContact('call', order.customer_phone));
+    $('shop-order-details').querySelector('[data-order-whatsapp]')?.addEventListener('click', () => void openOrderContact('whatsapp', order.customer_phone));
     document.querySelectorAll('input[name="shop-order-status"]').forEach(input => input.addEventListener('change', syncOrderNotify));
     syncOrderNotify();
   }

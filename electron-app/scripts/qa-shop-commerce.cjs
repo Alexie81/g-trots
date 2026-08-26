@@ -32,7 +32,7 @@ app.whenReady().then(async () => {
     const qaImageOrange = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22400%22%3E%3Crect width=%22400%22 height=%22400%22 rx=%2240%22 fill=%22%23ff6b00%22/%3E%3Ccircle cx=%22200%22 cy=%22200%22 r=%22110%22 fill=%22%23171519%22/%3E%3C/svg%3E';
     const qaImageBlue = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22400%22%3E%3Crect width=%22400%22 height=%22400%22 rx=%2240%22 fill=%22%2338bdf8%22/%3E%3Ccircle cx=%22200%22 cy=%22200%22 r=%22110%22 fill=%22%23ffffff%22/%3E%3C/svg%3E';
     const products = Array.from({ length: 31 }, (_, index) => ({ id:'p' + (index + 1), name:'Anvelopa G10 ' + (index + 1), slug:'anvelopa-g10-' + (index + 1), sku:'GT-' + String(index + 1).padStart(3, '0'), source_id:'s1', source_domain:'g-trots.ro', source_url:'', price:149, sale_price:119, discount_type:'fixed', discount_value:30, discount_percent:20.13, short_description:'Anvelopa testata in service.', description_html:'<p><strong>Profil aderent</strong> pentru drum mixt.</p>', category_id:null, manufacturer_id:null, brand_ids:[], stock_mode:'tracked', stock_quantity:4, low_stock_threshold:3, is_active:true, is_featured:index === 0, images:index === 0 ? [{ id:'i1', url:qaImageOrange, alt_text:'Imagine portocalie', sort_order:0 }, { id:'i2', url:qaImageBlue, alt_text:'Imagine albastra', sort_order:1 }] : [] }));
-    const qaOrder = { id:'o1', order_number:'GT-QA-ORDER', created_at:'2026-08-26 10:00:00', customer_name:'Client QA', customer_phone:'0700000000', customer_email:'client@example.com', address:'Strada Test 1', city:'Bucuresti', county:'Bucuresti', shipping_method_name:'Curier standard', shipping_cost:25, subtotal:119, total:144, payment_method:'cash_on_delivery', payment_status:'pending', status:'new', admin_notes:'', customer_notes:'Vreau comanda livrata cat mai repede.', status_history:[], items:[{ product_name:'Anvelopa G10 1', product_sku:'GT-001', quantity:1, unit_price:119, line_total:119, image_url:qaImageOrange }] };
+    const qaOrder = { id:'o1', order_number:'GT-QA-ORDER', created_at:'2026-08-26 10:00:00', customer_name:'Client QA', customer_phone:'0700000000', customer_email:'client@example.com', address:'Strada Test 1', city:'Bucuresti', county:'Bucuresti', postal_code:'010101', shipping_method_name:'Curier standard', shipping_cost:25, subtotal:119, total:144, payment_method:'cash_on_delivery', payment_status:'pending', status:'new', admin_notes:'', customer_notes:'Vreau comanda livrata cat mai repede.', status_history:[], items:[{ product_name:'Anvelopa G10 1', product_sku:'GT-001', quantity:1, unit_price:119, line_total:119, image_url:qaImageOrange }] };
     window.SHOP_API = {
       loadProductManager: async () => ({ products, categories:[], brands, manufacturers:[], sources }),
       getDashboardStats: async () => ({ revenue:18450, orders_count:42, new_orders_count:7, acquisitions:9300, profit:9150, products_count:31, recent_orders:[] }),
@@ -99,10 +99,14 @@ app.whenReady().then(async () => {
 
   await win.webContents.executeJavaScript(`window.switchTab('shop-orders')`);
   win.setSize(938, 936);
-  win.webContents.setZoomFactor(2);
+  win.webContents.setZoomFactor(1);
   await sleep(250);
   await win.webContents.executeJavaScript(`document.querySelector('#shop-orders-content [data-order-open]').click()`);
   await sleep(250);
+  const orderContactPath = path.join(outputDir, 'order-modal-contact.png');
+  fs.writeFileSync(orderContactPath, (await win.webContents.capturePage()).toPNG());
+  win.webContents.setZoomFactor(2);
+  await sleep(120);
   await win.webContents.executeJavaScript(`(() => {
     const nextStatus = document.querySelector('input[name="shop-order-status"][value="confirmed"]');
     nextStatus.click();
@@ -137,10 +141,12 @@ app.whenReady().then(async () => {
     bodyHorizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
     orderNotifyChecked: document.getElementById('shop-order-notify')?.checked,
     orderNotifyScrollDelta: Number(window.__qaOrderNotifyScrollDelta || 0),
+    orderContactActions: document.querySelectorAll('#shop-order-details .shop-order-contact-actions button').length,
+    orderDeliveryRows: document.querySelectorAll('#shop-order-details .shop-order-summary-card:nth-child(2) .shop-order-detail-row').length,
     orderModalRects: (() => { const modal = document.querySelector('#shop-order-modal .shop-commerce-modal'); const scroll = document.getElementById('shop-order-details'); const footer = modal?.querySelector(':scope > footer'); return Object.fromEntries([['modal',modal],['scroll',scroll],['footer',footer]].map(([key,node]) => [key, node ? { top:Math.round(node.getBoundingClientRect().top), bottom:Math.round(node.getBoundingClientRect().bottom), height:Math.round(node.getBoundingClientRect().height), scrollHeight:node.scrollHeight } : null])); })(),
     heroRects: (() => { const hero = document.querySelector('.shop-commerce-hero'); const back = hero?.querySelector('.shop-back-btn'); const title = hero?.querySelector('.shop-commerce-title'); const actions = hero?.querySelector('.shop-commerce-head-actions'); return Object.fromEntries([['hero',hero],['back',back],['title',title],['actions',actions]].map(([key,node]) => [key, node ? { x:Math.round(node.getBoundingClientRect().x), width:Math.round(node.getBoundingClientRect().width) } : null])); })(),
   }))()`);
-  console.log(JSON.stringify({ ...metrics, errors, screenshots: { dashboardPath, productsPath, productDetailPath, editorPath, sourcesPath, orderModalPath } }, null, 2));
+  console.log(JSON.stringify({ ...metrics, errors, screenshots: { dashboardPath, productsPath, productDetailPath, editorPath, sourcesPath, orderContactPath, orderModalPath } }, null, 2));
   await win.destroy();
   app.quit();
 }).catch((error) => {

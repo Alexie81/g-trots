@@ -13126,6 +13126,20 @@ body::after {
 .shop-order-grid small, .shop-order-note small { color: #ff8126; font-size: 7px; font-weight: 900; }
 .shop-order-grid strong { color: #eee9e5; font-size: 11px; }
 .shop-order-grid span { color: #918983; font-size: 9px; }
+.shop-order-grid .shop-order-summary-card { gap: 0; overflow: hidden; border: 1px solid #3a363e; border-radius: 21px; padding: 15px; background: #211f24; }
+.shop-order-card-head { min-height: 30px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #3a363e; padding-bottom: 9px; margin-bottom: 2px; }
+.shop-order-card-head > small { color: #ff8a27; font-size: 9px; letter-spacing: .1em; }
+.shop-order-card-head > em { color: #736d75; font-size: 8px; font-style: normal; font-weight: 850; letter-spacing: .08em; }
+.shop-order-detail-row { min-height: 42px; display: grid; grid-template-columns: minmax(96px, .7fr) minmax(0, 1.3fr); align-items: center; gap: 14px; border-bottom: 1px solid #302d34; padding: 8px 1px; }
+.shop-order-detail-row > small { color: #817a82; font-size: 10px; font-weight: 650; letter-spacing: 0; }
+.shop-order-detail-row > span { min-width: 0; color: #c8c1bb; font-size: 12px; font-weight: 700; line-height: 1.35; text-align: right; overflow-wrap: anywhere; }
+.shop-order-detail-row > span.strong { color: #f2ede8; font-size: 13px; font-weight: 850; }
+.shop-order-contact-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding-top: 12px; margin-top: auto; }
+.shop-order-contact-actions > button { min-height: 43px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 14px; color: #eee9e5; background: #343138; font: inherit; font-size: 11px; font-weight: 850; cursor: pointer; transition: transform .16s ease, filter .16s ease, background .16s ease; }
+.shop-order-contact-actions > button:hover { filter: brightness(1.12); transform: translateY(-1px); }
+.shop-order-contact-actions > button.whatsapp { border: 1px solid #275b3d; color: #56d990; background: #163323; }
+.shop-order-contact-actions > button > span { color: inherit; font-size: 11px; font-weight: 850; }
+.shop-order-contact-actions svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .shop-order-items { overflow: hidden; border-radius: 15px; background: #252329; margin-top: 10px; }
 .shop-order-items > div { min-height: 58px; display: flex; align-items: center; gap: 11px; border-top: 1px solid #37343a; padding: 9px 12px; }
 .shop-order-items > div:first-child { border-top: 0; }

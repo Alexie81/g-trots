@@ -482,8 +482,10 @@ function initializeCategoryTree(root = document) {
 const SHOP_PUBLIC_FILTERS_URL = "https://g-trots.ro/shop-api/api-v2.php?action=publicCatalogFilters";
 
 function safePublicImageUrl(value) {
+  const rawValue = String(value ?? "").trim();
+  if (!rawValue) return "";
   try {
-    const url = new URL(String(value || ""), window.location.origin);
+    const url = new URL(rawValue, window.location.origin);
     return ["http:", "https:"].includes(url.protocol) ? url.href : "";
   } catch {
     return "";
@@ -500,11 +502,7 @@ function createCategoryVisual(category, depth) {
     return thumbnail;
   }
 
-  if (depth !== 1) return null;
-  const marker = document.createElement("i");
-  marker.className = "category-tree-marker";
-  marker.setAttribute("aria-hidden", "true");
-  return marker;
+  return null;
 }
 
 function createCategoryNode(category, childMap, depth, openRoot, ancestry = new Set()) {

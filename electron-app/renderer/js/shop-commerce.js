@@ -2,19 +2,15 @@
   const state = {
     products: [], orders: [], inventory: [], sources: [], categories: [], brands: [], manufacturers: [], shipping: [],
     editingProduct: null, editingOrder: null, editingStock: null, editingSource: null, editingShipping: null,
-    productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, slugTouched: false, skuTouched: false, productQuery: '', richRange: null, richImage: null,
+    productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, slugTouched: false, productQuery: '', richRange: null, richImage: null, richDragging: null, richResize: null,
     pages: { products: 1, orders: 1, inventory: 1 },
+    pageSizes: { products: 10, orders: 10, inventory: 10 },
   };
-  const PAGE_SIZE = 25;
+  const PAGE_SIZE_OPTIONS = [10, 25, 50];
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
   const money = value => `${new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0))} lei`;
   const slugify = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 200);
-  const skuFromName = (value, domain = 'g-trots.ro') => {
-    const prefix = String(domain).includes('boomag') ? 'BOOM' : 'GT';
-    const parts = slugify(value).split('-').filter(Boolean).slice(0, 4).map(part => part.slice(0, 4).toUpperCase());
-    return parts.length ? `${prefix}-${parts.join('-')}`.slice(0, 80) : '';
-  };
   const toast = (message, type = 'success') => window.BUSINESS_UI?.showToast?.(message, type);
   const statusLabels = { new: 'Noua', confirmed: 'Confirmata', processing: 'In pregatire', shipped: 'Expediata', completed: 'Finalizata', cancelled: 'Anulata' };
   const statusColors = { new: '#38bdf8', confirmed: '#a78bfa', processing: '#f59e0b', shipped: '#2dd4bf', completed: '#22c55e', cancelled: '#ef4444' };
@@ -43,7 +39,7 @@
   function commercePage(title, description, contentId, hasAdd = false) {
     const kind = contentId.replace('shop-', '').replace('-content', '');
     const symbols = { products: '◇', orders: '✓', inventory: '▦', sources: '◎', payments: '▣', shipping: '⇢' };
-    return `<div class="shop-commerce-page"><header class="shop-commerce-head shop-commerce-hero" data-commerce-kind="${kind}"><span class="shop-commerce-hero-glow"></span><button type="button" class="shop-back-btn" data-shop-open="shop-dashboard">&larr; Panou SHOP</button><div class="shop-commerce-title"><span>G-TROTS SHOP CRM</span><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="shop-commerce-hero-symbol" aria-hidden="true">${symbols[kind] || '◇'}</div><div class="shop-commerce-head-actions"><button type="button" class="shop-commerce-refresh" data-commerce-refresh="${contentId}" title="Reincarca">↻</button>${hasAdd ? `<button type="button" class="shop-commerce-add" data-commerce-add="${contentId}">+ Adauga</button>` : ''}</div></header><main id="${contentId}" class="shop-commerce-content"><div class="shop-commerce-loading">Se incarca...</div></main></div>`;
+    return `<div class="shop-commerce-page"><header class="shop-commerce-head shop-commerce-hero" data-commerce-kind="${kind}"><span class="shop-commerce-hero-glow"></span><button type="button" class="shop-back-btn" data-shop-open="shop-dashboard">&larr; Panou SHOP</button><div class="shop-commerce-title"><span>G-TROTS SHOP CRM</span><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="shop-commerce-hero-symbol" aria-hidden="true">${symbols[kind] || '◇'}</div><div class="shop-commerce-head-actions"><button type="button" class="shop-commerce-refresh" data-commerce-refresh="${contentId}" title="Reincarca" aria-label="Reincarca datele"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0 2 5"/><path d="M20 4v7h-7"/></svg></button>${hasAdd ? `<button type="button" class="shop-commerce-add" data-commerce-add="${contentId}">+ Adauga</button>` : ''}</div></header><main id="${contentId}" class="shop-commerce-content"><div class="shop-commerce-loading">Se incarca...</div></main></div>`;
   }
   function dashboardCard(target, tone, kicker, title, description) {
     return `<button type="button" class="shop-area-card ${tone}" data-shop-open="${target}"><span class="shop-area-icon">${target === 'shop-sources' ? '◎' : target === 'shop-payments' ? '▣' : '⇢'}</span><span class="shop-area-copy"><small>${kicker}</small><strong>${title}</strong><em>${description}</em></span><span class="shop-area-arrow">&rarr;</span></button>`;
@@ -52,14 +48,14 @@
   function productModal() {
     return `<div class="shop-commerce-overlay" id="shop-product-modal" hidden><form class="shop-commerce-modal product-editor" id="shop-product-form"><header><div><small>CRM PRODUSE</small><h2 id="shop-product-modal-title">Produs nou</h2></div><button type="button" data-commerce-close="shop-product-modal">×</button></header><div class="shop-commerce-modal-scroll">
       ${section('01', 'Sursa si identitate', 'Sursa implicita este selectata automat pentru un produs nou.')}
-      <div class="shop-commerce-columns"><label>Sursa produsului<select id="shop-product-source"></select></label><label>SKU / cod<input id="shop-product-sku" maxlength="80" /></label></div>
+      <div class="shop-commerce-columns"><label>Sursa produsului<select id="shop-product-source"></select></label><label>SKU / cod<input id="shop-product-sku" maxlength="80" placeholder="Se generează automat la salvare" disabled aria-disabled="true" /><small class="shop-field-help">Se generează automat la salvare</small></label></div>
       <div class="shop-commerce-columns"><label>Nume produs *<input id="shop-product-name" maxlength="180" required /><small id="shop-product-name-error" class="shop-field-error" hidden>Acest nume de produs exista deja.</small></label><label>Slug *<span class="shop-input-prefix">g-trots.ro/magazin/produs/</span><input id="shop-product-slug" maxlength="200" required /></label></div>
       ${section('02', 'Galerie foto', 'Incarca pana la 12 poze. Tine click pe o fotografie si trage-o in pozitia dorita.')}
       <div class="shop-product-gallery" id="shop-product-gallery"></div><input id="shop-product-images-input" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden />
       ${section('03', 'Descriere', 'Poti lipi continut formatat; stilurile, bold si italic sunt pastrate.')}
       <label>Descriere scurta<textarea id="shop-product-short" rows="3" maxlength="2000"></textarea></label>
       <label>Titlu descriere lunga<input id="shop-product-description-title" maxlength="220" placeholder="Ex: Aderenta sigura pentru traseele tale zilnice." /></label>
-      <div class="shop-rich-field"><span class="shop-rich-label">Descriere completa</span><div class="shop-rich-toolbar"><button type="button" data-rich-command="bold" title="Bold"><b>B</b></button><button type="button" data-rich-command="italic" title="Italic"><i>I</i></button><button type="button" data-rich-command="underline" title="Subliniat"><u>U</u></button><button type="button" data-rich-command="insertUnorderedList">• Lista</button><button type="button" data-rich-command="insertOrderedList">1. Lista</button><i class="shop-rich-separator"></i><button type="button" class="shop-rich-image-add" id="shop-rich-image-add">+ Imagine</button><button type="button" data-rich-image-action="move-up" title="Muta imaginea mai sus" disabled>↑</button><button type="button" data-rich-image-action="move-down" title="Muta imaginea mai jos" disabled>↓</button><button type="button" data-rich-image-action="resize" title="Schimba dimensiunea" disabled>Marime</button><span class="shop-rich-hint" id="shop-rich-hint">Poti lipi text si imagini direct in editor</span></div><input id="shop-rich-image-input" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden><div id="shop-product-description" class="shop-rich-editor" contenteditable="true" spellcheck="true"></div></div>
+      <div class="shop-rich-field"><span class="shop-rich-label">Descriere completa</span><div class="shop-rich-toolbar"><button type="button" data-rich-command="bold" title="Bold"><b>B</b></button><button type="button" data-rich-command="italic" title="Italic"><i>I</i></button><button type="button" data-rich-command="underline" title="Subliniat"><u>U</u></button><button type="button" data-rich-command="insertUnorderedList">• Lista</button><button type="button" data-rich-command="insertOrderedList">1. Lista</button><i class="shop-rich-separator"></i><button type="button" class="shop-rich-image-add" id="shop-rich-image-add">+ Imagine</button><button type="button" data-rich-image-action="move-up" title="Muta imaginea mai sus" disabled>↑</button><button type="button" data-rich-image-action="move-down" title="Muta imaginea mai jos" disabled>↓</button><button type="button" data-rich-image-action="resize" title="Schimba dimensiunea" disabled>Marime</button><span class="shop-rich-hint" id="shop-rich-hint">Poti lipi text si imagini direct in editor</span></div><input id="shop-rich-image-input" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden><div id="shop-product-description" class="shop-rich-editor" contenteditable="true" spellcheck="true"></div><div id="shop-rich-image-menu" class="shop-rich-image-menu" role="menu" aria-label="Optiuni imagine" hidden><button type="button" data-rich-context-action="copy" role="menuitem"><span class="shop-rich-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg></span><span><b>Copiaza imaginea</b><small>O pune in clipboard</small></span></button><button type="button" class="danger" data-rich-context-action="delete" role="menuitem"><span class="shop-rich-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="M7 7l1 13h8l1-13"></path><path d="M10 11v5M14 11v5"></path></svg></span><span><b>Sterge imaginea</b><small>O elimina din descriere</small></span></button></div></div>
       ${section('04', 'Specificatii', 'Adauga grupele si caracteristicile proprii acestui produs.')}<div class="shop-subeditor-head"><strong>SPECIFICATII PRODUS</strong><button type="button" id="shop-product-add-specification">+ Adauga specificatie</button></div><div id="shop-product-specifications" class="shop-product-subeditor"></div>
       ${section('05', 'Intrebari si raspunsuri', 'Continutul este afisat numai pe pagina acestui produs.')}<div class="shop-subeditor-head"><strong>INTREBARI PRODUS</strong><button type="button" id="shop-product-add-question">+ Adauga intrebare</button></div><div id="shop-product-questions" class="shop-product-subeditor"></div>
       ${section('06', 'Pret si reducere', 'Configureaza pretul de vanzare si reducerea afisata pe site.')}
@@ -117,10 +113,8 @@
     $('shop-product-add-specification').addEventListener('click', () => { state.productSpecifications.push({ group: 'Caracteristici generale', label: '', value: '' }); renderProductSpecifications(); });
     $('shop-product-add-question').addEventListener('click', () => { state.productQuestions.push({ question: '', answer: '' }); renderProductQuestions(); });
     $('shop-product-detail-edit').addEventListener('click', () => { const product = state.productDetail?.product; if (!product) return; closeModal('shop-product-detail-modal'); setTimeout(() => openProduct(product.id), 190); });
-    $('shop-product-name').addEventListener('input', () => { if (!state.slugTouched) $('shop-product-slug').value = slugify($('shop-product-name').value); if (!state.skuTouched) { const source = state.sources.find(item => item.id === $('shop-product-source').value); $('shop-product-sku').value = skuFromName($('shop-product-name').value, source?.domain); } validateProductName(); updateProductPreview(); });
+    $('shop-product-name').addEventListener('input', () => { if (!state.slugTouched) $('shop-product-slug').value = slugify($('shop-product-name').value); validateProductName(); updateProductPreview(); });
     $('shop-product-slug').addEventListener('input', () => { state.slugTouched = true; $('shop-product-slug').value = slugify($('shop-product-slug').value); updateProductPreview(); });
-    $('shop-product-sku').addEventListener('input', () => { state.skuTouched = true; $('shop-product-sku').value = $('shop-product-sku').value.toUpperCase(); });
-    $('shop-product-source').addEventListener('change', () => { if (!state.skuTouched) { const source = state.sources.find(item => item.id === $('shop-product-source').value); $('shop-product-sku').value = skuFromName($('shop-product-name').value, source?.domain); } });
     $('shop-product-brands-toggle').addEventListener('click', () => { const options = $('shop-product-brands'); const opening = options.hidden; options.hidden = !opening; $('shop-product-brands-toggle').setAttribute('aria-expanded', opening ? 'true' : 'false'); });
     document.addEventListener('click', event => { if (event.target.closest('#shop-product-brand-select')) return; $('shop-product-brands').hidden = true; $('shop-product-brands-toggle').setAttribute('aria-expanded', 'false'); });
     ['shop-product-price', 'shop-product-discount-value', 'shop-product-meta-title', 'shop-product-meta-description', 'shop-product-short'].forEach(id => $(id).addEventListener('input', updateProductPreview));
@@ -138,7 +132,20 @@
       if (editor.contains(range.commonAncestorContainer)) state.richRange = range.cloneRange();
     });
     editor.addEventListener('dblclick', event => { event.preventDefault(); event.stopPropagation(); });
-    editor.addEventListener('click', event => selectRichImage(event.target.closest('figure[data-rich-image]')));
+    editor.addEventListener('click', event => selectRichImage(event.target.closest?.('figure[data-rich-image]') || null));
+    editor.addEventListener('contextmenu', event => {
+      const figure = event.target.closest?.('figure[data-rich-image]');
+      if (!figure) return closeRichImageMenu();
+      event.preventDefault(); event.stopPropagation();
+      selectRichImage(figure); openRichImageMenu(event.clientX, event.clientY);
+    });
+    editor.addEventListener('pointerdown', startRichImageResize);
+    editor.addEventListener('dragstart', startRichImageDrag);
+    editor.addEventListener('dragover', updateRichImageDrop, true);
+    editor.addEventListener('drop', finishRichImageDrop, true);
+    editor.addEventListener('dragend', finishRichImageDrag);
+    editor.addEventListener('dragleave', event => { if (!editor.contains(event.relatedTarget)) clearRichDropMarkers(); });
+    editor.addEventListener('beforeinput', event => { if (state.richDragging && event.inputType === 'insertFromDrop') event.preventDefault(); });
     editor.addEventListener('input', () => { normalizeRichImages(); saveRichSelection(); });
     editor.addEventListener('keyup', saveRichSelection);
     editor.addEventListener('mouseup', saveRichSelection);
@@ -154,6 +161,10 @@
       for (const file of files) await uploadRichImage(file);
     });
     document.querySelectorAll('[data-rich-image-action]').forEach(button => button.addEventListener('click', () => richImageAction(button.dataset.richImageAction)));
+    $('shop-rich-image-menu').querySelectorAll('[data-rich-context-action]').forEach(button => button.addEventListener('click', () => richImageContextAction(button.dataset.richContextAction)));
+    document.addEventListener('pointerdown', event => { if (!event.target.closest?.('#shop-rich-image-menu')) closeRichImageMenu(); });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') closeRichImageMenu(); });
+    window.addEventListener('resize', closeRichImageMenu);
   }
 
   function saveRichSelection() {
@@ -173,9 +184,34 @@
   function selectRichImage(figure) {
     state.richImage?.classList.remove('selected');
     state.richImage = figure || null;
-    state.richImage?.classList.add('selected');
+    if (state.richImage) {
+      ensureRichImageUi(state.richImage);
+      state.richImage.classList.add('selected');
+      updateRichImageWidthLabel(state.richImage);
+    }
     document.querySelectorAll('[data-rich-image-action]').forEach(button => { button.disabled = !state.richImage; });
-    $('shop-rich-hint').textContent = state.richImage ? 'Imagine selectata: mut-o sau schimba-i marimea.' : 'Poti lipi text si imagini direct in editor';
+    $('shop-rich-hint').textContent = state.richImage ? 'Trage imaginea pentru mutare sau coltul portocaliu pentru redimensionare.' : 'Poti lipi text si imagini direct in editor';
+  }
+
+  function ensureRichImageUi(figure) {
+    figure.contentEditable = 'false';
+    figure.draggable = true;
+    let handle = figure.querySelector(':scope > [data-rich-editor-ui="resize"]');
+    if (!handle) {
+      handle = document.createElement('span');
+      handle.className = 'shop-rich-resize-handle';
+      handle.dataset.richEditorUi = 'resize';
+      handle.title = 'Trage pentru redimensionare';
+      handle.setAttribute('aria-label', 'Redimensioneaza imaginea');
+      handle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 16 16 8M11 16h5v-5"></path></svg>';
+      figure.append(handle);
+    }
+    handle.draggable = false;
+  }
+
+  function updateRichImageWidthLabel(figure) {
+    const width = Math.round(Number.parseFloat(figure.style.width || '100')) || 100;
+    figure.dataset.richWidth = `${width}%`;
   }
 
   function normalizeRichImages() {
@@ -186,14 +222,18 @@
         figure = document.createElement('figure'); figure.dataset.richImage = ''; figure.style.cssText = 'width:100%;max-width:100%;margin:18px auto;';
         image.parentNode.insertBefore(figure, image); figure.append(image);
       }
-      figure.contentEditable = 'false'; image.draggable = false; image.loading = 'lazy';
-      image.style.cssText += ';width:100%;max-width:100%;height:auto;display:block;object-fit:contain;border-radius:14px';
+      ensureRichImageUi(figure);
+      updateRichImageWidthLabel(figure);
+      image.draggable = false; image.loading = 'lazy';
+      image.style.width = '100%'; image.style.maxWidth = '100%'; image.style.height = 'auto'; image.style.display = 'block'; image.style.objectFit = 'contain'; image.style.borderRadius = '14px';
     });
   }
 
   function richDescriptionHtml() {
     const clone = $('shop-product-description').cloneNode(true);
-    clone.querySelectorAll('.selected').forEach(node => node.classList.remove('selected'));
+    clone.querySelectorAll('[data-rich-editor-ui]').forEach(node => node.remove());
+    clone.querySelectorAll('.selected,.dragging,.resizing,.drop-before,.drop-after').forEach(node => node.classList.remove('selected', 'dragging', 'resizing', 'drop-before', 'drop-after'));
+    clone.querySelectorAll('figure[data-rich-image]').forEach(node => { node.removeAttribute('draggable'); delete node.dataset.richWidth; });
     clone.querySelectorAll('[contenteditable]').forEach(node => node.removeAttribute('contenteditable'));
     return clone.innerHTML;
   }
@@ -211,6 +251,7 @@
     else if (range) range.insertNode(figure);
     else editor.append(figure);
     const paragraph = document.createElement('p'); paragraph.innerHTML = '<br>'; figure.insertAdjacentElement('afterend', paragraph);
+    ensureRichImageUi(figure); updateRichImageWidthLabel(figure);
     selectRichImage(figure);
   }
 
@@ -235,10 +276,145 @@
   function richImageAction(action) {
     const editor = $('shop-product-description'); const figure = state.richImage;
     if (!figure) return;
-    if (figure.parentElement !== editor) editor.append(figure);
-    if (action === 'move-up') { const previous = figure.previousElementSibling; if (previous) editor.insertBefore(figure, previous); }
-    else if (action === 'move-down') { const next = figure.nextElementSibling; if (next) editor.insertBefore(figure, next.nextSibling); }
-    else if (action === 'resize') { const sizes = [100, 75, 50, 33]; const current = parseInt(figure.style.width || '100', 10); const next = sizes[(Math.max(0, sizes.indexOf(current)) + 1) % sizes.length]; figure.style.width = `${next}%`; figure.style.marginInline = 'auto'; $('shop-rich-hint').textContent = `Imagine ${next}% din latimea descrierii.`; }
+    const container = figure.parentElement || editor;
+    if (action === 'move-up') { const previous = figure.previousElementSibling; if (previous) container.insertBefore(figure, previous); }
+    else if (action === 'move-down') { const next = figure.nextElementSibling; if (next) container.insertBefore(figure, next.nextSibling); }
+    else if (action === 'resize') { const sizes = [100, 75, 50, 33]; const current = parseInt(figure.style.width || '100', 10); const index = sizes.indexOf(current); const next = sizes[(index < 0 ? 0 : index + 1) % sizes.length]; setRichImageWidth(figure, next); }
+    markRichDescriptionChanged();
+  }
+
+  function setRichImageWidth(figure, width) {
+    const safeWidth = Math.max(24, Math.min(100, Math.round(width)));
+    figure.style.width = `${safeWidth}%`; figure.style.maxWidth = '100%'; figure.style.marginInline = 'auto';
+    updateRichImageWidthLabel(figure);
+    $('shop-rich-hint').textContent = `Imagine ${safeWidth}% din latimea descrierii.`;
+  }
+
+  function markRichDescriptionChanged() {
+    normalizeRichImages();
+    $('shop-product-description').dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function startRichImageResize(event) {
+    const handle = event.target.closest?.('[data-rich-editor-ui="resize"]');
+    if (!handle) return;
+    const editor = $('shop-product-description'); const figure = handle.closest('figure[data-rich-image]');
+    if (!figure) return;
+    event.preventDefault(); event.stopPropagation(); closeRichImageMenu(); selectRichImage(figure);
+    const editorWidth = Math.max(1, editor.getBoundingClientRect().width - 36);
+    state.richResize = { figure, pointerId: event.pointerId, startX: event.clientX, startWidth: figure.getBoundingClientRect().width / editorWidth * 100, editorWidth };
+    figure.draggable = false; figure.classList.add('resizing'); handle.setPointerCapture?.(event.pointerId);
+    const onMove = moveEvent => {
+      if (!state.richResize || moveEvent.pointerId !== state.richResize.pointerId) return;
+      moveEvent.preventDefault();
+      setRichImageWidth(figure, state.richResize.startWidth + ((moveEvent.clientX - state.richResize.startX) / state.richResize.editorWidth * 100));
+    };
+    const onEnd = endEvent => {
+      if (!state.richResize || endEvent.pointerId !== state.richResize.pointerId) return;
+      window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onEnd); window.removeEventListener('pointercancel', onEnd);
+      figure.classList.remove('resizing'); figure.draggable = true; state.richResize = null; markRichDescriptionChanged();
+    };
+    window.addEventListener('pointermove', onMove, { passive: false }); window.addEventListener('pointerup', onEnd); window.addEventListener('pointercancel', onEnd);
+  }
+
+  function startRichImageDrag(event) {
+    const figure = event.target.closest?.('figure[data-rich-image]');
+    if (!figure || state.richResize || event.target.closest?.('[data-rich-editor-ui]')) return event.preventDefault();
+    closeRichImageMenu(); selectRichImage(figure); state.richDragging = figure;
+    event.stopPropagation(); event.dataTransfer?.clearData(); event.dataTransfer?.setData('application/x-g-trots-rich-image', 'move');
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+    requestAnimationFrame(() => figure.classList.add('dragging'));
+    $('shop-rich-hint').textContent = 'Muta imaginea in locul dorit si elibereaza.';
+  }
+
+  function directRichEditorBlock(target) {
+    const editor = $('shop-product-description'); let block = target?.nodeType === Node.TEXT_NODE ? target.parentElement : target;
+    if (!block || block === editor || !editor.contains(block)) return null;
+    while (block.parentElement && block.parentElement !== editor) block = block.parentElement;
+    return block.parentElement === editor ? block : null;
+  }
+
+  function clearRichDropMarkers() {
+    $('shop-product-description').querySelectorAll('.drop-before,.drop-after').forEach(node => node.classList.remove('drop-before', 'drop-after'));
+  }
+
+  function updateRichImageDrop(event) {
+    if (!state.richDragging) return;
+    event.preventDefault(); event.stopPropagation();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    clearRichDropMarkers();
+    const target = directRichEditorBlock(event.target);
+    if (!target || target === state.richDragging) return;
+    const after = event.clientY > target.getBoundingClientRect().top + target.getBoundingClientRect().height / 2;
+    target.classList.add(after ? 'drop-after' : 'drop-before');
+  }
+
+  function finishRichImageDrop(event) {
+    const editor = $('shop-product-description'); const figure = state.richDragging;
+    if (!figure) return;
+    event.preventDefault(); event.stopPropagation();
+    const target = directRichEditorBlock(event.target); const oldParent = figure.parentElement;
+    if (target && target !== figure) {
+      const after = event.clientY > target.getBoundingClientRect().top + target.getBoundingClientRect().height / 2;
+      editor.insertBefore(figure, after ? target.nextSibling : target);
+    } else if (!target) editor.append(figure);
+    if (oldParent && oldParent !== editor && !oldParent.textContent.trim() && !oldParent.querySelector('img')) oldParent.remove();
+    finishRichImageDrag(); markRichDescriptionChanged(); selectRichImage(figure);
+  }
+
+  function finishRichImageDrag() {
+    state.richDragging?.classList.remove('dragging'); state.richDragging = null; clearRichDropMarkers();
+    if (state.richImage) $('shop-rich-hint').textContent = 'Imagine mutata. Trage din nou pentru a-i schimba pozitia.';
+  }
+
+  function openRichImageMenu(clientX, clientY) {
+    const menu = $('shop-rich-image-menu'); menu.hidden = false;
+    const margin = 12; const width = menu.offsetWidth || 250; const height = menu.offsetHeight || 126;
+    menu.style.left = `${Math.max(margin, Math.min(clientX, window.innerWidth - width - margin))}px`;
+    menu.style.top = `${Math.max(margin, Math.min(clientY, window.innerHeight - height - margin))}px`;
+    requestAnimationFrame(() => menu.classList.add('visible'));
+  }
+
+  function closeRichImageMenu() {
+    const menu = $('shop-rich-image-menu'); if (!menu) return;
+    menu.classList.remove('visible'); menu.hidden = true;
+  }
+
+  async function copyRichImage(figure) {
+    const image = figure?.querySelector('img'); const source = image?.currentSrc || image?.src || '';
+    if (!source) throw new Error('Imaginea nu poate fi copiata.');
+    try {
+      const { clipboard, nativeImage, net } = require('electron');
+      let clipboardImage;
+      if (source.startsWith('data:')) clipboardImage = nativeImage.createFromDataURL(source);
+      else {
+        const response = await net.fetch(source); if (!response.ok) throw new Error('Imagine indisponibila');
+        clipboardImage = nativeImage.createFromBuffer(Buffer.from(await response.arrayBuffer()));
+      }
+      if (clipboardImage?.isEmpty?.()) throw new Error('Imagine invalida');
+      clipboard.writeImage(clipboardImage); return;
+    } catch (electronError) {
+      const response = await fetch(source); const blob = await response.blob();
+      if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') throw electronError;
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+    }
+  }
+
+  async function richImageContextAction(action) {
+    const editor = $('shop-product-description'); const figure = state.richImage;
+    if (!figure) return closeRichImageMenu();
+    if (action === 'copy') {
+      try { await copyRichImage(figure); toast('Imaginea a fost copiata.'); }
+      catch (error) { toast(error.message || 'Imaginea nu a putut fi copiata.', 'error'); }
+    } else if (action === 'delete') {
+      const next = figure.nextElementSibling || figure.previousElementSibling;
+      figure.remove(); closeRichImageMenu(); selectRichImage(null);
+      if (!editor.childNodes.length) { const paragraph = document.createElement('p'); paragraph.innerHTML = '<br>'; editor.append(paragraph); }
+      const caretTarget = next?.isConnected ? next : editor.lastChild;
+      if (caretTarget) { const range = document.createRange(); range.selectNodeContents(caretTarget); range.collapse(false); state.richRange = range; restoreRichSelection(); }
+      editor.focus(); markRichDescriptionChanged(); toast('Imaginea a fost stearsa din descriere.');
+    }
+    closeRichImageMenu();
   }
 
   function openModal(id) { const modal = $(id); modal.hidden = false; requestAnimationFrame(() => modal.classList.add('visible')); }
@@ -249,19 +425,31 @@
   function loading(id, text) { $(id).innerHTML = `<div class="shop-commerce-loading">${esc(text)}</div>`; }
   function failure(id, error) { $(id).innerHTML = `<div class="shop-commerce-error">${esc(error.message || 'Datele nu au putut fi incarcate.')}</div>`; }
   function pageData(items, key) {
-    const pageCount = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+    const pageSize = PAGE_SIZE_OPTIONS.includes(state.pageSizes[key]) ? state.pageSizes[key] : PAGE_SIZE_OPTIONS[0];
+    const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
     const page = Math.min(Math.max(1, state.pages[key] || 1), pageCount);
     state.pages[key] = page;
-    return { page, pageCount, items: items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) };
+    state.pageSizes[key] = pageSize;
+    return { page, pageCount, pageSize, items: items.slice((page - 1) * pageSize, page * pageSize) };
   }
-  function pagination(key, total, page, pageCount) {
-    if (total <= PAGE_SIZE) return '';
-    const first = (page - 1) * PAGE_SIZE + 1;
-    const last = Math.min(total, page * PAGE_SIZE);
-    return `<nav class="shop-commerce-pagination" aria-label="Paginare"><button type="button" data-page-key="${key}" data-page="${page - 1}" ${page === 1 ? 'disabled' : ''}>‹</button><span><b>Pagina ${page} din ${pageCount}</b><small>${first}–${last} din ${total}</small></span><button type="button" data-page-key="${key}" data-page="${page + 1}" ${page === pageCount ? 'disabled' : ''}>›</button></nav>`;
+  function pagination(key, total, page, pageCount, pageSize) {
+    if (!total) return '';
+    const first = (page - 1) * pageSize + 1;
+    const last = Math.min(total, page * pageSize);
+    const selectId = `shop-${key}-page-size`;
+    const options = PAGE_SIZE_OPTIONS.map(value => `<option value="${value}" ${value === pageSize ? 'selected' : ''}>${value}</option>`).join('');
+    const chevron = direction => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${direction === 'left' ? 'm15 18-6-6 6-6' : 'm9 18 6-6-6-6'}"/></svg>`;
+    return `<nav class="shop-commerce-pagination" aria-label="Paginare"><div class="shop-commerce-page-size"><label for="${selectId}">Randuri pe pagina:</label><span><select id="${selectId}" data-page-size-key="${key}" aria-label="Randuri pe pagina">${options}</select><i aria-hidden="true">⌄</i></span></div><span class="shop-commerce-pagination-range" aria-live="polite">${first}–${last} din ${total}</span><div class="shop-commerce-pagination-arrows"><button type="button" data-page-key="${key}" data-page="${page - 1}" aria-label="Pagina anterioara" title="Pagina anterioara" ${page === 1 ? 'disabled' : ''}>${chevron('left')}</button><button type="button" data-page-key="${key}" data-page="${page + 1}" aria-label="Pagina urmatoare" title="Pagina urmatoare" ${page === pageCount ? 'disabled' : ''}>${chevron('right')}</button></div></nav>`;
   }
   function bindPagination(containerId, key, render) {
     $(containerId).querySelectorAll(`[data-page-key="${key}"]`).forEach(button => button.addEventListener('click', () => { state.pages[key] = Number(button.dataset.page); render(); $(containerId).scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
+    $(containerId).querySelector(`[data-page-size-key="${key}"]`)?.addEventListener('change', event => {
+      const pageSize = Number(event.target.value);
+      if (!PAGE_SIZE_OPTIONS.includes(pageSize)) return;
+      state.pageSizes[key] = pageSize;
+      state.pages[key] = 1;
+      render();
+    });
   }
   function imageBackground(image) {
     const url = image?.preview || image?.url || '';
@@ -305,11 +493,19 @@
     const filtered = term ? state.products.filter(product => `${product.name} ${product.sku || ''} ${product.source_domain || ''}`.toLowerCase().includes(term)) : state.products;
     const page = pageData(filtered, 'products');
     const rows = page.items.map(product => `<tr data-product-open="${product.id}"><td>${productPicture(product.images?.[0])}</td><td><strong>${esc(product.name)}</strong><small>/${esc(product.slug)}</small><em>${esc(product.sku || 'Fara SKU')} · ${esc(product.source_domain)}</em></td><td><b>${money(product.sale_price ?? product.price)}</b>${product.sale_price ? `<small class="old">${money(product.price)}</small>` : ''}</td><td>${stockBadge(product)}</td><td>${product.is_active ? '<span class="commerce-pill active">ACTIV</span>' : '<span class="commerce-pill inactive">INACTIV</span>'}</td><td><button class="commerce-icon edit" data-product-edit="${product.id}" title="Editeaza" aria-label="Editeaza produsul"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="commerce-icon delete" data-product-delete="${product.id}" title="Sterge" aria-label="Sterge produsul"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v6M14 10v6"/></svg></button></td></tr>`).join('');
-    $('shop-products-content').innerHTML = `<div class="shop-commerce-tools"><div><b>${filtered.length}</b><span>produse gasite</span></div><input id="shop-products-search" value="${esc(state.productQuery)}" placeholder="Cauta produs sau SKU..." /></div>${rows ? `<div class="shop-commerce-table-wrap"><table class="shop-commerce-table products"><thead><tr><th>Poza</th><th>Produs</th><th>Pret</th><th>Stoc</th><th>Status</th><th>Actiuni</th></tr></thead><tbody>${rows}</tbody></table></div>${pagination('products', filtered.length, page.page, page.pageCount)}` : empty('Niciun produs', 'Adauga primul produs pentru a-l publica pe site.')}`;
+    $('shop-products-content').innerHTML = `<div class="shop-commerce-tools"><div><b>${filtered.length}</b><span>produse gasite</span></div><input id="shop-products-search" value="${esc(state.productQuery)}" placeholder="Cauta produs sau SKU..." /></div>${rows ? `<div class="shop-commerce-table-wrap"><table class="shop-commerce-table products"><thead><tr><th>Poza</th><th>Produs</th><th>Pret</th><th>Stoc</th><th>Status</th><th>Actiuni</th></tr></thead><tbody>${rows}</tbody></table></div>${pagination('products', filtered.length, page.page, page.pageCount, page.pageSize)}` : empty('Niciun produs', 'Adauga primul produs pentru a-l publica pe site.')}`;
     $('shop-products-content').querySelectorAll('[data-product-edit]').forEach(button => button.addEventListener('click', () => openProduct(button.dataset.productEdit)));
     $('shop-products-content').querySelectorAll('[data-product-delete]').forEach(button => button.addEventListener('click', () => deleteProduct(button.dataset.productDelete)));
     $('shop-products-content').querySelectorAll('[data-product-open]').forEach(row => row.addEventListener('click', event => { if (!event.target.closest('button')) openProductDetail(row.dataset.productOpen); }));
-    $('shop-products-search')?.addEventListener('input', event => { state.productQuery = event.target.value; state.pages.products = 1; renderProducts(); $('shop-products-search')?.focus(); });
+    $('shop-products-search')?.addEventListener('input', event => {
+      state.productQuery = event.target.value;
+      state.pages.products = 1;
+      const caret = event.target.selectionStart ?? state.productQuery.length;
+      renderProducts();
+      const nextInput = $('shop-products-search');
+      nextInput?.focus();
+      nextInput?.setSelectionRange?.(caret, caret);
+    });
     bindPagination('shop-products-content', 'products', renderProducts);
   }
   function stockBadge(product) { if (product.stock_mode === 'unlimited') return '<span class="commerce-stock unlimited">NELIMITAT</span>'; const low = product.stock_quantity <= product.low_stock_threshold; return `<span class="commerce-stock ${low ? 'low' : ''}">${product.stock_quantity} BUC.${low ? ' · STOC MIC' : ''}</span>`; }
@@ -349,7 +545,6 @@
       const product = id ? await window.SHOP_API.getProduct(id) : null;
       state.editingProduct = product;
       state.slugTouched = false;
-      state.skuTouched = Boolean(product);
       state.productImages = (product?.images || []).map((image, index) => ({ ...image, key: image.id || `existing-${index}`, preview: image.url }));
       state.productSpecifications = (product?.specifications || []).map(item => ({ ...item }));
       state.productQuestions = (product?.questions || []).map(item => ({ ...item }));
@@ -431,7 +626,7 @@
       const price = Number($('shop-product-price').value); const costPrice = Number(state.editingProduct?.cost_price || 0); const discount = Number($('shop-product-discount-value').value || 0); const discountType = $('shop-product-discount-type').value; const source = state.sources.find(item => item.id === $('shop-product-source').value);
       if (discount < 0 || (discount > 0 && (discountType === 'percent' ? discount >= 100 : discount >= price))) throw new Error(discountType === 'percent' ? 'Reducerea procentuala trebuie sa fie sub 100%.' : 'Reducerea fixa trebuie sa fie mai mica decat pretul.');
       const salePrice = discount ? Math.round((discountType === 'fixed' ? price - discount : price * (1 - discount / 100)) * 100) / 100 : null;
-      const payload = { source_id: source?.id || null, source_domain: source?.domain || 'g-trots.ro', source_url: '', sku: $('shop-product-sku').value.trim(), name: $('shop-product-name').value.trim(), slug: $('shop-product-slug').value.trim(), short_description: $('shop-product-short').value.trim(), description_title: $('shop-product-description-title').value.trim(), description_html: richDescriptionHtml(), specifications: state.productSpecifications.map(item => ({ group: item.group.trim(), label: item.label.trim(), value: item.value.trim() })), questions: state.productQuestions.map(item => ({ question: item.question.trim(), answer: item.answer.trim() })), meta_title: $('shop-product-meta-title').value.trim(), meta_description: $('shop-product-meta-description').value.trim(), cost_price: costPrice, price, discount_type: discountType, discount_value: discount || null, discount_percent: discountType === 'percent' ? discount || null : null, sale_price: salePrice, category_id: $('shop-product-category').value || null, manufacturer_id: $('shop-product-manufacturer').value || null, brand_ids: Array.from($('shop-product-brands').querySelectorAll('input:checked')).map(input => input.value), stock_mode: $('shop-product-stock-mode').value, stock_quantity: Math.max(0, Number($('shop-product-stock').value || 0)), low_stock_threshold: Math.max(0, Number($('shop-product-low-stock').value || 0)), currency: 'RON', is_active: $('shop-product-active').checked, is_featured: $('shop-product-featured').checked, images: state.productImages.map((image, index) => ({ id: image.id, base64: image.base64, alt_text: image.alt_text || $('shop-product-name').value.trim(), sort_order: index })) };
+      const payload = { source_id: source?.id || null, source_domain: source?.domain || 'g-trots.ro', source_url: '', name: $('shop-product-name').value.trim(), slug: $('shop-product-slug').value.trim(), short_description: $('shop-product-short').value.trim(), description_title: $('shop-product-description-title').value.trim(), description_html: richDescriptionHtml(), specifications: state.productSpecifications.map(item => ({ group: item.group.trim(), label: item.label.trim(), value: item.value.trim() })), questions: state.productQuestions.map(item => ({ question: item.question.trim(), answer: item.answer.trim() })), meta_title: $('shop-product-meta-title').value.trim(), meta_description: $('shop-product-meta-description').value.trim(), cost_price: costPrice, price, discount_type: discountType, discount_value: discount || null, discount_percent: discountType === 'percent' ? discount || null : null, sale_price: salePrice, category_id: $('shop-product-category').value || null, manufacturer_id: $('shop-product-manufacturer').value || null, brand_ids: Array.from($('shop-product-brands').querySelectorAll('input:checked')).map(input => input.value), stock_mode: $('shop-product-stock-mode').value, stock_quantity: Math.max(0, Number($('shop-product-stock').value || 0)), low_stock_threshold: Math.max(0, Number($('shop-product-low-stock').value || 0)), currency: 'RON', is_active: $('shop-product-active').checked, is_featured: $('shop-product-featured').checked, images: state.productImages.map((image, index) => ({ id: image.id, base64: image.base64, alt_text: image.alt_text || $('shop-product-name').value.trim(), sort_order: index })) };
       if (!payload.name || !payload.slug || !Number.isFinite(price) || !Number.isFinite(costPrice) || costPrice < 0) throw new Error('Completeaza numele, slug-ul si preturile valide.');
       const saved = state.editingProduct ? await window.SHOP_API.updateProduct(state.editingProduct.id, payload) : await window.SHOP_API.createProduct(payload);
       closeModal('shop-product-modal');
@@ -445,7 +640,7 @@
   function renderOrders() {
     const page = pageData(state.orders, 'orders');
     const rows = page.items.map(order => `<tr data-order-open="${order.id}"><td><strong>${esc(order.order_number)}</strong><small>${esc(new Date(order.created_at.replace(' ', 'T')).toLocaleString('ro-RO'))}</small></td><td><strong>${esc(order.customer_name)}</strong><small>${esc(order.customer_phone)}</small></td><td><span class="commerce-pill" style="--pill:${statusColors[order.status]}">${esc(statusLabels[order.status] || order.status)}</span></td><td>${order.payment_method === 'card' ? 'Card' : 'Ramburs'}<small>${esc(order.payment_status)}</small></td><td><b>${money(order.total)}</b></td><td>›</td></tr>`).join('');
-    $('shop-orders-content').innerHTML = rows ? `<div class="shop-commerce-summary"><span><b>${state.orders.filter(item => item.status === 'new').length}</b> comenzi noi</span><span><b>${state.orders.filter(item => item.status === 'processing').length}</b> in pregatire</span><span><b>${money(state.orders.filter(item => item.status !== 'cancelled').reduce((sum, item) => sum + Number(item.total), 0))}</b> valoare</span></div><div class="shop-commerce-table-wrap"><table class="shop-commerce-table orders"><thead><tr><th>Comanda</th><th>Client</th><th>Status</th><th>Plata</th><th>Total</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${pagination('orders', state.orders.length, page.page, page.pageCount)}` : empty('Nicio comanda', 'Comenzile trimise de pe site vor aparea automat aici.');
+    $('shop-orders-content').innerHTML = rows ? `<div class="shop-commerce-summary"><span><b>${state.orders.filter(item => item.status === 'new').length}</b> comenzi noi</span><span><b>${state.orders.filter(item => item.status === 'processing').length}</b> in pregatire</span><span><b>${money(state.orders.filter(item => item.status !== 'cancelled').reduce((sum, item) => sum + Number(item.total), 0))}</b> valoare</span></div><div class="shop-commerce-table-wrap"><table class="shop-commerce-table orders"><thead><tr><th>Comanda</th><th>Client</th><th>Status</th><th>Plata</th><th>Total</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${pagination('orders', state.orders.length, page.page, page.pageCount, page.pageSize)}` : empty('Nicio comanda', 'Comenzile trimise de pe site vor aparea automat aici.');
     $('shop-orders-content').querySelectorAll('[data-order-open]').forEach(row => row.addEventListener('click', () => openOrder(row.dataset.orderOpen)));
     bindPagination('shop-orders-content', 'orders', renderOrders);
   }
@@ -457,7 +652,7 @@
     const page = pageData(state.inventory, 'inventory');
     const rows = page.items.map(product => `<tr ${product.stock_mode === 'tracked' ? `data-stock-open="${product.id}"` : ''}><td>${productPicture(product.images?.[0])}</td><td><strong>${esc(product.name)}</strong><small>${esc(product.sku || 'Fara SKU')}</small></td><td>${stockBadge(product)}</td><td><strong class="commerce-accounting-stock">${Number(product.accounting_stock_quantity || 0)} BUC.</strong><small>Doar citire</small></td><td>${product.stock_mode === 'tracked' ? product.low_stock_threshold : '—'}</td><td>${product.stock_mode === 'tracked' ? 'Ajusteaza ›' : 'Nelimitat'}</td></tr>`).join('');
     const low = state.inventory.filter(item => item.stock_mode === 'tracked' && item.stock_quantity <= item.low_stock_threshold).length;
-    $('shop-inventory-content').innerHTML = rows ? `<div class="shop-commerce-summary"><span><b>${state.inventory.filter(item => item.stock_mode === 'tracked').length}</b> produse urmarite</span><span class="warn"><b>${low}</b> cu stoc mic</span><span><b>${state.inventory.filter(item => item.stock_mode === 'unlimited').length}</b> nelimitate</span></div><div class="shop-commerce-table-wrap"><table class="shop-commerce-table inventory"><thead><tr><th>Poza</th><th>Produs</th><th>Stoc online</th><th>Stoc Conta</th><th>Alerta sub</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${pagination('inventory', state.inventory.length, page.page, page.pageCount)}` : empty('Niciun produs in stoc', 'Adauga produse pentru a le gestiona cantitatile.');
+    $('shop-inventory-content').innerHTML = rows ? `<div class="shop-commerce-summary"><span><b>${state.inventory.filter(item => item.stock_mode === 'tracked').length}</b> produse urmarite</span><span class="warn"><b>${low}</b> cu stoc mic</span><span><b>${state.inventory.filter(item => item.stock_mode === 'unlimited').length}</b> nelimitate</span></div><div class="shop-commerce-table-wrap"><table class="shop-commerce-table inventory"><thead><tr><th>Poza</th><th>Produs</th><th>Stoc online</th><th>Stoc Conta</th><th>Alerta sub</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${pagination('inventory', state.inventory.length, page.page, page.pageCount, page.pageSize)}` : empty('Niciun produs in stoc', 'Adauga produse pentru a le gestiona cantitatile.');
     $('shop-inventory-content').querySelectorAll('[data-stock-open]').forEach(row => row.addEventListener('click', () => openStock(row.dataset.stockOpen)));
     bindPagination('shop-inventory-content', 'inventory', renderInventory);
   }
@@ -476,9 +671,104 @@
     try {
       const settings = await window.SHOP_API.getPaymentSettings();
       const stripeState = settings.stripe_configured
-        ? `<b class="commerce-pill active">STRIPE ${settings.stripe_test_mode ? 'TEST' : 'ACTIV'}</b>`
-        : '<b class="commerce-pill inactive">NECONFIGURAT</b>';
-      $('shop-payments-content').innerHTML = `<form id="shop-payments-form" class="shop-settings-form"><section><span class="shop-settings-icon">S</span><div><h2>Catalog conectat la Stripe</h2><p>CRM-ul este catalogul principal. ${Number(settings.stripe_synced_products || 0)} produse sincronizate${Number(settings.stripe_sync_errors || 0) ? ` · ${Number(settings.stripe_sync_errors)} erori` : ''}.</p></div>${stripeState}</section><button class="btn-secondary" type="button" data-stripe-sync ${settings.stripe_configured ? '' : 'disabled'}>Sincronizeaza acum catalogul</button><section><span class="shop-settings-icon">▣</span><div><h2>Card online</h2><p>Clientii platesc in siguranta prin Stripe.</p></div><input type="checkbox" id="shop-payment-card" ${settings.card_enabled ? 'checked' : ''} /></section><label>Denumire afisata<input id="shop-payment-card-label" value="${esc(settings.card_label)}" /></label><section><span class="shop-settings-icon">⌂</span><div><h2>Ramburs la curier</h2><p>Clientul plateste la primirea coletului.</p></div><input type="checkbox" id="shop-payment-cod" ${settings.cash_on_delivery_enabled ? 'checked' : ''} /></section><label>Denumire afisata<input id="shop-payment-cod-label" value="${esc(settings.cash_on_delivery_label)}" /></label><button class="btn-primary" type="submit">Salveaza metodele de plata</button></form>`;
+        ? `<span class="shop-payment-status is-connected"><i aria-hidden="true"></i>STRIPE ${settings.stripe_test_mode ? 'TEST' : 'ACTIV'}</span>`
+        : '<span class="shop-payment-status is-offline"><i aria-hidden="true"></i>NECONFIGURAT</span>';
+      $('shop-payments-content').innerHTML = `
+        <form id="shop-payments-form" class="shop-settings-form shop-payment-settings" aria-label="Setari metode de plata">
+          <section class="shop-payment-stripe-card">
+            <div class="shop-payment-stripe-main">
+              <span class="shop-payment-brand-icon" aria-hidden="true">S</span>
+              <div class="shop-payment-copy">
+                <span class="shop-payment-eyebrow">INTEGRARE STRIPE</span>
+                <h2>Catalog conectat la Stripe</h2>
+                <p>CRM-ul ramane catalogul principal pentru produse, preturi si disponibilitate.</p>
+              </div>
+              ${stripeState}
+            </div>
+            <div class="shop-payment-sync-row">
+              <div class="shop-payment-sync-summary">
+                <span class="shop-payment-sync-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6.1 9a7 7 0 0 1 11.6-2.6L20 9M4 15l2.3 2.6A7 7 0 0 0 17.9 15" /></svg>
+                </span>
+                <span>
+                  <strong>${Number(settings.stripe_synced_products || 0)} produse sincronizate</strong>
+                  <small>${Number(settings.stripe_sync_errors || 0) ? `${Number(settings.stripe_sync_errors)} erori necesita atentie` : 'Catalogul este pregatit pentru urmatoarea sincronizare'}</small>
+                </span>
+              </div>
+              <button class="btn-secondary shop-payment-sync-button" type="button" data-stripe-sync ${settings.stripe_configured ? '' : 'disabled'}>Sincronizeaza acum</button>
+            </div>
+          </section>
+
+          <section class="shop-payment-methods-panel">
+            <header class="shop-payment-section-head">
+              <div>
+                <span class="shop-payment-eyebrow">CONFIGURARE CHECKOUT</span>
+                <h2>Cum pot plati clientii</h2>
+                <p>Activeaza metodele dorite si personalizeaza denumirea afisata in magazin.</p>
+              </div>
+              <span class="shop-payment-options-badge">2 OPTIUNI</span>
+            </header>
+
+            <div class="shop-payment-method-grid">
+              <article class="shop-payment-method-card shop-payment-method-card--online">
+                <div class="shop-payment-method-head">
+                  <span class="shop-payment-method-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3" /><path d="M3 10h18M7 15h4" /></svg>
+                  </span>
+                  <div class="shop-payment-method-copy">
+                    <h3>Card online</h3>
+                    <p>Plata securizata, procesata prin Stripe.</p>
+                  </div>
+                  <label class="shop-payment-switch" for="shop-payment-card">
+                    <input type="checkbox" id="shop-payment-card" ${settings.card_enabled ? 'checked' : ''} />
+                    <span class="shop-payment-switch-track" aria-hidden="true"></span>
+                    <span class="shop-payment-sr-only">Activeaza plata cu cardul</span>
+                  </label>
+                </div>
+                <label class="shop-payment-field" for="shop-payment-card-label">
+                  <span>Denumire afisata</span>
+                  <input id="shop-payment-card-label" value="${esc(settings.card_label)}" />
+                  <small>Asa va aparea optiunea la finalizarea comenzii.</small>
+                </label>
+              </article>
+
+              <article class="shop-payment-method-card shop-payment-method-card--cash">
+                <div class="shop-payment-method-head">
+                  <span class="shop-payment-method-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M4 9.5 12 4l8 5.5v8.2a2.3 2.3 0 0 1-2.3 2.3H6.3A2.3 2.3 0 0 1 4 17.7Z" /><path d="M8 13h8M9.5 16h5" /></svg>
+                  </span>
+                  <div class="shop-payment-method-copy">
+                    <h3>Ramburs la curier</h3>
+                    <p>Clientul plateste atunci cand primeste coletul.</p>
+                  </div>
+                  <label class="shop-payment-switch" for="shop-payment-cod">
+                    <input type="checkbox" id="shop-payment-cod" ${settings.cash_on_delivery_enabled ? 'checked' : ''} />
+                    <span class="shop-payment-switch-track" aria-hidden="true"></span>
+                    <span class="shop-payment-sr-only">Activeaza plata ramburs</span>
+                  </label>
+                </div>
+                <label class="shop-payment-field" for="shop-payment-cod-label">
+                  <span>Denumire afisata</span>
+                  <input id="shop-payment-cod-label" value="${esc(settings.cash_on_delivery_label)}" />
+                  <small>Asa va aparea optiunea la finalizarea comenzii.</small>
+                </label>
+              </article>
+            </div>
+          </section>
+
+          <footer class="shop-payment-form-actions">
+            <div class="shop-payment-save-note">
+              <span aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="3" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
+              </span>
+              <span><strong>Setari protejate</strong><small>Modificarile devin vizibile imediat in checkout.</small></span>
+            </div>
+            <button class="btn-primary shop-payment-save-button" type="submit">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12 4 4 8-8" /></svg>
+              Salveaza metodele de plata
+            </button>
+          </footer>
+        </form>`;
       $('shop-payments-content').querySelector('[data-stripe-sync]')?.addEventListener('click', async event => {
         const button = event.currentTarget;
         button.disabled = true;

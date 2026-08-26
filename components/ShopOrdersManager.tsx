@@ -48,6 +48,7 @@ export default function ShopOrdersManager() {
   const [orders, setOrders] = useState<ShopOrder[]>([]);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -72,7 +73,6 @@ export default function ShopOrdersManager() {
     if (!term) return orders;
     return orders.filter((order) => `${order.order_number} ${order.customer_name} ${order.customer_phone} ${order.customer_email || ''}`.toLowerCase().includes(term));
   }, [orders, query]);
-  const pageSize = 20;
   const safePage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
   const pagedOrders = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
@@ -126,7 +126,7 @@ export default function ShopOrdersManager() {
           <ChevronRight size={18} color={Colors.textMuted} />
         </TouchableOpacity>;
       }) : <View style={styles.empty}><PackageCheck size={34} color="#38BDF8" /><Text style={styles.emptyTitle}>Nicio comanda</Text><Text style={styles.emptyText}>Comenzile trimise de pe site vor aparea automat aici.</Text></View>}
-      <ShopPagination page={safePage} pageSize={pageSize} total={filtered.length} onPageChange={setPage} />
+      <ShopPagination page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} onPageSizeChange={setPageSize} />
 
       <Modal visible={Boolean(selected)} animationType="slide" onRequestClose={() => !saving && setSelected(null)}>
         <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>

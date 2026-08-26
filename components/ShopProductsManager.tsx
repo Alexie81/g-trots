@@ -183,12 +183,6 @@ function slugify(value: string) {
     .slice(0, 200);
 }
 
-function skuFromName(value: string, domain = 'g-trots.ro') {
-  const prefix = domain.includes('boomag') ? 'BOOM' : 'GT';
-  const parts = slugify(value).split('-').filter(Boolean).slice(0, 4).map((part) => part.slice(0, 4).toUpperCase());
-  return parts.length ? `${prefix}-${parts.join('-')}`.slice(0, 80) : '';
-}
-
 function money(value: number) {
   return new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value) + ' lei';
 }
@@ -203,6 +197,7 @@ export default function ShopProductsManager() {
   const [sources, setSources] = useState<ShopProductSource[]>([]);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -213,7 +208,6 @@ export default function ShopProductsManager() {
   const [reviewReplies, setReviewReplies] = useState<Record<string, string>>({});
   const [galleryDragging, setGalleryDragging] = useState(false);
   const [slugTouched, setSlugTouched] = useState(false);
-  const [skuTouched, setSkuTouched] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
 
   const load = useCallback(async (quiet = false) => {
@@ -241,7 +235,6 @@ export default function ShopProductsManager() {
     if (!term) return products;
     return products.filter((product) => `${product.name} ${product.sku || ''} ${product.category_name || ''}`.toLowerCase().includes(term));
   }, [products, query]);
-  const pageSize = 20;
   const safePage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
   const pagedProducts = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
   const normalizedFormName = form.name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ro-RO');
@@ -262,7 +255,6 @@ export default function ShopProductsManager() {
     }
     setForm(next);
     setSlugTouched(false);
-    setSkuTouched(false);
     setEditorVisible(true);
   };
 
@@ -300,7 +292,6 @@ export default function ShopProductsManager() {
         questions: (full.questions || []).map((item, index) => ({ ...item, key: `question-${index}-${Date.now()}` })),
       });
       setSlugTouched(false);
-      setSkuTouched(true);
       setEditorVisible(true);
     } catch (editError) {
       Alert.alert('Produs indisponibil', editError instanceof Error ? editError.message : 'Nu s-a putut deschide produsul.');
@@ -426,7 +417,6 @@ export default function ShopProductsManager() {
       category_id: form.category_id,
       manufacturer_id: form.manufacturer_id,
       brand_ids: form.brand_ids,
-      sku: form.sku.trim(),
       source_domain: form.source_domain,
       source_id: form.source_id,
       source_url: '',
@@ -521,7 +511,7 @@ export default function ShopProductsManager() {
           <TouchableOpacity style={[styles.iconAction, styles.deleteAction]} onPress={() => removeProduct(product)}><Trash2 size={17} color={Colors.error} /></TouchableOpacity>
         </View>
       )) : <View style={styles.empty}><Package size={32} color="#A78BFA" /><Text style={styles.emptyTitle}>Niciun produs</Text><Text style={styles.emptyText}>Adauga primul produs pentru a-l publica pe site.</Text></View>}
-      <ShopPagination page={safePage} pageSize={pageSize} total={filtered.length} onPageChange={setPage} />
+      <ShopPagination page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} onPageSizeChange={setPageSize} />
 
       <Modal visible={detailVisible} animationType="slide" onRequestClose={() => setDetailVisible(false)}>
         <SafeAreaView style={styles.editorSafe} edges={['top', 'bottom']}>
@@ -573,10 +563,10 @@ export default function ShopProductsManager() {
           <ScrollView contentContainerStyle={[styles.form, { paddingBottom: Math.max(insets.bottom, 24) + 36 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <SectionTitle number="01" title="Sursa si identitate" text="Alege provenienta produsului si adresa lui publica." />
             <Text style={styles.label}>SURSA PRODUSULUI</Text>
-            <View style={styles.sourceRow}>{sources.filter((source) => source.is_active || (Boolean(form.id) && source.id === form.source_id)).map((source) => <Choice key={source.id} label={`${source.name} · ${source.domain}${source.is_default ? ' (implicita)' : ''}${!source.is_active ? ' · ascunsa pe site' : ''}`} selected={form.source_id === source.id} onPress={() => { patchForm('source_id', source.id); patchForm('source_domain', source.domain); if (!skuTouched) patchForm('sku', skuFromName(form.name, source.domain)); }} />)}</View>
-            <Field label="NUME PRODUS *" value={form.name} onChangeText={(value) => { patchForm('name', value); if (!slugTouched) patchForm('slug', slugify(value)); if (!skuTouched) patchForm('sku', skuFromName(value, form.source_domain)); }} placeholder="Ex: Anvelopa G10 All-Terrain" error={duplicateProductName ? 'Acest nume de produs exista deja.' : undefined} />
+            <View style={styles.sourceRow}>{sources.filter((source) => source.is_active || (Boolean(form.id) && source.id === form.source_id)).map((source) => <Choice key={source.id} label={`${source.name} · ${source.domain}${source.is_default ? ' (implicita)' : ''}${!source.is_active ? ' · ascunsa pe site' : ''}`} selected={form.source_id === source.id} onPress={() => { patchForm('source_id', source.id); patchForm('source_domain', source.domain); }} />)}</View>
+            <Field label="NUME PRODUS *" value={form.name} onChangeText={(value) => { patchForm('name', value); if (!slugTouched) patchForm('slug', slugify(value)); }} placeholder="Ex: Anvelopa G10 All-Terrain" error={duplicateProductName ? 'Acest nume de produs exista deja.' : undefined} />
             <Field label="SLUG *" value={form.slug} onChangeText={(value) => { setSlugTouched(true); patchForm('slug', slugify(value)); }} placeholder="anvelopa-g10-all-terrain" autoCapitalize="none" prefix="g-trots.ro/magazin/produs/" />
-            <Field label="SKU / COD PRODUS" value={form.sku} onChangeText={(value) => { setSkuTouched(true); patchForm('sku', value.toUpperCase()); }} placeholder="Se genereaza automat" autoCapitalize="characters" />
+            <Field label="SKU / COD PRODUS" value={form.sku} editable={false} placeholder="Se generează automat la salvare" hint="Se generează automat la salvare" />
 
             <SectionTitle number="02" title="Galerie foto" text="Incarca pana la 12 poze. Tine de o fotografie si trage-o in pozitia dorita." />
             <ScrollView horizontal scrollEnabled={!galleryDragging} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.gallery}>
@@ -671,8 +661,8 @@ function MultiSelectDropdown({ items, selectedIds, onChange }: { items: ShopBran
   </View>;
 }
 
-function Field({ label, prefix, multiline, error, ...props }: React.ComponentProps<typeof TextInput> & { label: string; prefix?: string; error?: string }) {
-  return <View style={styles.field}><Text style={styles.label}>{label}</Text>{prefix ? <Text style={styles.prefix}>{prefix}</Text> : null}<TextInput {...props} multiline={multiline} placeholderTextColor={Colors.textMuted} style={[styles.input, multiline && styles.textarea, prefix && styles.inputWithPrefix, Boolean(error) && styles.inputError]} />{error ? <Text style={styles.fieldError}>{error}</Text> : null}</View>;
+function Field({ label, prefix, multiline, error, hint, editable = true, ...props }: React.ComponentProps<typeof TextInput> & { label: string; prefix?: string; error?: string; hint?: string }) {
+  return <View style={styles.field}><Text style={styles.label}>{label}</Text>{prefix ? <Text style={styles.prefix}>{prefix}</Text> : null}<TextInput {...props} editable={editable} multiline={multiline} placeholderTextColor={Colors.textMuted} style={[styles.input, !editable && styles.inputInactive, multiline && styles.textarea, prefix && styles.inputWithPrefix, Boolean(error) && styles.inputError]} />{hint ? <Text style={styles.fieldHint}>{hint}</Text> : null}{error ? <Text style={styles.fieldError}>{error}</Text> : null}</View>;
 }
 
 function Metric({ label, value, accent, icon }: { label: string; value: string; accent?: boolean; icon?: 'eye' }) {
@@ -706,7 +696,7 @@ const styles = StyleSheet.create({
   sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: 11, borderTopWidth: 1, borderTopColor: '#2D2A30', paddingTop: 20, marginTop: 12, marginBottom: 16 }, sectionNumber: { width: 38, height: 38, textAlign: 'center', textAlignVertical: 'center', borderRadius: 12, color: Colors.orange, backgroundColor: Colors.orangeDim, fontFamily: 'Inter-Bold', fontSize: 10 }, sectionName: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 15 }, sectionText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 9, marginTop: 2, maxWidth: 650 },
   inlineAdd: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderWidth: 1, borderColor: 'rgba(255,107,0,0.28)', borderRadius: 14, backgroundColor: Colors.orangeDim, marginBottom: 10 }, inlineAddText: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 10 }, subEditorCard: { borderWidth: 1, borderColor: '#37343B', borderRadius: 17, padding: 13, backgroundColor: '#1B1B1F', marginBottom: 10 }, subEditorHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }, subEditorTitle: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.8 },
   label: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.8, marginBottom: 7 }, sourceRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 14 }, choices: { gap: 7, paddingBottom: 15 }, choiceWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 15 }, choice: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: '#413D45', borderRadius: 999, paddingHorizontal: 13, backgroundColor: '#1B1B1F' }, choiceActive: { borderColor: Colors.orange, backgroundColor: Colors.orangeDim }, choiceText: { color: Colors.textSecondary, fontFamily: 'Inter-SemiBold', fontSize: 9 }, choiceTextActive: { color: Colors.orange },
-  field: { marginBottom: 15 }, input: { minHeight: 50, borderWidth: 1, borderColor: '#49454F', borderRadius: 13, paddingHorizontal: 14, color: Colors.textPrimary, backgroundColor: '#161519', fontFamily: 'Inter-Regular', fontSize: 12 }, inputError: { borderColor: '#EF4444', backgroundColor: 'rgba(239,68,68,0.055)' }, fieldError: { marginTop: 6, color: '#FF6B72', fontFamily: 'Inter-SemiBold', fontSize: 9 }, textarea: { minHeight: 84, paddingTop: 12, textAlignVertical: 'top' }, prefix: { position: 'absolute', zIndex: 2, left: 14, top: 35, color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 10 }, inputWithPrefix: { paddingLeft: 150 },
+  field: { marginBottom: 15 }, input: { minHeight: 50, borderWidth: 1, borderColor: '#49454F', borderRadius: 13, paddingHorizontal: 14, color: Colors.textPrimary, backgroundColor: '#161519', fontFamily: 'Inter-Regular', fontSize: 12 }, inputInactive: { borderColor: '#353239', color: Colors.textMuted, backgroundColor: '#201E23', opacity: 0.72 }, inputError: { borderColor: '#EF4444', backgroundColor: 'rgba(239,68,68,0.055)' }, fieldHint: { marginTop: 6, color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 9 }, fieldError: { marginTop: 6, color: '#FF6B72', fontFamily: 'Inter-SemiBold', fontSize: 9 }, textarea: { minHeight: 84, paddingTop: 12, textAlignVertical: 'top' }, prefix: { position: 'absolute', zIndex: 2, left: 14, top: 35, color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 10 }, inputWithPrefix: { paddingLeft: 150 },
   gallery: { gap: 12, paddingBottom: 10, paddingRight: 16 }, galleryCard: { width: 180, height: 214, padding: 7, borderWidth: 1, borderColor: '#3B373E', borderRadius: 20, backgroundColor: '#211F24' }, galleryMain: { borderColor: Colors.orange }, galleryDragging: { zIndex: 20, elevation: 14, opacity: 0.88, shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 8 } }, galleryPhoto: { width: 164, height: 148, overflow: 'hidden', borderRadius: 14, backgroundColor: '#F4F3F1' }, galleryRemove: { position: 'absolute', top: 7, right: 7, width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.95)' }, mainBadge: { position: 'absolute', left: 7, bottom: 7, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5, backgroundColor: 'rgba(255,255,255,0.95)' }, mainBadgeText: { color: '#111', fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.5 }, galleryFooter: { height: 51, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 5, paddingHorizontal: 2 }, dragHint: { flexDirection: 'row', alignItems: 'center', gap: 2 }, dragHintText: { color: Colors.textMuted, fontFamily: 'Inter-SemiBold', fontSize: 7 }, makeMain: { height: 30, flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: '#48434B', borderRadius: 9, paddingHorizontal: 7, backgroundColor: '#2B282E' }, makeMainActive: { borderColor: 'rgba(255,107,0,0.3)', backgroundColor: Colors.orangeDim }, makeMainText: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 7 }, makeMainTextActive: { color: Colors.orange }, imageAdd: { width: 180, height: 214, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#57515B', borderStyle: 'dashed', borderRadius: 20, backgroundColor: '#161519' }, imageAddIcon: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: Colors.orangeDim }, imageAddText: { color: Colors.textSecondary, fontFamily: 'Inter-SemiBold', fontSize: 10, marginTop: 11 }, imageCount: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 4 },
   twoColumns: { flexDirection: 'row', gap: 9 }, column: { flex: 1 }, pricePreview: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 16, padding: 14, backgroundColor: '#1B1B1F', marginBottom: 10 }, oldPrice: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 11, textDecorationLine: 'line-through' }, newPrice: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 16 }, discountBadge: { color: '#9CD9AE', fontFamily: 'Inter-Bold', fontSize: 9 },
   nirNote: { marginBottom: 10, borderWidth: 1, borderColor: 'rgba(56,189,248,0.18)', borderRadius: 15, padding: 13, backgroundColor: 'rgba(56,189,248,0.055)' }, nirNoteTitle: { color: '#7DD3FC', fontFamily: 'Inter-Bold', fontSize: 10 }, nirNoteText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 14, marginTop: 4 },

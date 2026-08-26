@@ -14,6 +14,7 @@ export default function ShopInventoryManager() {
   const [movements, setMovements] = useState<ShopInventoryMovement[]>([]);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -34,7 +35,6 @@ export default function ShopInventoryManager() {
     const term = query.trim().toLowerCase();
     return term ? products.filter((product) => `${product.name} ${product.sku || ''}`.toLowerCase().includes(term)) : products;
   }, [products, query]);
-  const pageSize = 20;
   const safePage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
   const pagedProducts = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
@@ -76,7 +76,7 @@ export default function ShopInventoryManager() {
         {product.stock_mode === 'tracked' ? <ChevronRight size={18} color={Colors.textMuted} /> : <Boxes size={19} color="#22C55E" />}
       </TouchableOpacity>;
     }) : <View style={styles.empty}><Boxes size={34} color="#22C55E" /><Text style={styles.emptyTitle}>Niciun produs in stoc</Text></View>}
-    <ShopPagination page={safePage} pageSize={pageSize} total={filtered.length} onPageChange={setPage} />
+    <ShopPagination page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} onPageSizeChange={setPageSize} />
 
     <Modal visible={Boolean(selected)} animationType="slide" transparent onRequestClose={() => !saving && setSelected(null)}>
       <View style={styles.backdrop}><SafeAreaView style={styles.sheet} edges={['bottom']}><View style={styles.sheetHeader}><View><Text style={styles.sheetKicker}>AJUSTARE STOC</Text><Text style={styles.sheetTitle}>{selected?.name}</Text></View><TouchableOpacity style={styles.close} onPress={() => setSelected(null)}><X size={20} color={Colors.textSecondary} /></TouchableOpacity></View>

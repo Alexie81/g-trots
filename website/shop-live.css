@@ -115,10 +115,19 @@
 }
 
 .product-live-description h2 { color: #111; margin: 0.4rem 0 1.2rem; }
-.product-rich-copy { color: #454541; line-height: 1.75; }
+.product-rich-copy { color: #454541; font-size: clamp(1rem, 1.25vw, 1.16rem); line-height: 1.78; overflow-wrap: anywhere; }
 .product-rich-copy > :first-child { margin-top: 0; }
 .product-rich-copy > :last-child { margin-bottom: 0; }
-.product-rich-copy img { height: auto; max-width: 100%; }
+.product-rich-copy h2,
+.product-rich-copy h3,
+.product-rich-copy h4 { color: #111; line-height: 1.15; margin: 1.35em 0 .55em; }
+.product-rich-copy p { margin: .5em 0 1em; }
+.product-rich-copy ul,
+.product-rich-copy ol { padding-left: 1.35em; }
+.product-rich-copy figure[data-rich-image] { width: 100%; max-width: 100%; overflow: hidden; margin: clamp(1.25rem, 3vw, 2.4rem) auto; border: 1px solid #e5e3dc; border-radius: clamp(1rem, 2vw, 1.7rem); padding: clamp(.35rem, 1vw, .65rem); background: #f4f2ed; box-shadow: 0 22px 60px rgba(17,17,17,.09); }
+.product-rich-copy img { width: 100%; max-width: 100%; height: auto; display: block; border-radius: clamp(.75rem, 1.7vw, 1.25rem); object-fit: contain; }
+.product-rich-copy figcaption { padding: .75rem .5rem .25rem; color: #77756f; font-size: .82em; line-height: 1.45; text-align: center; }
+.product-rich-copy table { width: 100%; max-width: 100%; display: block; overflow-x: auto; border-collapse: collapse; }
 
 .live-checkout-panel {
   background: #fff;
@@ -182,6 +191,10 @@
   .live-checkout-final { align-items: stretch; flex-direction: column; gap: 0.9rem; }
   .live-checkout-option { grid-template-columns: auto minmax(0, 1fr); }
   .live-checkout-option > b { grid-column: 2; }
+  .product-live-description { border-radius: 1.1rem; padding: 1.15rem; }
+  .product-rich-copy { font-size: 1rem; line-height: 1.68; }
+  .product-rich-copy figure[data-rich-image] { width: 100% !important; margin: 1.2rem 0; border-radius: 1rem; padding: .35rem; }
+  .product-rich-copy img { border-radius: .75rem; }
 }
 [hidden] {
   display: none !important;

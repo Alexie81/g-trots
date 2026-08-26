@@ -356,6 +356,7 @@ export const shopApi = {
   getProductStats: (token: string, id: string) => shopCall<ShopProductStats>('getProductStats', token, undefined, id),
   createProduct: (token: string, payload: ShopProductPayload) => shopCall<ShopProduct>('createProduct', token, { method: 'POST', body: JSON.stringify(payload) }),
   updateProduct: (token: string, id: string, payload: ShopProductPayload) => shopCall<ShopProduct>('updateProduct', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
+  uploadRichDescriptionImage: (token: string, base64: string) => shopCall<{ url: string; path: string }>('uploadRichDescriptionImage', token, { method: 'POST', body: JSON.stringify({ base64 }) }),
   deleteProduct: (token: string, id: string) => shopCall<{ success: true; deleted_files: number }>('deleteProduct', token, { method: 'DELETE' }, id),
   listProductReviews: (token: string, productId?: string) => shopCall<ShopProductReview[]>('listProductReviews', token, undefined, productId),
   replyProductReview: (token: string, id: string, adminReply: string) => shopCall<ShopProductReview>('replyProductReview', token, { method: 'PATCH', body: JSON.stringify({ admin_reply: adminReply }) }, id),

@@ -69,6 +69,7 @@
     getProductStats: (id) => call('getProductStats', {}, id),
     createProduct: (payload) => call('createProduct', json('POST', payload)),
     updateProduct: (id, payload) => call('updateProduct', json('PUT', payload), id),
+    uploadRichDescriptionImage: (base64) => call('uploadRichDescriptionImage', json('POST', { base64 })),
     deleteProduct: (id) => call('deleteProduct', { method: 'DELETE' }, id),
     listProductReviews: (id = '') => call('listProductReviews', {}, id),
     replyProductReview: (id, adminReply) => call('replyProductReview', json('PATCH', { admin_reply: adminReply }), id),

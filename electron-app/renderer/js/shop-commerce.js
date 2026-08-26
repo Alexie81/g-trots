@@ -2,7 +2,7 @@
   const state = {
     products: [], orders: [], inventory: [], sources: [], categories: [], brands: [], manufacturers: [], shipping: [],
     editingProduct: null, editingOrder: null, editingStock: null, editingSource: null, editingShipping: null,
-    productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, slugTouched: false, skuTouched: false, productQuery: '',
+    productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, slugTouched: false, skuTouched: false, productQuery: '', richRange: null, richImage: null,
     pages: { products: 1, orders: 1, inventory: 1 },
   };
   const PAGE_SIZE = 25;
@@ -59,7 +59,7 @@
       ${section('03', 'Descriere', 'Poti lipi continut formatat; stilurile, bold si italic sunt pastrate.')}
       <label>Descriere scurta<textarea id="shop-product-short" rows="3" maxlength="2000"></textarea></label>
       <label>Titlu descriere lunga<input id="shop-product-description-title" maxlength="220" placeholder="Ex: Aderenta sigura pentru traseele tale zilnice." /></label>
-      <label>Descriere completa<div class="shop-rich-toolbar"><button type="button" data-rich-command="bold"><b>B</b></button><button type="button" data-rich-command="italic"><i>I</i></button><button type="button" data-rich-command="underline"><u>U</u></button><button type="button" data-rich-command="insertUnorderedList">• Lista</button><button type="button" data-rich-command="insertOrderedList">1. Lista</button><span>Lipeste textul formatat direct in editor</span></div><div id="shop-product-description" class="shop-rich-editor" contenteditable="true"></div></label>
+      <div class="shop-rich-field"><span class="shop-rich-label">Descriere completa</span><div class="shop-rich-toolbar"><button type="button" data-rich-command="bold" title="Bold"><b>B</b></button><button type="button" data-rich-command="italic" title="Italic"><i>I</i></button><button type="button" data-rich-command="underline" title="Subliniat"><u>U</u></button><button type="button" data-rich-command="insertUnorderedList">• Lista</button><button type="button" data-rich-command="insertOrderedList">1. Lista</button><i class="shop-rich-separator"></i><button type="button" class="shop-rich-image-add" id="shop-rich-image-add">+ Imagine</button><button type="button" data-rich-image-action="move-up" title="Muta imaginea mai sus" disabled>↑</button><button type="button" data-rich-image-action="move-down" title="Muta imaginea mai jos" disabled>↓</button><button type="button" data-rich-image-action="resize" title="Schimba dimensiunea" disabled>Marime</button><span class="shop-rich-hint" id="shop-rich-hint">Poti lipi text si imagini direct in editor</span></div><input id="shop-rich-image-input" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden><div id="shop-product-description" class="shop-rich-editor" contenteditable="true" spellcheck="true"></div></div>
       ${section('04', 'Specificatii', 'Adauga grupele si caracteristicile proprii acestui produs.')}<div class="shop-subeditor-head"><strong>SPECIFICATII PRODUS</strong><button type="button" id="shop-product-add-specification">+ Adauga specificatie</button></div><div id="shop-product-specifications" class="shop-product-subeditor"></div>
       ${section('05', 'Intrebari si raspunsuri', 'Continutul este afisat numai pe pagina acestui produs.')}<div class="shop-subeditor-head"><strong>INTREBARI PRODUS</strong><button type="button" id="shop-product-add-question">+ Adauga intrebare</button></div><div id="shop-product-questions" class="shop-product-subeditor"></div>
       ${section('06', 'Pret si reducere', 'Configureaza pretul de vanzare si reducerea afisata pe site.')}
@@ -126,7 +126,119 @@
     ['shop-product-price', 'shop-product-discount-value', 'shop-product-meta-title', 'shop-product-meta-description', 'shop-product-short'].forEach(id => $(id).addEventListener('input', updateProductPreview));
     $('shop-product-discount-type').addEventListener('change', updateProductPreview);
     $('shop-product-stock-mode').addEventListener('change', updateStockInputs);
-    document.querySelectorAll('[data-rich-command]').forEach(button => button.addEventListener('click', () => { $('shop-product-description').focus(); document.execCommand(button.dataset.richCommand, false, null); }));
+    wireRichDescriptionEditor();
+  }
+
+  function wireRichDescriptionEditor() {
+    const editor = $('shop-product-description');
+    document.addEventListener('selectionchange', () => {
+      const selection = window.getSelection();
+      if (!selection?.rangeCount) return;
+      const range = selection.getRangeAt(0);
+      if (editor.contains(range.commonAncestorContainer)) state.richRange = range.cloneRange();
+    });
+    editor.addEventListener('dblclick', event => { event.preventDefault(); event.stopPropagation(); });
+    editor.addEventListener('click', event => selectRichImage(event.target.closest('figure[data-rich-image]')));
+    editor.addEventListener('input', () => { normalizeRichImages(); saveRichSelection(); });
+    editor.addEventListener('keyup', saveRichSelection);
+    editor.addEventListener('mouseup', saveRichSelection);
+    editor.addEventListener('paste', handleRichPaste);
+    document.querySelectorAll('[data-rich-command], [data-rich-image-action]').forEach(button => button.addEventListener('mousedown', event => event.preventDefault()));
+    document.querySelectorAll('[data-rich-command]').forEach(button => button.addEventListener('click', () => {
+      restoreRichSelection(); editor.focus(); document.execCommand(button.dataset.richCommand, false, null); saveRichSelection();
+    }));
+    $('shop-rich-image-add').addEventListener('click', () => $('shop-rich-image-input').click());
+    $('shop-rich-image-input').addEventListener('change', async event => {
+      const files = Array.from(event.target.files || []).slice(0, 6);
+      event.target.value = '';
+      for (const file of files) await uploadRichImage(file);
+    });
+    document.querySelectorAll('[data-rich-image-action]').forEach(button => button.addEventListener('click', () => richImageAction(button.dataset.richImageAction)));
+  }
+
+  function saveRichSelection() {
+    const editor = $('shop-product-description');
+    const selection = window.getSelection();
+    if (!selection?.rangeCount) return;
+    const range = selection.getRangeAt(0);
+    if (editor.contains(range.commonAncestorContainer)) state.richRange = range.cloneRange();
+  }
+
+  function restoreRichSelection() {
+    if (!state.richRange) return;
+    const selection = window.getSelection();
+    selection.removeAllRanges(); selection.addRange(state.richRange);
+  }
+
+  function selectRichImage(figure) {
+    state.richImage?.classList.remove('selected');
+    state.richImage = figure || null;
+    state.richImage?.classList.add('selected');
+    document.querySelectorAll('[data-rich-image-action]').forEach(button => { button.disabled = !state.richImage; });
+    $('shop-rich-hint').textContent = state.richImage ? 'Imagine selectata: mut-o sau schimba-i marimea.' : 'Poti lipi text si imagini direct in editor';
+  }
+
+  function normalizeRichImages() {
+    const editor = $('shop-product-description');
+    editor.querySelectorAll('img').forEach(image => {
+      let figure = image.closest('figure[data-rich-image]');
+      if (!figure) {
+        figure = document.createElement('figure'); figure.dataset.richImage = ''; figure.style.cssText = 'width:100%;max-width:100%;margin:18px auto;';
+        image.parentNode.insertBefore(figure, image); figure.append(image);
+      }
+      figure.contentEditable = 'false'; image.draggable = false; image.loading = 'lazy';
+      image.style.cssText += ';width:100%;max-width:100%;height:auto;display:block;object-fit:contain;border-radius:14px';
+    });
+  }
+
+  function richDescriptionHtml() {
+    const clone = $('shop-product-description').cloneNode(true);
+    clone.querySelectorAll('.selected').forEach(node => node.classList.remove('selected'));
+    clone.querySelectorAll('[contenteditable]').forEach(node => node.removeAttribute('contenteditable'));
+    return clone.innerHTML;
+  }
+
+  function insertRichImage(url) {
+    if (!url) return;
+    const editor = $('shop-product-description');
+    const figure = document.createElement('figure'); figure.dataset.richImage = ''; figure.contentEditable = 'false'; figure.style.cssText = 'width:100%;max-width:100%;margin:18px auto;';
+    figure.innerHTML = `<img src="${esc(url)}" alt="Imagine din descriere" loading="lazy" style="width:100%;max-width:100%;height:auto;display:block;object-fit:contain;border-radius:14px">`;
+    restoreRichSelection();
+    const range = state.richRange;
+    const anchor = range?.startContainer?.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range?.startContainer;
+    const block = anchor?.closest?.('p,div,h2,h3,h4,blockquote,li');
+    if (block && block.parentElement === editor) block.insertAdjacentElement('afterend', figure);
+    else if (range) range.insertNode(figure);
+    else editor.append(figure);
+    const paragraph = document.createElement('p'); paragraph.innerHTML = '<br>'; figure.insertAdjacentElement('afterend', paragraph);
+    selectRichImage(figure);
+  }
+
+  async function uploadRichImage(fileOrBase64) {
+    const hint = $('shop-rich-hint');
+    try {
+      hint.textContent = 'Imaginea se incarca...';
+      const base64 = typeof fileOrBase64 === 'string' ? fileOrBase64 : await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result || '')); reader.onerror = reject; reader.readAsDataURL(fileOrBase64); });
+      const uploaded = await window.SHOP_API.uploadRichDescriptionImage(base64);
+      insertRichImage(uploaded.url);
+      hint.textContent = 'Imagine adaugata. Apasa pe ea pentru optiuni.';
+    } catch (error) { hint.textContent = 'Imaginea nu a putut fi incarcata.'; toast(error.message || hint.textContent, 'error'); }
+  }
+
+  function handleRichPaste(event) {
+    const files = Array.from(event.clipboardData?.items || []).filter(item => item.type.startsWith('image/')).map(item => item.getAsFile()).filter(Boolean);
+    if (!files.length) { setTimeout(normalizeRichImages, 0); return; }
+    event.preventDefault();
+    files.forEach(file => void uploadRichImage(file));
+  }
+
+  function richImageAction(action) {
+    const editor = $('shop-product-description'); const figure = state.richImage;
+    if (!figure) return;
+    if (figure.parentElement !== editor) editor.append(figure);
+    if (action === 'move-up') { const previous = figure.previousElementSibling; if (previous) editor.insertBefore(figure, previous); }
+    else if (action === 'move-down') { const next = figure.nextElementSibling; if (next) editor.insertBefore(figure, next.nextSibling); }
+    else if (action === 'resize') { const sizes = [100, 75, 50, 33]; const current = parseInt(figure.style.width || '100', 10); const next = sizes[(Math.max(0, sizes.indexOf(current)) + 1) % sizes.length]; figure.style.width = `${next}%`; figure.style.marginInline = 'auto'; $('shop-rich-hint').textContent = `Imagine ${next}% din latimea descrierii.`; }
   }
 
   function openModal(id) { const modal = $(id); modal.hidden = false; requestAnimationFrame(() => modal.classList.add('visible')); }
@@ -249,7 +361,10 @@
       const values = { 'shop-product-sku': product?.sku, 'shop-product-name': product?.name, 'shop-product-slug': product?.slug, 'shop-product-short': product?.short_description, 'shop-product-description-title': product?.description_title, 'shop-product-price': product?.price, 'shop-product-discount-value': product?.discount_value || '', 'shop-product-stock': product?.stock_quantity ?? 0, 'shop-product-low-stock': product?.low_stock_threshold ?? 3, 'shop-product-meta-title': product?.meta_title, 'shop-product-meta-description': product?.meta_description };
       Object.entries(values).forEach(([key, value]) => $(key).value = value ?? '');
       $('shop-product-discount-type').value = product?.discount_type || 'percent';
+      state.richRange = null;
+      selectRichImage(null);
       $('shop-product-description').innerHTML = product?.description_html || '';
+      normalizeRichImages();
       $('shop-product-stock-mode').value = product?.stock_mode || 'tracked';
       $('shop-product-active').checked = product?.is_active ?? true;
       $('shop-product-featured').checked = product?.is_featured ?? false;
@@ -316,7 +431,7 @@
       const price = Number($('shop-product-price').value); const costPrice = Number(state.editingProduct?.cost_price || 0); const discount = Number($('shop-product-discount-value').value || 0); const discountType = $('shop-product-discount-type').value; const source = state.sources.find(item => item.id === $('shop-product-source').value);
       if (discount < 0 || (discount > 0 && (discountType === 'percent' ? discount >= 100 : discount >= price))) throw new Error(discountType === 'percent' ? 'Reducerea procentuala trebuie sa fie sub 100%.' : 'Reducerea fixa trebuie sa fie mai mica decat pretul.');
       const salePrice = discount ? Math.round((discountType === 'fixed' ? price - discount : price * (1 - discount / 100)) * 100) / 100 : null;
-      const payload = { source_id: source?.id || null, source_domain: source?.domain || 'g-trots.ro', source_url: '', sku: $('shop-product-sku').value.trim(), name: $('shop-product-name').value.trim(), slug: $('shop-product-slug').value.trim(), short_description: $('shop-product-short').value.trim(), description_title: $('shop-product-description-title').value.trim(), description_html: $('shop-product-description').innerHTML, specifications: state.productSpecifications.map(item => ({ group: item.group.trim(), label: item.label.trim(), value: item.value.trim() })), questions: state.productQuestions.map(item => ({ question: item.question.trim(), answer: item.answer.trim() })), meta_title: $('shop-product-meta-title').value.trim(), meta_description: $('shop-product-meta-description').value.trim(), cost_price: costPrice, price, discount_type: discountType, discount_value: discount || null, discount_percent: discountType === 'percent' ? discount || null : null, sale_price: salePrice, category_id: $('shop-product-category').value || null, manufacturer_id: $('shop-product-manufacturer').value || null, brand_ids: Array.from($('shop-product-brands').querySelectorAll('input:checked')).map(input => input.value), stock_mode: $('shop-product-stock-mode').value, stock_quantity: Math.max(0, Number($('shop-product-stock').value || 0)), low_stock_threshold: Math.max(0, Number($('shop-product-low-stock').value || 0)), currency: 'RON', is_active: $('shop-product-active').checked, is_featured: $('shop-product-featured').checked, images: state.productImages.map((image, index) => ({ id: image.id, base64: image.base64, alt_text: image.alt_text || $('shop-product-name').value.trim(), sort_order: index })) };
+      const payload = { source_id: source?.id || null, source_domain: source?.domain || 'g-trots.ro', source_url: '', sku: $('shop-product-sku').value.trim(), name: $('shop-product-name').value.trim(), slug: $('shop-product-slug').value.trim(), short_description: $('shop-product-short').value.trim(), description_title: $('shop-product-description-title').value.trim(), description_html: richDescriptionHtml(), specifications: state.productSpecifications.map(item => ({ group: item.group.trim(), label: item.label.trim(), value: item.value.trim() })), questions: state.productQuestions.map(item => ({ question: item.question.trim(), answer: item.answer.trim() })), meta_title: $('shop-product-meta-title').value.trim(), meta_description: $('shop-product-meta-description').value.trim(), cost_price: costPrice, price, discount_type: discountType, discount_value: discount || null, discount_percent: discountType === 'percent' ? discount || null : null, sale_price: salePrice, category_id: $('shop-product-category').value || null, manufacturer_id: $('shop-product-manufacturer').value || null, brand_ids: Array.from($('shop-product-brands').querySelectorAll('input:checked')).map(input => input.value), stock_mode: $('shop-product-stock-mode').value, stock_quantity: Math.max(0, Number($('shop-product-stock').value || 0)), low_stock_threshold: Math.max(0, Number($('shop-product-low-stock').value || 0)), currency: 'RON', is_active: $('shop-product-active').checked, is_featured: $('shop-product-featured').checked, images: state.productImages.map((image, index) => ({ id: image.id, base64: image.base64, alt_text: image.alt_text || $('shop-product-name').value.trim(), sort_order: index })) };
       if (!payload.name || !payload.slug || !Number.isFinite(price) || !Number.isFinite(costPrice) || costPrice < 0) throw new Error('Completeaza numele, slug-ul si preturile valide.');
       const saved = state.editingProduct ? await window.SHOP_API.updateProduct(state.editingProduct.id, payload) : await window.SHOP_API.createProduct(payload);
       closeModal('shop-product-modal');

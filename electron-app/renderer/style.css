@@ -13029,10 +13029,22 @@ body::after {
 .shop-product-gallery .add-images > span { width: 43px; height: 43px; display: grid; place-items: center; border-radius: 14px; background: rgba(255,107,0,.12); font-size: 27px; }
 .shop-product-gallery .add-images b { color: #d6d0d6; font-size: 10px; }
 .shop-product-gallery .add-images small { color: #777078; font-size: 8px; }
-.shop-rich-toolbar { min-height: 45px; display: flex; align-items: center; gap: 5px; border: 1px solid #49454f; border-bottom: 0; border-radius: 12px 12px 0 0; padding: 5px 7px; background: #29262c; }
-.shop-rich-toolbar button { min-width: 34px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 9px; color: #eee9e5; background: rgba(255,255,255,.055); font: inherit; font-size: 9px; line-height: 1; cursor: pointer; }
-.shop-rich-toolbar span { flex: 1; color: #68625d; font-size: 7px; font-weight: 500; text-align: right; }
-.shop-rich-editor { min-height: 210px; overflow-y: auto; border: 1px solid #49454f; border-radius: 0 0 12px 12px; padding: 14px; color: #eee9e5; background: #161519; font-size: 11px; line-height: 1.55; outline: 0; }
+.shop-rich-field { display: block; }
+.shop-rich-label { display: block; margin-bottom: 7px; color: #9c958f; font-size: 8px; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; }
+.shop-rich-toolbar { min-height: 49px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; border: 1px solid #49454f; border-bottom: 0; border-radius: 14px 14px 0 0; padding: 7px 8px; background: linear-gradient(180deg, #2d2a30, #252329); }
+.shop-rich-toolbar button { min-width: 35px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 10px; padding: 0 9px; color: #eee9e5; background: rgba(255,255,255,.055); font: inherit; font-size: 9px; font-weight: 750; line-height: 1; cursor: pointer; transition: color .16s ease, border-color .16s ease, background .16s ease, opacity .16s ease; }
+.shop-rich-toolbar button:hover:not(:disabled) { border-color: #5b555f; background: rgba(255,255,255,.09); }
+.shop-rich-toolbar button:disabled { opacity: .28; cursor: not-allowed; }
+.shop-rich-toolbar .shop-rich-image-add { border-color: rgba(255,129,38,.28); color: #ff9b4a; background: rgba(255,129,38,.11); }
+.shop-rich-separator { width: 1px; height: 25px; margin: 0 2px; background: #4a454d; }
+.shop-rich-toolbar .shop-rich-hint { flex: 1 1 180px; color: #8b858c; font-size: 8px; font-weight: 550; line-height: 1.35; text-align: right; }
+.shop-rich-editor { min-height: 280px; overflow-y: auto; border: 1px solid #49454f; border-radius: 0 0 14px 14px; padding: 18px; caret-color: #ff8126; color: #eee9e5; background: #161519; font-size: 12px; line-height: 1.65; outline: 0; cursor: text; user-select: text; -webkit-user-select: text; transition: border-color .16s ease, box-shadow .16s ease; }
+.shop-rich-editor:focus { border-color: rgba(255,129,38,.65); box-shadow: inset 0 0 0 1px rgba(255,129,38,.12), 0 0 0 3px rgba(255,129,38,.07); }
+.shop-rich-editor p { margin: .35em 0 .85em; }
+.shop-rich-editor figure[data-rich-image] { position: relative; width: 100%; max-width: 100%; overflow: hidden; margin: 18px auto; border: 2px solid transparent; border-radius: 18px; padding: 5px; background: #242126; transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; cursor: pointer; }
+.shop-rich-editor figure[data-rich-image].selected { border-color: #ff8126; box-shadow: 0 0 0 4px rgba(255,129,38,.12); }
+.shop-rich-editor figure[data-rich-image] img { width: 100%; max-width: 100%; height: auto; display: block; border-radius: 13px; object-fit: contain; }
+.shop-rich-editor figure[data-rich-image]::after { content: 'Click pentru optiuni'; position: absolute; right: 12px; bottom: 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 999px; padding: 6px 9px; color: #ff9b4a; background: rgba(16,15,18,.84); font-size: 8px; font-weight: 850; pointer-events: none; }
 .shop-price-preview { min-height: 67px; display: flex; flex-direction: column; justify-content: center; border-radius: 13px; padding: 10px 14px; background: rgba(255,107,0,.1); }
 .shop-nir-note { min-height: 58px; display: flex; flex-direction: column; justify-content: center; gap: 4px; margin-bottom: 9px; border: 1px solid rgba(56,189,248,.16); border-radius: 13px; padding: 10px 14px; background: rgba(56,189,248,.055); }
 .shop-nir-note b { color: #7dd3fc; font-size: 10px; }
@@ -13257,6 +13269,9 @@ body::after {
   .shop-detail-reviews { grid-template-columns: 1fr; }
   .shop-dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .shop-dashboard-columns { grid-template-columns: 1fr; }
+  .shop-rich-toolbar .shop-rich-hint { flex-basis: 100%; text-align: left; }
+  .shop-rich-editor { min-height: 320px; padding: 14px; }
+  .shop-rich-editor figure[data-rich-image] { width: 100% !important; }
 }
 
 /* CRM SHOP: text dimensionat pentru citire confortabila pe ecranele desktop. */

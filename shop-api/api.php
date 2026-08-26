@@ -678,7 +678,7 @@ function cleanRichHtml($html): string {
     $html = trim((string)$html);
     if ($html === '') return '';
     $html = preg_replace('#<(script|iframe|object|embed|form|input|button|textarea|select|meta|link|style)[^>]*>.*?</\1>#is', '', $html) ?? '';
-    $html = strip_tags($html, '<p><br><div><span><strong><b><em><i><u><s><ul><ol><li><h2><h3><h4><blockquote><a><table><thead><tbody><tr><th><td><hr>');
+    $html = strip_tags($html, '<p><br><div><span><strong><b><em><i><u><s><ul><ol><li><h2><h3><h4><blockquote><a><table><thead><tbody><tr><th><td><hr><figure><figcaption><img>');
     $html = preg_replace('/\son[a-z]+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $html) ?? '';
     $html = preg_replace('/\s(href)\s*=\s*(["\'])\s*javascript:[^"\']*\2/i', '', $html) ?? '';
 
@@ -691,7 +691,7 @@ function cleanRichHtml($html): string {
     $xpath = new DOMXPath($document);
     foreach ($xpath->query('//*[@id="shop-rich-root"]//*') ?: [] as $element) {
         if (!$element instanceof DOMElement) continue;
-        $allowedAttributes = ['style', 'href', 'title', 'target', 'rel'];
+        $allowedAttributes = ['style', 'href', 'title', 'target', 'rel', 'src', 'alt', 'loading', 'width', 'height', 'data-rich-image'];
         for ($index = $element->attributes->length - 1; $index >= 0; $index--) {
             $attribute = $element->attributes->item($index);
             if (!$attribute) continue;
@@ -703,13 +703,23 @@ function cleanRichHtml($html): string {
             if (!preg_match('#^(https?://|mailto:|tel:|/|#)#i', $href)) $element->removeAttribute('href');
             $element->setAttribute('rel', 'noopener noreferrer');
         }
+        if ($element->hasAttribute('src')) {
+            if (strtolower($element->tagName) !== 'img') {
+                $element->removeAttribute('src');
+            } else {
+                $src = trim($element->getAttribute('src'));
+                if (!preg_match('#^(https?://|/)#i', $src)) $element->removeAttribute('src');
+                else $element->setAttribute('loading', 'lazy');
+            }
+        }
         if ($element->hasAttribute('style')) {
             $safeDeclarations = [];
             $allowedProperties = [
                 'color', 'background-color', 'font-family', 'font-size', 'font-weight', 'font-style',
                 'text-decoration', 'text-align', 'line-height', 'letter-spacing', 'margin', 'margin-top',
                 'margin-right', 'margin-bottom', 'margin-left', 'padding', 'padding-top', 'padding-right',
-                'padding-bottom', 'padding-left', 'border', 'border-radius', 'list-style-type'
+                'padding-bottom', 'padding-left', 'border', 'border-radius', 'list-style-type',
+                'width', 'max-width', 'height', 'display', 'object-fit'
             ];
             foreach (explode(';', $element->getAttribute('style')) as $declaration) {
                 if (strpos($declaration, ':') === false) continue;
@@ -754,9 +764,24 @@ function saveShopImage(?string $encoded, string $folder = 'products'): ?string {
 
 function removeShopImage(?string $path): bool {
     $path = trim((string)$path);
-    if ($path === '' || strpos($path, 'uploads/products/') !== 0) return false;
+    if ($path === '' || !preg_match('#^uploads/(products|descriptions)/[a-f0-9]{32}\.(jpg|png|webp)$#i', $path)) return false;
     $absolute = __DIR__ . '/' . $path;
     return is_file($absolute) ? @unlink($absolute) : false;
+}
+
+function richDescriptionImagePaths(?string $html): array {
+    $html = (string)$html;
+    if ($html === '' || !preg_match_all('/<img\b[^>]*\bsrc\s*=\s*(["\'])(.*?)\1/is', $html, $matches)) return [];
+    $paths = [];
+    foreach ($matches[2] as $source) {
+        $urlPath = rawurldecode((string)(parse_url((string)$source, PHP_URL_PATH) ?? ''));
+        $marker = '/uploads/descriptions/';
+        $position = strpos($urlPath, $marker);
+        if ($position === false) continue;
+        $path = ltrim(substr($urlPath, $position), '/');
+        if (preg_match('#^uploads/descriptions/[a-f0-9]{32}\.(jpg|png|webp)$#i', $path)) $paths[] = $path;
+    }
+    return array_values(array_unique($paths));
 }
 
 function productRow(PDO $db, array $row, array $config, bool $withDescription = true, bool $includeInternal = true): array {
@@ -1363,6 +1388,15 @@ try {
 
     $currentUser = validateAuthToken($config, $body);
 
+    if ($action === 'uploadRichDescriptionImage' && $method === 'POST') {
+        $path = saveShopImage(isset($body['base64']) ? (string)$body['base64'] : null, 'descriptions');
+        if ($path === null) throw new InvalidArgumentException('Alege o imagine pentru descriere.');
+        jsonResponse([
+            'url' => rtrim((string)$config['public_base_url'], '/') . '/' . ltrim($path, '/'),
+            'path' => $path,
+        ], 201);
+    }
+
     if ($action === 'listProductReviews' && $method === 'GET') {
         $productId = trim((string)($_GET['id'] ?? $_GET['product_id'] ?? ''));
         $stmt = $db->prepare('SELECT r.*, p.name AS product_name, p.slug AS product_slug FROM shop_product_reviews r INNER JOIN shop_products p ON p.id = r.product_id WHERE (? = "" OR r.product_id = ?) ORDER BY r.created_at DESC LIMIT 500');
@@ -1612,6 +1646,10 @@ try {
         $current = $currentStmt->fetch();
         if (!$current) jsonResponse(['error' => 'Produsul nu exista.'], 404);
         $payload = productPayload($db, $body, true);
+        $removedDescriptionImages = array_diff(
+            richDescriptionImagePaths((string)($current['description_html'] ?? '')),
+            richDescriptionImagePaths((string)$payload['description_html'])
+        );
         ensureUniqueProductName($db, $payload['name'], $id);
         $db->beginTransaction();
         try {
@@ -1635,6 +1673,7 @@ try {
             if ($db->inTransaction()) $db->rollBack();
             throw $error;
         }
+        foreach ($removedDescriptionImages as $path) removeShopImage((string)$path);
         $stripeSync = stripeSyncProductSafe($db, $config, $id);
         $productResponse = findProduct($db, $id, $config);
         $productResponse['stripe_sync'] = $stripeSync;
@@ -1644,9 +1683,12 @@ try {
     if ($action === 'deleteProduct' && $method === 'DELETE') {
         $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
         stripeArchiveProduct($db, $config, $id);
+        $descriptionStmt = $db->prepare('SELECT description_html FROM shop_products WHERE id = ?');
+        $descriptionStmt->execute([$id]);
+        $descriptionPaths = richDescriptionImagePaths((string)($descriptionStmt->fetchColumn() ?: ''));
         $images = $db->prepare('SELECT image_path FROM shop_product_images WHERE product_id = ?');
         $images->execute([$id]);
-        $paths = $images->fetchAll(PDO::FETCH_COLUMN);
+        $paths = array_values(array_unique(array_merge($images->fetchAll(PDO::FETCH_COLUMN), $descriptionPaths)));
         $db->beginTransaction();
         try {
             $db->prepare('DELETE FROM shop_product_brands WHERE product_id = ?')->execute([$id]);

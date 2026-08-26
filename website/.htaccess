@@ -14,6 +14,9 @@ DirectoryIndex index.html
   RewriteCond %{HTTP_HOST} ^www\.g-trots\.ro$ [NC]
   RewriteRule ^ https://g-trots.ro%{REQUEST_URI} [R=301,L]
 
+  # /magazin este si directorul paginilor de produs; servim explicit catalogul.
+  RewriteRule ^magazin/?$ /magazin.html [END]
+
   RewriteRule ^magazin/produs/([^/]+)/?$ /produs.html?slug=$1 [END,QSA,NC]
 
   RewriteCond %{REQUEST_FILENAME} !-d

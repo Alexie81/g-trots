@@ -588,7 +588,15 @@ export default function ShopProductsManager() {
             <Field label="DESCRIERE SCURTA" value={form.short_description} onChangeText={(value) => patchForm('short_description', value)} placeholder="Rezumatul afisat in liste si in Google" multiline />
             <Field label="TITLU DESCRIERE LUNGA" value={form.description_title} onChangeText={(value) => patchForm('description_title', value)} placeholder="Ex: Aderenta sigura pentru traseele tale zilnice." maxLength={220} />
             <Text style={styles.label}>DESCRIERE COMPLETA</Text>
-            <RichTextEditor value={form.description_html} onChange={(value) => patchForm('description_html', value)} />
+            <RichTextEditor
+              value={form.description_html}
+              onChange={(value) => patchForm('description_html', value)}
+              onUploadImage={async (base64) => {
+                if (!token) throw new Error('Sesiunea a expirat. Autentifica-te din nou.');
+                const uploaded = await shopApi.uploadRichDescriptionImage(token, base64);
+                return uploaded.url;
+              }}
+            />
 
             <SectionTitle number="04" title="Specificatii" text="Fiecare produs poate avea propriile grupe si caracteristici." />
             <TouchableOpacity style={styles.inlineAdd} onPress={() => patchForm('specifications', [...form.specifications, { key: `spec-${Date.now()}`, group: 'Caracteristici generale', label: '', value: '' }])}><Plus size={16} color={Colors.orange} /><Text style={styles.inlineAddText}>Adauga specificatie</Text></TouchableOpacity>

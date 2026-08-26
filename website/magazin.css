@@ -4003,8 +4003,8 @@ body.filters-open {
   }
 
   .product-grid:not(.list-view) .product-info h3 {
-    font-size: clamp(0.86rem, 4vw, 1.05rem);
-    line-height: 1.02;
+    font-size: clamp(0.76rem, 3.3vw, 0.92rem);
+    line-height: 1.08;
   }
 
   .product-grid:not(.list-view) .product-info h3 br {
@@ -4017,12 +4017,7 @@ body.filters-open {
   }
 
   .product-summary {
-    min-height: 0;
-    margin-top: 0.5rem;
-    padding: 0.42rem;
-    grid-template-columns: 1fr;
-    gap: 0.28rem;
-    border-radius: 0.72rem;
+    display: none;
   }
 
   .product-summary-badge {

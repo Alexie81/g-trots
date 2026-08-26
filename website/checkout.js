@@ -191,6 +191,13 @@
     });
   }
 
+  function updateSubmitLabel(form, submit) {
+    const label = submit?.querySelector("strong");
+    if (!label || submit.disabled) return;
+    const paymentMethod = form?.querySelector('input[name="payment_method"]:checked')?.value || "";
+    label.textContent = paymentMethod === "card" ? "Plătește acum" : "Trimite comanda";
+  }
+
   function updateTotals(cart, config) {
     const subtotal = cartSubtotal(cart);
     const shippingId = document.querySelector('input[name="shipping_method_id"]:checked')?.value || "";
@@ -283,13 +290,17 @@
       renderPayments(config);
       renderSummary(cart, config);
       form.hidden = false;
+      updateSubmitLabel(form, submit);
 
       form.addEventListener("change", event => {
         event.target.closest("label")?.classList.remove("is-invalid");
         if (event.target.matches('input[type="radio"]')) {
           updateTotals(cartRows(), config);
+          if (event.target.name === "payment_method") updateSubmitLabel(form, submit);
         }
       });
+      form.addEventListener("reset", () => window.requestAnimationFrame(() => updateSubmitLabel(form, submit)));
+      window.addEventListener("pageshow", () => updateSubmitLabel(form, submit));
       form.addEventListener("input", event => {
         event.target.closest("label")?.classList.remove("is-invalid");
       });
@@ -384,7 +395,7 @@
           message.classList.add("is-error");
           message.textContent = errorMessage;
           submit.disabled = false;
-          submit.querySelector("strong").textContent = "Trimite comanda";
+          updateSubmitLabel(form, submit);
         }
       });
     } catch (error) {

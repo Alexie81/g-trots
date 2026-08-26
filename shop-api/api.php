@@ -44,6 +44,7 @@ function shopConfig(): array {
         'gomag_api_key' => '',
         'gomag_shop_url' => 'https://www.boomag.ro',
         'boomag_feed_url' => 'https://www.boomag.ro/feed/doctor-trotineta.csv',
+        'boomag_import_key' => '',
     ];
 
     $config = $defaults;
@@ -219,6 +220,7 @@ function ensureShopSchema(PDO $db): void {
             category_id CHAR(36) NULL,
             manufacturer_id CHAR(36) NULL,
             source_id CHAR(36) NULL,
+            supplier_external_id VARCHAR(120) NULL,
             sku VARCHAR(80) NULL UNIQUE,
             supplier_product_code VARCHAR(120) NULL,
             ean VARCHAR(120) NULL,
@@ -253,12 +255,14 @@ function ensureShopSchema(PDO $db): void {
             stripe_price_id VARCHAR(80) NULL,
             stripe_synced_at DATETIME NULL,
             stripe_sync_error VARCHAR(500) NULL,
+            content_status VARCHAR(20) NOT NULL DEFAULT 'manual',
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_shop_products_name (name),
             INDEX idx_shop_products_category (category_id),
             INDEX idx_shop_products_manufacturer (manufacturer_id),
             INDEX idx_shop_products_source (source_id),
+            UNIQUE INDEX idx_shop_products_supplier_external (source_id, supplier_external_id),
             INDEX idx_shop_products_active (is_active),
             INDEX idx_shop_products_stock (stock_mode, stock_quantity),
             UNIQUE INDEX idx_shop_products_stripe_product (stripe_product_id),
@@ -274,6 +278,7 @@ function ensureShopSchema(PDO $db): void {
         $db->exec('ALTER TABLE shop_products ADD COLUMN discount_value DECIMAL(12,2) NULL AFTER discount_type');
     }
     $productIdentityColumns = [
+        'supplier_external_id' => 'VARCHAR(120) NULL AFTER source_id',
         'supplier_product_code' => 'VARCHAR(120) NULL AFTER sku',
         'ean' => 'VARCHAR(120) NULL AFTER supplier_product_code',
     ];
@@ -328,6 +333,12 @@ function ensureShopSchema(PDO $db): void {
         if (!$db->query("SHOW COLUMNS FROM shop_products LIKE " . $db->quote($column))->fetch()) {
             $db->exec("ALTER TABLE shop_products ADD COLUMN {$column} {$definition}");
         }
+    }
+    if (!$db->query("SHOW COLUMNS FROM shop_products LIKE 'content_status'")->fetch()) {
+        $db->exec("ALTER TABLE shop_products ADD COLUMN content_status VARCHAR(20) NOT NULL DEFAULT 'manual' AFTER stripe_sync_error");
+    }
+    if (!$db->query("SHOW INDEX FROM shop_products WHERE Key_name = 'idx_shop_products_supplier_external'")->fetch()) {
+        $db->exec('ALTER TABLE shop_products ADD UNIQUE INDEX idx_shop_products_supplier_external (source_id, supplier_external_id)');
     }
     if (!$db->query("SHOW INDEX FROM shop_products WHERE Key_name = 'idx_shop_products_stripe_product'")->fetch()) {
         $db->exec('ALTER TABLE shop_products ADD UNIQUE INDEX idx_shop_products_stripe_product (stripe_product_id)');
@@ -566,6 +577,15 @@ function verifyApiKey(array $config): void {
     $provided = requestHeader('X-API-Key');
     if ($expected === '' || $provided === '' || !hash_equals($expected, $provided)) {
         jsonResponse(['error' => 'API Key SHOP invalid.'], 401);
+    }
+}
+
+function verifyBoomagImportKey(array $config): void {
+    $expected = trim((string)($config['boomag_import_key'] ?? ''));
+    if ($expected === '') $expected = trim((string)($config['gomag_api_key'] ?? ''));
+    $provided = requestHeader('X-Import-Key');
+    if ($expected === '' || $provided === '' || !hash_equals($expected, $provided)) {
+        jsonResponse(['error' => 'Cheia importului Boomag este invalida.'], 401);
     }
 }
 
@@ -840,7 +860,7 @@ function saveShopImage(?string $encoded, string $folder = 'products'): ?string {
 
 function removeShopImage(?string $path): bool {
     $path = trim((string)$path);
-    if ($path === '' || !preg_match('#^uploads/(products|descriptions)/[a-f0-9]{32}\.(jpg|png|webp)$#i', $path)) return false;
+    if ($path === '' || !preg_match('#^uploads/(products|descriptions)/[a-f0-9]{32}\.(jpg|png|webp|gif)$#i', $path)) return false;
     $absolute = __DIR__ . '/' . $path;
     return is_file($absolute) ? @unlink($absolute) : false;
 }
@@ -877,8 +897,12 @@ function legacyProductImageUrl(array $product, array $config): string {
 
 function productRow(PDO $db, array $row, array $config, bool $withDescription = true, bool $includeInternal = true): array {
     $productId = (string)$row['id'];
-    $images = $db->prepare('SELECT id, image_path, alt_text, sort_order FROM shop_product_images WHERE product_id = ? ORDER BY sort_order ASC, created_at ASC');
-    $images->execute([$productId]);
+    $preloadedImages = $row['_preloaded_images'] ?? null;
+    if (!is_array($preloadedImages)) {
+        $images = $db->prepare('SELECT id, image_path, alt_text, sort_order FROM shop_product_images WHERE product_id = ? ORDER BY sort_order ASC, created_at ASC');
+        $images->execute([$productId]);
+        $preloadedImages = $images->fetchAll();
+    }
     $row['images'] = array_map(function (array $image) use ($config): array {
         $path = (string)$image['image_path'];
         return [
@@ -887,7 +911,7 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
             'alt_text' => (string)($image['alt_text'] ?? ''),
             'sort_order' => (int)$image['sort_order'],
         ];
-    }, $images->fetchAll());
+    }, $preloadedImages);
     if (count($row['images']) === 0) {
         $slug = (string)($row['slug'] ?? '');
         $legacyImageUrl = legacyProductImageUrl($row, $config);
@@ -901,9 +925,13 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
             ];
         }
     }
-    $brands = $db->prepare('SELECT b.id, b.name, b.slug FROM shop_brands b INNER JOIN shop_product_brands pb ON pb.brand_id = b.id WHERE pb.product_id = ? ORDER BY b.name ASC');
-    $brands->execute([$productId]);
-    $row['brands'] = $brands->fetchAll();
+    $preloadedBrands = $row['_preloaded_brands'] ?? null;
+    if (!is_array($preloadedBrands)) {
+        $brands = $db->prepare('SELECT b.id, b.name, b.slug FROM shop_brands b INNER JOIN shop_product_brands pb ON pb.brand_id = b.id WHERE pb.product_id = ? ORDER BY b.name ASC');
+        $brands->execute([$productId]);
+        $preloadedBrands = $brands->fetchAll();
+    }
+    $row['brands'] = $preloadedBrands;
     $row['brand_ids'] = array_map(fn(array $brand): string => (string)$brand['id'], $row['brands']);
     $decodedSpecifications = json_decode((string)($row['specifications_json'] ?? ''), true);
     $row['specifications'] = is_array($decodedSpecifications) ? array_values($decodedSpecifications) : [];
@@ -911,6 +939,8 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['questions'] = is_array($decodedQuestions) ? array_values($decodedQuestions) : [];
     unset($row['specifications_json']);
     unset($row['questions_json']);
+    unset($row['_preloaded_images']);
+    unset($row['_preloaded_brands']);
     $row['price'] = (float)$row['price'];
     $row['cost_price'] = (float)($row['cost_price'] ?? 0);
     $row['sale_price'] = $row['sale_price'] === null ? null : (float)$row['sale_price'];
@@ -944,9 +974,46 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['stock_available'] = $row['stock_mode'] === 'unlimited' || $row['stock_quantity'] > 0;
     if (!$withDescription) unset($row['description_html']);
     if (!$includeInternal) {
-        unset($row['source_id'], $row['source_domain'], $row['source_url'], $row['source_name'], $row['source_is_active'], $row['supplier_product_code'], $row['ean']);
+        unset($row['source_id'], $row['source_domain'], $row['source_url'], $row['source_name'], $row['source_is_active'], $row['supplier_external_id'], $row['supplier_product_code'], $row['ean'], $row['content_status']);
     }
     return $row;
+}
+
+function productRows(PDO $db, array $rows, array $config, bool $withDescription = true, bool $includeInternal = true): array {
+    if (!$rows) return [];
+    $ids = array_values(array_unique(array_map(static fn(array $row): string => (string)$row['id'], $rows)));
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $imagesByProduct = [];
+    $imageStmt = $db->prepare(
+        "SELECT id, product_id, image_path, alt_text, sort_order
+         FROM shop_product_images
+         WHERE product_id IN ({$placeholders})
+         ORDER BY product_id ASC, sort_order ASC, created_at ASC"
+    );
+    $imageStmt->execute($ids);
+    foreach ($imageStmt->fetchAll() as $image) $imagesByProduct[(string)$image['product_id']][] = $image;
+
+    $brandsByProduct = [];
+    $brandStmt = $db->prepare(
+        "SELECT pb.product_id, b.id, b.name, b.slug
+         FROM shop_product_brands pb
+         INNER JOIN shop_brands b ON b.id = pb.brand_id
+         WHERE pb.product_id IN ({$placeholders})
+         ORDER BY pb.product_id ASC, b.name ASC"
+    );
+    $brandStmt->execute($ids);
+    foreach ($brandStmt->fetchAll() as $brand) {
+        $productId = (string)$brand['product_id'];
+        unset($brand['product_id']);
+        $brandsByProduct[$productId][] = $brand;
+    }
+
+    return array_map(static function (array $row) use ($db, $config, $withDescription, $includeInternal, $imagesByProduct, $brandsByProduct): array {
+        $productId = (string)$row['id'];
+        $row['_preloaded_images'] = $imagesByProduct[$productId] ?? [];
+        $row['_preloaded_brands'] = $brandsByProduct[$productId] ?? [];
+        return productRow($db, $row, $config, $withDescription, $includeInternal);
+    }, $rows);
 }
 
 function productSelectSql(): string {
@@ -1436,10 +1503,10 @@ try {
             $where[] = 'EXISTS (SELECT 1 FROM shop_product_brands pb WHERE pb.product_id = p.id AND pb.brand_id = ?)';
             $params[] = $brandId;
         }
-        $sql = productSelectSql() . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY p.is_featured DESC, p.created_at DESC LIMIT 300';
+        $sql = productSelectSql() . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY p.is_featured DESC, p.created_at DESC LIMIT 2500';
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
-        jsonResponse(array_map(fn(array $row): array => productRow($db, $row, $config, false, false), $stmt->fetchAll()));
+        jsonResponse(productRows($db, $stmt->fetchAll(), $config, false, false));
     }
 
     if ($action === 'publicProduct' && $method === 'GET') {
@@ -1593,6 +1660,20 @@ try {
         ]);
     }
 
+    if ($action === 'importBoomagProductsBatch' && $method === 'POST') {
+        verifyBoomagImportKey($config);
+        set_time_limit(0);
+        $offset = max(0, (int)($body['offset'] ?? 0));
+        $limit = max(1, min(10, (int)($body['limit'] ?? 5)));
+        $forceRefresh = !empty($body['force_feed_refresh']) && $offset === 0;
+        jsonResponse(boomagImportProductsBatch($db, $config, $offset, $limit, $forceRefresh));
+    }
+
+    if ($action === 'auditBoomagImport' && in_array($method, ['GET', 'POST'], true)) {
+        verifyBoomagImportKey($config);
+        jsonResponse(boomagImportAudit($db, $config));
+    }
+
     $currentUser = validateAuthToken($config, $body);
 
     if ($action === 'uploadRichDescriptionImage' && $method === 'POST') {
@@ -1728,7 +1809,7 @@ try {
              ORDER BY s.is_default DESC, s.sort_order ASC, s.name ASC'
         )->fetchAll();
         jsonResponse([
-            'products' => array_map(fn(array $row): array => productRow($db, $row, $config, false), $products),
+            'products' => productRows($db, $products, $config, false),
             'categories' => array_map(fn(array $row): array => categoryRow($row, $config), $categories),
             'brands' => array_map('brandRow', $brands),
             'manufacturers' => array_map('brandRow', $manufacturers),
@@ -1822,7 +1903,7 @@ try {
 
     if ($action === 'listProducts' && $method === 'GET') {
         $rows = $db->query(productSelectSql() . ' ORDER BY p.updated_at DESC, p.name ASC')->fetchAll();
-        jsonResponse(array_map(fn(array $row): array => productRow($db, $row, $config, false), $rows));
+        jsonResponse(productRows($db, $rows, $config, false));
     }
 
     if ($action === 'getProduct' && $method === 'GET') {
@@ -1886,7 +1967,7 @@ try {
             $productSku = trim((string)($current['sku'] ?? '')) !== ''
                 ? (string)$current['sku']
                 : uniqueProductSku($db, $payload['sku'] ?? generatedProductSku($payload['name'], $payload['source_domain']), $id);
-            $stmt = $db->prepare('UPDATE shop_products SET category_id = ?, manufacturer_id = ?, source_id = ?, sku = ?, supplier_product_code = ?, ean = ?, source_domain = ?, source_url = ?, name = ?, slug = ?, short_description = ?, description_title = ?, description_html = ?, specifications_json = ?, questions_json = ?, meta_title = ?, meta_description = ?, cost_price = ?, price = ?, sale_price = ?, discount_type = ?, discount_value = ?, currency = ?, stock_mode = ?, stock_quantity = ?, low_stock_threshold = ?, is_active = ?, is_featured = ? WHERE id = ?');
+            $stmt = $db->prepare('UPDATE shop_products SET category_id = ?, manufacturer_id = ?, source_id = ?, sku = ?, supplier_product_code = ?, ean = ?, source_domain = ?, source_url = ?, name = ?, slug = ?, short_description = ?, description_title = ?, description_html = ?, specifications_json = ?, questions_json = ?, meta_title = ?, meta_description = ?, cost_price = ?, price = ?, sale_price = ?, discount_type = ?, discount_value = ?, currency = ?, stock_mode = ?, stock_quantity = ?, low_stock_threshold = ?, is_active = ?, is_featured = ?, content_status = "manual" WHERE id = ?');
             $stmt->execute([
                 $payload['category_id'], $payload['manufacturer_id'], $payload['source_id'], $productSku, $payload['supplier_product_code'], $payload['ean'], $payload['source_domain'], $payload['source_url'],
                 $payload['name'], uniqueSlug($db, 'shop_products', $payload['slug_source'], $id), $payload['short_description'], $payload['description_title'], $payload['description_html'], $payload['specifications_json'], $payload['questions_json'],
@@ -1956,7 +2037,7 @@ try {
 
     if ($action === 'listInventory' && $method === 'GET') {
         $rows = $db->query(productSelectSql() . ' ORDER BY (p.stock_mode = "tracked" AND p.stock_quantity <= p.low_stock_threshold) DESC, p.name ASC')->fetchAll();
-        jsonResponse(array_map(fn(array $row): array => productRow($db, $row, $config, false), $rows));
+        jsonResponse(productRows($db, $rows, $config, false));
     }
 
     if ($action === 'listInventoryMovements' && $method === 'GET') {

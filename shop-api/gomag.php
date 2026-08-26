@@ -392,10 +392,10 @@ function boomagFeedContents(array $config): string {
     return $raw;
 }
 
-function boomagFeedRows(array $config): array {
+function boomagParseFeedRows(string $raw): array {
     $stream = fopen('php://temp', 'w+b');
     if ($stream === false) throw new RuntimeException('Feedul Boomag nu a putut fi procesat.');
-    fwrite($stream, boomagFeedContents($config));
+    fwrite($stream, $raw);
     rewind($stream);
 
     $headers = fgetcsv($stream, 0, '|', '"', '\\');
@@ -428,8 +428,575 @@ function boomagFeedRows(array $config): array {
     return $rows;
 }
 
+function boomagFeedRows(array $config, bool $forceRefresh = false): array {
+    $directory = __DIR__ . '/uploads/import';
+    $cacheFile = $directory . '/boomag-products.csv';
+    $cacheIsFresh = is_file($cacheFile) && filemtime($cacheFile) >= time() - 21600;
+    if (!$forceRefresh && $cacheIsFresh) {
+        $cached = @file_get_contents($cacheFile);
+        if (is_string($cached) && strlen($cached) >= 100) return boomagParseFeedRows($cached);
+    }
+
+    $raw = boomagFeedContents($config);
+    if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
+        return boomagParseFeedRows($raw);
+    }
+    $temporary = $cacheFile . '.tmp-' . bin2hex(random_bytes(4));
+    if (file_put_contents($temporary, $raw, LOCK_EX) !== false) {
+        @rename($temporary, $cacheFile);
+    } else {
+        @unlink($temporary);
+    }
+    return boomagParseFeedRows($raw);
+}
+
 function boomagStockAvailable($value): bool {
     return in_array(mb_strtolower(trim((string)$value)), ['1', 'true', 'yes', 'da', 'in_stock', 'instock', 'in stoc'], true);
+}
+
+function boomagNormalizeKey(string $value): string {
+    $value = html_entity_decode(trim($value), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    if (function_exists('iconv')) {
+        $converted = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+        if ($converted !== false) $value = $converted;
+    }
+    $value = mb_strtolower($value);
+    return trim(preg_replace('/[^a-z0-9]+/', ' ', $value) ?? '');
+}
+
+function boomagPlainText(string $value): string {
+    $value = preg_replace('#<\s*(br|/p|/div|/li)\s*/?>#iu', "\n", $value) ?? $value;
+    $value = strip_tags($value);
+    $value = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $value = preg_replace('/[ \t]+/u', ' ', $value) ?? $value;
+    $value = preg_replace('/\s*\n\s*/u', "\n", $value) ?? $value;
+    return trim(preg_replace('/\n{3,}/u', "\n\n", $value) ?? $value);
+}
+
+function boomagExcerpt(string $value, int $limit): string {
+    $value = trim(preg_replace('/\s+/u', ' ', $value) ?? $value);
+    if (mb_strlen($value) <= $limit) return $value;
+    $cut = mb_substr($value, 0, max(1, $limit - 1));
+    $space = mb_strrpos($cut, ' ');
+    if ($space !== false && $space > (int)($limit * 0.65)) $cut = mb_substr($cut, 0, $space);
+    return rtrim($cut, " \t\n\r\0\x0B,;:-") . '…';
+}
+
+function boomagCleanTitle(string $value): string {
+    $value = boomagPlainText($value);
+    $value = preg_replace('/\s*([|–—])\s*/u', ' - ', $value) ?? $value;
+    $value = preg_replace('/\s+/u', ' ', $value) ?? $value;
+    return mb_substr(trim($value), 0, 180);
+}
+
+function boomagCategoryIndex(PDO $db): array {
+    $rows = $db->query('SELECT id, parent_id, name FROM shop_categories WHERE is_active = 1 ORDER BY parent_id IS NULL DESC, name ASC')->fetchAll();
+    $byName = [];
+    foreach ($rows as $row) $byName[boomagNormalizeKey((string)$row['name'])] = (string)$row['id'];
+    return ['rows' => $rows, 'by_name' => $byName];
+}
+
+function boomagCategoryIdByName(array $index, string $name): ?string {
+    $key = boomagNormalizeKey($name);
+    return isset($index['by_name'][$key]) ? (string)$index['by_name'][$key] : null;
+}
+
+function boomagInferCategory(PDO $db, array $row): ?string {
+    static $index = null;
+    if ($index === null) $index = boomagCategoryIndex($db);
+    $feedCategory = trim((string)($row['category_name'] ?? ''));
+    $exact = boomagCategoryIdByName($index, $feedCategory);
+    $rootNames = ['Accesorii trotinete electrice', 'Piese trotinete electrice'];
+    if ($exact !== null && !in_array(boomagNormalizeKey($feedCategory), array_map('boomagNormalizeKey', $rootNames), true)) return $exact;
+
+    $aliases = [
+        'casca bicicleta' => 'Casti protectie',
+        'lumini bicicleta' => 'Faruri si lumini',
+        'antifurt bicicleta cu alarma sau gps' => 'Sistem antifurt',
+        'antifurt bicicleta cu lant' => 'Sistem antifurt',
+        'antifurt bicicleta cu cablu din otel' => 'Sistem antifurt',
+        'discuri frana bicicleta' => 'Discuri de frana',
+        'placute frana bicicleta' => 'Placute de frana',
+        'suport telefon bicicleta' => 'Suport telefon',
+        'sisteme franare trotinete electrice' => 'Componente franare',
+        'rucsaci si borsete ciclism' => 'Genti Transport',
+        'cabluri si camasi' => 'Cabluri de frana',
+        'camera bicicleta' => 'Camere',
+        'chei si scule bicicleta' => 'Accesorii trotinete electrice',
+    ];
+    $feedKey = boomagNormalizeKey($feedCategory);
+
+    $nameText = boomagNormalizeKey((string)($row['name'] ?? ''));
+    $text = boomagNormalizeKey((string)($row['name'] ?? '') . ' ' . $feedCategory . ' ' . boomagPlainText((string)($row['description'] ?? '')));
+    $rules = [
+        ['cauciuc plin|anvelopa plina', 'Cauciucuri pline'],
+        ['tubeless|fara camera', 'Cauciucuri tubeless'],
+        ['camera aer|camera bicicleta|camera trotineta', 'Camere'],
+        ['cauciuc|anvelop', 'Cauciucuri'],
+        ['valva|ventil', 'Valve'],
+        ['incarcator|charger', 'Incarcatoare'],
+        ['acumulator|baterie', 'Acumulatori'],
+        ['\bbms\b', 'BMS'],
+        ['controller|controler', 'Controller'],
+        ['convertor|dc dc', 'Convertor'],
+        ['display|ecran|bord', 'Display'],
+        ['far|stop|lumina|semnalizare', 'Faruri si lumini'],
+        ['claxon', 'Claxoane'],
+        ['acceleratie|accelerator', 'Manete acceleratie'],
+        ['maneta frana', 'Manete de frana'],
+        ['placut.*frana', 'Placute de frana'],
+        ['disc.*frana', 'Discuri de frana'],
+        ['etrier', 'Etrier frana'],
+        ['frana hidraulic', 'Frane hidraulice'],
+        ['frana tambur', 'Frane cu tambur'],
+        ['cablu.*frana|camasa.*frana', 'Cabluri de frana'],
+        ['motor', 'Motoare'],
+        ['senzor', 'Senzori'],
+        ['mufa|conector|cablaj|cablu electric', 'Cabluri si mufe'],
+        ['buton|comutator', 'Butoane si conectori'],
+        ['furca', 'Furca'],
+        ['suspensie|amortizor', 'Suspensii'],
+        ['rulment|surub|piulita|saiba', 'Rulmenti si suruburi'],
+        ['pliere|balama', 'Sisteme de pliere'],
+        ['aripa|protectie cadru', 'Aparatori si protectii'],
+        ['ghidon', 'Ghidoane'],
+        ['roata|janta', 'Roti'],
+        ['cric', 'Cric'],
+        ['geanta|borseta|rucsac', 'Genti Transport'],
+        ['suport.*telefon', 'Suport telefon'],
+        ['antifurt|lacat', 'Sistem antifurt'],
+        ['casca|protectie cap', 'Casti protectie'],
+        ['maner|manso', 'Mansoane'],
+        ['oglinda', 'Oglinzi'],
+        ['scaun|sezut', 'Scaune'],
+        ['sonerie', 'Sonerii'],
+        ['sticker|reflectoriz', 'Stickere reflectorizate'],
+    ];
+    foreach ([$nameText, $text] as $searchText) {
+        foreach ($rules as [$pattern, $categoryName]) {
+            if (preg_match('/' . $pattern . '/iu', $searchText)) {
+                $categoryId = boomagCategoryIdByName($index, $categoryName);
+                if ($categoryId !== null) return $categoryId;
+            }
+        }
+    }
+    if (isset($aliases[$feedKey])) {
+        $aliasId = boomagCategoryIdByName($index, $aliases[$feedKey]);
+        if ($aliasId !== null) return $aliasId;
+    }
+    $fallback = str_contains($feedKey, 'accesor') || str_contains($feedKey, 'ciclism')
+        ? 'Accesorii trotinete electrice'
+        : 'Piese trotinete electrice';
+    return boomagCategoryIdByName($index, $fallback) ?? $exact;
+}
+
+function boomagFindOrCreateTaxonomy(PDO $db, string $table, string $type, string $name): ?string {
+    $name = mb_substr(trim($name), 0, 120);
+    if ($name === '') return null;
+    gomagUpsertNamedTaxonomy($db, $table, $type, [$name]);
+    $stmt = $db->prepare("SELECT id FROM {$table} WHERE slug = ? OR LOWER(name) = LOWER(?) LIMIT 1");
+    $stmt->execute([slugBase($name), $name]);
+    $id = $stmt->fetchColumn();
+    return $id ? (string)$id : null;
+}
+
+function boomagCompatibilityNames(array $row): array {
+    $text = boomagPlainText((string)($row['name'] ?? '') . "\n" . (string)($row['description'] ?? ''));
+    $patterns = [
+        'KuKirin' => '/\b(ku\s*kirin|kukirin|kugoo\s*kirin)\b/iu',
+        'Kugoo' => '/\bkugoo\b/iu',
+        'Xiaomi' => '/\b(xiaomi|mijia|m365)\b/iu',
+        'Segway-Ninebot' => '/\b(segway|ninebot)\b/iu',
+        'Dualtron' => '/\bdualtron\b/iu',
+        'Kaabo' => '/\bkaabo\b/iu',
+        'Vsett' => '/\bvsett\b/iu',
+        'Joyor' => '/\bjoyor\b/iu',
+        'Navee' => '/\bnavee\b/iu',
+        'Apollo' => '/\bapollo\b/iu',
+        'Inokim' => '/\binokim\b/iu',
+        'E-Twow' => '/\be[\s-]?twow\b/iu',
+        'InMotion' => '/\binmotion\b/iu',
+        'iScooter' => '/\biscooter\b/iu',
+        'Teverun' => '/\bteverun\b/iu',
+        'Techlife' => '/\btechlife\b/iu',
+        'Zero' => '/\bzero\s*(8|9|10|11|scooter)\b/iu',
+        'Pure Electric' => '/\bpure\s*(electric|air|advance)\b/iu',
+        'Motus' => '/\bmotus\b/iu',
+        'Razor' => '/\brazor\b/iu',
+        'Nami' => '/\bnami\b/iu',
+        'Obarter' => '/\bobarter\b/iu',
+        'Hiley' => '/\bhiley\b/iu',
+        'Ausom' => '/\bausom\b/iu',
+        'Aovo' => '/\baovo\b/iu',
+        'Laotie' => '/\blaotie\b/iu',
+        'CityCoco' => '/\bcity\s*coco\b/iu',
+        'Wispeed' => '/\bwispeed\b/iu',
+        'Speedway' => '/\bspeedway\b/iu',
+        'Nanrobot' => '/\bnanrobot\b/iu',
+        'Fiido' => '/\bfiido\b/iu',
+        'Engwe' => '/\bengwe\b/iu',
+        'Hitway' => '/\bhitway\b/iu',
+        'Universal' => '/\b(universal|toate\s+trotinetele|orice\s+trotineta)\b/iu',
+    ];
+    $names = [];
+    foreach ($patterns as $name => $pattern) {
+        if (preg_match($pattern, $text)) $names[$name] = true;
+    }
+    return array_keys($names);
+}
+
+function boomagProductSpecifications(array $row, string $categoryName, string $manufacturerName): array {
+    $specs = [];
+    $add = static function (string $group, string $label, string $value) use (&$specs): void {
+        $value = trim(preg_replace('/\s+/u', ' ', $value) ?? $value);
+        if ($value === '' || mb_strlen($value) > 300 || count($specs) >= 60) return;
+        $key = boomagNormalizeKey($group . ' ' . $label);
+        foreach ($specs as $existing) {
+            if (boomagNormalizeKey((string)$existing['group'] . ' ' . (string)$existing['label']) === $key) return;
+        }
+        $specs[] = ['group' => $group, 'label' => $label, 'value' => $value];
+    };
+    $add('Identificare produs', 'Cod produs', (string)($row['sku'] ?? ''));
+    if (trim((string)($row['ean'] ?? '')) !== '') $add('Identificare produs', 'EAN', (string)$row['ean']);
+    if ($manufacturerName !== '') $add('Identificare produs', 'Producator', $manufacturerName);
+    if ($categoryName !== '') $add('Clasificare', 'Categorie', $categoryName);
+
+    $plain = boomagPlainText((string)($row['description'] ?? ''));
+    foreach (preg_split('/\n+/u', $plain) ?: [] as $line) {
+        if (!preg_match('/^\s*([\p{L}\p{N}][\p{L}\p{N}\s()\/.,+-]{1,58})\s*:\s*(.{1,300})$/u', trim($line), $match)) continue;
+        $label = trim($match[1]);
+        $value = trim($match[2]);
+        if (preg_match('/^(pret|stoc|produs|descriere|observatii?)$/iu', $label)) continue;
+        $add('Specificatii tehnice', $label, $value);
+    }
+    return $specs;
+}
+
+function boomagProductQuestions(array $row, array $compatibilities): array {
+    $name = boomagCleanTitle((string)($row['name'] ?? 'produsul'));
+    $sku = trim((string)($row['sku'] ?? ''));
+    $compatibilityAnswer = $compatibilities
+        ? 'Din informatiile furnizorului reies compatibilitati cu ' . implode(', ', $compatibilities) . '. Confirma modelul, anul si dimensiunile piesei inainte de comanda.'
+        : 'Compatibilitatea trebuie confirmata dupa modelul complet al trotinetei, anul sau revizia si dimensiunile piesei originale.';
+    return [
+        ['question' => 'Cu ce trotinete este compatibil ' . $name . '?', 'answer' => $compatibilityAnswer],
+        ['question' => 'Cum verific daca produsul se potriveste?', 'answer' => 'Compara codul, mufele, dimensiunile si specificatiile cu piesa existenta. Echipa G-Trots te poate ajuta daca trimiti modelul complet si fotografii clare.'],
+        ['question' => 'Care este codul produsului?', 'answer' => $sku !== '' ? 'Codul de identificare al furnizorului este ' . $sku . '.' : 'Codul de identificare este afisat in fisa produsului.'],
+        ['question' => 'Pot solicita montaj sau verificare?', 'answer' => 'Da. Pentru componentele care influenteaza franarea, alimentarea sau structura recomandam verificare si montaj intr-un service specializat.'],
+    ];
+}
+
+function boomagProductContent(array $row, string $categoryName, string $manufacturerName, array $compatibilities): array {
+    $name = boomagCleanTitle((string)($row['name'] ?? ''));
+    $sourceDescription = boomagPlainText((string)($row['description'] ?? ''));
+    $fallback = $name . ' este un produs pentru trotinete electrice din categoria ' . ($categoryName ?: 'piese si accesorii') . '.';
+    $short = boomagExcerpt($sourceDescription !== '' ? $sourceDescription : $fallback, 240);
+    if (mb_strlen($short) < 70) $short = boomagExcerpt($short . ' ' . $fallback, 240);
+    $descriptionTitle = boomagExcerpt('Detalii complete despre ' . $name, 210);
+    $metaBase = $name . ($categoryName !== '' ? ' - ' . $categoryName : '') . ' | G-Trots';
+    $metaTitle = boomagExcerpt($metaBase, 60);
+    $metaDescription = boomagExcerpt(($short ?: $fallback) . ' Vezi specificatiile si compatibilitatea la G-Trots.', 158);
+
+    $paragraphs = [];
+    foreach (preg_split('/\n+/u', $sourceDescription) ?: [] as $paragraph) {
+        $paragraph = trim($paragraph);
+        if ($paragraph !== '') $paragraphs[] = '<p>' . htmlspecialchars($paragraph, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>';
+    }
+    if (!$paragraphs) $paragraphs[] = '<p>' . htmlspecialchars($fallback, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>';
+    $compatibilityText = $compatibilities
+        ? 'Compatibilitatile identificate in datele produsului includ: ' . implode(', ', $compatibilities) . '.'
+        : 'Compatibilitatea se confirma dupa modelul complet, revizia, mufele si dimensiunile piesei originale.';
+    $details = '<h2>Informatii despre produs</h2>' . implode("\n", $paragraphs)
+        . '<h2>Compatibilitate si alegere corecta</h2><p>' . htmlspecialchars($compatibilityText, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . ' Verifica toate caracteristicile inainte de montaj.</p>'
+        . '<h2>Recomandari de montaj si utilizare</h2><p>Pentru componentele electrice, de franare sau de structura, montajul si verificarea finala trebuie facute corect. Daca exista diferente intre piesa originala si produs, solicita confirmarea echipei G-Trots inainte de utilizare.</p>';
+    return [
+        'name' => $name,
+        'short_description' => $short,
+        'description_title' => $descriptionTitle,
+        'description_html' => $details,
+        'meta_title' => $metaTitle,
+        'meta_description' => $metaDescription,
+        'specifications' => boomagProductSpecifications($row, $categoryName, $manufacturerName),
+        'questions' => boomagProductQuestions($row, $compatibilities),
+    ];
+}
+
+function boomagDownloadProductImage(string $url, string $externalId, int $index): string {
+    $url = trim($url);
+    if (!preg_match('#^https?://#i', $url)) return '';
+    $directory = __DIR__ . '/uploads/products';
+    if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) return '';
+    $baseName = md5('boomag|' . $externalId . '|' . $index . '|' . $url);
+    foreach (['webp', 'jpg', 'png', 'gif'] as $extension) {
+        $existing = $directory . '/' . $baseName . '.' . $extension;
+        if (is_file($existing) && filesize($existing) > 500) return 'uploads/products/' . basename($existing);
+    }
+
+    $binary = false;
+    if (function_exists('curl_init')) {
+        $curl = curl_init($url);
+        curl_setopt_array($curl, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_CONNECTTIMEOUT => 12,
+            CURLOPT_TIMEOUT => 50,
+            CURLOPT_MAXREDIRS => 5,
+            CURLOPT_USERAGENT => 'G-Trots-Shop/1.0',
+        ]);
+        $binary = curl_exec($curl);
+        $status = (int)curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        curl_close($curl);
+        if ($status < 200 || $status >= 300) $binary = false;
+    } else {
+        $binary = @file_get_contents($url, false, stream_context_create(['http' => ['timeout' => 50]]));
+    }
+    if (!is_string($binary) || strlen($binary) < 500 || strlen($binary) > 15 * 1024 * 1024) return '';
+    $info = @getimagesizefromstring($binary);
+    $mime = is_array($info) ? (string)($info['mime'] ?? '') : '';
+    $extensions = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
+    if (!isset($extensions[$mime])) return '';
+
+    if (function_exists('imagecreatefromstring') && function_exists('imagewebp')) {
+        $source = @imagecreatefromstring($binary);
+        if ($source !== false) {
+            $width = imagesx($source);
+            $height = imagesy($source);
+            $scale = min(1, 1600 / max($width, $height));
+            $targetWidth = max(1, (int)round($width * $scale));
+            $targetHeight = max(1, (int)round($height * $scale));
+            $canvas = imagecreatetruecolor($targetWidth, $targetHeight);
+            imagealphablending($canvas, false);
+            imagesavealpha($canvas, true);
+            imagecopyresampled($canvas, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height);
+            $path = $directory . '/' . $baseName . '.webp';
+            $saved = @imagewebp($canvas, $path, 84);
+            imagedestroy($canvas);
+            imagedestroy($source);
+            if ($saved) return 'uploads/products/' . basename($path);
+        }
+    }
+
+    $extension = $extensions[$mime];
+    $path = $directory . '/' . $baseName . '.' . $extension;
+    return file_put_contents($path, $binary, LOCK_EX) === false ? '' : 'uploads/products/' . basename($path);
+}
+
+function boomagSyncImportedImages(PDO $db, string $productId, string $externalId, string $name, array $row): array {
+    $urls = [];
+    foreach (['file', 'image2', 'image3', 'image4', 'image5'] as $column) {
+        $url = trim((string)($row[$column] ?? ''));
+        if ($url !== '' && !in_array($url, $urls, true)) $urls[] = $url;
+    }
+    $saved = [];
+    foreach ($urls as $index => $url) {
+        $path = boomagDownloadProductImage($url, $externalId, $index);
+        if ($path !== '') $saved[] = ['url' => $url, 'path' => $path, 'sort_order' => $index];
+    }
+    if (!$saved) return ['saved' => 0, 'requested' => count($urls)];
+
+    $db->prepare('DELETE FROM shop_product_images WHERE product_id = ?')->execute([$productId]);
+    $insert = $db->prepare('INSERT INTO shop_product_images (id, product_id, image_path, alt_text, sort_order) VALUES (?, ?, ?, ?, ?)');
+    foreach ($saved as $image) {
+        $insert->execute([
+            gomagStableUuid('product-image', $externalId . '|' . (string)$image['sort_order'] . '|' . (string)$image['url']),
+            $productId,
+            (string)$image['path'],
+            mb_substr($name, 0, 180),
+            (int)$image['sort_order'],
+        ]);
+    }
+    return ['saved' => count($saved), 'requested' => count($urls)];
+}
+
+function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $limit, bool $forceFeedRefresh = false): array {
+    $rows = boomagFeedRows($config, $forceFeedRefresh);
+    $total = count($rows);
+    $offset = max(0, min($offset, $total));
+    $limit = max(1, min($limit, 10));
+    $batch = array_slice($rows, $offset, $limit);
+    $source = $db->query("SELECT * FROM shop_product_sources WHERE LOWER(domain) = 'boomag.ro' LIMIT 1")->fetch();
+    if (!$source) throw new RuntimeException('Sursa boomag.ro nu exista in catalog.');
+
+    $categoryNames = [];
+    foreach ($db->query('SELECT id, name FROM shop_categories')->fetchAll() as $category) {
+        $categoryNames[(string)$category['id']] = (string)$category['name'];
+    }
+    $stats = ['created' => 0, 'updated' => 0, 'images_saved' => 0, 'images_missing' => 0, 'without_compatibility' => 0, 'errors' => []];
+
+    foreach ($batch as $batchIndex => $row) {
+        $externalId = trim((string)($row['id'] ?? ''));
+        $sku = mb_substr(trim((string)($row['sku'] ?? '')), 0, 80);
+        try {
+            if ($externalId === '' || $sku === '') throw new RuntimeException('Produsul nu are ID sau SKU.');
+            $categoryId = boomagInferCategory($db, $row);
+            $categoryName = $categoryId !== null ? (string)($categoryNames[$categoryId] ?? '') : '';
+            $manufacturerName = boomagCleanTitle((string)($row['brand_name'] ?? ''));
+            $manufacturerId = boomagFindOrCreateTaxonomy($db, 'shop_manufacturers', 'manufacturer', $manufacturerName);
+            $compatibilities = boomagCompatibilityNames($row);
+            $brandIds = [];
+            foreach ($compatibilities as $compatibility) {
+                $brandId = boomagFindOrCreateTaxonomy($db, 'shop_brands', 'compatibility', $compatibility);
+                if ($brandId !== null) $brandIds[] = $brandId;
+            }
+            if (!$brandIds) $stats['without_compatibility']++;
+            $content = boomagProductContent($row, $categoryName, $manufacturerName, $compatibilities);
+            $available = boomagStockAvailable($row['stock_status'] ?? '0');
+            $stock = max(0, (int)floor((float)str_replace(',', '.', trim((string)($row['stock'] ?? '0')))));
+            if (!$available) $stock = 0;
+            $priceRaw = str_replace([' ', ','], ['', '.'], trim((string)($row['base_price'] ?? '0')));
+            $price = max(0, round((float)$priceRaw, 2));
+            $ean = mb_substr(trim((string)($row['ean'] ?? '')), 0, 120);
+            $sourceUrl = mb_substr(trim((string)($row['url'] ?? '')), 0, 500);
+
+            $find = $db->prepare('SELECT * FROM shop_products WHERE (source_id = ? AND supplier_external_id = ?) OR sku = ? LIMIT 1');
+            $find->execute([(string)$source['id'], $externalId, $sku]);
+            $existing = $find->fetch();
+            $productId = $existing ? (string)$existing['id'] : gomagStableUuid('product', $externalId);
+            $contentStatus = $existing ? (string)($existing['content_status'] ?? 'manual') : 'baseline';
+            $slug = uniqueSlug($db, 'shop_products', $content['name'], $existing ? $productId : null);
+            $specificationsJson = json_encode($content['specifications'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $questionsJson = json_encode($content['questions'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+            $db->beginTransaction();
+            if (!$existing) {
+                $insert = $db->prepare(
+                    'INSERT INTO shop_products
+                     (id, category_id, manufacturer_id, source_id, supplier_external_id, sku, supplier_product_code, ean, source_domain, source_url,
+                      name, slug, short_description, description_title, description_html, specifications_json, questions_json, meta_title, meta_description,
+                      cost_price, price, sale_price, discount_type, discount_value, currency, stock_mode, stock_quantity,
+                      supplier_stock_quantity, supplier_stock_status, supplier_stock_updated_at, accounting_stock_quantity,
+                      low_stock_threshold, is_active, is_featured, content_status)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, "boomag.ro", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, "percent", NULL, "RON", "tracked", ?, ?, ?, NOW(), 0, 3, 1, 0, "baseline")'
+                );
+                $insert->execute([
+                    $productId, $categoryId, $manufacturerId, (string)$source['id'], $externalId, $sku, $sku, $ean !== '' ? $ean : null, $sourceUrl !== '' ? $sourceUrl : null,
+                    $content['name'], $slug, $content['short_description'], $content['description_title'], $content['description_html'],
+                    $specificationsJson, $questionsJson, $content['meta_title'], $content['meta_description'], $price, $stock, $stock, $available ? 1 : 0,
+                ]);
+                $stats['created']++;
+            } else {
+                $update = $db->prepare(
+                    'UPDATE shop_products SET category_id = ?, manufacturer_id = ?, source_id = ?, supplier_external_id = ?, sku = ?, supplier_product_code = ?, ean = ?,
+                     source_domain = "boomag.ro", source_url = ?, price = ?, currency = "RON", stock_mode = "tracked", stock_quantity = ?,
+                     supplier_stock_quantity = ?, supplier_stock_status = ?, supplier_stock_updated_at = NOW(), is_active = 1,
+                     name = IF(content_status = "baseline", ?, name), slug = IF(content_status = "baseline", ?, slug),
+                     short_description = IF(content_status = "baseline", ?, short_description), description_title = IF(content_status = "baseline", ?, description_title),
+                     description_html = IF(content_status = "baseline", ?, description_html), specifications_json = IF(content_status = "baseline", ?, specifications_json),
+                     questions_json = IF(content_status = "baseline", ?, questions_json), meta_title = IF(content_status = "baseline", ?, meta_title),
+                     meta_description = IF(content_status = "baseline", ?, meta_description)
+                     WHERE id = ?'
+                );
+                $update->execute([
+                    $categoryId, $manufacturerId, (string)$source['id'], $externalId, $sku, $sku, $ean !== '' ? $ean : null, $sourceUrl !== '' ? $sourceUrl : null,
+                    $price, $stock, $stock, $available ? 1 : 0,
+                    $content['name'], $slug, $content['short_description'], $content['description_title'], $content['description_html'],
+                    $specificationsJson, $questionsJson, $content['meta_title'], $content['meta_description'], $productId,
+                ]);
+                $stats['updated']++;
+            }
+            $db->prepare('DELETE FROM shop_product_brands WHERE product_id = ?')->execute([$productId]);
+            $brandInsert = $db->prepare('INSERT IGNORE INTO shop_product_brands (product_id, brand_id) VALUES (?, ?)');
+            foreach (array_values(array_unique($brandIds)) as $brandId) $brandInsert->execute([$productId, $brandId]);
+            $db->commit();
+
+            $imageResult = boomagSyncImportedImages($db, $productId, $externalId, $content['name'], $row);
+            $stats['images_saved'] += (int)$imageResult['saved'];
+            if ((int)$imageResult['saved'] === 0) $stats['images_missing']++;
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            $stats['errors'][] = [
+                'offset' => $offset + $batchIndex,
+                'id' => $externalId,
+                'sku' => $sku,
+                'message' => mb_substr($error->getMessage(), 0, 500),
+            ];
+        }
+    }
+
+    $nextOffset = min($total, $offset + count($batch));
+    return [
+        'success' => count($stats['errors']) === 0,
+        'source' => 'boomag.ro',
+        'offset' => $offset,
+        'processed' => count($batch),
+        'next_offset' => $nextOffset,
+        'total' => $total,
+        'done' => $nextOffset >= $total,
+        'stats' => $stats,
+    ];
+}
+
+function boomagImportAudit(PDO $db, array $config): array {
+    $source = $db->query("SELECT id, name, domain, is_active FROM shop_product_sources WHERE LOWER(domain) = 'boomag.ro' LIMIT 1")->fetch();
+    if (!$source) throw new RuntimeException('Sursa boomag.ro nu exista in catalog.');
+    $sourceId = (string)$source['id'];
+    $stmt = $db->prepare(
+        'SELECT COUNT(*) AS products,
+                COUNT(DISTINCT supplier_external_id) AS distinct_external_ids,
+                COUNT(DISTINCT sku) AS distinct_skus,
+                SUM(supplier_external_id IS NULL OR supplier_external_id = "") AS missing_external_id,
+                SUM(sku IS NULL OR sku = "") AS missing_sku,
+                SUM(supplier_product_code IS NULL OR supplier_product_code = "") AS missing_supplier_code,
+                SUM(COALESCE(supplier_product_code, "") <> COALESCE(sku, "")) AS supplier_code_mismatch,
+                SUM(category_id IS NULL) AS missing_category,
+                SUM(manufacturer_id IS NULL) AS missing_manufacturer,
+                SUM(price <= 0) AS invalid_price,
+                SUM(stock_quantity <> supplier_stock_quantity) AS stock_mismatch,
+                SUM(content_status = "baseline") AS baseline_content,
+                SUM(content_status = "seo") AS seo_content,
+                SUM(ean IS NULL OR ean = "") AS missing_ean,
+                SUM(NOT EXISTS (SELECT 1 FROM shop_product_images image WHERE image.product_id = shop_products.id)) AS missing_images,
+                SUM(NOT EXISTS (SELECT 1 FROM shop_product_brands pb WHERE pb.product_id = shop_products.id)) AS missing_compatibility
+         FROM shop_products
+         WHERE source_id = ? OR LOWER(source_domain) = "boomag.ro"'
+    );
+    $stmt->execute([$sourceId]);
+    $summary = $stmt->fetch() ?: [];
+    foreach ($summary as $key => $value) $summary[$key] = (int)$value;
+
+    $categoryStmt = $db->prepare(
+        'SELECT COALESCE(c.name, "Fara categorie") AS name, COUNT(*) AS products
+         FROM shop_products p
+         LEFT JOIN shop_categories c ON c.id = p.category_id
+         WHERE p.source_id = ? OR LOWER(p.source_domain) = "boomag.ro"
+         GROUP BY p.category_id, c.name
+         ORDER BY products DESC, name ASC'
+    );
+    $categoryStmt->execute([$sourceId]);
+    $categories = array_map(static fn(array $row): array => ['name' => (string)$row['name'], 'products' => (int)$row['products']], $categoryStmt->fetchAll());
+
+    $compatibilityStmt = $db->prepare(
+        'SELECT b.name, COUNT(DISTINCT pb.product_id) AS products
+         FROM shop_product_brands pb
+         INNER JOIN shop_brands b ON b.id = pb.brand_id
+         INNER JOIN shop_products p ON p.id = pb.product_id
+         WHERE p.source_id = ? OR LOWER(p.source_domain) = "boomag.ro"
+         GROUP BY b.id, b.name
+         ORDER BY products DESC, b.name ASC'
+    );
+    $compatibilityStmt->execute([$sourceId]);
+    $compatibilities = array_map(static fn(array $row): array => ['name' => (string)$row['name'], 'products' => (int)$row['products']], $compatibilityStmt->fetchAll());
+
+    $imageStmt = $db->prepare(
+        'SELECT COUNT(*) FROM shop_product_images image
+         INNER JOIN shop_products p ON p.id = image.product_id
+         WHERE p.source_id = ? OR LOWER(p.source_domain) = "boomag.ro"'
+    );
+    $imageStmt->execute([$sourceId]);
+    $feedRows = boomagFeedRows($config);
+    return [
+        'success' => true,
+        'source' => [
+            'name' => (string)$source['name'],
+            'domain' => (string)$source['domain'],
+            'is_active' => (bool)$source['is_active'],
+        ],
+        'feed_products' => count($feedRows),
+        'database' => $summary,
+        'images' => (int)$imageStmt->fetchColumn(),
+        'categories' => $categories,
+        'compatibilities' => $compatibilities,
+    ];
 }
 
 function gomagSyncSupplierStock(PDO $db, array $config): array {

@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <base href="/">
-    <title>Anvelopă G10 All-Terrain | Magazin G-Trots</title>
-    <meta name="description" content="Anvelopă all-terrain de 10 inch pentru trotinete electrice, cu aderență bună pe asfalt și drum mixt.">
+    <title>Produs G-Trots</title>
+    <meta name="description" content="Detalii, specificații, recenzii și întrebări despre produsul selectat din magazinul G-Trots.">
     <meta name="theme-color" content="#080808">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://g-trots.ro/magazin/produs/anvelopa-g10-all-terrain/">
@@ -69,9 +69,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="preload" href="assets/magazin-produse-v1.png" as="image" type="image/png">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="magazin.css">
-    <link rel="stylesheet" href="produs.css">
-    <link rel="stylesheet" href="favorites.css">
+    <link rel="stylesheet" href="magazin.css?v=20260826-2">
+    <link rel="stylesheet" href="produs.css?v=20260826-2">
+    <link rel="stylesheet" href="favorites.css?v=20260826-2">
+    <link rel="stylesheet" href="shop-live.css?v=20260826-2">
   </head>
   <body class="shop-page product-page" data-product-id="anvelopa-g10-all-terrain">
     <a class="skip-link" href="#product-detail">Sari la produs</a>
@@ -161,9 +162,9 @@
 
       <nav class="product-content-tabs shell" aria-label="Detalii produs">
         <a class="active" href="#descriere" data-product-tab>Descriere</a>
-        <a href="#specificatii" data-product-tab>Specificații</a>
+        <a href="#specificatii" data-product-tab hidden>Specificații</a>
         <a href="#recenzii" data-product-tab>Recenzii <span data-review-count>(0)</span></a>
-        <a href="#intrebari" data-product-tab>Întrebări și răspunsuri</a>
+        <a href="#intrebari" data-product-tab hidden>Întrebări și răspunsuri</a>
       </nav>
 
       <div class="product-content shell">
@@ -193,7 +194,7 @@
           <button class="product-expand-toggle" type="button" data-expand-toggle aria-expanded="false"><span>Vezi mai mult</span><i aria-hidden="true"></i></button>
         </section>
 
-        <section class="product-content-section product-specifications-section" id="specificatii" aria-labelledby="specificatii-title" data-expand-section>
+        <section class="product-content-section product-specifications-section" id="specificatii" aria-labelledby="specificatii-title" data-expand-section hidden>
           <div class="product-expand-shell" data-expand-shell>
             <div class="product-expand-content" data-expand-content>
               <div class="product-section-heading compact">
@@ -233,7 +234,7 @@
           <div class="product-section-heading compact">
             <span>Experiențe reale</span>
             <h2 id="recenzii-title">Recenziile clienților</h2>
-            <p>Recenziile adăugate aici sunt păstrate pe dispozitivul tău. Publicarea și verificarea centralizată vor fi conectate odată cu sistemul final de magazin.</p>
+            <p>Recenziile sunt salvate în magazin, pot primi răspuns din aplicația G-Trots și sunt vizibile pe pagina acestui produs.</p>
           </div>
 
           <div class="reviews-layout">
@@ -262,7 +263,7 @@
                 <label><span>Nume</span><input type="text" name="name" maxlength="40" placeholder="Prenumele tău" required></label>
                 <label><span>Recenzie</span><textarea name="message" minlength="20" maxlength="700" rows="5" placeholder="Ce ți-a plăcut și pentru ce model ai folosit produsul?" required></textarea></label>
                 <button class="review-submit" type="submit">Salvează recenzia</button>
-                <small>Recenzia este salvată local pe acest dispozitiv.</small>
+                <small>Recenzia va fi publicată pe pagina acestui produs.</small>
               </form>
               <div class="review-list" data-review-list></div>
               <div class="reviews-empty" data-reviews-empty><span aria-hidden="true">☆</span><strong>Nu există încă recenzii.</strong><p>Fii primul care împărtășește experiența cu acest produs.</p></div>
@@ -275,7 +276,7 @@
           </div>
         </section>
 
-        <section class="product-content-section" id="intrebari" aria-labelledby="intrebari-title">
+        <section class="product-content-section" id="intrebari" aria-labelledby="intrebari-title" hidden>
           <div class="product-faq-heading">
             <div class="product-section-heading compact">
               <span>Întrebări utile</span>
@@ -321,7 +322,8 @@
       <span>WhatsApp</span>
     </a>
 
-    <script src="favorites.js" defer></script>
-    <script src="produs.js" defer></script>
+    <script src="favorites.js?v=20260826-2" defer></script>
+    <script src="produs.js?v=20260826-4" defer></script>
+    <script src="shop-live.js?v=20260826-2" defer></script>
   </body>
 </html>

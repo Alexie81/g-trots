@@ -511,13 +511,27 @@ const productSections = productTabs
   .map(tab => document.querySelector(tab.getAttribute("href")))
   .filter(Boolean);
 
+document.querySelectorAll('a[href^="#"]:not([data-product-tab])').forEach(link => {
+  link.addEventListener("click", event => {
+    const selector = link.getAttribute("href");
+    const target = selector && selector.length > 1 ? document.querySelector(selector) : null;
+    if (!target) return;
+    event.preventDefault();
+    target.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "start"
+    });
+    history.replaceState(null, "", `${window.location.pathname}${window.location.search}${selector}`);
+  });
+});
+
 productTabs.forEach(tab => {
   tab.addEventListener("click", event => {
     const target = document.querySelector(tab.getAttribute("href"));
     if (!target) return;
     event.preventDefault();
     target.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
-    history.replaceState(null, "", tab.getAttribute("href"));
+    history.replaceState(null, "", `${window.location.pathname}${window.location.search}${tab.getAttribute("href")}`);
   });
 });
 

@@ -13,7 +13,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="favorites.css?v=20260825-3">
-    <link rel="stylesheet" href="checkout.css?v=20260825-5">
+    <link rel="stylesheet" href="checkout.css?v=20260826-6">
   </head>
   <body class="shop-page favorites-page checkout-page">
     <a class="skip-link" href="#checkout-content">Sari la finalizarea comenzii</a>
@@ -22,8 +22,10 @@
     <main class="checkout-main" id="checkout-content">
       <section class="checkout-hero shell">
         <div class="checkout-hero-copy">
-          <a class="checkout-back-link" href="cos.html"><span aria-hidden="true">←</span> Înapoi la coș</a>
-          <span class="checkout-eyebrow"><i></i> Comandă protejată</span>
+          <div class="checkout-hero-meta">
+            <a class="checkout-back-link" href="cos.html"><span aria-hidden="true">←</span> Înapoi la coș</a>
+            <span class="checkout-eyebrow"><i aria-hidden="true"></i> Comandă protejată</span>
+          </div>
           <h1>Finalizarea<br><em>comenzii.</em></h1>
           <p>Completează datele, alege livrarea și metoda de plată. Totalul este calculat transparent înainte să trimiți comanda.</p>
         </div>
@@ -61,7 +63,7 @@
               <div class="checkout-fields">
                 <label class="is-wide"><span>Nume și prenume <b>*</b></span><input name="customer_name" autocomplete="name" required placeholder="Ex: Alexie Popescu"><small data-field-error="customer_name"></small></label>
                 <label><span>Telefon <b>*</b></span><input name="customer_phone" autocomplete="tel" inputmode="tel" required placeholder="07xx xxx xxx"><small data-field-error="customer_phone"></small></label>
-                <label><span>Email <em>obligatoriu</em></span><input name="customer_email" type="email" autocomplete="email" placeholder="nume@email.ro" required><small data-field-error="customer_email"></small></label>
+                <label><span>Email <em>*</em></span><input name="customer_email" type="email" autocomplete="email" placeholder="nume@email.ro" required><small data-field-error="customer_email"></small></label>
               </div>
             </section>
 
@@ -108,7 +110,7 @@
             <button class="checkout-submit" type="submit" data-checkout-submit>
               <span class="checkout-submit-lock" aria-hidden="true"></span>
               <strong>Trimite comanda</strong>
-              <b aria-hidden="true">›</b>
+              <b aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"></path></svg></b>
             </button>
             <label class="checkout-confirmation">
               <input type="checkbox" name="confirm_order" required>

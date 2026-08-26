@@ -138,6 +138,22 @@
     setTextAll("[data-receipt-status-text]", "În confirmare");
   }
 
+  function renderClientTimeline(currentStatus) {
+    const flow = ["new", "confirmed", "processing", "shipped", "completed"];
+    const currentIndex = flow.indexOf(currentStatus);
+    document.querySelectorAll("[data-order-flow-step]").forEach(step => {
+      const value = step.dataset.orderFlowStep;
+      const index = flow.indexOf(value);
+      const isCancelled = currentStatus === "cancelled";
+      const reached = !isCancelled && index >= 0 && index <= currentIndex;
+      const current = value === currentStatus;
+      step.classList.toggle("is-reached", reached || current);
+      step.classList.toggle("is-current", current);
+      const state = step.querySelector("i");
+      if (state) state.textContent = current ? "Acum" : reached ? "Finalizat" : value === "cancelled" ? "Alternativ" : "Urmează";
+    });
+  }
+
   function currentCartItems() {
     const cart = window.GTrotsCart?.get?.() || [];
     const products = window.GTrotsFavorites?.products || {};
@@ -176,6 +192,40 @@
     });
   }
 
+  async function enrichStateImages(state) {
+    const items = normalizedItems(state);
+    if (!items.length || items.every(item => item.imageUrl || item.image)) return state;
+    try {
+      const catalog = await api("publicProducts");
+      const products = Array.isArray(catalog) ? catalog : [];
+      const byKey = new Map();
+      products.forEach(product => {
+        const image = Array.isArray(product.images) ? product.images[0] : null;
+        const normalized = {
+          apiId: String(product.id || ""),
+          slug: String(product.slug || ""),
+          imageUrl: safeUrl(image?.url),
+          image: Number(image?.sprite_index || 0),
+          url: `/magazin/produs/${encodeURIComponent(String(product.slug || product.id || ""))}/`
+        };
+        [normalized.apiId, normalized.slug].filter(Boolean).forEach(key => byKey.set(key, normalized));
+      });
+      const hydrated = items.map(item => {
+        const urlSlug = String(item.url || "").match(/\/magazin\/produs\/([^/]+)/)?.[1] || "";
+        const product = byKey.get(item.id) || byKey.get(decodeURIComponent(urlSlug)) || {};
+        return {
+          ...item,
+          imageUrl: item.imageUrl || product.imageUrl || "",
+          image: item.image || product.image || 0,
+          url: item.url || product.url || "/magazin.html"
+        };
+      });
+      return { ...state, items: hydrated };
+    } catch {
+      return state;
+    }
+  }
+
   function renderReceipt(state, method) {
     const host = document.querySelector("[data-order-items]");
     if (!host) return;
@@ -191,13 +241,22 @@
 
     host.innerHTML = items.map(item => {
       const legacyImage = item.image >= 1 && item.image <= 6 ? ` is-legacy-image receipt-product-image-${item.image}` : "";
-      const imageStyle = item.imageUrl ? ` style="background-image:url('${escapeHtml(item.imageUrl)}')"` : "";
+      const imageMarkup = item.imageUrl
+        ? `<img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}" loading="eager">`
+        : legacyImage
+          ? ""
+          : '<span class="order-receipt-product-fallback">GT</span>';
       return `<article class="order-receipt-product">
-        <a href="${escapeHtml(item.url)}" class="order-receipt-product-image${legacyImage}"${imageStyle} aria-label="Deschide ${escapeHtml(item.name)}"></a>
+        <a href="${escapeHtml(item.url)}" class="order-receipt-product-image${legacyImage}" aria-label="Deschide ${escapeHtml(item.name)}">${imageMarkup}</a>
         <span><strong>${escapeHtml(item.name)}</strong><small>${item.quantity} × ${formatMoney(item.unitPrice)}</small></span>
         <b>${formatMoney(item.lineTotal)}</b>
       </article>`;
     }).join("");
+    host.querySelectorAll(".order-receipt-product-image img").forEach(image => {
+      image.addEventListener("error", () => {
+        image.replaceWith(Object.assign(document.createElement("span"), { className: "order-receipt-product-fallback", textContent: "GT" }));
+      }, { once: true });
+    });
     host.hidden = items.length === 0;
     if (empty) empty.hidden = items.length > 0;
 
@@ -334,15 +393,16 @@
     }
 
     configureResultState(method, status);
+    renderClientTimeline(status === "paid" ? "confirmed" : "new");
 
     if (method === "cash_on_delivery" || status === "cod") {
-      setTextAll("[data-status-lead]", "Comanda este confirmată în sistemul G-Trots. Vei achita la livrare, după verificarea produselor și pregătirea expedierii.");
+      setTextAll("[data-status-lead]", "Am primit comanda ta. Este nouă și se află în procesare, iar echipa G-Trots verifică toate detaliile înainte de pregătire.");
       setTextAll("[data-payment-step-title]", "Plătești la livrare");
-      setTextAll("[data-payment-step-copy]", state.paymentLabel || "Suma va fi achitată curierului când primești coletul.");
+      setTextAll("[data-payment-step-copy]", "Comanda va fi verificată și confirmată de echipa G-Trots.");
     } else if (status === "paid") {
-      setTextAll("[data-status-lead]", "Plata este confirmată, iar comanda a ajuns în sistemul G-Trots. Începem pregătirea produselor pentru livrare.");
+      setTextAll("[data-status-lead]", "Am primit comanda ta. Plata a fost efectuată, iar comanda este confirmată automat și va intra în pregătire.");
       setTextAll("[data-payment-step-title]", "Plata este confirmată");
-      setTextAll("[data-payment-step-copy]", "Nu mai este necesară nicio acțiune pentru plată.");
+      setTextAll("[data-payment-step-copy]", "Plata a fost efectuată, iar comanda este confirmată.");
     } else if (method === "card") {
       setTextAll("[data-status-lead]", "Comanda este confirmată în sistemul G-Trots. Plata cu cardul rămâne în curs de confirmare până la verificarea comenzii.");
       setTextAll("[data-payment-step-title]", "Confirmăm plata cu cardul");
@@ -352,6 +412,8 @@
     if (state.shippingLabel) {
       setTextAll("[data-shipping-step-copy]", `${state.shippingLabel}. Primești confirmarea înainte ca produsele să plece spre tine.`);
     }
+    state = await enrichStateImages(state);
+    saveState(state);
     renderReceipt(state, method);
     bindInteractions(orderNumber);
     revealReceipt();

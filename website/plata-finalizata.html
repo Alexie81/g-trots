@@ -10,7 +10,7 @@
     <link rel="icon" href="assets/logo.png" type="image/png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,400;8..144,500;8..144,600;8..144,700;8..144,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="favorites.css?v=20260825-3">
     <link rel="stylesheet" href="checkout.css?v=20260825-5">
@@ -43,11 +43,14 @@
       <section class="order-confirmation-content shell">
         <div class="order-confirmation-grid">
           <section class="order-next-card" aria-labelledby="next-title">
-            <header><span>Ce urmează</span><h2 id="next-title">Ne ocupăm noi de aici.</h2><p>Poți păstra numărul comenzii sau bonul alăturat. Te contactăm dacă este necesară confirmarea compatibilității.</p></header>
+            <header><span>Ce urmează</span><h2 id="next-title">Ne ocupăm noi de aici.</h2><p>Poți păstra numărul comenzii sau rezumatul alăturat. Te contactăm dacă este necesară confirmarea compatibilității.</p></header>
             <ol class="order-next-steps">
-              <li><span>01</span><div><strong>Verificăm comanda</strong><small>Confirmăm produsele, stocul și compatibilitatea.</small></div><i>Acum</i></li>
-              <li><span>02</span><div><strong data-payment-step-title>Confirmăm plata</strong><small data-payment-step-copy>Metoda de plată este atașată comenzii.</small></div></li>
-              <li><span>03</span><div><strong>Pregătim livrarea</strong><small data-shipping-step-copy>Primești confirmarea înainte de expediere.</small></div></li>
+              <li data-order-flow-step="new"><span>01</span><div><strong>În procesare</strong><small>Am primit comanda și verificăm toate detaliile.</small></div><i>Acum</i></li>
+              <li data-order-flow-step="confirmed"><span>02</span><div><strong>Confirmată</strong><small data-payment-step-copy>Confirmăm comanda și metoda de plată.</small></div><i>Urmează</i></li>
+              <li data-order-flow-step="processing"><span>03</span><div><strong>În pregătire</strong><small>Produsele sunt pregătite pentru expediere.</small></div><i>Urmează</i></li>
+              <li data-order-flow-step="shipped"><span>04</span><div><strong>Predată curierului</strong><small data-shipping-step-copy>Pachetul pleacă spre adresa de livrare.</small></div><i>Urmează</i></li>
+              <li data-order-flow-step="completed"><span>05</span><div><strong>Livrată</strong><small>Comanda ajunge la destinație.</small></div><i>Urmează</i></li>
+              <li class="is-alternative" data-order-flow-step="cancelled"><span>×</span><div><strong>Comandă anulată</strong><small>Stare alternativă dacă fluxul comenzii este oprit.</small></div><i>Alternativ</i></li>
             </ol>
             <div class="order-next-actions">
               <a href="magazin.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.2 10.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 1.9-1.4L21 8H7"/><circle cx="10" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/></svg><span>Continuă cumpărăturile</span><b aria-hidden="true">›</b></a>
@@ -62,7 +65,7 @@
               <span class="order-receipt-status" data-receipt-status><i></i><b data-receipt-status-text>Confirmată</b></span>
             </header>
             <div class="order-receipt-meta">
-              <span><small>Bon comandă</small><strong id="receipt-title" data-order-number>—</strong></span>
+              <span><small>Rezumat comandă</small><strong id="receipt-title" data-order-number>—</strong></span>
               <span><small>Data</small><strong data-order-date>—</strong></span>
             </div>
             <div class="order-receipt-products" data-order-items></div>
@@ -75,7 +78,7 @@
             <div class="order-receipt-total"><span><strong>Total</strong><small>TVA inclus, unde se aplică</small></span><b data-order-total>—</b></div>
             <footer class="order-receipt-footer">
               <button type="button" data-copy-order><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg><span>Copiază numărul</span></button>
-              <button type="button" data-print-order><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg><span>Printează bonul</span></button>
+              <button type="button" data-print-order><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg><span>Printează rezumatul</span></button>
             </footer>
             <p class="order-receipt-note">Păstrează numărul comenzii pentru orice modificare sau întrebare.</p>
             <span class="order-receipt-tear bottom" aria-hidden="true"></span>

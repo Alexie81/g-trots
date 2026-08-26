@@ -341,18 +341,21 @@
           });
           const shipping = config.shipping_methods.find(row => String(row.id) === String(fields.shipping_method_id));
           const payment = payments.find(row => row.id === fields.payment_method);
+          const apiItems = new Map((Array.isArray(order.items) ? order.items : []).map(item => [String(item.product_id || ""), item]));
           const receiptItems = currentCart.map(item => {
             const product = products[item.id] || {};
+            const apiItem = apiItems.get(String(product.apiId || "")) || {};
             const quantity = Number(item.quantity || 1);
-            const unitPrice = productPrice(product);
+            const unitPrice = Number(apiItem.unit_price ?? productPrice(product));
             return {
               id: String(item.id || ""),
-              name: String(product.name || "Produs G-Trots"),
+              apiId: String(product.apiId || apiItem.product_id || ""),
+              name: String(apiItem.product_name || product.name || "Produs G-Trots"),
               quantity,
               unitPrice,
-              lineTotal: unitPrice * quantity,
+              lineTotal: Number(apiItem.line_total ?? unitPrice * quantity),
               image: Number(product.image || 0),
-              imageUrl: safeUrl(product.imageUrl),
+              imageUrl: safeUrl(apiItem.image_url || product.imageUrl),
               url: String(product.url || "/magazin.html")
             };
           });
@@ -360,6 +363,7 @@
             sessionStorage.setItem(ORDER_STATE_KEY, JSON.stringify({
               orderNumber: String(order.order_number || ""),
               orderId: String(order.id || ""),
+              trackingToken: String(order.tracking_token || ""),
               paymentMethod: String(fields.payment_method || ""),
               paymentLabel: String(payment?.label || ""),
               shippingLabel: String(shipping?.name || ""),

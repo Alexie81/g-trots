@@ -8,6 +8,9 @@
   <title>Urmărire comandă | G-Trots România</title>
   <meta name="description" content="Urmărește în siguranță statusul comenzii tale G-Trots România.">
   <link rel="icon" type="image/png" href="assets/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,400;8..144,500;8..144,600;8..144,700;8..144,800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="urmarire-comanda.css">
 </head>
 <body>
@@ -33,8 +36,8 @@
         <label for="tracking-order-number">Cod comandă <b>*</b></label>
         <div class="tracking-field"><span aria-hidden="true">#</span><input id="tracking-order-number" name="order_number" autocomplete="off" placeholder="GT-20260826-AB12CD34" required></div>
         <label for="tracking-email">E-mail <b>*</b></label>
-        <div class="tracking-field"><span aria-hidden="true">@</span><input id="tracking-email" name="email" type="email" autocomplete="email" placeholder="adresa@exemplu.ro" required></div>
-        <button id="tracking-submit" type="submit"><span>Verifică statusul</span><b aria-hidden="true">→</b></button>
+        <div class="tracking-field"><span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/></svg></span><input id="tracking-email" name="email" type="email" autocomplete="email" placeholder="adresa@exemplu.ro" required></div>
+        <button id="tracking-submit" type="submit"><span>Verifică statusul</span><b aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></b></button>
         <p class="tracking-form-note"><span>i</span> Ai primit un e-mail de la noi? Butonul „Urmărește comanda” te aduce aici automat, fără să mai completezi formularul.</p>
       </form>
     </section>

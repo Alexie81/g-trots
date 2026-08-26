@@ -328,17 +328,19 @@ function liveProductCard(product, index) {
 }
 
 function renderLiveProducts(products) {
-  if (!productGrid || !Array.isArray(products) || products.length === 0) return false;
+  if (!productGrid || !Array.isArray(products)) return false;
   const cards = products.map(liveProductCard);
   productGrid.replaceChildren(...cards);
   productCards = cards;
-  const oldMaximum = Number(priceRange?.max || 0);
-  const maximumPrice = Math.max(...products.map(product => Number(product.sale_price ?? product.price ?? 0)), oldMaximum, 1);
-  if (priceRange && maximumPrice > oldMaximum) {
-    const wasAtMaximum = Number(priceRange.value) >= oldMaximum;
-    priceRange.max = String(Math.ceil(maximumPrice / 100) * 100);
-    if (wasAtMaximum) priceRange.value = priceRange.max;
-    updateRangeAppearance();
+  if (products.length) {
+    const oldMaximum = Number(priceRange?.max || 0);
+    const maximumPrice = Math.max(...products.map(product => Number(product.sale_price ?? product.price ?? 0)), oldMaximum, 1);
+    if (priceRange && maximumPrice > oldMaximum) {
+      const wasAtMaximum = Number(priceRange.value) >= oldMaximum;
+      priceRange.max = String(Math.ceil(maximumPrice / 100) * 100);
+      if (wasAtMaximum) priceRange.value = priceRange.max;
+      updateRangeAppearance();
+    }
   }
   currentPage = 1;
   applyFilters();

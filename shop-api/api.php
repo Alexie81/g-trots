@@ -210,6 +210,8 @@ function ensureShopSchema(PDO $db): void {
             manufacturer_id CHAR(36) NULL,
             source_id CHAR(36) NULL,
             sku VARCHAR(80) NULL UNIQUE,
+            supplier_product_code VARCHAR(120) NULL,
+            ean VARCHAR(120) NULL,
             source_domain VARCHAR(80) NOT NULL DEFAULT 'g-trots.ro',
             source_url VARCHAR(500) NULL,
             name VARCHAR(180) NOT NULL,
@@ -257,6 +259,15 @@ function ensureShopSchema(PDO $db): void {
     $discountValueColumn = $db->query("SHOW COLUMNS FROM shop_products LIKE 'discount_value'")->fetch();
     if (!$discountValueColumn) {
         $db->exec('ALTER TABLE shop_products ADD COLUMN discount_value DECIMAL(12,2) NULL AFTER discount_type');
+    }
+    $productIdentityColumns = [
+        'supplier_product_code' => 'VARCHAR(120) NULL AFTER sku',
+        'ean' => 'VARCHAR(120) NULL AFTER supplier_product_code',
+    ];
+    foreach ($productIdentityColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_products LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_products ADD COLUMN {$column} {$definition}");
+        }
     }
     $descriptionTitleColumn = $db->query("SHOW COLUMNS FROM shop_products LIKE 'description_title'")->fetch();
     if (!$descriptionTitleColumn) {
@@ -484,25 +495,8 @@ function ensureShopSchema(PDO $db): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
 
-    $db->exec("INSERT IGNORE INTO shop_payment_settings (id) VALUES (1)");
-    $db->exec(
-        "INSERT IGNORE INTO shop_brands (id, name, slug, website_url, is_active) VALUES
-            ('00000000-0000-4000-8000-000000000020', 'Universal', 'universal', '', 1),
-            ('00000000-0000-4000-8000-000000000021', 'KuKirin', 'kukirin', '', 1),
-            ('00000000-0000-4000-8000-000000000022', 'Xiaomi', 'xiaomi', '', 1),
-            ('00000000-0000-4000-8000-000000000023', 'Ninebot', 'ninebot', '', 1)"
-    );
-    $db->exec(
-        "INSERT IGNORE INTO shop_product_sources (id, name, domain, base_url, is_default, is_active, sort_order) VALUES
-            ('00000000-0000-4000-8000-000000000010', 'G-Trots', 'g-trots.ro', 'https://g-trots.ro', 1, 1, 0),
-            ('00000000-0000-4000-8000-000000000011', 'Boomag', 'boomag.ro', 'https://boomag.ro', 0, 1, 1)"
-    );
-    $db->exec(
-        "INSERT IGNORE INTO shop_shipping_methods
-            (id, name, description, cost, free_above, eta_label, is_active, sort_order)
-         VALUES
-            ('00000000-0000-4000-8000-000000000001', 'Curier standard', 'Livrare la adresa clientului.', 0, NULL, '1-3 zile lucratoare', 1, 0)"
-    );
+    // Datele comerciale sunt administrate exclusiv din CRM. Schema nu
+    // reintroduce automat surse, marci sau livrari demonstrative.
 }
 
 function categoryParentId(PDO $db, $value, ?string $categoryId = null): ?string {
@@ -912,7 +906,7 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['stock_available'] = $row['stock_mode'] === 'unlimited' || $row['stock_quantity'] > 0;
     if (!$withDescription) unset($row['description_html']);
     if (!$includeInternal) {
-        unset($row['source_id'], $row['source_domain'], $row['source_url'], $row['source_name'], $row['source_is_active']);
+        unset($row['source_id'], $row['source_domain'], $row['source_url'], $row['source_name'], $row['source_is_active'], $row['supplier_product_code'], $row['ean']);
     }
     return $row;
 }
@@ -1034,6 +1028,8 @@ function productPayload(PDO $db, array $body, bool $allowInactiveSource = false)
         'name' => mb_substr($name, 0, 180),
         'slug_source' => mb_substr(trim((string)($body['slug'] ?? $name)), 0, 200),
         'sku' => ($sku = mb_substr(trim((string)($body['sku'] ?? '')), 0, 80)) === '' ? null : $sku,
+        'supplier_product_code' => ($supplierCode = mb_substr(trim((string)($body['supplier_product_code'] ?? '')), 0, 120)) === '' ? null : $supplierCode,
+        'ean' => ($ean = mb_substr(trim((string)($body['ean'] ?? '')), 0, 120)) === '' ? null : $ean,
         'source_id' => $sourceId,
         'source_domain' => $sourceDomain,
         'source_url' => ($sourceUrl = mb_substr(trim((string)($body['source_url'] ?? '')), 0, 500)) === '' ? null : $sourceUrl,
@@ -1788,9 +1784,9 @@ try {
         $db->beginTransaction();
         try {
             $productSku = uniqueProductSku($db, $payload['sku'] ?? generatedProductSku($payload['name'], $payload['source_domain']));
-            $stmt = $db->prepare('INSERT INTO shop_products (id, category_id, manufacturer_id, source_id, sku, source_domain, source_url, name, slug, short_description, description_title, description_html, specifications_json, questions_json, meta_title, meta_description, cost_price, price, sale_price, discount_type, discount_value, currency, stock_mode, stock_quantity, low_stock_threshold, is_active, is_featured) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt = $db->prepare('INSERT INTO shop_products (id, category_id, manufacturer_id, source_id, sku, supplier_product_code, ean, source_domain, source_url, name, slug, short_description, description_title, description_html, specifications_json, questions_json, meta_title, meta_description, cost_price, price, sale_price, discount_type, discount_value, currency, stock_mode, stock_quantity, low_stock_threshold, is_active, is_featured) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
             $stmt->execute([
-                $id, $payload['category_id'], $payload['manufacturer_id'], $payload['source_id'], $productSku, $payload['source_domain'], $payload['source_url'],
+                $id, $payload['category_id'], $payload['manufacturer_id'], $payload['source_id'], $productSku, $payload['supplier_product_code'], $payload['ean'], $payload['source_domain'], $payload['source_url'],
                 $payload['name'], uniqueSlug($db, 'shop_products', $payload['slug_source']), $payload['short_description'], $payload['description_title'], $payload['description_html'], $payload['specifications_json'], $payload['questions_json'],
                 $payload['meta_title'], $payload['meta_description'], $payload['cost_price'], $payload['price'], $payload['sale_price'], $payload['discount_type'], $payload['discount_value'], $payload['currency'],
                 $payload['stock_mode'], $payload['stock_quantity'], $payload['low_stock_threshold'], $payload['is_active'] ? 1 : 0, $payload['is_featured'] ? 1 : 0
@@ -1829,9 +1825,9 @@ try {
             $productSku = trim((string)($current['sku'] ?? '')) !== ''
                 ? (string)$current['sku']
                 : uniqueProductSku($db, $payload['sku'] ?? generatedProductSku($payload['name'], $payload['source_domain']), $id);
-            $stmt = $db->prepare('UPDATE shop_products SET category_id = ?, manufacturer_id = ?, source_id = ?, sku = ?, source_domain = ?, source_url = ?, name = ?, slug = ?, short_description = ?, description_title = ?, description_html = ?, specifications_json = ?, questions_json = ?, meta_title = ?, meta_description = ?, cost_price = ?, price = ?, sale_price = ?, discount_type = ?, discount_value = ?, currency = ?, stock_mode = ?, stock_quantity = ?, low_stock_threshold = ?, is_active = ?, is_featured = ? WHERE id = ?');
+            $stmt = $db->prepare('UPDATE shop_products SET category_id = ?, manufacturer_id = ?, source_id = ?, sku = ?, supplier_product_code = ?, ean = ?, source_domain = ?, source_url = ?, name = ?, slug = ?, short_description = ?, description_title = ?, description_html = ?, specifications_json = ?, questions_json = ?, meta_title = ?, meta_description = ?, cost_price = ?, price = ?, sale_price = ?, discount_type = ?, discount_value = ?, currency = ?, stock_mode = ?, stock_quantity = ?, low_stock_threshold = ?, is_active = ?, is_featured = ? WHERE id = ?');
             $stmt->execute([
-                $payload['category_id'], $payload['manufacturer_id'], $payload['source_id'], $productSku, $payload['source_domain'], $payload['source_url'],
+                $payload['category_id'], $payload['manufacturer_id'], $payload['source_id'], $productSku, $payload['supplier_product_code'], $payload['ean'], $payload['source_domain'], $payload['source_url'],
                 $payload['name'], uniqueSlug($db, 'shop_products', $payload['slug_source'], $id), $payload['short_description'], $payload['description_title'], $payload['description_html'], $payload['specifications_json'], $payload['questions_json'],
                 $payload['meta_title'], $payload['meta_description'], $payload['cost_price'], $payload['price'], $payload['sale_price'], $payload['discount_type'], $payload['discount_value'], $payload['currency'],
                 $payload['stock_mode'], $payload['stock_quantity'], $payload['low_stock_threshold'], $payload['is_active'] ? 1 : 0, $payload['is_featured'] ? 1 : 0, $id
@@ -1968,6 +1964,13 @@ try {
             $stmt->execute([$id]);
             $current = $stmt->fetch();
             if (!$current) throw new InvalidArgumentException('Comanda nu exista.');
+            $address = trim((string)($body['address'] ?? $current['address'] ?? ''));
+            $city = trim((string)($body['city'] ?? $current['city'] ?? ''));
+            $county = trim((string)($body['county'] ?? $current['county'] ?? ''));
+            $postalCode = trim((string)($body['postal_code'] ?? $current['postal_code'] ?? ''));
+            if ($address === '' || $city === '' || $county === '') {
+                throw new InvalidArgumentException('Adresa, localitatea și județul sunt obligatorii pentru livrare.');
+            }
             $mainStatusFlow = ['new', 'confirmed', 'processing', 'shipped', 'completed'];
             $terminalStatuses = ['refunded', 'cancelled'];
             $currentStatus = (string)$current['status'];
@@ -1997,8 +2000,8 @@ try {
                     $movement->execute([uuidV4(), $product['id'], $id, 'return', (int)$item['quantity'], $next, $movementNote, (string)($currentUser['display_name'] ?? $currentUser['username'] ?? '')]);
                 }
             }
-            $update = $db->prepare('UPDATE shop_orders SET status = ?, payment_status = ?, admin_notes = ? WHERE id = ?');
-            $update->execute([$status, $paymentStatus, mb_substr(trim((string)($body['admin_notes'] ?? '')), 0, 5000), $id]);
+            $update = $db->prepare('UPDATE shop_orders SET status = ?, payment_status = ?, admin_notes = ?, address = ?, city = ?, county = ?, postal_code = ? WHERE id = ?');
+            $update->execute([$status, $paymentStatus, mb_substr(trim((string)($body['admin_notes'] ?? '')), 0, 5000), $address, $city, $county, $postalCode, $id]);
             if ($statusChanged) {
                 $historyId = recordOrderStatusHistory(
                     $db,
@@ -2044,7 +2047,7 @@ try {
         $cardEnabled = boolValue($body['card_enabled'] ?? false);
         $codEnabled = boolValue($body['cash_on_delivery_enabled'] ?? true, true);
         if (!$cardEnabled && !$codEnabled) throw new InvalidArgumentException('Activeaza cel putin o metoda de plata.');
-        $stmt = $db->prepare('UPDATE shop_payment_settings SET card_enabled = ?, cash_on_delivery_enabled = ?, card_label = ?, cash_on_delivery_label = ? WHERE id = 1');
+        $stmt = $db->prepare('INSERT INTO shop_payment_settings (id, card_enabled, cash_on_delivery_enabled, card_label, cash_on_delivery_label) VALUES (1, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE card_enabled = VALUES(card_enabled), cash_on_delivery_enabled = VALUES(cash_on_delivery_enabled), card_label = VALUES(card_label), cash_on_delivery_label = VALUES(cash_on_delivery_label)');
         $stmt->execute([$cardEnabled ? 1 : 0, $codEnabled ? 1 : 0, mb_substr(trim((string)($body['card_label'] ?? 'Card online')), 0, 120), mb_substr(trim((string)($body['cash_on_delivery_label'] ?? 'Ramburs la curier')), 0, 120)]);
         jsonResponse(paymentSettings($db, $config));
     }

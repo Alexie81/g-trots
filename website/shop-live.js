@@ -93,7 +93,7 @@
 
   function registerProducts(products) {
     const normalized = products.map(normalizeProduct);
-    window.GTrotsFavorites?.registerProducts?.(normalized);
+    window.GTrotsFavorites?.registerProducts?.(normalized, { authoritative: true });
     window.GTrotsShopCatalog?.renderLiveProducts?.(products);
     document.dispatchEvent(new CustomEvent("g-trots:live-products", { detail: normalized }));
     return normalized;
@@ -710,7 +710,7 @@
     let products = [];
     try {
       products = await api("publicProducts");
-      if (Array.isArray(products) && products.length) registerProducts(products);
+      if (Array.isArray(products)) registerProducts(products);
     } catch {
       // Păstrăm catalogul local existent ca rezervă.
     }

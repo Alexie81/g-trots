@@ -84,8 +84,9 @@
     return `<div class="${className}${legacyClass}${imageUrl ? " is-live-image" : ""}"${style} role="img" aria-label="${escapeHtml(product.name)}"></div>`;
   }
 
-  function registerProducts(rows) {
+  function registerProducts(rows, options = {}) {
     if (!Array.isArray(rows)) return;
+    if (options.authoritative) Object.keys(PRODUCTS).forEach(id => delete PRODUCTS[id]);
     rows.forEach(product => {
       const id = String(product?.id || product?.slug || "").trim();
       if (!id) return;

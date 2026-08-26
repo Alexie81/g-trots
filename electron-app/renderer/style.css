@@ -13170,17 +13170,32 @@ body::after {
 .shop-order-grid .shop-order-summary-card { gap: 0; overflow: hidden; border: 1px solid #3a363e; border-radius: 21px; padding: 15px; background: #211f24; }
 .shop-order-card-head { min-height: 30px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #3a363e; padding-bottom: 9px; margin-bottom: 2px; }
 .shop-order-card-head > small { color: #ff8a27; font-size: 9px; letter-spacing: .1em; }
-.shop-order-card-head > em { color: #736d75; font-size: 8px; font-style: normal; font-weight: 850; letter-spacing: .08em; }
+.shop-order-card-head > em,
+.shop-order-card-actions > em { color: #736d75; font-size: 8px; font-style: normal; font-weight: 850; letter-spacing: .08em; }
+.shop-order-card-actions { display: flex; align-items: center; gap: 8px; }
+.shop-order-card-actions > button { min-height: 30px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid #4a4650; border-radius: 10px; padding: 0 9px; color: #eee9e5; background: #343139; font: inherit; font-size: 8px; font-weight: 850; cursor: pointer; }
+.shop-order-card-actions > button:hover,
+.shop-order-card-actions > button.active { border-color: #ff8a27; color: #ff9c51; background: rgba(255,138,39,.1); }
+.shop-order-card-actions svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .shop-order-detail-row { min-height: 42px; display: grid; grid-template-columns: minmax(96px, .7fr) minmax(0, 1.3fr); align-items: center; gap: 14px; border-bottom: 1px solid #302d34; padding: 8px 1px; }
 .shop-order-detail-row > small { color: #817a82; font-size: 10px; font-weight: 650; letter-spacing: 0; }
 .shop-order-detail-row > span { min-width: 0; color: #c8c1bb; font-size: 12px; font-weight: 700; line-height: 1.35; text-align: right; overflow-wrap: anywhere; }
 .shop-order-detail-row > span.strong { color: #f2ede8; font-size: 13px; font-weight: 850; }
+.shop-order-delivery-field { min-height: 42px; display: grid !important; grid-template-columns: minmax(96px,.7fr) minmax(0,1.3fr); align-items: center; gap: 14px; border-bottom: 1px solid #302d34; padding: 5px 1px; margin: 0 !important; }
+.shop-order-delivery-field > small { color: #817a82; font-size: 10px; font-weight: 650; letter-spacing: 0; }
+.shop-order-delivery-field > input { width: 100%; min-height: 34px; border: 1px solid #49454f; border-radius: 10px; padding: 0 9px; color: #f2ede8; background: #171519; font: inherit; font-size: 12px; font-weight: 750; text-align: right; outline: 0; }
+.shop-order-delivery-field > input:focus { border-color: #ff8a27; box-shadow: 0 0 0 3px rgba(255,138,39,.09); }
+.shop-order-delivery-field > input:disabled { border-color: transparent; padding-right: 0; color: #c8c1bb; background: transparent; opacity: 1; }
+.shop-order-delivery-field.strong > input { font-size: 13px; font-weight: 850; }
+.shop-order-delivery-helper { margin: 9px 0 0; border-radius: 10px; padding: 8px 10px; color: #ffad70; background: rgba(255,138,39,.08); font-size: 8px; line-height: 1.4; }
+.shop-order-delivery-helper[hidden] { display: none; }
 .shop-order-contact-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding-top: 12px; margin-top: auto; }
 .shop-order-contact-actions > button { min-height: 43px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 14px; color: #eee9e5; background: #343138; font: inherit; font-size: 11px; font-weight: 850; cursor: pointer; transition: transform .16s ease, filter .16s ease, background .16s ease; }
 .shop-order-contact-actions > button:hover { filter: brightness(1.12); transform: translateY(-1px); }
 .shop-order-contact-actions > button.whatsapp { border: 1px solid #275b3d; color: #56d990; background: #163323; }
 .shop-order-contact-actions > button > span { color: inherit; font-size: 11px; font-weight: 850; }
 .shop-order-contact-actions svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.shop-order-contact-actions svg.whatsapp-brand { fill: currentColor; stroke: none; }
 .shop-order-items { overflow: hidden; border-radius: 15px; background: #252329; margin-top: 10px; }
 .shop-order-items > div { min-height: 58px; display: flex; align-items: center; gap: 11px; border-top: 1px solid #37343a; padding: 9px 12px; }
 .shop-order-items > div:first-child { border-top: 0; }
@@ -13511,16 +13526,31 @@ body::after {
 }
 .shop-order-timeline,
 .shop-order-status-section { border-color: #403c44; background: #1d1b20; }
-.shop-order-timeline-flow { display: flex; align-items: stretch; gap: 0; overflow-x: auto; overflow-y: hidden; padding: 2px 2px 7px; }
-.shop-order-timeline-step { min-width: 132px; min-height: 0; flex: 1 0 132px; display: grid; grid-template-rows: 44px minmax(0,1fr); gap: 7px; position: relative; border: 0; border-radius: 0; padding: 0 5px; background: transparent; }
-.shop-order-timeline-rail { display: flex; align-items: center; position: relative; }
+.shop-order-timeline-flow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: start; gap: 8px; overflow: visible; padding: 2px 0 5px; }
+.shop-order-timeline-step { min-width: 0; min-height: 78px; display: grid; grid-template-columns: minmax(0,1fr); grid-template-rows: 42px auto auto; align-content: start; gap: 4px; position: relative; border: 0; border-radius: 0; padding: 0 3px; background: transparent; text-align: center; }
+.shop-order-timeline-rail { height: 42px; display: grid; place-items: center; position: relative; }
 .shop-order-timeline-rail > span { z-index: 1; width: 40px; height: 40px; border-radius: 14px; }
-.shop-order-timeline-rail > i { height: 3px; min-height: 0; flex: 1; margin: 0 -5px 0 5px; background: #3a363e; }
+.shop-order-timeline-rail > i { width: auto; height: 3px; min-height: 0; position: absolute; z-index: 0; left: calc(50% + 23px); right: -16px; margin: 0; background: #3a363e; }
+.shop-order-timeline-step > strong { overflow: hidden; color: #aaa39c; font-size: 10px; font-weight: 850; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.shop-order-timeline-step > small { overflow: hidden; color: #706a71; font-size: 7px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.shop-order-timeline-step.reached > strong,
+.shop-order-timeline-step.current > strong { color: var(--status-color); }
+.shop-order-timeline-step.current .shop-order-timeline-rail > span { box-shadow: 0 0 0 5px color-mix(in srgb,var(--status-color) 12%,transparent),0 8px 18px color-mix(in srgb,var(--status-color) 25%,transparent); }
 .shop-order-timeline-card { min-height: 72px; border: 1px solid #39363e; border-radius: 16px; padding: 10px; background: #211f24; }
 .shop-order-timeline-step.current .shop-order-timeline-card { border-color: color-mix(in srgb,var(--status-color) 60%,transparent); background: color-mix(in srgb,var(--status-color) 8%,#211f24); box-shadow: 0 10px 22px rgba(0,0,0,.14); }
 .shop-order-timeline-card strong { font-size: 11px; }
 .shop-order-timeline-card p { display: -webkit-box; overflow: hidden; margin-top: 3px; font-size: 9px; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .shop-order-timeline-card footer { margin-top: 6px; }
+.shop-order-current-state { min-height: 76px; display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; align-items: center; gap: 12px; margin-top: 10px; border: 1px solid color-mix(in srgb,var(--status-color) 42%,#3d3940); border-radius: 19px; padding: 11px 14px; background: linear-gradient(135deg,color-mix(in srgb,var(--status-color) 9%,#211f24),#211f24); box-shadow: 0 10px 24px rgba(0,0,0,.11); }
+.shop-order-current-state.terminal { border-color: color-mix(in srgb,var(--status-color) 68%,transparent); background: linear-gradient(135deg,color-mix(in srgb,var(--status-color) 15%,#211f24),#211f24); }
+.shop-order-current-state > span { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 14px; color: #171411; background: var(--status-color); box-shadow: 0 8px 18px color-mix(in srgb,var(--status-color) 24%,transparent); }
+.shop-order-current-state svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.shop-order-current-state > div { min-width: 0; }
+.shop-order-current-state small { display: block; color: var(--status-color); font-size: 7px; font-weight: 900; letter-spacing: .1em; }
+.shop-order-current-state strong { display: block; margin-top: 3px; color: #fff; font-size: 13px; }
+.shop-order-current-state p { margin: 3px 0 0; color: #aaa39c; font-size: 9px; }
+.shop-order-current-state time { display: block; margin-top: 4px; color: #827b74; font-size: 8px; }
+.shop-order-current-state > em { align-self: start; border-radius: 999px; padding: 6px 9px; color: #171411; background: var(--status-color); font-size: 7px; font-style: normal; font-weight: 900; letter-spacing: .08em; }
 .shop-order-status-picker { display: flex; align-items: stretch; gap: 0; overflow-x: auto; overflow-y: hidden; padding: 4px 2px 8px; }
 .shop-order-status-option { min-width: 132px; min-height: 112px; flex: 1 0 132px; display: grid; grid-template-columns: 1fr 22px; grid-template-rows: 43px auto; align-items: start; gap: 5px 7px; position: relative; border: 0; border-radius: 0; padding: 0 5px; background: transparent; }
 .shop-order-status-option::after { content: ''; height: 3px; position: absolute; z-index: 0; left: 45px; right: -5px; top: 20px; border-radius: 99px; background: #3a363e; }
@@ -13538,8 +13568,11 @@ body::after {
 .shop-order-status-option.locked { cursor: not-allowed; opacity: .43; }
 .shop-order-status-option.locked:hover { transform: none; }
 @media (max-width: 820px) {
+  .shop-order-timeline-flow { display: flex; gap: 7px; overflow-x: auto; overflow-y: hidden; }
   .shop-order-timeline-step,
   .shop-order-status-option { min-width: 142px; flex-basis: 142px; }
+  .shop-order-current-state { grid-template-columns: 42px minmax(0,1fr); }
+  .shop-order-current-state > em { grid-column: 2; justify-self: start; }
 }
 @media (max-width: 560px) {
   #shop-order-modal .shop-commerce-modal.compact { height: calc(100vh - 12px); height: calc(100dvh - 12px); max-height: calc(100vh - 12px); max-height: calc(100dvh - 12px); width: calc(100vw - 12px); border-radius: 24px; }

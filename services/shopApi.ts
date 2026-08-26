@@ -95,6 +95,8 @@ export type ShopProduct = {
   manufacturer_id: string | null;
   manufacturer_name: string | null;
   sku: string | null;
+  supplier_product_code: string | null;
+  ean: string | null;
   source_id: string | null;
   source_name: string | null;
   source_domain: string;
@@ -142,6 +144,8 @@ export type ShopProductPayload = {
   manufacturer_id: string | null;
   brand_ids: string[];
   sku?: string;
+  supplier_product_code: string;
+  ean: string;
   source_id: string | null;
   source_domain: string;
   source_url: string;
@@ -398,7 +402,7 @@ export const shopApi = {
   adjustStock: (token: string, id: string, quantity: number, note: string) => shopCall<ShopProduct>('adjustStock', token, { method: 'POST', body: JSON.stringify({ quantity, note }) }, id),
   listOrders: (token: string) => shopCall<ShopOrder[]>('listOrders', token),
   getOrder: (token: string, id: string) => shopCall<ShopOrder>('getOrder', token, undefined, id),
-  updateOrder: (token: string, id: string, payload: Pick<ShopOrder, 'status' | 'payment_status'> & { admin_notes: string; notify_customer: boolean }) => shopCall<ShopOrder>('updateOrder', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
+  updateOrder: (token: string, id: string, payload: Pick<ShopOrder, 'status' | 'payment_status'> & { admin_notes: string; notify_customer: boolean; address?: string; city?: string; county?: string; postal_code?: string }) => shopCall<ShopOrder>('updateOrder', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
   getPaymentSettings: (token: string) => shopCall<ShopPaymentSettings>('getPaymentSettings', token),
   updatePaymentSettings: (token: string, payload: ShopPaymentSettings) => shopCall<ShopPaymentSettings>('updatePaymentSettings', token, { method: 'PUT', body: JSON.stringify(payload) }),
   syncStripeCatalog: (token: string) => shopCall<ShopStripeSyncSummary>('syncStripeCatalog', token, { method: 'POST', body: '{}' }),

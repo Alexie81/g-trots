@@ -120,6 +120,8 @@ type FormState = {
   name: string;
   slug: string;
   sku: string;
+  supplier_product_code: string;
+  ean: string;
   short_description: string;
   description_title: string;
   description_html: string;
@@ -150,6 +152,8 @@ function emptyForm(): FormState {
     name: '',
     slug: '',
     sku: '',
+    supplier_product_code: '',
+    ean: '',
     short_description: '',
     description_title: '',
     description_html: '',
@@ -239,7 +243,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
     if (!term) return products;
-    return products.filter((product) => `${product.name} ${product.sku || ''} ${product.category_name || ''}`.toLowerCase().includes(term));
+    return products.filter((product) => `${product.name} ${product.sku || ''} ${product.supplier_product_code || ''} ${product.ean || ''} ${product.category_name || ''}`.toLowerCase().includes(term));
   }, [products, query]);
   const safePage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
   const pagedProducts = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -279,6 +283,8 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
         name: full.name,
         slug: full.slug,
         sku: full.sku || '',
+        supplier_product_code: full.supplier_product_code || '',
+        ean: full.ean || '',
         short_description: full.short_description || '',
         description_title: full.description_title || '',
         description_html: full.description_html || '',
@@ -428,6 +434,8 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
       category_id: form.category_id,
       manufacturer_id: form.manufacturer_id,
       brand_ids: form.brand_ids,
+      supplier_product_code: form.supplier_product_code.trim(),
+      ean: form.ean.trim(),
       source_domain: form.source_domain,
       source_id: form.source_id,
       source_url: '',
@@ -585,6 +593,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
             <Field label="NUME PRODUS *" value={form.name} onChangeText={(value) => { patchForm('name', value); if (!slugTouched) patchForm('slug', slugify(value)); }} placeholder="Ex: Anvelopa G10 All-Terrain" error={duplicateProductName ? 'Acest nume de produs exista deja.' : undefined} />
             <Field label="SLUG *" value={form.slug} onChangeText={(value) => { setSlugTouched(true); patchForm('slug', slugify(value)); }} placeholder="anvelopa-g10-all-terrain" autoCapitalize="none" prefix="g-trots.ro/magazin/produs/" />
             <Field label="SKU / COD PRODUS" value={form.sku} editable={false} placeholder="Se generează automat la salvare" hint="Se generează automat la salvare" />
+            <View style={styles.twoColumns}><View style={styles.column}><Field label="COD PRODUS FURNIZOR" value={form.supplier_product_code} onChangeText={(value) => patchForm('supplier_product_code', value)} placeholder="Opțional · litere și cifre" maxLength={120} autoCapitalize="characters" /></View><View style={styles.column}><Field label="EAN" value={form.ean} onChangeText={(value) => patchForm('ean', value)} placeholder="Opțional · litere și cifre" maxLength={120} autoCapitalize="characters" /></View></View>
 
             <SectionTitle number="02" title="Galerie foto" text="Incarca pana la 12 poze. Tine de o fotografie si trage-o in pozitia dorita." />
             <ScrollView horizontal scrollEnabled={!galleryDragging} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.gallery}>

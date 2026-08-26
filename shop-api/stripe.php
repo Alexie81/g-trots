@@ -86,6 +86,8 @@ function stripeProductParams(array $product, array $config, string $stripeProduc
             'g_trots_product_id' => (string)$product['id'],
             'g_trots_slug' => mb_substr((string)$product['slug'], 0, 200),
             'sku' => mb_substr((string)($product['sku'] ?? ''), 0, 80),
+            'supplier_product_code' => mb_substr((string)($product['supplier_product_code'] ?? ''), 0, 120),
+            'ean' => mb_substr((string)($product['ean'] ?? ''), 0, 120),
             'source' => mb_substr((string)($product['source_domain'] ?? 'g-trots.ro'), 0, 80),
         ],
     ];

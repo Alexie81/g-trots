@@ -163,15 +163,6 @@
     return payments;
   }
 
-  function syncEmailRequirement(form) {
-    const email = form.elements.customer_email;
-    const paymentMethod = String(form.elements.payment_method?.value || "");
-    const requiredForCard = paymentMethod === "card";
-    if (email) email.required = requiredForCard;
-    const label = form.querySelector("[data-email-requirement]");
-    if (label) label.textContent = requiredForCard ? "necesar pentru plata cu cardul" : "opțional la ramburs";
-  }
-
   function imageStyle(product) {
     const url = safeUrl(product?.imageUrl);
     return url ? ` style="background-image:url('${escapeHtml(url)}')"` : "";
@@ -245,9 +236,8 @@
       errors.push(form.elements.customer_phone);
     }
     const email = String(form.elements.customer_email?.value || "").trim();
-    const cardPayment = String(form.elements.payment_method?.value || "") === "card";
-    if (cardPayment && !email) {
-      invalidate(form.elements.customer_email, "Completează e-mailul pentru plata cu cardul.");
+    if (!email) {
+      invalidate(form.elements.customer_email, "Completează adresa de e-mail.");
       errors.push(form.elements.customer_email);
     } else if (email && !form.elements.customer_email.checkValidity()) {
       invalidate(form.elements.customer_email, "Introdu o adresă de e-mail validă.");
@@ -291,7 +281,6 @@
       if (!payments.length) throw new Error("Momentan nu este activă nicio metodă de plată.");
       renderShipping(config);
       renderPayments(config);
-      syncEmailRequirement(form);
       renderSummary(cart, config);
       form.hidden = false;
 
@@ -299,7 +288,6 @@
         event.target.closest("label")?.classList.remove("is-invalid");
         if (event.target.matches('input[type="radio"]')) {
           updateTotals(cartRows(), config);
-          syncEmailRequirement(form);
         }
       });
       form.addEventListener("input", event => {

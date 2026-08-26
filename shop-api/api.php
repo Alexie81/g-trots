@@ -1097,11 +1097,8 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
     if ($paymentMethod === 'cash_on_delivery' && !$payments['cash_on_delivery_enabled']) throw new InvalidArgumentException('Plata ramburs nu este activa.');
     if (!in_array($paymentMethod, ['card', 'cash_on_delivery'], true)) throw new InvalidArgumentException('Metoda de plata nu este valida.');
     $customerEmail = mb_substr(trim((string)($body['customer_email'] ?? '')), 0, 180);
-    if ($paymentMethod === 'card' && !filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
-        throw new InvalidArgumentException('Completeaza o adresa de e-mail valida pentru plata cu cardul.');
-    }
-    if ($customerEmail !== '' && !filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
-        throw new InvalidArgumentException('Adresa de e-mail nu este valida.');
+    if (!filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
+        throw new InvalidArgumentException('Completeaza o adresa de e-mail valida.');
     }
     $shippingId = existingReference($db, 'shop_shipping_methods', $body['shipping_method_id'] ?? null, 'Metoda de livrare');
     if (!$shippingId) throw new InvalidArgumentException('Alege metoda de livrare.');

@@ -228,6 +228,7 @@ const pageSizeMenu = document.querySelector(".pagination-select-menu");
 const pageSizeOptions = [...document.querySelectorAll(".pagination-select-menu [data-value]")];
 const paginationRange = document.querySelector("#pagination-range");
 const paginationPages = document.querySelector("#pagination-pages");
+let isCatalogLoading = Boolean(productGrid?.classList.contains("is-catalog-loading"));
 
 const legacyProductImages = {
   "anvelopa-g10-all-terrain": 1,
@@ -332,8 +333,11 @@ function liveProductCard(product, index) {
 
 function renderLiveProducts(products) {
   if (!productGrid || !Array.isArray(products)) return false;
+  isCatalogLoading = false;
   const cards = products.map(liveProductCard);
   productGrid.replaceChildren(...cards);
+  productGrid.classList.remove("is-catalog-loading", "has-catalog-error");
+  productGrid.setAttribute("aria-busy", "false");
   productCards = cards;
   if (products.length) {
     const oldMaximum = Number(priceRange?.max || 0);
@@ -349,6 +353,30 @@ function renderLiveProducts(products) {
   applyFilters();
   productGrid.dataset.catalogSource = "shop-api";
   return true;
+}
+
+function showCatalogError() {
+  if (!productGrid || !isCatalogLoading) return;
+  isCatalogLoading = false;
+  productCards = [];
+  productGrid.classList.remove("is-catalog-loading");
+  productGrid.classList.add("has-catalog-error");
+  productGrid.setAttribute("aria-busy", "false");
+  productGrid.innerHTML = `
+    <section class="catalog-load-error" role="alert">
+      <span class="catalog-load-error-icon" aria-hidden="true">!</span>
+      <div>
+        <span>Catalog indisponibil momentan</span>
+        <h3>Produsele nu s-au putut încărca</h3>
+        <p>Conexiunea poate fi temporar întreruptă. Reîncearcă fără să pierzi filtrele selectate.</p>
+      </div>
+      <button class="button" type="button" data-retry-catalog>Reîncearcă <b aria-hidden="true">↻</b></button>
+    </section>`;
+  resultsCount && (resultsCount.textContent = "Catalog indisponibil");
+  searchCount && (searchCount.textContent = "0 produse");
+  if (noResults) noResults.hidden = true;
+  if (productPagination) productPagination.hidden = true;
+  productGrid.querySelector("[data-retry-catalog]")?.addEventListener("click", () => window.location.reload());
 }
 
 function setSortMenuOpen(isOpen, focusSelected = false) {
@@ -731,6 +759,13 @@ function renderPagination(totalProducts) {
 }
 
 function applyFilters({ resetPage = true } = {}) {
+  if (isCatalogLoading) {
+    if (resultsCount) resultsCount.textContent = "Se încarcă produsele…";
+    if (searchCount) searchCount.textContent = "catalogul";
+    if (noResults) noResults.hidden = true;
+    if (productPagination) productPagination.hidden = true;
+    return;
+  }
   if (resetPage) currentPage = 1;
   const query = normalizeText(searchInput?.value || "");
   const selectedBrands = getSelectedBrands();
@@ -1067,5 +1102,8 @@ applyFilters();
 loadCatalogFilters();
 
 window.GTrotsShopCatalog = {
-  renderLiveProducts
+  renderLiveProducts,
+  showCatalogError
 };
+
+document.addEventListener("g-trots:catalog-error", showCatalogError);

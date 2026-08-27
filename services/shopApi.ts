@@ -125,6 +125,9 @@ export type ShopProduct = {
   meta_description: string;
   cost_price: number;
   price: number;
+  supplier_base_price: number | null;
+  supplier_price_difference: number | null;
+  supplier_price_updated_at: string | null;
   sale_price: number | null;
   discount_type: 'percent' | 'fixed';
   discount_value: number | null;

@@ -129,6 +129,8 @@ type FormState = {
   meta_description: string;
   cost_price: string;
   price: string;
+  supplier_base_price: string;
+  supplier_price_difference: string;
   discount_type: 'percent' | 'fixed';
   discount_value: string;
   category_id: string | null;
@@ -162,6 +164,8 @@ function emptyForm(): FormState {
     meta_description: '',
     cost_price: '0',
     price: '',
+    supplier_base_price: '',
+    supplier_price_difference: '',
     discount_type: 'percent',
     discount_value: '',
     category_id: null,
@@ -294,6 +298,8 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
         meta_description: full.meta_description || '',
         cost_price: String(full.cost_price || 0),
         price: String(full.price),
+        supplier_base_price: full.supplier_base_price == null ? '' : String(full.supplier_base_price),
+        supplier_price_difference: full.supplier_price_difference == null ? '' : String(full.supplier_price_difference),
         discount_type: full.discount_type || 'percent',
         discount_value: full.discount_value ? String(full.discount_value) : '',
         category_id: full.category_id,
@@ -502,6 +508,11 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
   };
 
   const priceValue = Number(form.price.replace(',', '.')) || 0;
+  const isBoomagProduct = form.source_domain.trim().toLowerCase() === 'boomag.ro';
+  const supplierBasePriceValue = form.supplier_base_price.trim() === '' ? null : Number(form.supplier_base_price.replace(',', '.'));
+  const commercialDifferenceValue = supplierBasePriceValue === null || !Number.isFinite(supplierBasePriceValue)
+    ? null
+    : Math.round((priceValue - supplierBasePriceValue) * 100) / 100;
   const discountType = form.discount_type || 'percent';
   const discountValue = Number((form.discount_value || '').replace(',', '.')) || 0;
   const reducedPrice = discountValue > 0
@@ -626,13 +637,20 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
             <TouchableOpacity style={styles.inlineAdd} onPress={() => patchForm('questions', [...form.questions, { key: `question-${Date.now()}`, question: '', answer: '' }])}><Plus size={16} color={Colors.orange} /><Text style={styles.inlineAddText}>Adauga intrebare</Text></TouchableOpacity>
             {form.questions.map((question, index) => <View key={question.key} style={styles.subEditorCard}><View style={styles.subEditorHead}><Text style={styles.subEditorTitle}>INTREBARE {index + 1}</Text><TouchableOpacity onPress={() => patchForm('questions', form.questions.filter((item) => item.key !== question.key))}><Trash2 size={16} color={Colors.error} /></TouchableOpacity></View><Field label="INTREBARE" value={question.question} onChangeText={(value) => patchForm('questions', form.questions.map((item) => item.key === question.key ? { ...item, question: value } : item))} placeholder="Intrebarea clientului" multiline /><Field label="RASPUNS" value={question.answer} onChangeText={(value) => patchForm('questions', form.questions.map((item) => item.key === question.key ? { ...item, answer: value } : item))} placeholder="Raspunsul magazinului" multiline /></View>)}
 
-            <SectionTitle number="06" title="Pret si reducere" text="Configureaza pretul de vanzare si reducerea afisata pe site." />
+            <SectionTitle number="06" title="Pret si reducere" text={isBoomagProduct ? 'Pretul G-Trots ramane pretul feedului Boomag plus diferenta comerciala stabilita de tine.' : 'Configureaza pretul G-Trots si reducerea afisata pe site.'} />
+            {isBoomagProduct ? <View style={styles.supplierPricingCard}>
+              <View style={styles.supplierPricingHead}><View><Text style={styles.supplierPricingKicker}>SINCRONIZARE BOOMAG</Text><Text style={styles.supplierPricingTitle}>Pretul public se pastreaza automat</Text></View><View style={styles.supplierPricingLive}><View style={styles.supplierPricingLiveDot} /><Text style={styles.supplierPricingLiveText}>FEED ACTIV</Text></View></View>
+              <View style={styles.twoColumns}>
+                <View style={styles.column}><Field label="PRET FEED BOOMAG" value={form.supplier_base_price} editable={false} placeholder="Nesincronizat" keyboardType="decimal-pad" hint="Valoare preluata automat din feed." /></View>
+                <View style={styles.column}><Field label="DIFERENTA COMERCIALA" value={commercialDifferenceValue === null ? '' : String(commercialDifferenceValue).replace('.', ',')} editable={false} placeholder="Nedisponibila" keyboardType="decimal-pad" hint="Calculata automat fata de pretul G-Trots." /></View>
+              </View>
+            </View> : null}
             <Text style={styles.label}>TIP REDUCERE</Text>
             <View style={styles.sourceRow}>
               <Choice label="Procent (%)" selected={discountType === 'percent'} onPress={() => patchForm('discount_type', 'percent')} />
               <Choice label="Suma fixa (lei)" selected={discountType === 'fixed'} onPress={() => patchForm('discount_type', 'fixed')} />
             </View>
-            <Field label="PRET VANZARE *" value={form.price} onChangeText={(value) => patchForm('price', value)} placeholder="0,00" keyboardType="decimal-pad" />
+            <Field label="PRET G-TROTS *" value={form.price} onChangeText={(value) => patchForm('price', value)} placeholder="0,00" keyboardType="decimal-pad" hint={isBoomagProduct ? 'Editezi pretul public dorit; diferenta comerciala se recalculeaza automat.' : undefined} />
             <Field label={discountType === 'percent' ? 'REDUCERE %' : 'REDUCERE LEI'} value={form.discount_value || ''} onChangeText={(value) => patchForm('discount_value', value)} placeholder="0" keyboardType="decimal-pad" />
             <View style={styles.nirNote}><Text style={styles.nirNoteTitle}>Costul de achizitie nu se introduce manual.</Text><Text style={styles.nirNoteText}>Va fi calculat automat din NIR-uri si facturile de intrare, deoarece poate varia la fiecare receptie.</Text></View>
             {reducedPrice !== null ? <View style={styles.pricePreview}><Text style={styles.oldPrice}>{money(priceValue)}</Text><Text style={styles.newPrice}>{money(reducedPrice)}</Text><Text style={styles.discountBadge}>{discountType === 'percent' ? `-${discountValue}%` : `-${money(discountValue)}`}</Text></View> : null}
@@ -729,6 +747,7 @@ const styles = StyleSheet.create({
   gallery: { gap: 12, paddingBottom: 10, paddingRight: 16 }, galleryCard: { width: 180, height: 214, padding: 7, borderWidth: 1, borderColor: '#3B373E', borderRadius: 20, backgroundColor: '#211F24' }, galleryMain: { borderColor: Colors.orange }, galleryDragging: { zIndex: 20, elevation: 14, opacity: 0.88, shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 8 } }, galleryPhoto: { width: 164, height: 148, overflow: 'hidden', borderRadius: 14, backgroundColor: '#F4F3F1' }, galleryRemove: { position: 'absolute', top: 7, right: 7, width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.95)' }, mainBadge: { position: 'absolute', left: 7, bottom: 7, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5, backgroundColor: 'rgba(255,255,255,0.95)' }, mainBadgeText: { color: '#111', fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.5 }, galleryFooter: { height: 51, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 5, paddingHorizontal: 2 }, dragHint: { flexDirection: 'row', alignItems: 'center', gap: 2 }, dragHintText: { color: Colors.textMuted, fontFamily: 'Inter-SemiBold', fontSize: 7 }, makeMain: { height: 30, flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: '#48434B', borderRadius: 9, paddingHorizontal: 7, backgroundColor: '#2B282E' }, makeMainActive: { borderColor: 'rgba(255,107,0,0.3)', backgroundColor: Colors.orangeDim }, makeMainText: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 7 }, makeMainTextActive: { color: Colors.orange }, imageAdd: { width: 180, height: 214, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#57515B', borderStyle: 'dashed', borderRadius: 20, backgroundColor: '#161519' }, imageAddIcon: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: Colors.orangeDim }, imageAddText: { color: Colors.textSecondary, fontFamily: 'Inter-SemiBold', fontSize: 10, marginTop: 11 }, imageCount: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 4 },
   twoColumns: { flexDirection: 'row', gap: 9 }, column: { flex: 1 }, pricePreview: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 16, padding: 14, backgroundColor: '#1B1B1F', marginBottom: 10 }, oldPrice: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 11, textDecorationLine: 'line-through' }, newPrice: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 16 }, discountBadge: { color: '#9CD9AE', fontFamily: 'Inter-Bold', fontSize: 9 },
   nirNote: { marginBottom: 10, borderWidth: 1, borderColor: 'rgba(56,189,248,0.18)', borderRadius: 15, padding: 13, backgroundColor: 'rgba(56,189,248,0.055)' }, nirNoteTitle: { color: '#7DD3FC', fontFamily: 'Inter-Bold', fontSize: 10 }, nirNoteText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 14, marginTop: 4 },
+  supplierPricingCard: { marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,138,39,0.28)', borderRadius: 20, padding: 13, backgroundColor: 'rgba(255,138,39,0.055)' }, supplierPricingHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14 }, supplierPricingKicker: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8 }, supplierPricingTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 12, marginTop: 3 }, supplierPricingLive: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 6, backgroundColor: 'rgba(34,197,94,0.1)' }, supplierPricingLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#2DD881' }, supplierPricingLiveText: { color: '#8FE3B2', fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.5 },
   multiSelect: { marginBottom: 16 }, multiSelectButton: { minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderWidth: 1, borderColor: '#49454F', borderRadius: 13, paddingHorizontal: 14, backgroundColor: '#161519' }, multiSelectButtonOpen: { borderColor: Colors.orange }, multiSelectValue: { flex: 1, color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 10 }, multiSelectPlaceholder: { color: Colors.textMuted, fontFamily: 'Inter-Regular' }, multiSelectOptions: { marginTop: 6, overflow: 'hidden', borderWidth: 1, borderColor: '#49454F', borderRadius: 14, padding: 6, backgroundColor: '#211F24' }, multiSelectOption: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 10, paddingHorizontal: 10 }, multiSelectCheck: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#57515B', borderRadius: 7, backgroundColor: '#171519' }, multiSelectCheckActive: { borderColor: Colors.orange, backgroundColor: Colors.orange }, multiSelectOptionText: { color: Colors.textSecondary, fontFamily: 'Inter-SemiBold', fontSize: 10 }, multiSelectOptionTextActive: { color: Colors.orange },
   googlePreview: { flexDirection: 'row', gap: 12, borderWidth: 1, borderColor: '#343137', borderRadius: 19, padding: 14, backgroundColor: '#FFF', marginBottom: 18 }, googleImage: { width: 78, height: 78, borderRadius: 10, backgroundColor: '#EEE' }, googleCopy: { flex: 1, minWidth: 0 }, googleSite: { color: '#202124', fontFamily: 'Inter-Regular', fontSize: 9 }, googleTitle: { color: '#1A0DAB', fontFamily: 'Inter-Regular', fontSize: 15, lineHeight: 19, marginTop: 3 }, googleDescription: { color: '#4D5156', fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 14, marginTop: 3 }, googleUrl: { color: '#188038', fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 4 },
   toggleCard: { minHeight: 65, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderRadius: 17, padding: 13, backgroundColor: '#1B1B1F', marginBottom: 9 }, toggleTitle: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 11 }, toggleText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 3 },

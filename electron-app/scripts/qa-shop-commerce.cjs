@@ -109,6 +109,17 @@ app.whenReady().then(async () => {
     document.querySelector('#shop-product-brands input')?.click();
     window.__qaBrandSummaryUpdates = document.getElementById('shop-product-brands-summary').textContent.includes('Universal');
     window.__qaNoManualCostInput = !document.getElementById('shop-product-cost-price');
+    const sourceSelect = document.getElementById('shop-product-source');
+    if (![...sourceSelect.options].some(option => option.value === 's2')) sourceSelect.add(new Option('Boomag · boomag.ro', 's2'));
+    sourceSelect.value = 's2';
+    sourceSelect.dispatchEvent(new Event('change', { bubbles:true }));
+    document.getElementById('shop-product-supplier-base-price').value = '100';
+    document.getElementById('shop-product-price').value = '149';
+    document.getElementById('shop-product-price').dispatchEvent(new Event('input', { bubbles:true }));
+    window.__qaBoomagPricingVisible = !document.getElementById('shop-product-boomag-pricing').hidden;
+    window.__qaBoomagSupplierPriceDisabled = document.getElementById('shop-product-supplier-base-price').disabled;
+    window.__qaBoomagDifferenceDisabled = document.getElementById('shop-product-price-difference').disabled;
+    window.__qaBoomagDifference = document.getElementById('shop-product-price-difference').value;
   })()`);
   await win.webContents.executeJavaScript(`document.querySelector('[data-commerce-close="shop-product-modal"]').click()`);
   await sleep(220);
@@ -158,6 +169,10 @@ app.whenReady().then(async () => {
     brandDropdownOptions: Number(window.__qaBrandDropdownOptions || 0),
     brandSummaryUpdates: Boolean(window.__qaBrandSummaryUpdates),
     noManualCostInput: Boolean(window.__qaNoManualCostInput),
+    boomagPricingVisible: Boolean(window.__qaBoomagPricingVisible),
+    boomagSupplierPriceDisabled: Boolean(window.__qaBoomagSupplierPriceDisabled),
+    boomagDifferenceDisabled: Boolean(window.__qaBoomagDifferenceDisabled),
+    boomagDifference: window.__qaBoomagDifference || '',
     discountTypes: [...document.querySelectorAll('#shop-product-discount-type option')].map(option => option.value),
     hasSourceLinkField: Boolean(document.getElementById('shop-product-source-url')),
     sourceRows: document.querySelectorAll('#shop-sources-content .shop-settings-row').length,

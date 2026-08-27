@@ -13051,6 +13051,17 @@ body::after {
 .shop-commerce-modal textarea { resize: vertical; }
 .shop-commerce-modal input:focus, .shop-commerce-modal textarea:focus, .shop-commerce-modal select:focus { border-color: rgba(255,107,0,.6); box-shadow: 0 0 0 3px rgba(255,107,0,.08); }
 .shop-commerce-modal input:disabled { opacity: .45; }
+.shop-supplier-pricing { margin: 0 0 14px; border: 1px solid rgba(255,138,39,.25); border-radius: 18px; padding: 14px; background: linear-gradient(135deg, rgba(255,138,39,.075), rgba(255,255,255,.018)); }
+.shop-supplier-pricing[hidden] { display: none; }
+.shop-supplier-pricing-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
+.shop-supplier-pricing-head > span { display: grid; gap: 4px; }
+.shop-supplier-pricing-head small { color: #ff8a27; font-size: 7px; font-weight: 900; letter-spacing: .1em; }
+.shop-supplier-pricing-head strong { color: #f2ede8; font-size: 12px; }
+.shop-supplier-pricing-head em { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 6px 9px; color: #8fe3b2; background: rgba(34,197,94,.1); font-size: 7px; font-style: normal; font-weight: 900; letter-spacing: .06em; white-space: nowrap; }
+.shop-supplier-pricing-head em i { width: 6px; height: 6px; border-radius: 50%; background: #2dd881; box-shadow: 0 0 0 4px rgba(45,216,129,.08); }
+.shop-supplier-pricing label > small,
+#shop-product-price-hint { color: #817a80; font-size: 8px; font-weight: 600; letter-spacing: 0; line-height: 1.4; }
+.shop-supplier-pricing input:disabled { border-color: #37333a; color: #b8b0aa; background: #211e22; opacity: 1; cursor: default; }
 .shop-commerce-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .shop-commerce-columns.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .shop-commerce-columns.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }

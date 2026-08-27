@@ -839,7 +839,8 @@
       products = await api("publicProducts");
       if (Array.isArray(products)) registerProducts(products);
     } catch {
-      // Păstrăm catalogul local existent ca rezervă.
+      window.GTrotsShopCatalog?.showCatalogError?.();
+      document.dispatchEvent(new CustomEvent("g-trots:catalog-error"));
     }
 
     // Checkout-ul are acum o pagină dedicată. Coșul rămâne o etapă separată,

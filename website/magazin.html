@@ -21,7 +21,7 @@
     <meta property="og:image" content="https://g-trots.ro/assets/vehicle-performance-scooter.png">
     <link rel="preload" href="assets/magazin-produse-v1.png" as="image" type="image/png">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="magazin.css?v=20260826-6">
+    <link rel="stylesheet" href="magazin.css?v=20260827-2">
     <link rel="stylesheet" href="favorites.css?v=20260825-2">
   </head>
   <body class="shop-page">
@@ -242,7 +242,7 @@
 
           <div class="catalog-results">
             <div class="catalog-toolbar reveal">
-              <p aria-live="polite"><strong id="results-count">6 produse</strong><span> disponibile în catalog</span></p>
+              <p aria-live="polite"><strong id="results-count">Se încarcă produsele…</strong><span> din catalogul G-Trots</span></p>
               <div class="toolbar-actions">
                 <div class="sort-control"><span id="sort-products-label">Sortează:</span>
                   <div class="sort-select-wrap">
@@ -271,140 +271,25 @@
               </div>
             </div>
 
-            <div class="product-grid" id="product-grid">
-              <article class="product-card reveal" data-product-id="anvelopa-g10-all-terrain" data-category="anvelope" data-taxonomy="piese roti anvelope-10-inch anvelope-offroad" data-brand="universal kukirin xiaomi ninebot" data-stock="in-stock" data-manufacturer="g-trots" data-price="149" data-name="Anvelopă G10 All-Terrain" data-search="anvelopa cauciuc offroad all terrain 10 inch universal kukirin xiaomi ninebot">
-                <div class="product-stage">
-                  <span class="product-badge">Recomandat</span>
-                  <div class="product-card-actions">
-                    <button class="cart-button" type="button" data-add-cart aria-label="Adaugă Anvelopă G10 în coș"><span class="global-cart-icon" aria-hidden="true"><i></i><i></i></span><b aria-hidden="true">+</b></button>
-                    <button class="favorite-button" type="button" aria-label="Adaugă Anvelopă G10 la favorite" aria-pressed="false">♡</button>
-                  </div>
-                  <div class="product-image product-image-1" role="img" aria-label="Anvelopă all-terrain pentru trotinetă electrică"></div>
-                  <span class="product-quick-note"><i></i>În stoc</span>
+            <div class="product-grid is-catalog-loading" id="product-grid" aria-busy="true">
+              <section class="catalog-loading" id="catalog-loading" role="status" aria-live="polite" aria-label="Catalogul de produse se încarcă">
+                <div class="catalog-loading-orbit" aria-hidden="true">
+                  <span class="catalog-loading-logo"><b>G</b><i>T</i></span>
+                  <span class="catalog-loading-dot"></span>
                 </div>
-                <div class="product-info">
-                  <span class="product-category">Anvelope · 10 inch</span>
-                  <h3>Anvelopă G10<br>All-Terrain</h3>
-                  <div class="product-summary" tabindex="0" aria-label="Pe scurt: Aderență bună pe asfalt și drum mixt, profil anti-alunecare."><span class="product-summary-badge"><i aria-hidden="true"></i>Pe scurt</span><p>Aderență bună pe asfalt și drum mixt, profil anti-alunecare.</p><span class="product-summary-tooltip" aria-hidden="true">Aderență bună pe asfalt și drum mixt, profil anti-alunecare.</span></div>
-                  <div class="product-fit"><span>Universal</span><span>KuKirin</span><span>Xiaomi</span></div>
+                <div class="catalog-loading-copy">
+                  <span class="catalog-loading-label">Catalog G-Trots</span>
+                  <h3>Pregătim produsele pentru tine</h3>
+                  <p>Verificăm catalogul, prețurile și disponibilitatea actuală.</p>
+                  <span class="catalog-loading-progress" aria-hidden="true"><i></i></span>
                 </div>
-                <div class="product-bottom">
-                  <div class="product-price"><small>Preț</small><strong>149,00 <span>lei</span></strong></div>
-                  <span class="product-open-hint" aria-hidden="true">›</span>
+                <div class="catalog-loading-steps" aria-hidden="true">
+                  <span><i></i>Produse</span>
+                  <span><i></i>Prețuri</span>
+                  <span><i></i>Stoc</span>
                 </div>
-                <a class="product-card-link" href="magazin/produs/anvelopa-g10-all-terrain/" aria-label="Deschide pagina produsului Anvelopă G10 All-Terrain"></a>
-              </article>
-
-              <article class="product-card reveal" data-product-id="display-smart-ride-s3" data-category="electronica" data-taxonomy="piese electronica displayuri" data-brand="kukirin xiaomi ninebot" data-stock="in-stock" data-manufacturer="g-trots" data-price="349" data-name="Display Smart Ride S3" data-search="display bord ecran smart ride s3 electronica kukirin xiaomi ninebot">
-                <div class="product-stage">
-                  <div class="product-card-actions">
-                    <button class="cart-button" type="button" data-add-cart aria-label="Adaugă Display Smart Ride S3 în coș"><span class="global-cart-icon" aria-hidden="true"><i></i><i></i></span><b aria-hidden="true">+</b></button>
-                    <button class="favorite-button" type="button" aria-label="Adaugă Display Smart Ride S3 la favorite" aria-pressed="false">♡</button>
-                  </div>
-                  <div class="product-image product-image-2" role="img" aria-label="Display digital pentru trotinetă electrică"></div>
-                  <span class="product-quick-note"><i></i>În stoc</span>
-                </div>
-                <div class="product-info">
-                  <span class="product-category">Electronică · Display</span>
-                  <h3>Display Smart<br>Ride S3</h3>
-                  <div class="product-summary" tabindex="0" aria-label="Pe scurt: Ecran clar, lizibilitate ridicată și comenzi intuitive în mers."><span class="product-summary-badge"><i aria-hidden="true"></i>Pe scurt</span><p>Ecran clar, lizibilitate ridicată și comenzi intuitive în mers.</p><span class="product-summary-tooltip" aria-hidden="true">Ecran clar, lizibilitate ridicată și comenzi intuitive în mers.</span></div>
-                  <div class="product-fit"><span>KuKirin</span><span>Xiaomi</span><span>Ninebot</span></div>
-                </div>
-                <div class="product-bottom">
-                  <div class="product-price"><small>Preț</small><strong>349,00 <span>lei</span></strong></div>
-                  <span class="product-open-hint" aria-hidden="true">›</span>
-                </div>
-                <a class="product-card-link" href="magazin/produs/display-smart-ride-s3/" aria-label="Deschide pagina produsului Display Smart Ride S3"></a>
-              </article>
-
-              <article class="product-card reveal" data-product-id="incarcator-fastcharge-54-6v" data-category="alimentare" data-taxonomy="piese alimentare incarcatoare" data-brand="universal kukirin xiaomi" data-stock="in-stock" data-manufacturer="g-trots" data-price="189" data-name="Încărcător FastCharge 54.6V" data-search="incarcator fast charge 54.6v alimentare universal kukirin xiaomi">
-                <div class="product-stage">
-                  <div class="product-card-actions">
-                    <button class="cart-button" type="button" data-add-cart aria-label="Adaugă Încărcător FastCharge în coș"><span class="global-cart-icon" aria-hidden="true"><i></i><i></i></span><b aria-hidden="true">+</b></button>
-                    <button class="favorite-button" type="button" aria-label="Adaugă Încărcător FastCharge la favorite" aria-pressed="false">♡</button>
-                  </div>
-                  <div class="product-image product-image-3" role="img" aria-label="Încărcător pentru trotinetă electrică"></div>
-                  <span class="product-quick-note"><i></i>În stoc</span>
-                </div>
-                <div class="product-info">
-                  <span class="product-category">Alimentare · 54.6V</span>
-                  <h3>Încărcător<br>FastCharge 54.6V</h3>
-                  <div class="product-summary" tabindex="0" aria-label="Pe scurt: Protecție la supratensiune și răcire eficientă pentru încărcare sigură."><span class="product-summary-badge"><i aria-hidden="true"></i>Pe scurt</span><p>Protecție la supratensiune și răcire eficientă pentru încărcare sigură.</p><span class="product-summary-tooltip" aria-hidden="true">Protecție la supratensiune și răcire eficientă pentru încărcare sigură.</span></div>
-                  <div class="product-fit"><span>Universal</span><span>KuKirin</span><span>Xiaomi</span></div>
-                </div>
-                <div class="product-bottom">
-                  <div class="product-price"><small>Preț</small><strong>189,00 <span>lei</span></strong></div>
-                  <span class="product-open-hint" aria-hidden="true">›</span>
-                </div>
-                <a class="product-card-link" href="magazin/produs/incarcator-fastcharge-54-6v/" aria-label="Deschide pagina produsului Încărcător FastCharge 54.6V"></a>
-              </article>
-
-              <article class="product-card reveal" data-product-id="motor-dualhub-x2-2000w" data-category="motoare" data-taxonomy="piese motoare motoare-2000w" data-brand="kukirin" data-stock="in-stock" data-manufacturer="kukirin" data-price="1899" data-name="Motor DualHub X2 2000W" data-search="motor dual hub x2 2000w roata kukirin putere">
-                <div class="product-stage">
-                  <span class="product-badge">Recomandat</span>
-                  <div class="product-card-actions">
-                    <button class="cart-button" type="button" data-add-cart aria-label="Adaugă Motor DualHub în coș"><span class="global-cart-icon" aria-hidden="true"><i></i><i></i></span><b aria-hidden="true">+</b></button>
-                    <button class="favorite-button" type="button" aria-label="Adaugă Motor DualHub la favorite" aria-pressed="false">♡</button>
-                  </div>
-                  <div class="product-image product-image-4" role="img" aria-label="Motor dual hub pentru trotinetă electrică"></div>
-                  <span class="product-quick-note product-quick-note-low"><i></i>Stoc limitat</span>
-                </div>
-                <div class="product-info">
-                  <span class="product-category">Motoare · 2000W</span>
-                  <h3>Motor DualHub<br>X2 2000W</h3>
-                  <div class="product-summary" tabindex="0" aria-label="Pe scurt: Cuplu ridicat, construcție robustă și răspuns prompt la accelerație."><span class="product-summary-badge"><i aria-hidden="true"></i>Pe scurt</span><p>Cuplu ridicat, construcție robustă și răspuns prompt la accelerație.</p><span class="product-summary-tooltip" aria-hidden="true">Cuplu ridicat, construcție robustă și răspuns prompt la accelerație.</span></div>
-                  <div class="product-fit"><span>KuKirin</span><span>G2 Master</span></div>
-                </div>
-                <div class="product-bottom">
-                  <div class="product-price"><small>Preț</small><strong>1.899,00 <span>lei</span></strong></div>
-                  <span class="product-open-hint" aria-hidden="true">›</span>
-                </div>
-                <a class="product-card-link" href="magazin/produs/motor-dualhub-x2-2000w/" aria-label="Deschide pagina produsului Motor DualHub X2 2000W"></a>
-              </article>
-
-              <article class="product-card reveal" data-product-id="baterie-powercore-52v-23ah" data-category="alimentare" data-taxonomy="piese alimentare baterii" data-brand="kukirin" data-stock="in-stock" data-manufacturer="kukirin" data-price="2499" data-name="Baterie PowerCore 52V 23Ah" data-search="baterie power core 52v 23ah acumulator autonomie alimentare kukirin">
-                <div class="product-stage">
-                  <div class="product-card-actions">
-                    <button class="cart-button" type="button" data-add-cart aria-label="Adaugă Baterie PowerCore în coș"><span class="global-cart-icon" aria-hidden="true"><i></i><i></i></span><b aria-hidden="true">+</b></button>
-                    <button class="favorite-button" type="button" aria-label="Adaugă Baterie PowerCore la favorite" aria-pressed="false">♡</button>
-                  </div>
-                  <div class="product-image product-image-5" role="img" aria-label="Baterie 52V pentru trotinetă electrică"></div>
-                  <span class="product-quick-note"><i></i>În stoc</span>
-                </div>
-                <div class="product-info">
-                  <span class="product-category">Alimentare · 52V 23Ah</span>
-                  <h3>Baterie PowerCore<br>52V 23Ah</h3>
-                  <div class="product-summary" tabindex="0" aria-label="Pe scurt: Celule echilibrate, BMS protejat și autonomie pentru trasee lungi."><span class="product-summary-badge"><i aria-hidden="true"></i>Pe scurt</span><p>Celule echilibrate, BMS protejat și autonomie pentru trasee lungi.</p><span class="product-summary-tooltip" aria-hidden="true">Celule echilibrate, BMS protejat și autonomie pentru trasee lungi.</span></div>
-                  <div class="product-fit"><span>KuKirin</span><span>G2 Pro</span><span>G3</span></div>
-                </div>
-                <div class="product-bottom">
-                  <div class="product-price"><small>Preț</small><strong>2.499,00 <span>lei</span></strong></div>
-                  <span class="product-open-hint" aria-hidden="true">›</span>
-                </div>
-                <a class="product-card-link" href="magazin/produs/baterie-powercore-52v-23ah/" aria-label="Deschide pagina produsului Baterie PowerCore 52V 23Ah"></a>
-              </article>
-
-              <article class="product-card reveal" data-product-id="kit-frana-hydrostop-pro" data-category="franare" data-taxonomy="piese franare frane-hidraulice" data-brand="universal kukirin xiaomi ninebot" data-stock="in-stock" data-manufacturer="g-trots" data-price="399" data-name="Kit frână HydroStop Pro" data-search="kit frana hidraulica hydro stop pro disc etrier universal kukirin xiaomi ninebot">
-                <div class="product-stage">
-                  <div class="product-card-actions">
-                    <button class="cart-button" type="button" data-add-cart aria-label="Adaugă Kit frână HydroStop în coș"><span class="global-cart-icon" aria-hidden="true"><i></i><i></i></span><b aria-hidden="true">+</b></button>
-                    <button class="favorite-button" type="button" aria-label="Adaugă Kit frână HydroStop la favorite" aria-pressed="false">♡</button>
-                  </div>
-                  <div class="product-image product-image-6" role="img" aria-label="Kit de frână hidraulică pentru trotinetă electrică"></div>
-                  <span class="product-quick-note"><i></i>În stoc</span>
-                </div>
-                <div class="product-info">
-                  <span class="product-category">Frânare · Hidraulic</span>
-                  <h3>Kit frână<br>HydroStop Pro</h3>
-                  <div class="product-summary" tabindex="0" aria-label="Pe scurt: Dozaj precis și putere constantă de oprire pentru control mai bun."><span class="product-summary-badge"><i aria-hidden="true"></i>Pe scurt</span><p>Dozaj precis și putere constantă de oprire pentru control mai bun.</p><span class="product-summary-tooltip" aria-hidden="true">Dozaj precis și putere constantă de oprire pentru control mai bun.</span></div>
-                  <div class="product-fit"><span>Universal</span><span>KuKirin</span><span>Xiaomi</span></div>
-                </div>
-                <div class="product-bottom">
-                  <div class="product-price"><small>Preț</small><strong>399,00 <span>lei</span></strong></div>
-                  <span class="product-open-hint" aria-hidden="true">›</span>
-                </div>
-                <a class="product-card-link" href="magazin/produs/kit-frana-hydrostop-pro/" aria-label="Deschide pagina produsului Kit frână HydroStop Pro"></a>
-              </article>
+              </section>
+              <noscript><p class="catalog-noscript">Activează JavaScript pentru a încărca produsele magazinului.</p></noscript>
             </div>
 
             <div class="no-results" id="no-results" hidden>
@@ -523,7 +408,7 @@
       <span>WhatsApp</span>
     </a>
     <script src="favorites.js?v=20260825-4" defer></script>
-    <script src="magazin.js?v=20260827-1" defer></script>
-    <script src="shop-live.js?v=20260826-1" defer></script>
+    <script src="magazin.js?v=20260827-2" defer></script>
+    <script src="shop-live.js?v=20260827-2" defer></script>
   </body>
 </html>

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import csv
 import hashlib
 import html
+import io
 import json
 import os
 import re
@@ -19,6 +21,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ENDPOINT = "https://g-trots.ro/shop-api/api-v2.php"
 DEFAULT_STATE = ROOT / "output" / "boomag-seo-json-import-state.json"
+BOOMAG_PUBLIC_FEED = "https://www.boomag.ro/feed/doctor-trotineta.csv"
 ALLOWED_DESCRIPTION_TAGS = {"p", "strong", "b", "em", "i", "ul", "ol", "li", "br"}
 SEMANTIC_REPLACEMENTS = (
     (re.compile(r"componenta de tip componentă", re.IGNORECASE), "această componentă"),
@@ -101,6 +104,49 @@ VARIANT_SPECIFICATION_TERMS = (
     "latime", "inaltime", "grosime", "tensiune", "putere", "material", "mufa",
     "conector", "numar pini", "tip prindere", "marime",
 )
+FAQ_FAMILY_NOUNS = {
+    "accessory": ("accesoriul", "accesoriului", "înlocuit"),
+    "bag": ("geanta", "genții", "înlocuită"),
+    "battery": ("bateria", "bateriei", "înlocuită"),
+    "bms": ("modulul BMS", "modulului BMS", "înlocuit"),
+    "brake_cable": ("cablul de frână", "cablului de frână", "înlocuit"),
+    "brake_caliper": ("etrierul de frână", "etrierului de frână", "înlocuit"),
+    "brake_disc": ("discul de frână", "discului de frână", "înlocuit"),
+    "brake_lever": ("maneta de frână", "manetei de frână", "înlocuită"),
+    "brake_pad": ("plăcuțele de frână", "plăcuțelor de frână", "înlocuite"),
+    "charger": ("încărcătorul", "încărcătorului", "înlocuit"),
+    "connector": ("conectorul", "conectorului", "înlocuit"),
+    "controller": ("controlerul", "controlerului", "înlocuit"),
+    "display": ("display-ul", "display-ului", "înlocuit"),
+    "drum_brake": ("frâna pe tambur", "frânei pe tambur", "înlocuită"),
+    "fender": ("aripa", "aripii", "înlocuită"),
+    "folding": ("mecanismul de pliere", "mecanismului de pliere", "înlocuit"),
+    "fork": ("furca", "furcii", "înlocuită"),
+    "generic": ("componenta", "componentei", "înlocuită"),
+    "grip": ("mânșonul", "mânșonului", "înlocuit"),
+    "handlebar": ("ghidonul", "ghidonului", "înlocuit"),
+    "hardware": ("elementul de prindere", "elementului de prindere", "înlocuit"),
+    "helmet": ("casca", "căștii", "înlocuită"),
+    "hydraulic_brake": ("frâna hidraulică", "frânei hidraulice", "înlocuită"),
+    "kickstand": ("cricul", "cricului", "înlocuit"),
+    "lighting": ("sistemul de iluminare", "sistemului de iluminare", "înlocuit"),
+    "lock": ("antifurtul", "antifurtului", "înlocuit"),
+    "mirror": ("oglinda", "oglinzii", "înlocuită"),
+    "motor": ("motorul", "motorului", "înlocuit"),
+    "phone_holder": ("suportul de telefon", "suportului de telefon", "înlocuit"),
+    "protective": ("elementul de protecție", "elementului de protecție", "înlocuit"),
+    "seat": ("șaua", "șeii", "înlocuită"),
+    "sensor": ("senzorul", "senzorului", "înlocuit"),
+    "sticker": ("autocolantul", "autocolantului", "înlocuit"),
+    "suspension": ("suspensia", "suspensiei", "înlocuită"),
+    "throttle": ("accelerația", "accelerației", "înlocuită"),
+    "tire": ("anvelopa", "anvelopei", "înlocuită"),
+    "tools": ("unealta", "uneltei", "înlocuită"),
+    "tube": ("camera", "camerei", "înlocuită"),
+    "valve": ("valva", "valvei", "înlocuită"),
+    "wheel": ("roata", "roții", "înlocuită"),
+    "wiring": ("cablajul", "cablajului", "înlocuit"),
+}
 
 
 def clean_string(value: str) -> str:
@@ -137,10 +183,9 @@ def accessory_family_text(product: dict[str, Any], values: dict[str, str]) -> st
 
 
 def accessory_help_answer(product: dict[str, Any]) -> str:
-    code = str(product.get("supplier_sku") or product.get("supplier_external_id") or "").strip()
     checks = accessory_checks(product)
     return (
-        f"Pentru reperul {code}, verifică {checks}. "
+        f"Verifică {checks}. "
         "Nu este necesară o programare în service pentru acest accesoriu. "
         "Dacă ai dubii înainte de comandă, echipa G-Trots te poate ajuta să compari dimensiunile și compatibilitatea declarată cu informațiile produsului tău."
     )
@@ -148,7 +193,6 @@ def accessory_help_answer(product: dict[str, Any]) -> str:
 
 def accessory_faq(product: dict[str, Any]) -> list[dict[str, str]]:
     title = str(product.get("title") or "acest accesoriu").strip()
-    code = str(product.get("supplier_sku") or product.get("supplier_external_id") or "").strip()
     family = str(product.get("product_family") or "").strip().lower()
     checks = accessory_checks(product)
     usage = accessory_family_text(product, ACCESSORY_USAGE)
@@ -180,31 +224,31 @@ def accessory_faq(product: dict[str, Any]) -> list[dict[str, str]]:
                 facts.append(fact)
         if len(facts) >= 4:
             break
-    confirmed = "; ".join(facts) if facts else f"denumirea și codul {code}"
+    confirmed = "; ".join(facts) if facts else "denumirea și caracteristicile publicate în fișa produsului"
     questions = [
         {
             "question": f"Ce verific înainte să comand produsul „{title}”?",
-            "answer": f"Pentru reperul {code}, compară {checks}. Verificarea acestor puncte înainte de cumpărare reduce riscul de a alege o mărime sau o variantă nepotrivită.",
+            "answer": f"Compară {checks}. Verificarea acestor puncte înainte de cumpărare reduce riscul de a alege o mărime sau o variantă nepotrivită.",
         },
         {
             "question": f"De ce depinde compatibilitatea produsului „{title}”?",
             "answer": compatibility,
         },
         {
-            "question": f"Ce specificații sunt confirmate pentru reperul {code}?",
+            "question": f"Ce caracteristici sunt importante pentru produsul „{title}”?",
             "answer": f"În fișa produsului sunt confirmate următoarele informații: {confirmed}. Orice caracteristică nemenționată trebuie verificată înainte de comandă și nu este presupusă automat.",
         },
         {
             "question": f"Cum folosesc corect produsul „{title}”?",
-            "answer": f"{usage} Pentru reperul {code}, prima utilizare trebuie să fie scurtă și controlată, urmată de o nouă verificare a poziției sau reglajului.",
+            "answer": f"{usage} Prima utilizare trebuie să fie scurtă și controlată, urmată de o nouă verificare a poziției sau reglajului.",
         },
         {
-            "question": f"Ce verific înainte de prima utilizare a reperului {code}?",
+            "question": "Ce verific înainte de prima utilizare?",
             "answer": f"Confirmă din nou {checks}. Accesoriul trebuie să rămână stabil, confortabil și ușor de folosit; dacă observi joc, alunecare ori disconfort, oprește utilizarea și refă reglajul.",
         },
         {
             "question": f"Cum întrețin și păstrez produsul „{title}”?",
-            "answer": f"{care} Folosește în continuare codul {code} când ai nevoie să identifici exact această variantă.",
+            "answer": care,
         },
         {
             "question": "Mă poate ajuta G-Trots să aleg corect acest accesoriu?",
@@ -301,6 +345,71 @@ def remove_public_identifiers(value: Any, product: dict[str, Any]) -> str:
     return re.sub(r"\s+", " ", result).strip(" |–—-,.;:")
 
 
+def public_short_description(value: Any, product: dict[str, Any], public_title: str) -> str:
+    result = clean_string(str(value or "").strip())
+    source_title = str(product.get("title") or "").strip()
+    if source_title and public_title:
+        result = re.sub(re.escape(source_title), public_title, result, flags=re.IGNORECASE)
+    result = remove_public_identifiers(result, product)
+    result = re.sub(r"^(?:reper(?:ul|ului|e|ele)?|sku|ean|cod(?:ul)?(?:\s+de\s+produs)?)\s*[:#-]?\s*", "", result, flags=re.IGNORECASE)
+    if public_title:
+        result = re.sub(rf"^{re.escape(public_title)}\s*(?:este|:|[–—-])?\s*", "", result, flags=re.IGNORECASE)
+    result = re.sub(r"\b(?:reper|reperul|reperului|repere|reperele)\b", "produs", result, flags=re.IGNORECASE)
+    result = re.sub(r"\b(?:SKU|EAN)\b", "", result, flags=re.IGNORECASE)
+    result = re.sub(r"\bdenumirea\s+și\s+codul\s+produsului\b", "denumirea exactă", result, flags=re.IGNORECASE)
+    result = re.sub(r"\bdupă\s+cod\s+și\s+configurație\b", "după dimensiuni și configurație", result, flags=re.IGNORECASE)
+    result = re.sub(r"\bcod(?:ul)?\s+produsului\b", "identificarea tehnică", result, flags=re.IGNORECASE)
+    result = re.sub(r"\s+([,.;:?!])", r"\1", result)
+    result = re.sub(r"\s+", " ", result).strip(" |–—-,.;:")
+    if result:
+        result = result[0].upper() + result[1:]
+    compatibility = product.get("compatibility") if isinstance(product.get("compatibility"), dict) else {}
+    checks = [str(item).strip() for item in compatibility.get("fitment_requirements") or [] if str(item).strip()]
+    if not checks:
+        checks = [accessory_checks(product)] if is_accessory(product) else ["dimensiunile, prinderile și configurația piesei existente"]
+    if len(result) < 90:
+        result = f"{result.rstrip(' .')}. Compară {natural_join(checks[:3])} înainte de comandă pentru a alege varianta potrivită.".lstrip(". ")
+    if len(result) > 420:
+        result = result[:420].rsplit(" ", 1)[0].rstrip(" ,.;:") + "."
+    return result
+
+
+def prepare_public_short_descriptions(
+    products: list[dict[str, Any]], public_titles: dict[str, str]
+) -> dict[str, str]:
+    descriptions: dict[str, str] = {}
+    sources: dict[str, dict[str, Any]] = {}
+    grouped: dict[str, list[str]] = {}
+    for index, product in enumerate(products):
+        key = str(product.get("supplier_external_id") or index)
+        title = public_titles[key]
+        value = str(product.get("short_description") or "").strip()
+        if is_accessory(product):
+            value = clean_accessory_text(value, product)
+        description = public_short_description(value, product, title)
+        descriptions[key] = description
+        sources[key] = product
+        grouped.setdefault(normalized(description), []).append(key)
+
+    for duplicate_keys in grouped.values():
+        if len(duplicate_keys) < 2:
+            continue
+        for key in duplicate_keys:
+            title = public_titles[key]
+            product = sources[key]
+            compatibility = product.get("compatibility") if isinstance(product.get("compatibility"), dict) else {}
+            checks = [str(item).strip() for item in compatibility.get("fitment_requirements") or [] if str(item).strip()]
+            if not checks:
+                checks = [accessory_checks(product)] if is_accessory(product) else ["dimensiunile, prinderile și configurația piesei existente"]
+            suffix = f" Pentru varianta „{title}”, compară {natural_join(checks[:2])} înainte de comandă."
+            room = max(80, 420 - len(suffix))
+            base = descriptions[key]
+            if len(base) > room:
+                base = base[:room].rsplit(" ", 1)[0].rstrip(" ,.;:") + "."
+            descriptions[key] = (base.rstrip() + suffix)[:420].strip()
+    return descriptions
+
+
 def base_public_title(product: dict[str, Any]) -> str:
     title = remove_public_identifiers(product.get("title"), product)
     if not title:
@@ -375,8 +484,10 @@ def confirmed_compatibility_names(product: dict[str, Any]) -> list[str]:
         return []
     compatibility = product.get("compatibility") if isinstance(product.get("compatibility"), dict) else {}
     candidates: list[str] = []
-    for value in compatibility.get("confirmed_brand_names") or []:
-        candidates.append(str(value).strip())
+    for item in compatibility.get("compatible_models") or []:
+        if not isinstance(item, dict) or str(item.get("confidence") or "").strip().lower() != "high":
+            continue
+        candidates.append(str(item.get("brand") or "").strip())
     for item in compatibility.get("brand_associations") or []:
         if not isinstance(item, dict) or not item.get("technical_compatibility_confirmed"):
             continue
@@ -385,9 +496,10 @@ def confirmed_compatibility_names(product: dict[str, Any]) -> list[str]:
         candidates.append(str(item.get("brand") or "").strip())
     result: list[str] = []
     seen: set[str] = set()
+    blocked = {"oem", "universal", "produse", "produs", "g trots", "boomag"}
     for value in candidates:
         key = normalized(value)
-        if value and key not in seen:
+        if value and key not in blocked and key not in seen:
             seen.add(key)
             result.append(value)
     return result
@@ -499,43 +611,107 @@ def image_alt_texts(product: dict[str, Any]) -> list[str]:
     return result[:12]
 
 
-def concise_questions(product: dict[str, Any]) -> list[dict[str, str]]:
-    title = str(product.get("title") or "").strip()
-    accessory = is_accessory(product)
-    checks = accessory_checks(product)
-    code = str(product.get("supplier_sku") or product.get("supplier_external_id") or "").strip()
-    result = []
-    source_questions = accessory_faq(product) if accessory else (product.get("questions") or [])
-    for item in source_questions:
-        if not isinstance(item, dict):
+def faq_family_nouns(product: dict[str, Any]) -> tuple[str, str, str]:
+    family = str(product.get("product_family") or "generic").strip().lower()
+    return FAQ_FAMILY_NOUNS.get(family, FAQ_FAMILY_NOUNS["generic"])
+
+
+def clean_faq_text(value: Any, product: dict[str, Any], public_title: str) -> str:
+    result = clean_string(str(value or "").strip())
+    source_title = str(product.get("title") or "").strip()
+    if source_title and public_title:
+        result = re.sub(re.escape(source_title), public_title, result, flags=re.IGNORECASE)
+    result = remove_public_identifiers(result, product)
+    replacements = (
+        (r"\breperul final de comparație\b", "punctul final de comparație"),
+        (r"\breperul existent\b", "piesa existentă"),
+        (r"\brepere tehnice\b", "detalii tehnice"),
+        (r"\breperele disponibile\b", "informațiile disponibile"),
+        (r"\burmătoarele repere\b", "următoarele informații"),
+        (r"\breper(?:ul|ului|e|ele)?\b", "produsul"),
+        (r"\bSKU\b", "produsul"),
+        (r"\bEAN\b", "produsul"),
+        (r"\bcod(?:ul)?\s+(?:de\s+)?produs\b", "produsul"),
+        (r"\binformațiile publicate de furnizor\b", "fișa tehnică disponibilă"),
+        (r"\bdin informațiile publicate de furnizor\b", "din fișa tehnică disponibilă"),
+    )
+    for pattern, replacement in replacements:
+        result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+    result = re.sub(r"\bprodusul\s+produsul\b", "produsul", result, flags=re.IGNORECASE)
+    result = re.sub(r"\bprodusul-ul\b", "produsul", result, flags=re.IGNORECASE)
+    result = re.sub(r"\bPentru\s+[,.;:]", "", result, flags=re.IGNORECASE)
+    result = re.sub(r"\s+([,.;:?!])", r"\1", result)
+    result = re.sub(r"([,.;:])\1+", r"\1", result)
+    return re.sub(r"\s+", " ", result).strip(" ,.;:")
+
+
+def compatibility_model_names(product: dict[str, Any]) -> list[str]:
+    compatibility = product.get("compatibility") if isinstance(product.get("compatibility"), dict) else {}
+    result: list[str] = []
+    for item in compatibility.get("compatible_models") or []:
+        if not isinstance(item, dict) or str(item.get("confidence") or "").lower() != "high":
             continue
-        question = clean_string(str(item.get("question") or "").strip())
-        answer = clean_string(str(item.get("answer") or "").strip())
-        if accessory and re.search(r"G[\s-]?Trots Service", question, re.IGNORECASE):
-            question = f"Mă poate ajuta G-Trots să aleg corect {title}?"
-            answer = accessory_help_answer(product)
-        elif accessory and re.search(r"Ce presupune montajul", question, re.IGNORECASE):
-            question = f"Cum pregătesc și folosesc corect {title}?"
-            answer = (
-                f"Pentru reperul {code}, verifică {checks}. "
-                "Urmează instrucțiunile produsului, fixează sau reglează accesoriul fără forțare și verifică să nu limiteze vizibilitatea, comenzile ori mișcarea ghidonului. "
-                "Prima utilizare trebuie să fie scurtă și controlată, urmată de o nouă verificare a poziției."
-            )
-        elif accessory and re.search(r"Ce verific după montarea", question, re.IGNORECASE):
-            question = f"Ce verific înainte de prima utilizare a reperului {code}?"
-            answer = (
-                f"Confirmă din nou {checks}. "
-                "Accesoriul trebuie să rămână stabil, confortabil și ușor de folosit, fără să incomodeze frânarea, direcția, cablurile sau mecanismul de pliere. "
-                "Dacă observi joc, alunecare ori disconfort, oprește utilizarea și refă reglajul."
-            )
-        elif accessory:
-            question = re.sub(r"\bmontaj(?:ul)?\b", "fixare și reglare", question, flags=re.IGNORECASE)
-            question = re.sub(r"\bmontarea\b", "fixarea", question, flags=re.IGNORECASE)
+        brand = str(item.get("brand") or "").strip()
+        model = str(item.get("model") or "").strip()
+        name = " ".join(part for part in (brand, model) if part)
+        if name and normalized(name) not in {normalized(existing) for existing in result}:
+            result.append(name)
+    return result
+
+
+def natural_join(values: list[str]) -> str:
+    if not values:
+        return ""
+    if len(values) == 1:
+        return values[0]
+    return ", ".join(values[:-1]) + " și " + values[-1]
+
+
+def natural_faq_questions(product: dict[str, Any], public_title: str, accessory: bool) -> list[str]:
+    definite, genitive, replacement = faq_family_nouns(product)
+    if accessory:
+        return [
+            f"Cum aleg corect produsul „{public_title}”?",
+            f"Ce dimensiuni trebuie verificate pentru {definite}?",
+            f"Ce caracteristici practice are {definite}?",
+            f"Cum se folosește corect {definite}?",
+            "Ce verific înainte de prima utilizare?",
+            f"Cum se întreține {definite}?",
+            "Mă poate ajuta G-Trots să aleg varianta potrivită?",
+        ]
+    models = compatibility_model_names(product)
+    compatibility_question = (
+        f"Produsul „{public_title}” este potrivit pentru {natural_join(models[:4])}?"
+        if models else
+        f"Cum verific dacă produsul „{public_title}” se potrivește trotinetei mele?"
+    )
+    return [
+        compatibility_question,
+        f"Ce trebuie măsurat înainte de a comanda {definite}?",
+        f"Ce caracteristici tehnice ale {genitive} trebuie verificate?",
+        f"Când ar trebui {replacement} {definite}?",
+        f"Cum se montează și se reglează corect {definite}?",
+        f"Există și alte modele compatibile cu {definite}?",
+        "Pot solicita verificarea compatibilității și montajul la G-Trots?",
+        f"Ce verific după montarea {genitive}?",
+    ]
+
+
+def concise_questions(product: dict[str, Any], public_title: str | None = None) -> list[dict[str, str]]:
+    public_title = public_title or base_public_title(product)
+    accessory = is_accessory(product)
+    source_questions = accessory_faq(product) if accessory else (product.get("questions") or [])
+    source_answers = [
+        item for item in source_questions
+        if isinstance(item, dict) and str(item.get("answer") or "").strip()
+    ]
+    questions = natural_faq_questions(product, public_title, accessory)
+    result: list[dict[str, str]] = []
+    for index, item in enumerate(source_answers[:len(questions)]):
+        answer = clean_faq_text(item.get("answer"), product, public_title)
+        if accessory:
             answer = clean_accessory_text(answer, product)
-        if len(question) > 180 and title:
-            question = re.sub(re.escape(title), "acest produs", question, flags=re.IGNORECASE)
-            question = re.sub(r"\s+", " ", question).strip()
-        result.append({"question": question, "answer": answer})
+        result.append({"question": questions[index], "answer": answer})
     return result
 
 
@@ -543,6 +719,7 @@ def payload_for(
     product: dict[str, Any],
     public_title: str | None = None,
     public_meta_title: str | None = None,
+    prepared_short_description: str | None = None,
 ) -> dict[str, Any]:
     cleaned = clean_tree(product)
     public_title = public_title or base_public_title(cleaned)
@@ -554,6 +731,7 @@ def payload_for(
         short_description = clean_accessory_text(short_description, cleaned)
         description_html = clean_accessory_text(description_html, cleaned, html_mode=True)
         meta_description = fit_accessory_meta_description(meta_description, cleaned)
+    short_description = prepared_short_description or public_short_description(short_description, cleaned, public_title)
     return {
         "supplier_external_id": str(cleaned.get("supplier_external_id") or "").strip(),
         "name": public_title,
@@ -564,7 +742,7 @@ def payload_for(
         "meta_title": public_meta_title or fit_meta_title(cleaned, public_title),
         "meta_description": meta_description,
         "specifications": clean_specifications(cleaned),
-        "questions": concise_questions(cleaned),
+        "questions": concise_questions(cleaned, public_title),
         "compatibility_names": confirmed_compatibility_names(cleaned),
         "image_alt_texts": image_alt_texts(cleaned),
         "research_sources": list(cleaned.get("research_sources") or []),
@@ -608,6 +786,9 @@ def validate_catalog(catalog_path: Path, validation_path: Path) -> tuple[list[di
     public_meta_titles = prepare_public_meta_titles(
         [item for item in products if isinstance(item, dict)], public_titles
     )
+    public_short_descriptions = prepare_public_short_descriptions(
+        [item for item in products if isinstance(item, dict)], public_titles
+    )
     for index, product in enumerate(products):
         if not isinstance(product, dict):
             errors.append(f"Pozitia {index}: produs invalid.")
@@ -618,6 +799,7 @@ def validate_catalog(catalog_path: Path, validation_path: Path) -> tuple[list[di
             product,
             public_titles.get(external_id),
             public_meta_titles.get(external_id),
+            public_short_descriptions.get(external_id),
         )
         after = json.dumps(payload, ensure_ascii=False)
         repairs["semantic_phrases"] += len(re.findall(r"componenta de tip componentă", before, flags=re.IGNORECASE))
@@ -671,6 +853,17 @@ def validate_catalog(catalog_path: Path, validation_path: Path) -> tuple[list[di
                 errors.append(f"Produs {external_id}: codul {identifier} apare in titlul public.")
             if identifier_pattern.search(payload["meta_title"]):
                 errors.append(f"Produs {external_id}: codul {identifier} apare in meta titlu.")
+            if identifier_pattern.search(payload["short_description"]):
+                errors.append(f"Produs {external_id}: codul {identifier} apare in descrierea scurta.")
+            for faq in payload["questions"]:
+                if identifier_pattern.search(str(faq.get("question") or "")) or identifier_pattern.search(str(faq.get("answer") or "")):
+                    errors.append(f"Produs {external_id}: codul {identifier} apare in FAQ.")
+        if re.search(r"\b(?:reper(?:ul|ului|e|ele)?|sku|cod(?:ul)?\s+produs)\b", payload["short_description"], re.IGNORECASE):
+            errors.append(f"Produs {external_id}: descrierea scurta incepe sau continua cu identificatori interni.")
+        for faq in payload["questions"]:
+            faq_copy = f"{faq.get('question', '')} {faq.get('answer', '')}"
+            if re.search(r"\b(?:reper(?:ul|ului|e|ele)?|sku|cod(?:ul)?\s+produs)\b", faq_copy, re.IGNORECASE):
+                errors.append(f"Produs {external_id}: FAQ contine limbaj intern sau termenul reper.")
         for specification in payload["specifications"]:
             if normalized(specification.get("group")) in HIDDEN_SPECIFICATION_GROUPS:
                 errors.append(f"Produs {external_id}: stocul furnizorului apare in specificatii.")
@@ -787,6 +980,33 @@ def request_json(url: str, payload: dict[str, Any], shop_key: str) -> dict[str, 
     return value
 
 
+def public_feed_sku_map() -> dict[str, str]:
+    request = urllib.request.Request(
+        BOOMAG_PUBLIC_FEED,
+        headers={"Accept": "text/csv", "User-Agent": "G-Trots-Catalog-Importer/1.0"},
+    )
+    with urllib.request.urlopen(request, timeout=180) as response:
+        raw = response.read()
+    if len(raw) < 100:
+        raise RuntimeError("Feedul public Boomag este gol sau incomplet.")
+    reader = csv.DictReader(io.StringIO(raw.decode("utf-8-sig", errors="replace")), delimiter="|", quotechar='"')
+    if not reader.fieldnames or "id" not in reader.fieldnames or "sku" not in reader.fieldnames:
+        raise RuntimeError("Feedul public Boomag nu conține coloanele id și sku.")
+    result: dict[str, str] = {}
+    for row in reader:
+        external_id = str(row.get("id") or "").strip()
+        sku = str(row.get("sku") or "").strip()
+        if not external_id or not sku:
+            continue
+        previous = result.get(external_id)
+        if previous is not None and previous != sku:
+            raise RuntimeError(f"Feedul Boomag conține două SKU-uri diferite pentru produsul {external_id}.")
+        result[external_id] = sku
+    if len(result) < 100:
+        raise RuntimeError("Feedul public Boomag nu conține suficiente produse pentru o asociere sigură.")
+    return result
+
+
 def load_state(path: Path) -> dict[str, str]:
     if not path.is_file():
         return {}
@@ -821,6 +1041,22 @@ def main() -> int:
     args = parser.parse_args()
 
     payloads, report = validate_catalog(args.catalog, args.validation)
+    feed_skus = public_feed_sku_map()
+    missing_feed_ids = [
+        str(payload["supplier_external_id"])
+        for payload in payloads
+        if str(payload["supplier_external_id"]) not in feed_skus
+    ]
+    payloads = [
+        payload for payload in payloads
+        if str(payload["supplier_external_id"]) in feed_skus
+    ]
+    for payload in payloads:
+        sku = feed_skus[str(payload["supplier_external_id"])]
+        payload["sku"] = sku
+        payload["supplier_product_code"] = sku
+    report["feed_sku_associations"] = len(payloads)
+    report["missing_from_current_feed"] = missing_feed_ids
     if args.limit > 0:
         payloads = payloads[:args.limit]
     print(json.dumps({"validation": report, "selected": len(payloads)}, ensure_ascii=False), flush=True)

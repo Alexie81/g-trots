@@ -2785,8 +2785,14 @@ body.image-viewer-open {
 }
 
 .product-detail-copy h1 {
-  max-width: 34rem;
-  font-size: clamp(2.65rem, 4.3vw, 4.65rem);
+  max-width: 100%;
+  font-size: clamp(2.2rem, 3.35vw, 3.65rem);
+  font-weight: 760;
+  letter-spacing: -0.045em;
+  line-height: 1.02;
+  overflow-wrap: break-word;
+  word-break: normal;
+  text-wrap: balance;
 }
 
 .product-detail-description {
@@ -2922,9 +2928,10 @@ body.image-viewer-open {
 
   .product-detail-copy h1 {
     max-width: 100%;
-    font-size: clamp(1.95rem, 9.4vw, 2.75rem);
-    letter-spacing: -0.055em;
-    line-height: 1.02;
+    font-size: clamp(1.55rem, 6.55vw, 1.95rem);
+    font-weight: 760;
+    letter-spacing: -0.035em;
+    line-height: 1.08;
     overflow-wrap: break-word;
     word-break: normal;
     text-wrap: balance;

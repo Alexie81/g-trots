@@ -115,29 +115,72 @@
 }
 
 .product-live-description h2 { color: #111; margin: 0.4rem 0 1.2rem; }
-.product-page.is-live-product-loading .product-detail-main { min-height: 72vh; }
-.product-page.is-live-product-loading .product-detail-main > * { display: none !important; }
-.product-page.is-live-product-loading .product-detail-main::before {
-  content: "Încărcăm produsul…";
+.product-page-loading {
   width: min(92rem, calc(100% - 2rem));
   min-height: clamp(24rem, 58vh, 38rem);
   margin: clamp(1.25rem, 4vw, 3rem) auto;
+  display: none;
+}
+.product-page.is-live-product-loading .product-detail-main,
+.product-page.has-live-product-error .product-detail-main { min-height: 72vh; }
+.product-page.is-live-product-loading .product-detail-main > :not(.product-page-loading),
+.product-page.has-live-product-error .product-detail-main > :not(.product-page-loading) { display: none !important; }
+.product-page.is-live-product-loading .product-page-loading,
+.product-page.has-live-product-error .product-page-loading { display: grid; }
+.product-loading-error {
+  grid-column: 1 / -1;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.25rem;
+}
+.product-page-loading.has-error > .catalog-loading-orbit,
+.product-page-loading.has-error > .product-loading-copy,
+.product-page-loading.has-error > .product-loading-steps { display: none; }
+.product-page-loading.has-error .product-loading-error { display: grid; }
+.product-loading-error > span {
+  width: 4.5rem;
+  aspect-ratio: 1;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255,255,255,.075);
-  border-radius: clamp(1.65rem, 4vw, 3rem);
-  background:
-    linear-gradient(110deg, transparent 34%, rgba(255,255,255,.045) 48%, transparent 62%) 0 0 / 220% 100%,
-    radial-gradient(circle at 76% 24%, rgba(240,127,0,.1), transparent 24rem),
-    #11100f;
-  color: #aaa39b;
-  font-size: .75rem;
-  font-weight: 800;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  animation: live-product-loading 1.35s linear infinite;
+  border: 1px solid rgba(255, 145, 86, .36);
+  border-radius: 1.35rem;
+  background: rgba(255, 118, 62, .12);
+  color: #ff9a68;
+  font-size: 1.5rem;
+  font-weight: 900;
 }
-@keyframes live-product-loading { to { background-position: -220% 0, 0 0, 0 0; } }
+.product-loading-error small {
+  display: block;
+  margin-bottom: .4rem;
+  color: #f69936;
+  font-size: .7rem;
+  font-weight: 900;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.product-loading-error strong {
+  display: block;
+  color: #f7f3ef;
+  font-size: clamp(1.45rem, 3vw, 2.4rem);
+  line-height: 1.08;
+}
+.product-loading-error p { margin: .65rem 0 0; color: #aaa39b; }
+.product-loading-error button {
+  min-height: 3.2rem;
+  padding: 0 1.25rem;
+  border: 0;
+  border-radius: 1rem;
+  background: #ff8a0a;
+  color: #17110b;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+}
+@media (max-width: 700px) {
+  .product-page-loading { width: min(100% - 1rem, 92rem); margin-top: .75rem; }
+  .product-loading-error { grid-template-columns: auto minmax(0, 1fr); }
+  .product-loading-error button { grid-column: 1 / -1; width: 100%; }
+}
 .product-rich-copy { width: 100%; max-width: none; color: #aaa39b; font-size: clamp(.94rem, 1.08vw, 1.05rem); line-height: 1.82; overflow-wrap: anywhere; columns: auto; }
 .product-rich-copy > :first-child { margin-top: 0; }
 .product-rich-copy > :last-child { margin-bottom: 0; }
@@ -238,7 +281,11 @@
 @media (prefers-reduced-motion: reduce) {
   .product-detail-image-live.is-gallery-enter-next .product-detail-image-seo,
   .product-detail-image-live.is-gallery-enter-previous .product-detail-image-seo { animation: none; }
-  .product-page.is-live-product-loading .product-detail-main::before { animation: none; }
+  .product-page.is-live-product-loading .catalog-loading-orbit::before,
+  .product-page.is-live-product-loading .catalog-loading-orbit::after,
+  .product-page.is-live-product-loading .catalog-loading-dot,
+  .product-page.is-live-product-loading .catalog-loading-progress i,
+  .product-page.is-live-product-loading .catalog-loading-steps i { animation: none; }
 }
 [hidden] {
   display: none !important;

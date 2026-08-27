@@ -69,10 +69,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="preload" href="assets/magazin-produse-v1.png" as="image" type="image/png">
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="magazin.css?v=20260826-5">
-    <link rel="stylesheet" href="produs.css?v=20260826-10">
+    <link rel="stylesheet" href="magazin.css?v=20260827-2">
+    <link rel="stylesheet" href="produs.css?v=20260827-3">
     <link rel="stylesheet" href="favorites.css?v=20260826-2">
-    <link rel="stylesheet" href="shop-live.css?v=20260826-14">
+    <link rel="stylesheet" href="shop-live.css?v=20260827-1">
   </head>
   <body class="shop-page product-page is-live-product-loading" data-product-id="anvelopa-g10-all-terrain">
     <a class="skip-link" href="#product-detail">Sari la produs</a>
@@ -96,6 +96,29 @@
     </header>
 
     <main class="product-detail-main" id="product-detail">
+      <section class="catalog-loading product-page-loading" role="status" aria-live="polite" aria-label="Produsul se încarcă">
+        <div class="catalog-loading-orbit" aria-hidden="true">
+          <span class="catalog-loading-logo"><b>G</b><i>T</i></span>
+          <span class="catalog-loading-dot"></span>
+        </div>
+        <div class="catalog-loading-copy product-loading-copy">
+          <span class="catalog-loading-label">Produs G-Trots</span>
+          <h3>Pregătim produsul pentru tine</h3>
+          <p>Verificăm imaginile, prețul și disponibilitatea actuală.</p>
+          <span class="catalog-loading-progress" aria-hidden="true"><i></i></span>
+        </div>
+        <div class="catalog-loading-steps product-loading-steps" aria-hidden="true">
+          <span><i></i>Produs</span>
+          <span><i></i>Preț</span>
+          <span><i></i>Stoc</span>
+        </div>
+        <div class="product-loading-error" hidden>
+          <span aria-hidden="true">!</span>
+          <div><small>Conexiune întreruptă</small><strong>Produsul nu s-a putut încărca</strong><p>Reîncearcă pentru a primi informațiile actuale.</p></div>
+          <button type="button" data-product-reload>Încearcă din nou</button>
+        </div>
+      </section>
+
       <div class="product-detail-breadcrumb shell">
         <a href="index.html">Acasă</a><span>/</span><a href="magazin.html">Magazin</a><span>/</span><strong data-product-breadcrumb>Anvelopă G10 All-Terrain</strong>
       </div>
@@ -324,6 +347,6 @@
 
     <script src="favorites.js?v=20260826-14" defer></script>
     <script src="produs.js?v=20260826-12" defer></script>
-    <script src="shop-live.js?v=20260826-15" defer></script>
+    <script src="shop-live.js?v=20260827-1" defer></script>
   </body>
 </html>

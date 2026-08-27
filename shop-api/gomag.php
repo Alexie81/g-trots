@@ -428,6 +428,10 @@ function boomagParseFeedRows(string $raw): array {
     return $rows;
 }
 
+function boomagNormalizeProductCode(string $value): string {
+    return mb_substr(trim($value), 0, 80);
+}
+
 function boomagFeedRows(array $config, bool $forceRefresh = false, int $maxCacheAgeSeconds = 21600): array {
     $directory = __DIR__ . '/uploads/import';
     $cacheFile = $directory . '/boomag-products.csv';
@@ -473,7 +477,7 @@ function boomagSalePriceForBase(float $price, ?string $discountType, $discountVa
 
 function gomagSyncProductFromFeed(PDO $db, array $config, string $idOrSlug): array {
     $stmt = $db->prepare(
-        'SELECT id, slug, sku, supplier_product_code, source_domain, price, sale_price,
+        'SELECT id, slug, sku, supplier_product_code, supplier_external_id, source_domain, price, sale_price,
                 discount_type, discount_value, stock_quantity, supplier_stock_quantity,
                 supplier_stock_status, supplier_base_price, supplier_price_difference
          FROM shop_products
@@ -494,9 +498,11 @@ function gomagSyncProductFromFeed(PDO $db, array $config, string $idOrSlug): arr
     if (!$codes) return ['synced' => false, 'reason' => 'missing_code', 'product_id' => (string)$product['id']];
 
     $feedRow = null;
+    $externalId = trim((string)($product['supplier_external_id'] ?? ''));
     foreach (boomagFeedRows($config, false, 900) as $row) {
+        $rowExternalId = trim((string)($row['id'] ?? ''));
         $key = mb_strtolower(trim((string)($row['sku'] ?? '')));
-        if ($key !== '' && isset($codes[$key])) {
+        if (($externalId !== '' && $rowExternalId === $externalId) || ($key !== '' && isset($codes[$key]))) {
             $feedRow = $row;
             break;
         }
@@ -529,16 +535,20 @@ function gomagSyncProductFromFeed(PDO $db, array $config, string $idOrSlug): arr
     $stockChanged = (int)$product['stock_quantity'] !== $stock
         || (int)$product['supplier_stock_quantity'] !== $stock
         || (bool)$product['supplier_stock_status'] !== $available;
+    $feedSku = boomagNormalizeProductCode((string)($feedRow['sku'] ?? ''));
+    if ($feedSku === '') return ['synced' => false, 'reason' => 'missing_feed_sku', 'product_id' => (string)$product['id']];
 
     $update = $db->prepare(
         'UPDATE shop_products
-         SET supplier_base_price = ?, supplier_price_difference = ?, supplier_price_updated_at = NOW(),
+         SET sku = ?, supplier_product_code = ?, supplier_base_price = ?, supplier_price_difference = ?, supplier_price_updated_at = NOW(),
              price = ?, sale_price = ?, stock_mode = "tracked", stock_quantity = ?,
              supplier_stock_quantity = ?, supplier_stock_status = ?, supplier_stock_updated_at = NOW(),
              updated_at = updated_at
          WHERE id = ?'
     );
     $update->execute([
+        $feedSku,
+        $feedSku,
         $supplierBase,
         $difference,
         $nextPrice,
@@ -926,9 +936,9 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
 
     foreach ($batch as $batchIndex => $row) {
         $externalId = trim((string)($row['id'] ?? ''));
-        $sku = mb_substr(trim((string)($row['sku'] ?? '')), 0, 80);
+        $supplierSku = boomagNormalizeProductCode((string)($row['sku'] ?? ''));
         try {
-            if ($externalId === '' || $sku === '') throw new RuntimeException('Produsul nu are ID sau SKU.');
+            if ($externalId === '' || $supplierSku === '') throw new RuntimeException('Produsul nu are ID sau cod de furnizor.');
             $categoryId = boomagInferCategory($db, $row);
             $categoryName = $categoryId !== null ? (string)($categoryNames[$categoryId] ?? '') : '';
             $manufacturerName = boomagCleanTitle((string)($row['brand_name'] ?? ''));
@@ -949,8 +959,8 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
             $ean = mb_substr(trim((string)($row['ean'] ?? '')), 0, 120);
             $sourceUrl = mb_substr(trim((string)($row['url'] ?? '')), 0, 500);
 
-            $find = $db->prepare('SELECT * FROM shop_products WHERE (source_id = ? AND supplier_external_id = ?) OR sku = ? LIMIT 1');
-            $find->execute([(string)$source['id'], $externalId, $sku]);
+            $find = $db->prepare('SELECT * FROM shop_products WHERE (source_id = ? AND supplier_external_id = ?) OR supplier_product_code = ? LIMIT 1');
+            $find->execute([(string)$source['id'], $externalId, $supplierSku]);
             $existing = $find->fetch();
             $productId = $existing ? (string)$existing['id'] : gomagStableUuid('product', $externalId);
             $contentStatus = $existing ? (string)($existing['content_status'] ?? 'manual') : 'baseline';
@@ -971,7 +981,7 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, "boomag.ro", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, "percent", NULL, "RON", "tracked", ?, ?, ?, NOW(), 0, 3, 1, 0, "baseline")'
                 );
                 $insert->execute([
-                    $productId, $categoryId, $manufacturerId, (string)$source['id'], $externalId, $sku, $sku, $ean !== '' ? $ean : null, $sourceUrl !== '' ? $sourceUrl : null,
+                    $productId, $categoryId, $manufacturerId, (string)$source['id'], $externalId, $supplierSku, $supplierSku, $ean !== '' ? $ean : null, $sourceUrl !== '' ? $sourceUrl : null,
                     $content['name'], $slug, $content['short_description'], $content['description_title'], $content['description_html'],
                     $specificationsJson, $questionsJson, $content['meta_title'], $content['meta_description'], $price, $stock, $stock, $available ? 1 : 0,
                 ]);
@@ -980,7 +990,7 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
                 $update = $db->prepare(
                     'UPDATE shop_products SET category_id = IF(content_status = "baseline", ?, category_id), manufacturer_id = IF(content_status = "baseline", ?, manufacturer_id),
                      source_id = IF(content_status = "baseline", ?, source_id), supplier_external_id = ?, sku = ?,
-                     supplier_product_code = IF(content_status = "baseline", ?, supplier_product_code), ean = IF(content_status = "baseline", ?, ean),
+                     supplier_product_code = ?, ean = IF(content_status = "baseline", ?, ean),
                      source_domain = IF(content_status = "baseline", "boomag.ro", source_domain), source_url = IF(content_status = "baseline", ?, source_url),
                      price = IF(content_status = "baseline", ?, price), currency = IF(content_status = "baseline", "RON", currency),
                      stock_mode = IF(LOWER(source_domain) = "boomag.ro", "tracked", stock_mode),
@@ -996,7 +1006,7 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
                      WHERE id = ?'
                 );
                 $update->execute([
-                    $categoryId, $manufacturerId, (string)$source['id'], $externalId, $sku, $sku, $ean !== '' ? $ean : null, $sourceUrl !== '' ? $sourceUrl : null,
+                    $categoryId, $manufacturerId, (string)$source['id'], $externalId, $supplierSku, $supplierSku, $ean !== '' ? $ean : null, $sourceUrl !== '' ? $sourceUrl : null,
                     $price, $stock, $stock, $available ? 1 : 0,
                     $content['name'], $slug, $content['short_description'], $content['description_title'], $content['description_html'],
                     $specificationsJson, $questionsJson, $content['meta_title'], $content['meta_description'], $productId,
@@ -1020,7 +1030,7 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
             $stats['errors'][] = [
                 'offset' => $offset + $batchIndex,
                 'id' => $externalId,
-                'sku' => $sku,
+                'sku' => $supplierSku,
                 'message' => mb_substr($error->getMessage(), 0, 500),
             ];
         }
@@ -1118,13 +1128,16 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
     if (!$source) throw new RuntimeException('Sursa boomag.ro nu exista in catalog.');
 
     $products = $db->prepare(
-        'SELECT p.id, p.sku, p.supplier_product_code
+        'SELECT p.id, p.sku, p.supplier_product_code, p.supplier_external_id
          FROM shop_products p
          WHERE p.source_id = ? OR LOWER(p.source_domain) = "boomag.ro"'
     );
     $products->execute([(string)$source]);
     $byCode = [];
+    $byExternalId = [];
     foreach ($products->fetchAll() as $product) {
+        $externalKey = trim((string)($product['supplier_external_id'] ?? ''));
+        if ($externalKey !== '') $byExternalId[$externalKey] = (string)$product['id'];
         foreach ([$product['sku'] ?? '', $product['supplier_product_code'] ?? ''] as $code) {
             $key = mb_strtolower(trim((string)$code));
             if ($key !== '') $byCode[$key] = (string)$product['id'];
@@ -1144,19 +1157,23 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
         $reset->execute([(string)$source]);
         $update = $db->prepare(
             'UPDATE shop_products
-             SET supplier_stock_quantity = ?, supplier_stock_status = ?,
+             SET sku = ?, supplier_product_code = ?, supplier_stock_quantity = ?, supplier_stock_status = ?,
                  supplier_stock_updated_at = NOW(), stock_mode = "tracked", stock_quantity = ?,
                  updated_at = updated_at
              WHERE id = ?'
         );
         foreach ($rows as $row) {
-            $key = mb_strtolower(trim((string)($row['sku'] ?? '')));
-            if ($key === '' || !isset($byCode[$key])) continue;
-            $productId = $byCode[$key];
+            $feedSku = boomagNormalizeProductCode((string)($row['sku'] ?? ''));
+            $key = mb_strtolower($feedSku);
+            $externalKey = trim((string)($row['id'] ?? ''));
+            $productId = $externalKey !== '' && isset($byExternalId[$externalKey])
+                ? $byExternalId[$externalKey]
+                : ($key !== '' && isset($byCode[$key]) ? $byCode[$key] : null);
+            if ($productId === null || $feedSku === '') continue;
             $available = boomagStockAvailable($row['stock_status'] ?? '0');
             $quantity = max(0, (int)floor((float)str_replace(',', '.', trim((string)($row['stock'] ?? '0')))));
             if (!$available) $quantity = 0;
-            $update->execute([$quantity, $available ? 1 : 0, $quantity, $productId]);
+            $update->execute([$feedSku, $feedSku, $quantity, $available ? 1 : 0, $quantity, $productId]);
             $matched[$productId] = true;
         }
         $state = $db->prepare(

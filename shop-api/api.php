@@ -2008,13 +2008,15 @@ try {
             $brandId = boomagFindOrCreateTaxonomy($db, 'shop_brands', 'compatibility', $compatibility);
             if ($brandId !== null) $brandIds[] = $brandId;
         }
+        $productSku = trim((string)($body['supplier_product_code'] ?? $body['sku'] ?? $current['supplier_product_code'] ?? $current['sku'] ?? ''));
+        if ($productSku === '') throw new InvalidArgumentException('SKU-ul public Boomag lipsește din asocierea produsului.');
         $db->beginTransaction();
         try {
             $update = $db->prepare(
-                'UPDATE shop_products SET name = ?, slug = ?, short_description = ?, description_title = ?, description_html = ?, specifications_json = ?, questions_json = ?, meta_title = ?, meta_description = ?, content_status = "seo", seo_researched_at = NOW(), seo_word_count = ?, seo_sources_json = ? WHERE id = ?'
+                'UPDATE shop_products SET sku = ?, supplier_product_code = ?, name = ?, slug = ?, short_description = ?, description_title = ?, description_html = ?, specifications_json = ?, questions_json = ?, meta_title = ?, meta_description = ?, content_status = "seo", seo_researched_at = NOW(), seo_word_count = ?, seo_sources_json = ? WHERE id = ?'
             );
             $update->execute([
-                $payload['name'], uniqueSlug($db, 'shop_products', $payload['slug_source'], (string)$current['id']),
+                $productSku, $productSku, $payload['name'], uniqueSlug($db, 'shop_products', $payload['slug_source'], (string)$current['id']),
                 $payload['short_description'], $payload['description_title'], $payload['description_html'],
                 $payload['specifications_json'], $payload['questions_json'], $payload['meta_title'], $payload['meta_description'],
                 $payload['word_count'], $payload['sources_json'], (string)$current['id'],

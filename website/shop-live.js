@@ -578,11 +578,15 @@
     stock?.classList.toggle("is-low", normalized.stock === "Stoc limitat");
     stock?.classList.toggle("is-out", normalized.stock === "Stoc epuizat");
 
+    const fit = document.querySelector(".product-detail-fit");
+    const fitLabel = fit?.querySelector(":scope > span");
     const brands = document.querySelector("[data-product-brands]");
-    if (brands) {
+    if (fit && brands) {
       brands.replaceChildren();
-      const names = Array.isArray(product.brands) ? product.brands.map(brand => brand.name).filter(Boolean) : [];
-      (names.length ? names : [product.manufacturer_name || "Universal"]).forEach(name => {
+      const manufacturer = String(product.manufacturer_name || "").trim();
+      fit.hidden = manufacturer.length === 0;
+      if (fitLabel) fitLabel.textContent = "Producător";
+      (manufacturer ? [manufacturer] : []).forEach(name => {
         const badge = document.createElement("b");
         badge.textContent = String(name);
         brands.append(badge);
@@ -812,17 +816,27 @@
     ensureStyles();
     const isProductPage = document.body.classList.contains("product-page");
     if (isProductPage) {
+      const productLoader = document.querySelector(".product-page-loading");
+      document.querySelector("[data-product-reload]")?.addEventListener("click", () => window.location.reload());
       const params = new URLSearchParams(window.location.search);
       const pathMatch = window.location.pathname.match(/\/magazin\/produs\/([^/]+)\/?$/i);
       const identifier = pathMatch ? decodeURIComponent(pathMatch[1]) : (params.get("slug") || params.get("id") || document.body.dataset.productId);
       if (identifier) {
+        let productLoaded = false;
         try {
           const product = await api("publicProduct", { query: `&slug=${encodeURIComponent(identifier)}` });
           applyLiveProduct(product);
+          productLoaded = true;
         } catch {
-          // Pagina statică a produsului rămâne disponibilă.
+          document.body.classList.add("has-live-product-error");
+          productLoader?.classList.add("has-error");
+          productLoader?.setAttribute("aria-label", "Produsul nu s-a putut încărca");
         } finally {
           document.body.classList.remove("is-live-product-loading");
+          if (productLoaded) {
+            document.body.classList.remove("has-live-product-error");
+            productLoader?.classList.remove("has-error");
+          }
           window.requestAnimationFrame(() => {
             window.dispatchEvent(new Event("resize"));
             window.dispatchEvent(new Event("scroll"));
@@ -830,6 +844,8 @@
         }
       } else {
         document.body.classList.remove("is-live-product-loading");
+        document.body.classList.add("has-live-product-error");
+        productLoader?.classList.add("has-error");
         window.dispatchEvent(new Event("resize"));
       }
     }

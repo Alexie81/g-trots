@@ -575,6 +575,115 @@ footer nav a:hover {
   color: var(--orange);
 }
 
+.main-nav .nav-shop-link {
+  min-height: 2.75rem;
+  margin-block: -0.75rem;
+  padding: 0.34rem 0.92rem 0.34rem 0.38rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.58rem;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 151, 35, 0.3);
+  border-radius: 999px;
+  background:
+    linear-gradient(135deg, rgba(255, 145, 0, 0.19), rgba(78, 47, 23, 0.48)),
+    rgba(255, 255, 255, 0.035);
+  color: #fff8ef;
+  font-weight: 820;
+  letter-spacing: -0.015em;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 0.55rem 1.35rem rgba(0, 0, 0, 0.18);
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease, color 180ms ease;
+}
+
+.main-nav .nav-shop-link::after {
+  width: 4.2rem;
+  height: 4.2rem;
+  content: "";
+  position: absolute;
+  top: -3.15rem;
+  right: -1.4rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  pointer-events: none;
+}
+
+.main-nav .nav-shop-link:hover,
+.main-nav .nav-shop-link:focus-visible {
+  outline: 0;
+  border-color: rgba(255, 161, 50, 0.62);
+  background:
+    linear-gradient(135deg, rgba(255, 145, 0, 0.3), rgba(96, 54, 24, 0.58)),
+    rgba(255, 255, 255, 0.045);
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    0 0.75rem 1.8rem rgba(240, 127, 0, 0.17);
+  transform: translateY(-1px);
+}
+
+.main-nav .nav-shop-link.active,
+.main-nav .nav-shop-link[aria-current="page"] {
+  border-color: rgba(255, 181, 92, 0.72);
+  background: linear-gradient(135deg, #ff981a, #e87200);
+  color: #1b0d04;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 0.7rem 1.8rem rgba(240, 127, 0, 0.22);
+}
+
+body.shop-page .main-nav .nav-shop-link.active,
+body.shop-page .main-nav .nav-shop-link[aria-current="page"] {
+  color: #1b0d04;
+}
+
+.nav-shop-icon {
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 2rem;
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+  border-radius: 0.72rem;
+  background: rgba(255, 151, 28, 0.17);
+  color: #ffad4a;
+  box-shadow: inset 0 0 0 1px rgba(255, 166, 57, 0.16);
+}
+
+.nav-shop-icon::before {
+  width: 0.82rem;
+  height: 0.72rem;
+  content: "";
+  box-sizing: border-box;
+  position: absolute;
+  top: 0.82rem;
+  left: 0.59rem;
+  border: 1.7px solid currentColor;
+  border-radius: 0.2rem 0.2rem 0.27rem 0.27rem;
+}
+
+.nav-shop-icon::after {
+  width: 0.48rem;
+  height: 0.42rem;
+  content: "";
+  box-sizing: border-box;
+  position: absolute;
+  top: 0.48rem;
+  left: 0.76rem;
+  border: 1.7px solid currentColor;
+  border-bottom: 0;
+  border-radius: 0.35rem 0.35rem 0 0;
+}
+
+.main-nav .nav-shop-link.active .nav-shop-icon,
+.main-nav .nav-shop-link[aria-current="page"] .nav-shop-icon {
+  background: rgba(255, 255, 255, 0.84);
+  color: #321707;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
 .mobile-nav-heading,
 .mobile-nav-call {
   display: none;
@@ -2701,6 +2810,56 @@ footer nav {
   .main-nav > a:not(.mobile-nav-call):focus-visible::after {
     color: var(--orange);
     opacity: 1;
+  }
+
+  .main-nav > a.nav-shop-link:not(.mobile-nav-call) {
+    min-height: 4.45rem;
+    margin: 0;
+    padding: 0.62rem 0.72rem;
+    grid-template-columns: 2.75rem 1fr auto;
+    gap: 0.8rem;
+    border-color: rgba(255, 158, 44, 0.3);
+    background:
+      linear-gradient(135deg, rgba(255, 145, 0, 0.2), rgba(79, 45, 21, 0.5)),
+      rgba(255, 255, 255, 0.035);
+    color: #fff8ef;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.075);
+  }
+
+  .main-nav > a.nav-shop-link:not(.mobile-nav-call)::before {
+    content: none;
+  }
+
+  .main-nav > a.nav-shop-link:not(.mobile-nav-call)::after {
+    position: static;
+    top: auto;
+    right: auto;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .main-nav > a.nav-shop-link:not(.mobile-nav-call) .nav-shop-icon {
+    width: 2.75rem;
+    height: 2.75rem;
+    flex-basis: 2.75rem;
+    border-radius: 0.9rem;
+  }
+
+  .main-nav > a.nav-shop-link:not(.mobile-nav-call) .nav-shop-icon::before {
+    top: 1.13rem;
+    left: 0.97rem;
+  }
+
+  .main-nav > a.nav-shop-link:not(.mobile-nav-call) .nav-shop-icon::after {
+    top: 0.79rem;
+    left: 1.14rem;
+  }
+
+  .main-nav > a.nav-shop-link.active:not(.mobile-nav-call),
+  .main-nav > a.nav-shop-link[aria-current="page"]:not(.mobile-nav-call) {
+    border-color: rgba(255, 187, 106, 0.76);
+    background: linear-gradient(135deg, #ff981a, #e87200);
+    color: #1b0d04;
   }
 
   .mobile-nav-call {

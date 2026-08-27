@@ -226,7 +226,7 @@
       nav.innerHTML = `
         <div class="mobile-nav-heading" aria-hidden="true"><span>Meniu</span><small>G-Trots service</small></div>
         <a href="/#servicii">Servicii</a>
-        <a href="/magazin.html"${shopActive ? ' aria-current="page"' : ""}>Magazin</a>
+        <a class="nav-shop-link${shopActive ? " active" : ""}" href="/magazin.html"${shopActive ? ' aria-current="page"' : ""}><span class="nav-shop-icon" aria-hidden="true"></span><span>Shop</span></a>
         <a href="/ghiduri-service-trotinete-electrice.html"${guidesActive ? ' aria-current="page"' : ""}>Ghiduri</a>
         <a href="/#proces">Cum lucrăm</a>
         <a href="/#intrebari">Întrebări</a>

@@ -1069,6 +1069,10 @@ h1 em {
   stroke-linejoin: round;
 }
 
+.hero-actions .hero-shop-mobile-icon {
+  display: none;
+}
+
 .hero-actions .hero-shop-button:hover,
 .hero-actions .hero-shop-button:focus-visible {
   outline: 0;
@@ -3570,6 +3574,14 @@ footer nav {
     width: 1.58rem;
     height: 1.58rem;
     stroke-width: 1.9;
+  }
+
+  .hero-actions .hero-shop-icon .hero-shop-desktop-icon {
+    display: none;
+  }
+
+  .hero-actions .hero-shop-icon .hero-shop-mobile-icon {
+    display: block;
   }
 
   .hero-actions .hero-shop-button:hover .hero-shop-icon,

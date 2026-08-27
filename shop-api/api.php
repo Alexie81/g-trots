@@ -1327,7 +1327,7 @@ function seoRepetitionIssues(string $shortDescription, string $metaDescription, 
     return array_values(array_unique($issues));
 }
 
-function seoResearchPayload(array $body): array {
+function seoResearchPayload(array $body, bool $finalCatalog = false): array {
     $name = mb_substr(trim((string)($body['name'] ?? '')), 0, 180);
     $shortDescription = trim((string)($body['short_description'] ?? ''));
     $descriptionTitle = mb_substr(trim((string)($body['description_title'] ?? '')), 0, 220);
@@ -1340,17 +1340,20 @@ function seoResearchPayload(array $body): array {
     }
     if ($descriptionTitle === '') throw new InvalidArgumentException('Titlul descrierii lungi este obligatoriu.');
     $wordCount = seoDescriptionWordCount($descriptionHtml);
-    if ($wordCount < 2500 || $wordCount > 3400) {
-        throw new InvalidArgumentException('Descrierea lunga trebuie sa aiba intre 2500 si 3400 de cuvinte; continutul primit are ' . $wordCount . '.');
+    $minimumWords = $finalCatalog ? 600 : 2500;
+    $maximumWords = $finalCatalog ? 1800 : 3400;
+    if ($wordCount < $minimumWords || $wordCount > $maximumWords) {
+        throw new InvalidArgumentException('Descrierea lunga trebuie sa aiba intre ' . $minimumWords . ' si ' . $maximumWords . ' de cuvinte; continutul primit are ' . $wordCount . '.');
     }
-    if (mb_strlen($metaTitle) < 35 || mb_strlen($metaTitle) > 70) {
-        throw new InvalidArgumentException('Meta titlul trebuie sa aiba intre 35 si 70 de caractere.');
+    $minimumMetaTitleLength = $finalCatalog ? 15 : 35;
+    if (mb_strlen($metaTitle) < $minimumMetaTitleLength || mb_strlen($metaTitle) > 70) {
+        throw new InvalidArgumentException('Meta titlul trebuie sa aiba intre ' . $minimumMetaTitleLength . ' si 70 de caractere.');
     }
     if (mb_strlen($metaDescription) < 120 || mb_strlen($metaDescription) > 180) {
         throw new InvalidArgumentException('Meta descrierea trebuie sa aiba intre 120 si 180 de caractere.');
     }
     $repetitionIssues = seoRepetitionIssues($shortDescription, $metaDescription, $descriptionHtml);
-    if ($repetitionIssues) {
+    if (!$finalCatalog && $repetitionIssues) {
         throw new InvalidArgumentException('Continutul nu a trecut verificarea anti-repetitie: ' . implode(' ', $repetitionIssues));
     }
 
@@ -1397,7 +1400,8 @@ function seoResearchPayload(array $body): array {
         $sources[$url] = ['url' => mb_substr($url, 0, 1000), 'label' => $label];
         if (count($sources) >= 15) break;
     }
-    if (count($sources) < 2) throw new InvalidArgumentException('Salveaza minimum doua surse folosite in cercetarea produsului.');
+    $minimumSources = $finalCatalog ? 1 : 2;
+    if (count($sources) < $minimumSources) throw new InvalidArgumentException('Salveaza minimum ' . $minimumSources . ' surse folosite in cercetarea produsului.');
 
     $compatibilities = [];
     foreach (array_values(is_array($body['compatibility_names'] ?? null) ? $body['compatibility_names'] : []) as $nameValue) {
@@ -1964,7 +1968,7 @@ try {
         $stmt->execute([$id, $id, $externalId, $externalId]);
         $current = $stmt->fetch();
         if (!$current) jsonResponse(['error' => 'Produsul Boomag nu a fost gasit.'], 404);
-        $payload = seoResearchPayload($body);
+        $payload = seoResearchPayload($body, !empty($body['final_catalog']));
         if (mb_strtolower(trim($payload['name'])) !== mb_strtolower(trim((string)$current['name']))) {
             ensureUniqueProductName($db, $payload['name'], (string)$current['id']);
         }

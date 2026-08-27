@@ -21,6 +21,10 @@ class CleanUrlHandler(SimpleHTTPRequestHandler):
         parsed = urlsplit(self.path)
         request_path = unquote(parsed.path)
 
+        if request_path.rstrip("/").startswith("/magazin/produs/"):
+            self.path = urlunsplit((parsed.scheme, parsed.netloc, "/produs.html", parsed.query, parsed.fragment))
+            return super().send_head()
+
         if request_path != "/" and not Path(request_path).suffix:
             html_candidate = WEBSITE_ROOT / f"{request_path.lstrip('/')}.html"
             if html_candidate.is_file():

@@ -6,7 +6,7 @@ ini_set('log_errors', '1');
 
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, X-API-Key, X-Auth-Token, X-Import-Key');
+header('Access-Control-Allow-Headers: Content-Type, X-API-Key, X-Auth-Token, X-Import-Key, X-Customer-Token, Authorization');
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
@@ -45,6 +45,7 @@ function shopConfig(): array {
         'gomag_shop_url' => 'https://www.boomag.ro',
         'boomag_feed_url' => 'https://www.boomag.ro/feed/doctor-trotineta.csv',
         'boomag_import_key' => '',
+        'google_client_id' => '',
     ];
 
     $config = $defaults;
@@ -469,6 +470,9 @@ function ensureShopSchema(PDO $db): void {
             shipping_method_id CHAR(36) NULL,
             shipping_method_name VARCHAR(120) NOT NULL,
             subtotal DECIMAL(12,2) NOT NULL,
+            discount_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+            promotion_id CHAR(36) NULL,
+            promotion_code VARCHAR(80) NULL,
             shipping_cost DECIMAL(12,2) NOT NULL DEFAULT 0,
             total DECIMAL(12,2) NOT NULL,
             currency CHAR(3) NOT NULL DEFAULT 'RON',
@@ -494,6 +498,16 @@ function ensureShopSchema(PDO $db): void {
         'stripe_paid_at' => 'DATETIME NULL AFTER stripe_payment_token',
     ];
     foreach ($stripeOrderColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_orders LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_orders ADD COLUMN {$column} {$definition}");
+        }
+    }
+    $promotionOrderColumns = [
+        'discount_total' => 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER subtotal',
+        'promotion_id' => 'CHAR(36) NULL AFTER discount_total',
+        'promotion_code' => 'VARCHAR(80) NULL AFTER promotion_id',
+    ];
+    foreach ($promotionOrderColumns as $column => $definition) {
         if (!$db->query("SHOW COLUMNS FROM shop_orders LIKE " . $db->quote($column))->fetch()) {
             $db->exec("ALTER TABLE shop_orders ADD COLUMN {$column} {$definition}");
         }
@@ -550,6 +564,98 @@ function ensureShopSchema(PDO $db): void {
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_shop_order_history_order (order_id, created_at),
             INDEX idx_shop_order_history_status (to_status, created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_customers (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            email VARCHAR(190) NOT NULL UNIQUE,
+            password_hash VARCHAR(255) NULL,
+            full_name VARCHAR(180) NOT NULL,
+            phone VARCHAR(50) NULL,
+            google_sub VARCHAR(190) NULL UNIQUE,
+            avatar_url VARCHAR(500) NULL,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            last_login_at DATETIME NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_shop_customers_active (is_active),
+            INDEX idx_shop_customers_name (full_name)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_customer_sessions (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            customer_id CHAR(36) NOT NULL,
+            token_hash CHAR(64) NOT NULL UNIQUE,
+            expires_at DATETIME NOT NULL,
+            last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_shop_customer_sessions_customer (customer_id, expires_at),
+            INDEX idx_shop_customer_sessions_expiry (expires_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_customer_addresses (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            customer_id CHAR(36) NOT NULL,
+            label VARCHAR(80) NOT NULL DEFAULT 'Acasă',
+            recipient_name VARCHAR(180) NOT NULL,
+            phone VARCHAR(50) NOT NULL,
+            address VARCHAR(255) NOT NULL,
+            city VARCHAR(120) NOT NULL,
+            county VARCHAR(120) NOT NULL,
+            postal_code VARCHAR(30) NULL,
+            is_default TINYINT(1) NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_shop_customer_addresses_customer (customer_id, is_default)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_coupons (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            code VARCHAR(80) NOT NULL UNIQUE,
+            title VARCHAR(180) NOT NULL,
+            description VARCHAR(500) NULL,
+            discount_type VARCHAR(20) NOT NULL DEFAULT 'percent',
+            discount_value DECIMAL(12,2) NOT NULL DEFAULT 0,
+            min_order_value DECIMAL(12,2) NULL,
+            audience VARCHAR(20) NOT NULL DEFAULT 'all',
+            scope VARCHAR(20) NOT NULL DEFAULT 'global',
+            product_id CHAR(36) NULL,
+            auto_apply TINYINT(1) NOT NULL DEFAULT 1,
+            show_banner TINYINT(1) NOT NULL DEFAULT 1,
+            banner_text VARCHAR(260) NULL,
+            valid_from DATETIME NULL,
+            valid_until DATETIME NULL,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_shop_coupons_active (is_active, valid_until)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $couponRuleColumns = [
+        'audience' => "VARCHAR(20) NOT NULL DEFAULT 'all' AFTER min_order_value",
+        'scope' => "VARCHAR(20) NOT NULL DEFAULT 'global' AFTER audience",
+        'product_id' => 'CHAR(36) NULL AFTER scope',
+        'auto_apply' => 'TINYINT(1) NOT NULL DEFAULT 1 AFTER product_id',
+        'show_banner' => 'TINYINT(1) NOT NULL DEFAULT 1 AFTER auto_apply',
+        'banner_text' => 'VARCHAR(260) NULL AFTER show_banner',
+    ];
+    foreach ($couponRuleColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_coupons LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_coupons ADD COLUMN {$column} {$definition}");
+        }
+    }
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_customer_coupons (
+            customer_id CHAR(36) NOT NULL,
+            coupon_id CHAR(36) NOT NULL,
+            assigned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            used_at DATETIME NULL,
+            PRIMARY KEY (customer_id, coupon_id),
+            INDEX idx_shop_customer_coupons_coupon (coupon_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     $db->exec(
@@ -668,6 +774,131 @@ function validateAuthToken(array $config, array $body): array {
     }
 
     jsonResponse(['error' => 'Verificarea sesiunii este temporar indisponibila. Reincercam imediat.'], 503);
+}
+
+function customerTokenFromRequest(): string {
+    $token = requestHeader('X-Customer-Token');
+    if ($token === '') {
+        $authorization = requestHeader('Authorization');
+        if (preg_match('/^Bearer\s+(.+)$/i', $authorization, $match)) $token = trim((string)$match[1]);
+    }
+    return preg_match('/^[a-f0-9]{64}$/i', $token) ? strtolower($token) : '';
+}
+
+function customerPublicRow(array $row): array {
+    return [
+        'id' => (string)$row['id'],
+        'email' => (string)$row['email'],
+        'full_name' => (string)$row['full_name'],
+        'phone' => (string)($row['phone'] ?? ''),
+        'avatar_url' => (string)($row['avatar_url'] ?? ''),
+        'has_password' => !empty($row['password_hash']),
+        'google_connected' => !empty($row['google_sub']),
+        'created_at' => (string)($row['created_at'] ?? ''),
+    ];
+}
+
+function issueCustomerSession(PDO $db, string $customerId): string {
+    $token = bin2hex(random_bytes(32));
+    $db->prepare('DELETE FROM shop_customer_sessions WHERE expires_at <= NOW() OR (customer_id = ? AND created_at < DATE_SUB(NOW(), INTERVAL 90 DAY))')->execute([$customerId]);
+    $stmt = $db->prepare('INSERT INTO shop_customer_sessions (id, customer_id, token_hash, expires_at) VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 30 DAY))');
+    $stmt->execute([uuidV4(), $customerId, hash('sha256', $token)]);
+    return $token;
+}
+
+function requireCustomer(PDO $db): array {
+    $token = customerTokenFromRequest();
+    if ($token === '') jsonResponse(['error' => 'Autentifică-te pentru a continua.', 'code' => 'customer_auth_required'], 401);
+    $stmt = $db->prepare(
+        'SELECT c.*, s.id AS session_id
+         FROM shop_customer_sessions s
+         INNER JOIN shop_customers c ON c.id = s.customer_id
+         WHERE s.token_hash = ? AND s.expires_at > NOW()
+         LIMIT 1'
+    );
+    $stmt->execute([hash('sha256', $token)]);
+    $customer = $stmt->fetch();
+    if (!$customer) jsonResponse(['error' => 'Sesiunea contului a expirat. Autentifică-te din nou.', 'code' => 'customer_session_expired'], 401);
+    if (!(bool)$customer['is_active']) jsonResponse(['error' => 'Acest cont a fost dezactivat. Contactează G-Trots pentru mai multe detalii.', 'code' => 'customer_disabled'], 403);
+    $db->prepare('UPDATE shop_customer_sessions SET last_seen_at = NOW(), expires_at = DATE_ADD(NOW(), INTERVAL 30 DAY) WHERE id = ?')->execute([$customer['session_id']]);
+    return $customer;
+}
+
+function optionalCustomer(PDO $db): ?array {
+    $token = customerTokenFromRequest();
+    if ($token === '') return null;
+    $stmt = $db->prepare('SELECT c.* FROM shop_customer_sessions s INNER JOIN shop_customers c ON c.id = s.customer_id WHERE s.token_hash = ? AND s.expires_at > NOW() AND c.is_active = 1 LIMIT 1');
+    $stmt->execute([hash('sha256', $token)]);
+    $customer = $stmt->fetch();
+    return $customer ?: null;
+}
+
+function customerAddressPayload(array $body): array {
+    $payload = [
+        'label' => mb_substr(trim((string)($body['label'] ?? 'Acasă')), 0, 80),
+        'recipient_name' => mb_substr(trim((string)($body['recipient_name'] ?? '')), 0, 180),
+        'phone' => mb_substr(trim((string)($body['phone'] ?? '')), 0, 50),
+        'address' => mb_substr(trim((string)($body['address'] ?? '')), 0, 255),
+        'city' => mb_substr(trim((string)($body['city'] ?? '')), 0, 120),
+        'county' => mb_substr(trim((string)($body['county'] ?? '')), 0, 120),
+        'postal_code' => mb_substr(trim((string)($body['postal_code'] ?? '')), 0, 30),
+        'is_default' => boolValue($body['is_default'] ?? false),
+    ];
+    if ($payload['label'] === '') $payload['label'] = 'Acasă';
+    if ($payload['recipient_name'] === '' || $payload['phone'] === '' || $payload['address'] === '' || $payload['city'] === '' || $payload['county'] === '') {
+        throw new InvalidArgumentException('Completează destinatarul, telefonul și toate datele adresei.');
+    }
+    return $payload;
+}
+
+function customerOrderResponse(array $order): array {
+    $allowed = [
+        'id', 'order_number', 'status', 'payment_status', 'payment_method', 'customer_name', 'customer_email',
+        'customer_phone', 'address', 'city', 'county', 'postal_code', 'customer_notes', 'shipping_method_name',
+        'subtotal', 'discount_total', 'promotion_code', 'shipping_cost', 'total', 'currency', 'tracking_token', 'items', 'status_history', 'created_at', 'updated_at'
+    ];
+    $response = array_intersect_key($order, array_flip($allowed));
+    $response['status_label'] = (string)gtOrderStatusMeta((string)($order['status'] ?? 'new'))['label'];
+    $response['tracking_url'] = '/urmarire-comanda?token=' . rawurlencode((string)($order['tracking_token'] ?? ''));
+    $response['items'] = array_map(fn(array $item): array => [
+        'product_id' => (string)($item['product_id'] ?? ''),
+        'product_name' => (string)($item['product_name'] ?? ''),
+        'product_sku' => (string)($item['product_sku'] ?? ''),
+        'quantity' => (int)($item['quantity'] ?? 0),
+        'unit_price' => (float)($item['unit_price'] ?? 0),
+        'line_total' => (float)($item['line_total'] ?? 0),
+        'image_url' => (string)($item['image_url'] ?? ''),
+    ], (array)($order['items'] ?? []));
+    $response['status_history'] = array_map(fn(array $entry): array => [
+        'to_status' => (string)($entry['to_status'] ?? ''),
+        'created_at' => (string)($entry['created_at'] ?? ''),
+    ], (array)($order['status_history'] ?? []));
+    return $response;
+}
+
+function fetchGoogleIdentity(string $credential, string $clientId): array {
+    if ($clientId === '') throw new RuntimeException('Autentificarea Google nu este configurată încă.');
+    if ($credential === '' || strlen($credential) > 10000) throw new InvalidArgumentException('Răspunsul Google nu este valid.');
+    $url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' . rawurlencode($credential);
+    $raw = false;
+    $status = 0;
+    if (function_exists('curl_init')) {
+        $curl = curl_init($url);
+        curl_setopt_array($curl, [CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_TIMEOUT => 12]);
+        $raw = curl_exec($curl);
+        $status = (int)curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        curl_close($curl);
+    } else {
+        $context = stream_context_create(['http' => ['timeout' => 12, 'ignore_errors' => true]]);
+        $raw = @file_get_contents($url, false, $context);
+        if (!empty($http_response_header[0]) && preg_match('/\s(\d{3})\s/', $http_response_header[0], $match)) $status = (int)$match[1];
+    }
+    $identity = is_string($raw) ? json_decode($raw, true) : null;
+    $issuer = (string)($identity['iss'] ?? '');
+    if ($status < 200 || $status >= 300 || !is_array($identity) || !hash_equals($clientId, (string)($identity['aud'] ?? '')) || !in_array($issuer, ['accounts.google.com', 'https://accounts.google.com'], true) || empty($identity['email_verified']) || (int)($identity['exp'] ?? 0) <= time()) {
+        throw new InvalidArgumentException('Autentificarea Google nu a putut fi verificată.');
+    }
+    return $identity;
 }
 
 function uuidV4(): string {
@@ -1567,6 +1798,97 @@ function sourcePayload(array $body): array {
     ];
 }
 
+function promotionPayload(PDO $db, array $body): array {
+    $code = strtoupper(preg_replace('/[^A-Z0-9_-]+/i', '', trim((string)($body['code'] ?? ''))) ?? '');
+    $title = mb_substr(trim((string)($body['title'] ?? '')), 0, 180);
+    $discountType = trim((string)($body['discount_type'] ?? 'percent'));
+    $discountValue = round((float)($body['discount_value'] ?? 0), 2);
+    $audience = trim((string)($body['audience'] ?? 'all'));
+    $scope = trim((string)($body['scope'] ?? 'global'));
+    $productId = $scope === 'product' ? trim((string)($body['product_id'] ?? '')) : null;
+    if ($code === '' || $title === '') throw new InvalidArgumentException('Completează codul și titlul reducerii.');
+    if (!in_array($discountType, ['percent', 'fixed'], true) || $discountValue <= 0 || ($discountType === 'percent' && $discountValue > 100)) throw new InvalidArgumentException('Valoarea reducerii nu este validă.');
+    if (!in_array($audience, ['all', 'registered'], true)) throw new InvalidArgumentException('Publicul reducerii nu este valid.');
+    if (!in_array($scope, ['global', 'product'], true)) throw new InvalidArgumentException('Tipul aplicării nu este valid.');
+    if ($scope === 'product') {
+        $exists = $db->prepare('SELECT id FROM shop_products WHERE id = ?');
+        $exists->execute([$productId]);
+        if (!$exists->fetchColumn()) throw new InvalidArgumentException('Alege un produs valid pentru reducere.');
+    }
+    $normalizeDate = static function ($value): ?string {
+        $value = trim((string)$value);
+        if ($value === '') return null;
+        $timestamp = strtotime($value);
+        if ($timestamp === false) throw new InvalidArgumentException('Perioada reducerii nu este validă.');
+        return date('Y-m-d H:i:s', $timestamp);
+    };
+    $validFrom = $normalizeDate($body['valid_from'] ?? null);
+    $validUntil = $normalizeDate($body['valid_until'] ?? null);
+    if ($validFrom && $validUntil && $validUntil <= $validFrom) throw new InvalidArgumentException('Data finală trebuie să fie după data de început.');
+    return [
+        'code' => $code,
+        'title' => $title,
+        'description' => mb_substr(trim((string)($body['description'] ?? '')), 0, 500),
+        'discount_type' => $discountType,
+        'discount_value' => $discountValue,
+        'min_order_value' => trim((string)($body['min_order_value'] ?? '')) === '' ? null : max(0, round((float)$body['min_order_value'], 2)),
+        'audience' => $audience,
+        'scope' => $scope,
+        'product_id' => $productId,
+        'auto_apply' => boolValue($body['auto_apply'] ?? true, true),
+        'show_banner' => boolValue($body['show_banner'] ?? true, true),
+        'banner_text' => mb_substr(trim((string)($body['banner_text'] ?? $title)), 0, 260),
+        'valid_from' => $validFrom,
+        'valid_until' => $validUntil,
+        'is_active' => boolValue($body['is_active'] ?? true, true),
+    ];
+}
+
+function promotionRow(array $row): array {
+    $row['discount_value'] = (float)$row['discount_value'];
+    $row['min_order_value'] = $row['min_order_value'] === null ? null : (float)$row['min_order_value'];
+    foreach (['auto_apply', 'show_banner', 'is_active'] as $key) $row[$key] = (bool)$row[$key];
+    return $row;
+}
+
+function bestOrderPromotion(PDO $db, array $resolvedItems, float $subtotal, ?array $customer, ?string $requestedCode = null): array {
+    $requestedCode = strtoupper(trim((string)$requestedCode));
+    $audience = $customer ? ['all', 'registered'] : ['all'];
+    $placeholders = implode(',', array_fill(0, count($audience), '?'));
+    $sql = "SELECT * FROM shop_coupons
+            WHERE is_active = 1 AND audience IN ({$placeholders})
+              AND (valid_from IS NULL OR valid_from <= NOW())
+              AND (valid_until IS NULL OR valid_until >= NOW())
+              AND (auto_apply = 1 OR code = ?)";
+    $stmt = $db->prepare($sql);
+    $stmt->execute([...$audience, $requestedCode]);
+    $best = ['id' => null, 'code' => null, 'title' => null, 'discount_total' => 0.0];
+    foreach ($stmt->fetchAll() as $promotion) {
+        if (!(bool)$promotion['auto_apply'] && $requestedCode !== strtoupper((string)$promotion['code'])) continue;
+        if ($promotion['min_order_value'] !== null && $subtotal < (float)$promotion['min_order_value']) continue;
+        $eligibleBase = $subtotal;
+        if ((string)$promotion['scope'] === 'product') {
+            $eligibleBase = 0.0;
+            foreach ($resolvedItems as $item) {
+                if ((string)($item['product']['id'] ?? '') === (string)$promotion['product_id']) $eligibleBase += (float)$item['line_total'];
+            }
+        }
+        if ($eligibleBase <= 0) continue;
+        $discount = (string)$promotion['discount_type'] === 'percent'
+            ? round($eligibleBase * min(100.0, (float)$promotion['discount_value']) / 100, 2)
+            : min($eligibleBase, round((float)$promotion['discount_value'], 2));
+        if ($discount > (float)$best['discount_total']) {
+            $best = [
+                'id' => (string)$promotion['id'],
+                'code' => (string)$promotion['code'],
+                'title' => (string)$promotion['title'],
+                'discount_total' => min($subtotal, $discount),
+            ];
+        }
+    }
+    return $best;
+}
+
 function orderStatusHistory(PDO $db, string $orderId): array {
     $stmt = $db->prepare('SELECT * FROM shop_order_status_history WHERE order_id = ? ORDER BY created_at ASC, id ASC');
     $stmt->execute([$orderId]);
@@ -1619,6 +1941,7 @@ function orderRow(PDO $db, array $row, ?array $config = null, bool $withHistory 
         return $item;
     }, $items->fetchAll());
     $row['subtotal'] = (float)$row['subtotal'];
+    $row['discount_total'] = (float)($row['discount_total'] ?? 0);
     $row['shipping_cost'] = (float)$row['shipping_cost'];
     $row['total'] = (float)$row['total'];
     if ($withHistory) $row['status_history'] = orderStatusHistory($db, (string)$row['id']);
@@ -1646,6 +1969,8 @@ function publicTrackingOrder(array $order): array {
         'payment_method' => (string)$order['payment_method'],
         'shipping_method_name' => (string)$order['shipping_method_name'],
         'subtotal' => (float)$order['subtotal'],
+        'discount_total' => (float)($order['discount_total'] ?? 0),
+        'promotion_code' => (string)($order['promotion_code'] ?? ''),
         'shipping_cost' => (float)$order['shipping_cost'],
         'total' => (float)$order['total'],
         'currency' => (string)$order['currency'],
@@ -1703,22 +2028,24 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
             $resolvedItems[] = ['product' => $product, 'quantity' => $quantity, 'unit_price' => $unitPrice, 'line_total' => $lineTotal];
         }
         if (!$resolvedItems) throw new InvalidArgumentException('Comanda nu contine produse valide.');
+        $promotion = bestOrderPromotion($db, $resolvedItems, $subtotal, optionalCustomer($db), (string)($body['coupon_code'] ?? ''));
+        $discountTotal = round((float)$promotion['discount_total'], 2);
         $shippingCost = (float)$shipping['cost'];
         if ($shipping['free_above'] !== null && $subtotal >= (float)$shipping['free_above']) $shippingCost = 0.0;
-        $total = round($subtotal + $shippingCost, 2);
+        $total = round(max(0, $subtotal - $discountTotal) + $shippingCost, 2);
         $orderId = uuidV4();
         $orderNumber = 'GT-' . date('Ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(4)), 0, 8));
         // Orice comandă abia primită este nouă; Stripe o confirmă automat numai după plata reușită.
         $initialStatus = 'new';
         $trackingToken = bin2hex(random_bytes(24));
-        $insertOrder = $db->prepare('INSERT INTO shop_orders (id, order_number, status, payment_status, payment_method, customer_name, customer_email, customer_phone, address, city, county, postal_code, customer_notes, shipping_method_id, shipping_method_name, subtotal, shipping_cost, total, currency, tracking_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $insertOrder = $db->prepare('INSERT INTO shop_orders (id, order_number, status, payment_status, payment_method, customer_name, customer_email, customer_phone, address, city, county, postal_code, customer_notes, shipping_method_id, shipping_method_name, subtotal, discount_total, promotion_id, promotion_code, shipping_cost, total, currency, tracking_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $insertOrder->execute([
             $orderId, $orderNumber, $initialStatus, 'pending', $paymentMethod, $name,
             $customerEmail ?: null, $phone, $address, $city,
             mb_substr(trim((string)($body['county'] ?? '')), 0, 120) ?: null,
             mb_substr(trim((string)($body['postal_code'] ?? '')), 0, 30) ?: null,
             mb_substr(trim((string)($body['customer_notes'] ?? '')), 0, 3000) ?: null,
-            $shippingId, (string)$shipping['name'], $subtotal, $shippingCost, $total, 'RON', $trackingToken
+            $shippingId, (string)$shipping['name'], $subtotal, $discountTotal, $promotion['id'], $promotion['code'], $shippingCost, $total, 'RON', $trackingToken
         ]);
         $insertItem = $db->prepare('INSERT INTO shop_order_items (id, order_id, product_id, product_name, product_sku, quantity, unit_price, line_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
         $updateStock = $db->prepare('UPDATE shop_products SET stock_quantity = stock_quantity - ? WHERE id = ?');
@@ -1770,6 +2097,281 @@ try {
 
     if ($action === 'stripeWebhook' && $method === 'POST') {
         jsonResponse(stripeProcessWebhook($db, $config, rawRequestBody(), requestHeader('Stripe-Signature')));
+    }
+
+    if ($action === 'customerAuthConfig' && $method === 'GET') {
+        jsonResponse(['google_client_id' => trim((string)($config['google_client_id'] ?? ''))]);
+    }
+
+    if ($action === 'publicActivePromotions' && $method === 'GET') {
+        $customer = optionalCustomer($db);
+        $audience = $customer ? ['all', 'registered'] : ['all'];
+        $placeholders = implode(',', array_fill(0, count($audience), '?'));
+        $stmt = $db->prepare(
+            "SELECT c.id, c.code, c.title, c.description, c.discount_type, c.discount_value, c.min_order_value,
+                    c.audience, c.scope, c.product_id, c.auto_apply, c.show_banner, c.banner_text, c.valid_from, c.valid_until,
+                    p.name AS product_name, p.slug AS product_slug
+             FROM shop_coupons c
+             LEFT JOIN shop_products p ON p.id = c.product_id
+             WHERE c.is_active = 1 AND c.audience IN ({$placeholders})
+               AND (c.valid_from IS NULL OR c.valid_from <= NOW())
+               AND (c.valid_until IS NULL OR c.valid_until >= NOW())
+             ORDER BY c.show_banner DESC, c.valid_until ASC, c.created_at DESC"
+        );
+        $stmt->execute($audience);
+        $rows = $stmt->fetchAll();
+        foreach ($rows as &$row) {
+            $row['discount_value'] = (float)$row['discount_value'];
+            $row['min_order_value'] = $row['min_order_value'] === null ? null : (float)$row['min_order_value'];
+            $row['auto_apply'] = (bool)$row['auto_apply'];
+            $row['show_banner'] = (bool)$row['show_banner'];
+        }
+        unset($row);
+        jsonResponse($rows);
+    }
+
+    if ($action === 'publicPromotionQuote' && $method === 'POST') {
+        $items = is_array($body['items'] ?? null) ? array_values($body['items']) : [];
+        if (!$items || count($items) > 50) jsonResponse(['subtotal' => 0, 'discount_total' => 0, 'promotion_code' => null, 'promotion_title' => null]);
+        $productStmt = $db->prepare('SELECT p.* FROM shop_products p INNER JOIN shop_product_sources s ON s.id = p.source_id AND s.is_active = 1 WHERE p.id = ? AND p.is_active = 1');
+        $resolvedItems = [];
+        $subtotal = 0.0;
+        foreach ($items as $item) {
+            if (!is_array($item)) continue;
+            $productId = trim((string)($item['product_id'] ?? ''));
+            $quantity = max(1, min(99, (int)($item['quantity'] ?? 1)));
+            $productStmt->execute([$productId]);
+            $product = $productStmt->fetch();
+            if (!$product) continue;
+            $unitPrice = $product['sale_price'] !== null ? (float)$product['sale_price'] : (float)$product['price'];
+            $lineTotal = round($unitPrice * $quantity, 2);
+            $subtotal += $lineTotal;
+            $resolvedItems[] = ['product' => $product, 'quantity' => $quantity, 'unit_price' => $unitPrice, 'line_total' => $lineTotal];
+        }
+        $promotion = bestOrderPromotion($db, $resolvedItems, $subtotal, optionalCustomer($db), (string)($body['coupon_code'] ?? ''));
+        jsonResponse([
+            'subtotal' => round($subtotal, 2),
+            'discount_total' => round((float)$promotion['discount_total'], 2),
+            'promotion_code' => $promotion['code'],
+            'promotion_title' => $promotion['title'],
+        ]);
+    }
+
+    if ($action === 'customerRegister' && $method === 'POST') {
+        $email = mb_strtolower(trim((string)($body['email'] ?? '')));
+        $fullName = mb_substr(trim((string)($body['full_name'] ?? '')), 0, 180);
+        $phone = mb_substr(trim((string)($body['phone'] ?? '')), 0, 50);
+        $password = (string)($body['password'] ?? '');
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) throw new InvalidArgumentException('Introdu o adresă de e-mail validă.');
+        if (mb_strlen($fullName) < 2) throw new InvalidArgumentException('Introdu numele complet.');
+        if (strlen($password) < 8 || !preg_match('/[A-Za-zĂÂÎȘȚăâîșț]/u', $password) || !preg_match('/\d/', $password)) {
+            throw new InvalidArgumentException('Parola trebuie să aibă minimum 8 caractere, cel puțin o literă și o cifră.');
+        }
+        $exists = $db->prepare('SELECT id FROM shop_customers WHERE email = ? LIMIT 1');
+        $exists->execute([$email]);
+        if ($exists->fetchColumn()) jsonResponse(['error' => 'Există deja un cont pentru această adresă de e-mail.', 'code' => 'email_exists'], 409);
+        $customerId = uuidV4();
+        $stmt = $db->prepare('INSERT INTO shop_customers (id, email, password_hash, full_name, phone, last_login_at) VALUES (?, ?, ?, ?, ?, NOW())');
+        $stmt->execute([$customerId, $email, password_hash($password, PASSWORD_DEFAULT), $fullName, $phone]);
+        $stmt = $db->prepare('SELECT * FROM shop_customers WHERE id = ?');
+        $stmt->execute([$customerId]);
+        jsonResponse(['token' => issueCustomerSession($db, $customerId), 'customer' => customerPublicRow($stmt->fetch())], 201);
+    }
+
+    if ($action === 'customerLogin' && $method === 'POST') {
+        $email = mb_strtolower(trim((string)($body['email'] ?? '')));
+        $password = (string)($body['password'] ?? '');
+        $stmt = $db->prepare('SELECT * FROM shop_customers WHERE email = ? LIMIT 1');
+        $stmt->execute([$email]);
+        $customer = $stmt->fetch();
+        if ($customer && !(bool)$customer['is_active']) {
+            jsonResponse(['error' => 'Acest cont a fost dezactivat. Contactează G-Trots pentru mai multe detalii.', 'code' => 'customer_disabled'], 403);
+        }
+        if (!$customer || empty($customer['password_hash']) || !password_verify($password, (string)$customer['password_hash'])) {
+            usleep(350000);
+            jsonResponse(['error' => 'Adresa de e-mail sau parola nu este corectă.', 'code' => 'invalid_credentials'], 401);
+        }
+        if (password_needs_rehash((string)$customer['password_hash'], PASSWORD_DEFAULT)) {
+            $db->prepare('UPDATE shop_customers SET password_hash = ? WHERE id = ?')->execute([password_hash($password, PASSWORD_DEFAULT), $customer['id']]);
+        }
+        $db->prepare('UPDATE shop_customers SET last_login_at = NOW() WHERE id = ?')->execute([$customer['id']]);
+        jsonResponse(['token' => issueCustomerSession($db, (string)$customer['id']), 'customer' => customerPublicRow($customer)]);
+    }
+
+    if ($action === 'customerGoogleLogin' && $method === 'POST') {
+        $identity = fetchGoogleIdentity(trim((string)($body['credential'] ?? '')), trim((string)($config['google_client_id'] ?? '')));
+        $email = mb_strtolower(trim((string)($identity['email'] ?? '')));
+        $googleSub = mb_substr(trim((string)($identity['sub'] ?? '')), 0, 190);
+        $fullName = mb_substr(trim((string)($identity['name'] ?? $email)), 0, 180);
+        $avatar = mb_substr(trim((string)($identity['picture'] ?? '')), 0, 500);
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || $googleSub === '') throw new InvalidArgumentException('Contul Google nu conține datele necesare.');
+        $stmt = $db->prepare('SELECT * FROM shop_customers WHERE google_sub = ? OR email = ? LIMIT 1');
+        $stmt->execute([$googleSub, $email]);
+        $customer = $stmt->fetch();
+        if ($customer) {
+            if (!(bool)$customer['is_active']) jsonResponse(['error' => 'Acest cont a fost dezactivat. Contactează G-Trots pentru mai multe detalii.', 'code' => 'customer_disabled'], 403);
+            $db->prepare('UPDATE shop_customers SET google_sub = ?, avatar_url = ?, full_name = CASE WHEN full_name = "" THEN ? ELSE full_name END, last_login_at = NOW() WHERE id = ?')->execute([$googleSub, $avatar, $fullName, $customer['id']]);
+            $stmt = $db->prepare('SELECT * FROM shop_customers WHERE id = ?');
+            $stmt->execute([$customer['id']]);
+            $customer = $stmt->fetch();
+        } else {
+            $customerId = uuidV4();
+            $db->prepare('INSERT INTO shop_customers (id, email, full_name, google_sub, avatar_url, last_login_at) VALUES (?, ?, ?, ?, ?, NOW())')->execute([$customerId, $email, $fullName, $googleSub, $avatar]);
+            $stmt = $db->prepare('SELECT * FROM shop_customers WHERE id = ?');
+            $stmt->execute([$customerId]);
+            $customer = $stmt->fetch();
+        }
+        jsonResponse(['token' => issueCustomerSession($db, (string)$customer['id']), 'customer' => customerPublicRow($customer)]);
+    }
+
+    if ($action === 'customerMe' && $method === 'GET') {
+        $customer = requireCustomer($db);
+        $orderCount = $db->prepare('SELECT COUNT(*) FROM shop_orders WHERE LOWER(customer_email) = ?');
+        $orderCount->execute([mb_strtolower((string)$customer['email'])]);
+        $addressCount = $db->prepare('SELECT COUNT(*) FROM shop_customer_addresses WHERE customer_id = ?');
+        $addressCount->execute([$customer['id']]);
+        jsonResponse(['customer' => customerPublicRow($customer), 'counts' => ['orders' => (int)$orderCount->fetchColumn(), 'addresses' => (int)$addressCount->fetchColumn()]]);
+    }
+
+    if ($action === 'customerProfile' && $method === 'PATCH') {
+        $customer = requireCustomer($db);
+        $fullName = mb_substr(trim((string)($body['full_name'] ?? $customer['full_name'])), 0, 180);
+        $phone = mb_substr(trim((string)($body['phone'] ?? $customer['phone'])), 0, 50);
+        if (mb_strlen($fullName) < 2) throw new InvalidArgumentException('Introdu numele complet.');
+        $db->prepare('UPDATE shop_customers SET full_name = ?, phone = ? WHERE id = ?')->execute([$fullName, $phone, $customer['id']]);
+        $stmt = $db->prepare('SELECT * FROM shop_customers WHERE id = ?');
+        $stmt->execute([$customer['id']]);
+        jsonResponse(['customer' => customerPublicRow($stmt->fetch())]);
+    }
+
+    if ($action === 'customerLogout' && $method === 'POST') {
+        requireCustomer($db);
+        $token = customerTokenFromRequest();
+        $db->prepare('DELETE FROM shop_customer_sessions WHERE token_hash = ?')->execute([hash('sha256', $token)]);
+        jsonResponse(['success' => true]);
+    }
+
+    if ($action === 'customerDeleteAccount' && $method === 'DELETE') {
+        $customer = requireCustomer($db);
+        if (strtoupper(trim((string)($body['confirmation'] ?? ''))) !== 'STERGE') {
+            throw new InvalidArgumentException('Confirmarea pentru ștergerea contului nu este validă.');
+        }
+        $db->beginTransaction();
+        try {
+            $db->prepare('DELETE FROM shop_customer_coupons WHERE customer_id = ?')->execute([$customer['id']]);
+            $db->prepare('DELETE FROM shop_customer_addresses WHERE customer_id = ?')->execute([$customer['id']]);
+            $db->prepare('DELETE FROM shop_customer_sessions WHERE customer_id = ?')->execute([$customer['id']]);
+            $db->prepare('DELETE FROM shop_customers WHERE id = ?')->execute([$customer['id']]);
+            $db->commit();
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
+        jsonResponse(['success' => true, 'orders_retained' => true]);
+    }
+
+    if ($action === 'customerOrders' && $method === 'GET') {
+        $customer = requireCustomer($db);
+        $stmt = $db->prepare('SELECT * FROM shop_orders WHERE LOWER(customer_email) = ? ORDER BY created_at DESC LIMIT 250');
+        $stmt->execute([mb_strtolower((string)$customer['email'])]);
+        jsonResponse(array_map(fn(array $row): array => customerOrderResponse(orderRow($db, $row, $config, true)), $stmt->fetchAll()));
+    }
+
+    if ($action === 'customerOrder' && $method === 'GET') {
+        $customer = requireCustomer($db);
+        $id = trim((string)($_GET['id'] ?? ''));
+        if ($id === '') throw new InvalidArgumentException('Comanda nu a fost specificată.');
+        $stmt = $db->prepare('SELECT * FROM shop_orders WHERE (id = ? OR order_number = ?) AND LOWER(customer_email) = ? LIMIT 1');
+        $stmt->execute([$id, strtoupper($id), mb_strtolower((string)$customer['email'])]);
+        $order = $stmt->fetch();
+        if (!$order) jsonResponse(['error' => 'Comanda nu există în acest cont.'], 404);
+        jsonResponse(customerOrderResponse(orderRow($db, $order, $config, true)));
+    }
+
+    if ($action === 'customerAddresses' && $method === 'GET') {
+        $customer = requireCustomer($db);
+        $stmt = $db->prepare('SELECT * FROM shop_customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, updated_at DESC');
+        $stmt->execute([$customer['id']]);
+        $rows = $stmt->fetchAll();
+        foreach ($rows as &$row) $row['is_default'] = (bool)$row['is_default'];
+        unset($row);
+        jsonResponse($rows);
+    }
+
+    if ($action === 'customerAddresses' && $method === 'POST') {
+        $customer = requireCustomer($db);
+        $payload = customerAddressPayload($body);
+        $id = uuidV4();
+        $db->beginTransaction();
+        try {
+            $existingCount = $db->prepare('SELECT COUNT(*) FROM shop_customer_addresses WHERE customer_id = ?');
+            $existingCount->execute([$customer['id']]);
+            $isDefault = $payload['is_default'] || (int)$existingCount->fetchColumn() === 0;
+            if ($isDefault) $db->prepare('UPDATE shop_customer_addresses SET is_default = 0 WHERE customer_id = ?')->execute([$customer['id']]);
+            $stmt = $db->prepare('INSERT INTO shop_customer_addresses (id, customer_id, label, recipient_name, phone, address, city, county, postal_code, is_default) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt->execute([$id, $customer['id'], $payload['label'], $payload['recipient_name'], $payload['phone'], $payload['address'], $payload['city'], $payload['county'], $payload['postal_code'], $isDefault ? 1 : 0]);
+            $db->commit();
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
+        $stmt = $db->prepare('SELECT * FROM shop_customer_addresses WHERE id = ?');
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+        $row['is_default'] = (bool)$row['is_default'];
+        jsonResponse($row, 201);
+    }
+
+    if ($action === 'customerAddress' && $method === 'PATCH') {
+        $customer = requireCustomer($db);
+        $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
+        $exists = $db->prepare('SELECT id FROM shop_customer_addresses WHERE id = ? AND customer_id = ?');
+        $exists->execute([$id, $customer['id']]);
+        if (!$exists->fetchColumn()) jsonResponse(['error' => 'Adresa nu există în acest cont.'], 404);
+        $payload = customerAddressPayload($body);
+        $db->beginTransaction();
+        try {
+            if ($payload['is_default']) $db->prepare('UPDATE shop_customer_addresses SET is_default = 0 WHERE customer_id = ?')->execute([$customer['id']]);
+            $stmt = $db->prepare('UPDATE shop_customer_addresses SET label = ?, recipient_name = ?, phone = ?, address = ?, city = ?, county = ?, postal_code = ?, is_default = ? WHERE id = ? AND customer_id = ?');
+            $stmt->execute([$payload['label'], $payload['recipient_name'], $payload['phone'], $payload['address'], $payload['city'], $payload['county'], $payload['postal_code'], $payload['is_default'] ? 1 : 0, $id, $customer['id']]);
+            $db->commit();
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
+        jsonResponse(['success' => true]);
+    }
+
+    if ($action === 'customerAddress' && $method === 'DELETE') {
+        $customer = requireCustomer($db);
+        $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
+        $stmt = $db->prepare('SELECT is_default FROM shop_customer_addresses WHERE id = ? AND customer_id = ?');
+        $stmt->execute([$id, $customer['id']]);
+        $wasDefault = $stmt->fetchColumn();
+        if ($wasDefault === false) jsonResponse(['error' => 'Adresa nu există în acest cont.'], 404);
+        $db->prepare('DELETE FROM shop_customer_addresses WHERE id = ? AND customer_id = ?')->execute([$id, $customer['id']]);
+        if ((bool)$wasDefault) $db->prepare('UPDATE shop_customer_addresses SET is_default = 1 WHERE customer_id = ? ORDER BY updated_at DESC LIMIT 1')->execute([$customer['id']]);
+        jsonResponse(['success' => true]);
+    }
+
+    if ($action === 'customerCoupons' && $method === 'GET') {
+        $customer = requireCustomer($db);
+        $stmt = $db->prepare(
+            'SELECT c.*, cc.assigned_at, cc.used_at
+             FROM shop_coupons c
+             LEFT JOIN shop_customer_coupons cc ON cc.coupon_id = c.id AND cc.customer_id = ?
+             WHERE c.is_active = 1 AND (c.valid_from IS NULL OR c.valid_from <= NOW()) AND (c.valid_until IS NULL OR c.valid_until >= NOW())
+             ORDER BY cc.assigned_at IS NULL ASC, c.valid_until ASC, c.created_at DESC'
+        );
+        $stmt->execute([$customer['id']]);
+        $rows = $stmt->fetchAll();
+        foreach ($rows as &$row) {
+            $row['discount_value'] = (float)$row['discount_value'];
+            $row['min_order_value'] = $row['min_order_value'] === null ? null : (float)$row['min_order_value'];
+            $row['is_active'] = (bool)$row['is_active'];
+        }
+        unset($row);
+        jsonResponse($rows);
     }
 
     if ($action === 'publicCatalogFilters' && $method === 'GET') {
@@ -2205,6 +2807,95 @@ try {
     }
 
     $currentUser = validateAuthToken($config, $body);
+
+    if ($action === 'listCustomers' && $method === 'GET') {
+        $rows = $db->query(
+            'SELECT c.id, c.email, c.full_name, c.phone, c.avatar_url, c.is_active, c.last_login_at, c.created_at, c.updated_at,
+                    COUNT(o.id) AS orders_count,
+                    COALESCE(SUM(CASE WHEN o.status NOT IN ("cancelled", "refunded") THEN o.total ELSE 0 END), 0) AS orders_total,
+                    MAX(o.created_at) AS last_order_at
+             FROM shop_customers c
+             LEFT JOIN shop_orders o ON LOWER(o.customer_email) = LOWER(c.email)
+             GROUP BY c.id
+             ORDER BY COALESCE(MAX(o.created_at), c.created_at) DESC'
+        )->fetchAll();
+        foreach ($rows as &$row) {
+            $row['is_active'] = (bool)$row['is_active'];
+            $row['orders_count'] = (int)$row['orders_count'];
+            $row['orders_total'] = (float)$row['orders_total'];
+        }
+        unset($row);
+        jsonResponse($rows);
+    }
+
+    if ($action === 'getCustomer' && $method === 'GET') {
+        $id = trim((string)($_GET['id'] ?? ''));
+        $stmt = $db->prepare('SELECT * FROM shop_customers WHERE id = ? LIMIT 1');
+        $stmt->execute([$id]);
+        $customer = $stmt->fetch();
+        if (!$customer) jsonResponse(['error' => 'Clientul nu există.'], 404);
+        $orders = $db->prepare('SELECT * FROM shop_orders WHERE LOWER(customer_email) = LOWER(?) ORDER BY created_at DESC LIMIT 500');
+        $orders->execute([$customer['email']]);
+        $orderRows = array_map(fn(array $row): array => orderRow($db, $row, $config, true), $orders->fetchAll());
+        $customer['is_active'] = (bool)$customer['is_active'];
+        unset($customer['password_hash'], $customer['google_sub']);
+        $customer['orders'] = $orderRows;
+        $customer['orders_count'] = count($orderRows);
+        $customer['orders_total'] = array_reduce($orderRows, fn(float $sum, array $order): float => $sum + (!in_array($order['status'], ['cancelled', 'refunded'], true) ? (float)$order['total'] : 0), 0.0);
+        jsonResponse($customer);
+    }
+
+    if ($action === 'updateCustomerStatus' && $method === 'PATCH') {
+        $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
+        $isActive = boolValue($body['is_active'] ?? true, true);
+        $stmt = $db->prepare('UPDATE shop_customers SET is_active = ? WHERE id = ?');
+        $stmt->execute([$isActive ? 1 : 0, $id]);
+        if ($stmt->rowCount() === 0) {
+            $exists = $db->prepare('SELECT id FROM shop_customers WHERE id = ?'); $exists->execute([$id]);
+            if (!$exists->fetchColumn()) jsonResponse(['error' => 'Clientul nu există.'], 404);
+        }
+        if (!$isActive) $db->prepare('DELETE FROM shop_customer_sessions WHERE customer_id = ?')->execute([$id]);
+        jsonResponse(['success' => true, 'is_active' => $isActive]);
+    }
+
+    if ($action === 'listPromotions' && $method === 'GET') {
+        $rows = $db->query('SELECT c.*, p.name AS product_name, p.slug AS product_slug FROM shop_coupons c LEFT JOIN shop_products p ON p.id = c.product_id ORDER BY c.is_active DESC, c.created_at DESC')->fetchAll();
+        jsonResponse(array_map('promotionRow', $rows));
+    }
+
+    if ($action === 'createPromotion' && $method === 'POST') {
+        $payload = promotionPayload($db, $body);
+        $duplicate = $db->prepare('SELECT id FROM shop_coupons WHERE code = ? LIMIT 1');
+        $duplicate->execute([$payload['code']]);
+        if ($duplicate->fetchColumn()) jsonResponse(['error' => 'Există deja o reducere cu acest cod.'], 409);
+        $id = uuidV4();
+        $stmt = $db->prepare('INSERT INTO shop_coupons (id, code, title, description, discount_type, discount_value, min_order_value, audience, scope, product_id, auto_apply, show_banner, banner_text, valid_from, valid_until, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt->execute([$id, $payload['code'], $payload['title'], $payload['description'], $payload['discount_type'], $payload['discount_value'], $payload['min_order_value'], $payload['audience'], $payload['scope'], $payload['product_id'], $payload['auto_apply'] ? 1 : 0, $payload['show_banner'] ? 1 : 0, $payload['banner_text'], $payload['valid_from'], $payload['valid_until'], $payload['is_active'] ? 1 : 0]);
+        $stmt = $db->prepare('SELECT c.*, p.name AS product_name, p.slug AS product_slug FROM shop_coupons c LEFT JOIN shop_products p ON p.id = c.product_id WHERE c.id = ?');
+        $stmt->execute([$id]);
+        jsonResponse(promotionRow($stmt->fetch()), 201);
+    }
+
+    if ($action === 'updatePromotion' && $method === 'PATCH') {
+        $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
+        $payload = promotionPayload($db, $body);
+        $duplicate = $db->prepare('SELECT id FROM shop_coupons WHERE code = ? AND id <> ? LIMIT 1');
+        $duplicate->execute([$payload['code'], $id]);
+        if ($duplicate->fetchColumn()) jsonResponse(['error' => 'Există deja o reducere cu acest cod.'], 409);
+        $stmt = $db->prepare('UPDATE shop_coupons SET code = ?, title = ?, description = ?, discount_type = ?, discount_value = ?, min_order_value = ?, audience = ?, scope = ?, product_id = ?, auto_apply = ?, show_banner = ?, banner_text = ?, valid_from = ?, valid_until = ?, is_active = ? WHERE id = ?');
+        $stmt->execute([$payload['code'], $payload['title'], $payload['description'], $payload['discount_type'], $payload['discount_value'], $payload['min_order_value'], $payload['audience'], $payload['scope'], $payload['product_id'], $payload['auto_apply'] ? 1 : 0, $payload['show_banner'] ? 1 : 0, $payload['banner_text'], $payload['valid_from'], $payload['valid_until'], $payload['is_active'] ? 1 : 0, $id]);
+        if ($stmt->rowCount() === 0) { $exists = $db->prepare('SELECT id FROM shop_coupons WHERE id = ?'); $exists->execute([$id]); if (!$exists->fetchColumn()) jsonResponse(['error' => 'Reducerea nu există.'], 404); }
+        $stmt = $db->prepare('SELECT c.*, p.name AS product_name, p.slug AS product_slug FROM shop_coupons c LEFT JOIN shop_products p ON p.id = c.product_id WHERE c.id = ?'); $stmt->execute([$id]);
+        jsonResponse(promotionRow($stmt->fetch()));
+    }
+
+    if ($action === 'deletePromotion' && $method === 'DELETE') {
+        $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
+        $db->prepare('DELETE FROM shop_customer_coupons WHERE coupon_id = ?')->execute([$id]);
+        $stmt = $db->prepare('DELETE FROM shop_coupons WHERE id = ?'); $stmt->execute([$id]);
+        if ($stmt->rowCount() === 0) jsonResponse(['error' => 'Reducerea nu există.'], 404);
+        jsonResponse(['success' => true]);
+    }
 
     if ($action === 'uploadRichDescriptionImage' && $method === 'POST') {
         $path = saveShopImage(isset($body['base64']) ? (string)$body['base64'] : null, 'descriptions');

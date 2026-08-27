@@ -1,7 +1,10 @@
 (() => {
   const API_URL = "https://g-trots.ro/shop-api/api-v2.php";
   const ORDER_STATE_KEY = "g-trots-last-checkout-v1";
+  const CUSTOMER_TOKEN_KEY = "g-trots-customer-session-v1";
   const $ = selector => document.querySelector(selector);
+  let activePromotionQuote = { subtotal: 0, discount_total: 0, promotion_code: "", promotion_title: "" };
+  let promotionQuoteSequence = 0;
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, character => ({
@@ -41,7 +44,8 @@
         method: options.method || "GET",
         headers: {
           Accept: "application/json",
-          ...(options.body ? { "Content-Type": "application/json" } : {})
+          ...(options.body ? { "Content-Type": "application/json" } : {}),
+          ...(localStorage.getItem(CUSTOMER_TOKEN_KEY) ? { "X-Customer-Token": localStorage.getItem(CUSTOMER_TOKEN_KEY) } : {})
         },
         body: options.body ? JSON.stringify(options.body) : undefined,
         cache: "no-store",
@@ -183,6 +187,28 @@
     }).join("");
     $("[data-checkout-item-count]").textContent = `${itemCount} ${itemCount === 1 ? "produs" : "produse"}`;
     updateTotals(cart, config);
+    void refreshPromotionQuote(cart, config);
+  }
+
+  async function refreshPromotionQuote(cart, config) {
+    const products = checkoutProducts();
+    const items = cart.map(item => ({ product_id: String(products[item.id]?.apiId || ""), quantity: Number(item.quantity || 1) })).filter(item => item.product_id);
+    const sequence = ++promotionQuoteSequence;
+    try {
+      const quote = await api("publicPromotionQuote", { method: "POST", body: { items } });
+      if (sequence !== promotionQuoteSequence) return;
+      activePromotionQuote = {
+        subtotal: Number(quote.subtotal || 0),
+        discount_total: Math.max(0, Number(quote.discount_total || 0)),
+        promotion_code: String(quote.promotion_code || ""),
+        promotion_title: String(quote.promotion_title || "")
+      };
+      updateTotals(cart, config);
+    } catch {
+      if (sequence !== promotionQuoteSequence) return;
+      activePromotionQuote = { subtotal: 0, discount_total: 0, promotion_code: "", promotion_title: "" };
+      updateTotals(cart, config);
+    }
   }
 
   function updateOptionStates() {
@@ -203,10 +229,15 @@
     const shippingId = document.querySelector('input[name="shipping_method_id"]:checked')?.value || "";
     const cost = shippingCost(config, subtotal, shippingId);
     $("[data-checkout-subtotal]").textContent = formatMoney(subtotal);
+    const discount = Math.abs(activePromotionQuote.subtotal - subtotal) < .02 ? Math.min(subtotal, activePromotionQuote.discount_total) : 0;
+    const discountLine = $("[data-checkout-discount-line]");
+    if (discountLine) discountLine.hidden = discount <= 0;
+    if ($("[data-checkout-discount]")) $("[data-checkout-discount]").textContent = `−${formatMoney(discount)}`;
+    if ($("[data-checkout-promotion-code]")) $("[data-checkout-promotion-code]").textContent = activePromotionQuote.promotion_code ? `· ${activePromotionQuote.promotion_code}` : "";
     $("[data-checkout-shipping-cost]").textContent = cost === 0 ? "Gratuit" : formatMoney(cost);
-    $("[data-checkout-total]").textContent = formatMoney(subtotal + cost);
+    $("[data-checkout-total]").textContent = formatMoney(subtotal - discount + cost);
     updateOptionStates();
-    return { subtotal, shippingCost: cost, total: subtotal + cost };
+    return { subtotal, discountTotal: discount, shippingCost: cost, total: subtotal - discount + cost };
   }
 
   function clearValidation(form) {
@@ -368,6 +399,8 @@
               paymentLabel: String(payment?.label || ""),
               shippingLabel: String(shipping?.name || ""),
               subtotal: Number(order.subtotal ?? totals.subtotal),
+              discountTotal: Number(order.discount_total ?? totals.discountTotal ?? 0),
+              promotionCode: String(order.promotion_code || activePromotionQuote.promotion_code || ""),
               shippingCost: Number(order.shipping_cost ?? totals.shippingCost),
               total: Number(order.total ?? totals.total),
               items: receiptItems,

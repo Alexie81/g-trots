@@ -5,6 +5,94 @@
   flex: 0 0 auto;
 }
 
+.global-account-nav {
+  min-width: 8.4rem;
+  height: 3.15rem;
+  padding: 0.3rem 0.8rem 0.3rem 0.32rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.62rem;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 1.1rem;
+  background: #1c1a18;
+  color: #f6f1eb;
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.global-account-nav:hover,
+.global-account-nav:focus-visible,
+.global-account-nav[aria-current="page"] {
+  border-color: rgba(240, 127, 0, 0.55);
+  background: #25201b;
+  transform: translateY(-1px);
+}
+
+.global-account-avatar {
+  width: 2.45rem;
+  height: 2.45rem;
+  padding: 0.18rem;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 0.82rem;
+  background: conic-gradient(from 20deg, #ff8500, #ffd05d, #41d6a3, #55bfff, #b77cff, #ff8500);
+}
+
+.global-account-avatar i {
+  width: 100%;
+  height: 100%;
+  display: block;
+  position: relative;
+  border-radius: 0.66rem;
+  background: #171411;
+}
+
+.global-account-avatar i::before {
+  content: "";
+  width: 0.54rem;
+  height: 0.54rem;
+  position: absolute;
+  left: 50%;
+  top: 0.45rem;
+  border-radius: 50%;
+  background: #fff;
+  transform: translateX(-50%);
+}
+
+.global-account-avatar i::after {
+  content: "";
+  width: 1.16rem;
+  height: 0.64rem;
+  position: absolute;
+  left: 50%;
+  bottom: 0.35rem;
+  border-radius: 1rem 1rem 0.5rem 0.5rem;
+  background: #fff;
+  transform: translateX(-50%);
+}
+
+.global-account-copy {
+  min-width: 0;
+  display: grid;
+  line-height: 1.05;
+}
+
+.global-account-copy small {
+  color: #847d76;
+  font-size: 0.5rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.global-account-copy strong {
+  max-width: 5.5rem;
+  overflow: hidden;
+  color: #fff;
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .global-favorites-nav,
 .global-cart-nav {
   width: 3.15rem;
@@ -948,12 +1036,18 @@
   }
 
   .global-favorites-nav,
-  .global-cart-nav {
+  .global-cart-nav,
+  .global-account-nav {
     width: 2.9rem;
+    min-width: 2.9rem;
     height: 2.9rem;
+    padding: 0.22rem;
     flex-basis: 2.9rem;
     border-radius: 0.95rem;
   }
+
+  .global-account-copy { display: none; }
+  .global-account-avatar { width: 2.42rem; height: 2.42rem; }
 
   .global-shop-actions {
     margin-left: auto;

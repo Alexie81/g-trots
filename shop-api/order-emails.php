@@ -169,6 +169,10 @@ function gtBuildOrderEmail(array $order, array $config, string $status): array {
     $shippingName = gtEmailEscape($order['shipping_method_name'] ?? 'Curier standard');
     $paymentText = gtEmailEscape($paymentLabel);
     $subtotal = gtEmailMoney($order['subtotal'] ?? 0, $currency);
+    $discountValue = (float)($order['discount_total'] ?? 0);
+    $discountRow = $discountValue > 0
+        ? '<tr><td style="padding:6px 0;color:#6ee7b7">Reducere' . (!empty($order['promotion_code']) ? ' · ' . gtEmailEscape((string)$order['promotion_code']) : '') . '</td><td align="right" style="color:#6ee7b7">−' . gtEmailMoney($discountValue, $currency) . '</td></tr>'
+        : '';
     $shippingCost = gtEmailMoney($order['shipping_cost'] ?? 0, $currency);
     $total = gtEmailMoney($order['total'] ?? 0, $currency);
     $timeline = gtEmailStatusTimeline($status, (string)($order['payment_method'] ?? 'card'));
@@ -187,7 +191,7 @@ function gtBuildOrderEmail(array $order, array $config, string $status): array {
 <div class="gt-summary" style="padding:24px;border:1px solid #403b43;border-radius:28px;background:#151318">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td><span style="display:block;color:#9d959f;font-size:9px;font-weight:900;letter-spacing:.12em">REZUMAT COMANDĂ</span><strong style="display:block;margin-top:6px;color:#ffb77a;font-size:17px;overflow-wrap:anywhere">{$orderNumber}</strong></td><td align="right"><span style="display:block;color:#9d959f;font-size:9px;font-weight:900;letter-spacing:.12em">DATA</span><strong style="display:block;margin-top:6px;color:#d8d1d9;font-size:12px">{$createdAt}</strong></td></tr></table>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px">{$itemsHtml}</table>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:17px;color:#aaa2ac;font-size:12px"><tr><td style="padding:6px 0">Subtotal</td><td align="right">{$subtotal}</td></tr><tr><td style="padding:6px 0">Livrare · {$shippingName}</td><td align="right">{$shippingCost}</td></tr><tr><td style="padding:6px 0">Plată</td><td align="right">{$paymentText}</td></tr><tr><td style="padding:19px 0 0;border-top:1px solid #403b43;color:#fff8f3;font-size:15px;font-weight:900">Total de plată</td><td align="right" style="padding:19px 0 0;border-top:1px solid #403b43;color:#ffb77a;font-size:24px;font-weight:1000">{$total}</td></tr></table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:17px;color:#aaa2ac;font-size:12px"><tr><td style="padding:6px 0">Subtotal</td><td align="right">{$subtotal}</td></tr>{$discountRow}<tr><td style="padding:6px 0">Livrare · {$shippingName}</td><td align="right">{$shippingCost}</td></tr><tr><td style="padding:6px 0">Plată</td><td align="right">{$paymentText}</td></tr><tr><td style="padding:19px 0 0;border-top:1px solid #403b43;color:#fff8f3;font-size:15px;font-weight:900">Total de plată</td><td align="right" style="padding:19px 0 0;border-top:1px solid #403b43;color:#ffb77a;font-size:24px;font-weight:1000">{$total}</td></tr></table>
 </div>
 <div class="gt-timeline" style="margin-top:20px;padding:20px;border:1px solid #403b43;border-radius:28px;background:#211f24"><span style="display:block;margin-bottom:13px;color:#a49ca6;font-size:9px;font-weight:900;letter-spacing:.12em">EVOLUȚIA COMENZII</span>{$timeline}</div>
 <div style="padding:22px 0 6px;text-align:center"><a class="gt-action" href="{$safeTrackingUrl}" style="display:inline-block;padding:17px 30px;border-radius:20px;background:#ff8a00;color:#ffffff;text-decoration:none;font-size:14px;font-weight:900;box-shadow:0 13px 32px rgba(255,138,0,.25)">Urmărește comanda&nbsp;&nbsp;→</a></div>

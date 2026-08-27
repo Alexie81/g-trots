@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b0a09">
+  <meta name="robots" content="noindex,follow">
+  <title>Intră în cont | G-Trots</title>
+  <link rel="icon" href="assets/logo.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=20260827-shop-call">
+  <link rel="stylesheet" href="favorites.css?v=20260827-account">
+  <link rel="stylesheet" href="cont.css?v=20260827-1">
+</head>
+<body class="customer-auth-page" data-customer-page="login">
+  <header class="site-header"><div class="header-inner"><a class="logo" href="/" aria-label="G-Trots"><img src="assets/logo.png" alt=""><b><span>G</span>-Trots</b></a><nav class="main-nav"></nav><button class="menu-toggle" type="button" aria-label="Deschide meniul" aria-expanded="false"><span></span><span></span></button></div></header>
+  <main class="auth-shell">
+    <section class="auth-brand-panel">
+      <div class="auth-brand-orbit" aria-hidden="true"><span></span><i></i><b></b></div>
+      <div class="auth-brand-copy"><span class="auth-kicker"><i></i> CONTUL TĂU G-TROTS</span><h1>Tot ce ai comandat.<br><em>Într-un singur loc.</em></h1><p>Vezi comenzile, urmărește livrarea și păstrează adresele pregătite pentru data viitoare.</p><ul><li><b>01</b><span><strong>Comenzi la vedere</strong><small>Produse, valori și status în timp real</small></span></li><li><b>02</b><span><strong>Adrese salvate</strong><small>Checkout mai rapid, fără completări repetate</small></span></li><li><b>03</b><span><strong>Control deplin</strong><small>Datele tale rămân ale tale</small></span></li></ul></div>
+    </section>
+    <section class="auth-form-panel">
+      <div class="auth-mobile-brand"><img src="assets/logo.png" alt=""><span><b>G-Trots</b><small>Service & magazin</small></span></div>
+      <div class="auth-heading"><span>Bine ai revenit</span><h2>Intră în cont</h2><p>Continuă de unde ai rămas.</p></div>
+      <div data-google-auth></div>
+      <div class="auth-divider"><span>sau cu e-mail</span></div>
+      <form class="customer-form" data-login-form novalidate>
+        <label><span>E-mail <b>*</b></span><div class="auth-input"><i data-icon="mail" aria-hidden="true"></i><input name="email" type="email" autocomplete="email" placeholder="nume@exemplu.ro" required></div></label>
+        <label><span>Parolă <b>*</b></span><div class="auth-input"><i data-icon="lock" aria-hidden="true"></i><input name="password" type="password" autocomplete="current-password" placeholder="Parola ta" required><button type="button" data-password-toggle aria-label="Arată parola"></button></div></label>
+        <p class="auth-message" data-auth-message role="alert" hidden></p>
+        <button class="auth-primary" type="submit"><span>Intră în cont</span><i aria-hidden="true">›</i></button>
+      </form>
+      <p class="auth-switch">Nu ai încă un cont? <a href="/cont-nou.html">Creează un cont</a></p>
+      <a class="auth-back" href="/magazin.html"><span>←</span> Înapoi la magazin</a>
+    </section>
+  </main>
+  <script src="favorites.js?v=20260827-account" defer></script>
+  <script src="cont.js?v=20260827-1" defer></script>
+</body>
+</html>

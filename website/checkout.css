@@ -12,6 +12,13 @@
   --checkout-green: #3dc58a;
 }
 
+.checkout-summary-lines .checkout-discount-line{color:#67dfad}
+.checkout-summary-lines .checkout-discount-line span{display:flex;align-items:center;gap:.4rem}
+.checkout-summary-lines .checkout-discount-line small{padding:.18rem .4rem;border-radius:.45rem;background:rgba(52,211,153,.11);color:#75e9ba;font-size:.55rem;font-weight:900;letter-spacing:.06em}
+.checkout-summary-lines .checkout-discount-line strong{color:#67dfad}
+.order-receipt-lines .order-receipt-discount,.order-receipt-lines .order-receipt-discount strong{color:#67dfad}
+.order-receipt-lines .order-receipt-discount small{font-size:.55rem;font-weight:900}
+
 .checkout-page {
   min-width: 0;
   color-scheme: dark;

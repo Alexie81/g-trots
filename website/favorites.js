@@ -3,6 +3,8 @@
 
   const STORAGE_KEY = "g-trots-favorite-products-v1";
   const CART_STORAGE_KEY = "g-trots-cart-products-v1";
+  const CUSTOMER_TOKEN_KEY = "g-trots-customer-session-v1";
+  const CUSTOMER_PROFILE_KEY = "g-trots-customer-profile-v1";
   const PRODUCTS = {
     "anvelopa-g10-all-terrain": {
       name: "Anvelopă G10 All-Terrain",
@@ -112,6 +114,21 @@
     link.rel = "stylesheet";
     link.href = "/favorites.css";
     document.head.append(link);
+  }
+
+  function ensurePromotionLayer() {
+    if (!document.querySelector('link[href$="promotions.css"]')) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "/promotions.css";
+      document.head.append(link);
+    }
+    if (!document.querySelector('script[src$="promotions.js"]')) {
+      const script = document.createElement("script");
+      script.src = "/promotions.js";
+      script.defer = true;
+      document.head.append(script);
+    }
   }
 
   function ensureCabItCredit() {
@@ -255,6 +272,15 @@
         actions.append(favoritesLink);
       }
 
+      if (!header.querySelector(".global-account-nav")) {
+        const accountLink = document.createElement("a");
+        accountLink.className = "global-account-nav";
+        const activePath = window.location.pathname.toLowerCase().replace(/\/+$/, "").replace(/\.html$/, "");
+        if (["/cont", "/login", "/cont-nou"].some(path => activePath.endsWith(path))) accountLink.setAttribute("aria-current", "page");
+        actions.prepend(accountLink);
+      }
+      updateCustomerNavigation();
+
       if (!header.querySelector(".global-cart-nav")) {
         const cartLink = document.createElement("a");
         cartLink.className = "global-cart-nav";
@@ -268,6 +294,25 @@
     });
 
     document.querySelectorAll(".mobile-favorites-link").forEach(link => link.remove());
+  }
+
+  function cachedCustomer() {
+    try {
+      if (!localStorage.getItem(CUSTOMER_TOKEN_KEY)) return null;
+      const profile = JSON.parse(localStorage.getItem(CUSTOMER_PROFILE_KEY) || "null");
+      return profile && typeof profile === "object" ? profile : null;
+    } catch { return null; }
+  }
+
+  function updateCustomerNavigation(customer = cachedCustomer()) {
+    const loggedIn = Boolean(customer && localStorage.getItem(CUSTOMER_TOKEN_KEY));
+    const name = loggedIn ? String(customer.full_name || "Contul meu").trim().split(/\s+/)[0] : "Login";
+    document.querySelectorAll(".global-account-nav").forEach(link => {
+      link.href = loggedIn ? "/cont.html" : "/login.html";
+      link.setAttribute("aria-label", loggedIn ? `Contul lui ${name}` : "Intră în cont sau creează un cont");
+      link.innerHTML = `<span class="global-account-avatar" aria-hidden="true"><i></i></span><span class="global-account-copy"><small>${loggedIn ? "Bun venit" : "Cont client"}</small><strong>${escapeHtml(name)}</strong></span>`;
+      link.classList.toggle("is-authenticated", loggedIn);
+    });
   }
 
   function bindMobileMenu() {
@@ -458,6 +503,7 @@
 
   function initialize() {
     ensureStyles();
+    ensurePromotionLayer();
     ensureCabItCredit();
     document.querySelectorAll(".shop-header-cta").forEach(button => button.remove());
     normalizeNavigation();
@@ -519,8 +565,10 @@
 
     document.addEventListener("g-trots:favorites-changed", event => refresh(event.detail));
     document.addEventListener("g-trots:cart-changed", event => refresh(readFavorites(), event.detail));
+    document.addEventListener("g-trots:customer-changed", event => updateCustomerNavigation(event.detail));
     window.addEventListener("storage", event => {
       if (event.key === STORAGE_KEY || event.key === CART_STORAGE_KEY) refresh();
+      if (event.key === CUSTOMER_TOKEN_KEY || event.key === CUSTOMER_PROFILE_KEY) updateCustomerNavigation();
     });
   }
 

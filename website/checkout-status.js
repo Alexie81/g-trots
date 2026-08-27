@@ -233,11 +233,12 @@
     const items = normalizedItems(state);
     const subtotalFromItems = items.reduce((sum, item) => sum + item.lineTotal, 0);
     const subtotal = Number.isFinite(Number(state.subtotal)) ? Number(state.subtotal) : subtotalFromItems;
+    const discount = Math.max(0, Number(state.discountTotal || 0));
     const hasShipping = state.shippingCost !== undefined && state.shippingCost !== null;
     const shipping = hasShipping ? Number(state.shippingCost || 0) : null;
     const total = Number.isFinite(Number(state.total)) && Number(state.total) > 0
       ? Number(state.total)
-      : subtotal + Number(shipping || 0);
+      : subtotal - discount + Number(shipping || 0);
 
     host.innerHTML = items.map(item => {
       const legacyImage = item.image >= 1 && item.image <= 6 ? ` is-legacy-image receipt-product-image-${item.image}` : "";
@@ -261,6 +262,10 @@
     if (empty) empty.hidden = items.length > 0;
 
     setTextAll("[data-order-subtotal]", formatMoney(subtotal));
+    const discountRow = document.querySelector("[data-order-discount-row]");
+    if (discountRow) discountRow.hidden = discount <= 0;
+    setTextAll("[data-order-discount]", `−${formatMoney(discount)}`);
+    setTextAll("[data-order-promotion-code]", state.promotionCode ? `· ${state.promotionCode}` : "");
     setTextAll("[data-order-shipping]", shipping === null ? "Se confirmă" : shipping === 0 ? "Gratuit" : formatMoney(shipping));
     setTextAll("[data-order-total]", formatMoney(total));
     setTextAll("[data-order-shipping-label]", state.shippingLabel || "Livrare");

@@ -275,6 +275,8 @@ export type ShopOrder = {
   admin_notes: string | null;
   shipping_method_name: string;
   subtotal: number;
+  discount_total?: number;
+  promotion_code?: string | null;
   shipping_cost: number;
   total: number;
   currency: string;
@@ -284,6 +286,50 @@ export type ShopOrder = {
   created_at: string;
   updated_at: string;
 };
+
+export type ShopCustomerSummary = {
+  id: string;
+  email: string;
+  full_name: string;
+  phone: string | null;
+  avatar_url: string | null;
+  is_active: boolean;
+  orders_count: number;
+  orders_total: number;
+  last_order_at: string | null;
+  last_login_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ShopCustomerDetail = ShopCustomerSummary & {
+  orders: ShopOrder[];
+};
+
+export type ShopPromotion = {
+  id: string;
+  code: string;
+  title: string;
+  description: string;
+  discount_type: 'percent' | 'fixed';
+  discount_value: number;
+  min_order_value: number | null;
+  audience: 'all' | 'registered';
+  scope: 'global' | 'product';
+  product_id: string | null;
+  product_name: string | null;
+  product_slug: string | null;
+  auto_apply: boolean;
+  show_banner: boolean;
+  banner_text: string;
+  valid_from: string | null;
+  valid_until: string | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ShopPromotionPayload = Omit<ShopPromotion, 'id' | 'product_name' | 'product_slug' | 'created_at' | 'updated_at'>;
 
 export type ShopPaymentSettings = {
   card_enabled: boolean;
@@ -426,6 +472,13 @@ export const shopApi = {
   listOrders: (token: string) => shopCall<ShopOrder[]>('listOrders', token),
   getOrder: (token: string, id: string) => shopCall<ShopOrder>('getOrder', token, undefined, id),
   updateOrder: (token: string, id: string, payload: Pick<ShopOrder, 'status' | 'payment_status'> & { admin_notes: string; notify_customer: boolean; address?: string; city?: string; county?: string; postal_code?: string }) => shopCall<ShopOrder>('updateOrder', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
+  listCustomers: (token: string) => shopCall<ShopCustomerSummary[]>('listCustomers', token),
+  getCustomer: (token: string, id: string) => shopCall<ShopCustomerDetail>('getCustomer', token, undefined, id),
+  updateCustomerStatus: (token: string, id: string, isActive: boolean) => shopCall<{ success: true; is_active: boolean }>('updateCustomerStatus', token, { method: 'PATCH', body: JSON.stringify({ is_active: isActive }) }, id),
+  listPromotions: (token: string) => shopCall<ShopPromotion[]>('listPromotions', token),
+  createPromotion: (token: string, payload: ShopPromotionPayload) => shopCall<ShopPromotion>('createPromotion', token, { method: 'POST', body: JSON.stringify(payload) }),
+  updatePromotion: (token: string, id: string, payload: ShopPromotionPayload) => shopCall<ShopPromotion>('updatePromotion', token, { method: 'PATCH', body: JSON.stringify(payload) }, id),
+  deletePromotion: (token: string, id: string) => shopCall<{ success: true }>('deletePromotion', token, { method: 'DELETE' }, id),
   getPaymentSettings: (token: string) => shopCall<ShopPaymentSettings>('getPaymentSettings', token),
   updatePaymentSettings: (token: string, payload: ShopPaymentSettings) => shopCall<ShopPaymentSettings>('updatePaymentSettings', token, { method: 'PUT', body: JSON.stringify(payload) }),
   syncStripeCatalog: (token: string) => shopCall<ShopStripeSyncSummary>('syncStripeCatalog', token, { method: 'POST', body: '{}' }),

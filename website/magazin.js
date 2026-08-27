@@ -878,6 +878,13 @@ function renderSmartSearch(rawQuery = searchInput?.value || "") {
 
 function openSmartSearch() {
   if (!smartSearchPanel || !searchDeck) return;
+  const searchTop = searchDeck.getBoundingClientRect().top + window.scrollY - 10;
+  if (Math.abs(window.scrollY - searchTop) > 18) {
+    window.scrollTo({
+      top: Math.max(0, searchTop),
+      behavior: prefersReducedMotion ? "auto" : "smooth"
+    });
+  }
   searchDeck.classList.add("is-search-open");
   document.body.classList.add("smart-search-open");
   smartSearchPanel.hidden = false;
@@ -1244,7 +1251,12 @@ searchClear?.addEventListener("click", event => {
   searchClear.hidden = true;
   applyFilters();
   renderSmartSearch();
-  searchInput.focus();
+  if (window.matchMedia("(max-width: 760px)").matches) {
+    closeSmartSearch();
+    searchInput.blur();
+  } else {
+    searchInput.focus();
+  }
 });
 
 smartSearchContent?.addEventListener("click", event => {

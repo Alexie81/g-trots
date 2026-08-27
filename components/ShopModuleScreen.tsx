@@ -33,18 +33,22 @@ import {
   Plus,
   RefreshCw,
   Save,
+  BadgePercent,
   ShoppingCart,
   Sparkles,
   Tags,
   Trash2,
   TrendingUp,
   Truck,
+  UsersRound,
   X,
 } from 'lucide-react-native';
 import Header from '@/components/Header';
 import ShopInventoryManager from '@/components/ShopInventoryManager';
 import ShopOrdersManager from '@/components/ShopOrdersManager';
 import ShopProductsManager from '@/components/ShopProductsManager';
+import ShopCustomersManager from '@/components/ShopCustomersManager';
+import ShopDiscountsManager from '@/components/ShopDiscountsManager';
 import { ShopPaymentMethodsManager, ShopProductSourcesManager, ShopShippingManager } from '@/components/ShopMoreManagers';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -60,7 +64,7 @@ import {
 } from '@/services/shopApi';
 
 type CatalogView = 'categories' | 'brands' | 'manufacturers';
-type SettingsView = 'sources' | 'payments' | 'shipping';
+type SettingsView = 'sources' | 'payments' | 'shipping' | 'customers' | 'discounts';
 type PrimaryTab = 'home' | 'orders' | 'products' | 'inventory' | 'more';
 type ShopView = PrimaryTab | CatalogView | SettingsView;
 type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; item: ShopBrand } | { type: 'manufacturer'; item: ShopManufacturer };
@@ -133,6 +137,8 @@ const primaryTabDetails = {
 } as const;
 
 const moreAreas = [
+  { key: 'customers', title: 'Clienți', description: 'Conturi, comenzi, valoare totală și controlul accesului.', Icon: UsersRound, color: '#38BDF8' },
+  { key: 'discounts', title: 'Reduceri', description: 'Campanii globale sau per produs și anunțuri pe site.', Icon: BadgePercent, color: '#F59E0B' },
   { key: 'sources', title: 'Surse produse', description: 'Magazinele si furnizorii din care provin produsele.', Icon: Globe2, color: '#38BDF8' },
   { key: 'categories', title: 'Categorii', description: 'Categorii, subcategorii si imagini.', Icon: FolderTree, color: '#FB7185' },
   { key: 'brands', title: 'Compatibilitati branduri', description: 'Marcile cu care sunt compatibile produsele.', Icon: Tags, color: '#2DD4BF' },
@@ -488,13 +494,13 @@ export default function ShopModuleScreen() {
     );
   }
 
-  if (view === 'sources' || view === 'payments' || view === 'shipping') {
-    const title = view === 'sources' ? 'Surse produse' : view === 'payments' ? 'Metode de plata' : 'Livrari';
+  if (view === 'sources' || view === 'payments' || view === 'shipping' || view === 'customers' || view === 'discounts') {
+    const title = view === 'sources' ? 'Surse produse' : view === 'payments' ? 'Metode de plată' : view === 'shipping' ? 'Livrări' : view === 'customers' ? 'Clienți' : 'Reduceri';
     return (
       <View style={styles.container}>
         <Header title={title} showBack onBack={() => setView('more')} />
         <ScrollView contentContainerStyle={{ paddingBottom: 88 + insets.bottom }} showsVerticalScrollIndicator={false}>
-          {view === 'sources' ? <ShopProductSourcesManager /> : view === 'payments' ? <ShopPaymentMethodsManager /> : <ShopShippingManager />}
+          {view === 'sources' ? <ShopProductSourcesManager /> : view === 'payments' ? <ShopPaymentMethodsManager /> : view === 'shipping' ? <ShopShippingManager /> : view === 'customers' ? <ShopCustomersManager /> : <ShopDiscountsManager />}
         </ScrollView>
         <ShopBottomNavigation activeTab="more" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
       </View>

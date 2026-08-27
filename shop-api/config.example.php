@@ -11,6 +11,8 @@ return [
     'auth_api_url' => 'https://g-trots.ro/trotty-api/api.php',
     'public_base_url' => 'https://g-trots.ro/shop-api',
     'website_base_url' => 'https://g-trots.ro',
+    // Client ID OAuth Web din Google Cloud, folosit pentru autentificarea clienților.
+    'google_client_id' => '',
     // Foloseste exclusiv chei sk_test_/pk_test_ pana la validarea fluxului.
     'stripe_secret_key' => 'sk_test_replace_me',
     'stripe_publishable_key' => 'pk_test_replace_me',

@@ -331,6 +331,22 @@ function stripeCreateCheckoutSession(PDO $db, array $config, array $order, array
     ];
     $email = trim((string)($order['customer_email'] ?? ''));
     if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) $params['customer_email'] = $email;
+    $discountTotal = round((float)($order['discount_total'] ?? 0), 2);
+    if ($discountTotal > 0) {
+        $coupon = stripeRequest($config, 'POST', 'coupons', [
+            'duration' => 'once',
+            'amount_off' => stripeMinorAmount($discountTotal, (string)($order['currency'] ?? 'RON')),
+            'currency' => strtolower((string)($order['currency'] ?? 'RON')),
+            'name' => mb_substr('Reducere G-Trots ' . ((string)($order['promotion_code'] ?? '') ?: $orderNumber), 0, 40),
+            'metadata' => [
+                'g_trots_order_id' => (string)$order['id'],
+                'g_trots_promotion_code' => (string)($order['promotion_code'] ?? ''),
+            ],
+        ], 'gtrots-coupon-' . (string)$order['id']);
+        $couponId = trim((string)($coupon['id'] ?? ''));
+        if ($couponId === '') throw new RuntimeException('Reducerea nu a putut fi pregătită pentru plata Stripe.');
+        $params['discounts'] = [['coupon' => $couponId]];
+    }
     $shippingCost = (float)($order['shipping_cost'] ?? 0);
     $params['shipping_options'] = [[
         'shipping_rate_data' => [
@@ -458,6 +474,8 @@ function stripePublicOrderReceipt(PDO $db, array $config, array $order): array {
         'paymentLabel' => $order['payment_method'] === 'card' ? 'Card online · Stripe' : 'Ramburs la curier',
         'shippingLabel' => (string)$order['shipping_method_name'],
         'subtotal' => (float)$order['subtotal'],
+        'discountTotal' => (float)($order['discount_total'] ?? 0),
+        'promotionCode' => (string)($order['promotion_code'] ?? ''),
         'shippingCost' => (float)$order['shipping_cost'],
         'total' => (float)$order['total'],
         'items' => $receiptItems,

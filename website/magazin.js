@@ -299,6 +299,9 @@ function liveProductCard(product, index) {
   article.dataset.brand = brandSlugs.join(" ");
   article.dataset.stock = stockKey;
   article.dataset.stockRank = String(stockRank);
+  article.dataset.featuredRank = product.is_featured && Number.isFinite(Number(product.featured_rank))
+    ? String(product.featured_rank)
+    : "";
   article.dataset.manufacturer = manufacturerSlug;
   article.dataset.price = String(currentPrice);
   article.dataset.name = String(product.name || "Produs G-Trots");
@@ -733,6 +736,20 @@ function sortCards(cards) {
       if (label.includes("limitat")) return 1;
       return 0;
     };
+    if (mode === "featured") {
+      const featuredRank = card => {
+        const rank = Number(card.dataset.featuredRank);
+        return Number.isFinite(rank) && rank > 0 ? rank : Number.POSITIVE_INFINITY;
+      };
+      const firstRank = featuredRank(first);
+      const secondRank = featuredRank(second);
+      const firstIsStorefrontPick = firstRank <= 10;
+      const secondIsStorefrontPick = secondRank <= 10;
+      if (firstIsStorefrontPick !== secondIsStorefrontPick) return firstIsStorefrontPick ? -1 : 1;
+      if (firstIsStorefrontPick && secondIsStorefrontPick && firstRank !== secondRank) {
+        return firstRank - secondRank;
+      }
+    }
     const stockDifference = stockRank(first) - stockRank(second);
     if (stockDifference !== 0) return stockDifference;
     if (mode === "price-asc") return Number(first.dataset.price) - Number(second.dataset.price);

@@ -269,6 +269,7 @@ function liveProductCard(product, index) {
   const currentPrice = product.sale_price == null ? Number(product.price || 0) : Number(product.sale_price || 0);
   const standardPrice = Number(product.price || 0);
   const stockLabel = productStockLabel(product);
+  const stockRank = stockLabel === "Stoc epuizat" ? 2 : stockLabel === "Stoc limitat" ? 1 : 0;
   const stockKey = product.stock_mode === "unlimited" || Number(product.stock_quantity || 0) > 0 ? "in-stock" : "out-of-stock";
   const stockClass = stockKey === "out-of-stock" ? " is-out" : stockLabel === "Stoc limitat" ? " is-low" : "";
   const shortDescription = String(product.short_description || "Produs disponibil în magazinul G-Trots.");
@@ -296,6 +297,7 @@ function liveProductCard(product, index) {
   article.dataset.taxonomy = `produse ${categorySlug}`;
   article.dataset.brand = brandSlugs.join(" ");
   article.dataset.stock = stockKey;
+  article.dataset.stockRank = String(stockRank);
   article.dataset.manufacturer = manufacturerSlug;
   article.dataset.price = String(currentPrice);
   article.dataset.name = String(product.name || "Produs G-Trots");
@@ -676,6 +678,16 @@ function updateMobileFilterCount() {
 function sortCards(cards) {
   const mode = sortSelect?.value || "featured";
   return [...cards].sort((first, second) => {
+    const stockRank = card => {
+      const explicitRank = Number(card.dataset.stockRank);
+      if (Number.isFinite(explicitRank)) return explicitRank;
+      const label = normalizeText(card.querySelector(".product-quick-note")?.textContent || "");
+      if (label.includes("epuizat")) return 2;
+      if (label.includes("limitat")) return 1;
+      return 0;
+    };
+    const stockDifference = stockRank(first) - stockRank(second);
+    if (stockDifference !== 0) return stockDifference;
     if (mode === "price-asc") return Number(first.dataset.price) - Number(second.dataset.price);
     if (mode === "price-desc") return Number(second.dataset.price) - Number(first.dataset.price);
     if (mode === "name") return first.dataset.name.localeCompare(second.dataset.name, "ro");

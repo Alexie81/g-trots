@@ -1048,6 +1048,14 @@ function productSelectSql(): string {
             LEFT JOIN shop_product_sources s ON s.id = p.source_id';
 }
 
+function productStockOrderSql(): string {
+    return 'CASE
+                WHEN p.stock_mode = "unlimited" OR p.stock_quantity > p.low_stock_threshold THEN 0
+                WHEN p.stock_quantity > 0 THEN 1
+                ELSE 2
+            END';
+}
+
 function reviewRow(array $row): array {
     return [
         'id' => (string)$row['id'],
@@ -1772,7 +1780,7 @@ try {
             $where[] = 'EXISTS (SELECT 1 FROM shop_product_brands pb WHERE pb.product_id = p.id AND pb.brand_id = ?)';
             $params[] = $brandId;
         }
-        $sql = productSelectSql() . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY p.is_featured DESC, p.created_at DESC LIMIT 2500';
+        $sql = productSelectSql() . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.is_featured DESC, p.created_at DESC LIMIT 2500';
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         jsonResponse(productRows($db, $stmt->fetchAll(), $config, false, false));
@@ -2125,7 +2133,7 @@ try {
     }
 
     if ($action === 'productManagerBootstrap' && $method === 'GET') {
-        $products = $db->query(productSelectSql() . ' ORDER BY p.updated_at DESC, p.name ASC')->fetchAll();
+        $products = $db->query(productSelectSql() . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.updated_at DESC, p.name ASC')->fetchAll();
         $categories = $db->query('SELECT c.*, p.name AS parent_name FROM shop_categories c LEFT JOIN shop_categories p ON p.id = c.parent_id ORDER BY COALESCE(p.name, c.name) ASC, c.parent_id IS NOT NULL ASC, c.name ASC')->fetchAll();
         $brands = $db->query('SELECT * FROM shop_brands ORDER BY name ASC')->fetchAll();
         $manufacturers = $db->query('SELECT * FROM shop_manufacturers ORDER BY name ASC')->fetchAll();
@@ -2229,7 +2237,7 @@ try {
     }
 
     if ($action === 'listProducts' && $method === 'GET') {
-        $rows = $db->query(productSelectSql() . ' ORDER BY p.updated_at DESC, p.name ASC')->fetchAll();
+        $rows = $db->query(productSelectSql() . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.updated_at DESC, p.name ASC')->fetchAll();
         jsonResponse(productRows($db, $rows, $config, false));
     }
 
@@ -2368,7 +2376,7 @@ try {
     }
 
     if ($action === 'listInventory' && $method === 'GET') {
-        $rows = $db->query(productSelectSql() . ' ORDER BY (p.stock_mode = "tracked" AND p.stock_quantity <= p.low_stock_threshold) DESC, p.name ASC')->fetchAll();
+        $rows = $db->query(productSelectSql() . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.name ASC')->fetchAll();
         jsonResponse(productRows($db, $rows, $config, false));
     }
 

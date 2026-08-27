@@ -3505,6 +3505,12 @@ footer nav {
     padding: 0;
     grid-column: 1;
     justify-content: center;
+    border-color: rgba(255, 177, 82, 0.78);
+    border-radius: 1.2rem;
+    background: linear-gradient(145deg, #ffa125, #f07f00);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.3),
+      0 0.85rem 1.8rem rgba(240, 127, 0, 0.25);
   }
 
   .hero-actions .hero-shop-label {
@@ -3528,12 +3534,16 @@ footer nav {
   }
 
   .hero-actions .hero-shop-icon {
-    border-color: rgba(255, 255, 255, 0.28);
-    background: rgba(255, 255, 255, 0.17);
-    color: #fff;
+    width: 3.2rem;
+    height: 3.2rem;
+    flex-basis: 3.2rem;
+    border: 1px solid rgba(255, 255, 255, 0.48);
+    border-radius: 0.9rem;
+    background: #ffe0b7;
+    color: #271206;
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.28),
-      0 0.45rem 1rem rgba(96, 40, 0, 0.2);
+      inset 0 1px 0 rgba(255, 255, 255, 0.72),
+      0 0.35rem 0.85rem rgba(96, 40, 0, 0.18);
   }
 
   .hero-actions .button-ghost {

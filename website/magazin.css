@@ -2957,7 +2957,11 @@ body.filters-open {
 }
 
 .product-grid.list-view .product-info {
-  padding: 1.35rem 1.25rem;
+  min-width: 0;
+  padding: 1.15rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .product-grid.list-view .product-info h3 br {
@@ -2965,8 +2969,19 @@ body.filters-open {
 }
 
 .product-grid.list-view .product-summary {
-  max-width: 35rem;
+  max-width: 100%;
   min-height: 0;
+  cursor: default;
+}
+
+.product-grid.list-view .product-summary > p {
+  font-size: 0.64rem;
+  line-height: 1.45;
+  -webkit-line-clamp: 3;
+}
+
+.product-grid.list-view .product-summary-tooltip {
+  display: none;
 }
 
 .product-grid.list-view .product-bottom {

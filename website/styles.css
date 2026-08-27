@@ -3505,12 +3505,12 @@ footer nav {
     padding: 0;
     grid-column: 1;
     justify-content: center;
-    border-color: rgba(255, 177, 82, 0.78);
-    border-radius: 1.2rem;
-    background: linear-gradient(145deg, #ffa125, #f07f00);
+    border-color: rgba(255, 196, 124, 0.68);
+    border-radius: 1.25rem;
+    background: linear-gradient(145deg, #ff9b20 0%, #f07f00 58%, #dc6a00 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.3),
-      0 0.85rem 1.8rem rgba(240, 127, 0, 0.25);
+      inset 0 1px 0 rgba(255, 255, 255, 0.32),
+      0 0.75rem 1.65rem rgba(240, 127, 0, 0.24);
   }
 
   .hero-actions .hero-shop-label {
@@ -3534,16 +3534,27 @@ footer nav {
   }
 
   .hero-actions .hero-shop-icon {
-    width: 3.2rem;
-    height: 3.2rem;
-    flex-basis: 3.2rem;
-    border: 1px solid rgba(255, 255, 255, 0.48);
-    border-radius: 0.9rem;
-    background: #ffe0b7;
-    color: #271206;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.72),
-      0 0.35rem 0.85rem rgba(96, 40, 0, 0.18);
+    width: 100%;
+    height: 100%;
+    flex-basis: 100%;
+    border: 0;
+    border-radius: inherit;
+    background: transparent;
+    color: #fff;
+    box-shadow: none;
+  }
+
+  .hero-actions .hero-shop-icon svg {
+    width: 1.48rem;
+    height: 1.48rem;
+    stroke-width: 2;
+  }
+
+  .hero-actions .hero-shop-button:hover .hero-shop-icon,
+  .hero-actions .hero-shop-button:focus-visible .hero-shop-icon {
+    background: transparent;
+    color: #fff;
+    transform: scale(1.04);
   }
 
   .hero-actions .button-ghost {

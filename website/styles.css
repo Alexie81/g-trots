@@ -1052,7 +1052,7 @@ h1 em {
   flex: 0 0 2.65rem;
   border: 2px solid #ff9d24;
   background: linear-gradient(145deg, #fffaf3, #ffe9cd);
-  color: #1686c5;
+  color: #f07f00;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.82),
     0 0.45rem 1rem rgba(122, 55, 5, 0.22);
@@ -1083,7 +1083,7 @@ h1 em {
 .hero-actions .hero-shop-button:hover .hero-shop-icon,
 .hero-actions .hero-shop-button:focus-visible .hero-shop-icon {
   background: linear-gradient(145deg, #fff, #fff0db);
-  color: #0f75b0;
+  color: #d96800;
   transform: translateX(2px);
 }
 

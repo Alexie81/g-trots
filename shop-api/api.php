@@ -253,6 +253,7 @@ function ensureShopSchema(PDO $db): void {
             low_stock_threshold INT NOT NULL DEFAULT 3,
             is_active TINYINT(1) NOT NULL DEFAULT 1,
             is_featured TINYINT(1) NOT NULL DEFAULT 0,
+            featured_rank INT UNSIGNED NULL,
             view_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
             stripe_product_id VARCHAR(80) NULL,
             stripe_price_id VARCHAR(80) NULL,
@@ -270,6 +271,7 @@ function ensureShopSchema(PDO $db): void {
             INDEX idx_shop_products_source (source_id),
             UNIQUE INDEX idx_shop_products_supplier_external (source_id, supplier_external_id),
             INDEX idx_shop_products_active (is_active),
+            INDEX idx_shop_products_featured (is_featured, featured_rank),
             INDEX idx_shop_products_stock (stock_mode, stock_quantity),
             UNIQUE INDEX idx_shop_products_stripe_product (stripe_product_id),
             INDEX idx_shop_products_stripe_price (stripe_price_id)
@@ -324,6 +326,9 @@ function ensureShopSchema(PDO $db): void {
     if (!$viewCountColumn) {
         $db->exec('ALTER TABLE shop_products ADD COLUMN view_count BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER is_featured');
     }
+    if (!$db->query("SHOW COLUMNS FROM shop_products LIKE 'featured_rank'")->fetch()) {
+        $db->exec('ALTER TABLE shop_products ADD COLUMN featured_rank INT UNSIGNED NULL AFTER is_featured');
+    }
     $accountingStockColumn = $db->query("SHOW COLUMNS FROM shop_products LIKE 'accounting_stock_quantity'")->fetch();
     if (!$accountingStockColumn) {
         $db->exec('ALTER TABLE shop_products ADD COLUMN accounting_stock_quantity INT NOT NULL DEFAULT 0 AFTER stock_quantity');
@@ -371,6 +376,9 @@ function ensureShopSchema(PDO $db): void {
     }
     if (!$db->query("SHOW INDEX FROM shop_products WHERE Key_name = 'idx_shop_products_stripe_price'")->fetch()) {
         $db->exec('ALTER TABLE shop_products ADD INDEX idx_shop_products_stripe_price (stripe_price_id)');
+    }
+    if (!$db->query("SHOW INDEX FROM shop_products WHERE Key_name = 'idx_shop_products_featured'")->fetch()) {
+        $db->exec('ALTER TABLE shop_products ADD INDEX idx_shop_products_featured (is_featured, featured_rank)');
     }
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_supplier_sync_state (
@@ -994,6 +1002,7 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['low_stock_threshold'] = (int)$row['low_stock_threshold'];
     $row['is_active'] = (bool)$row['is_active'];
     $row['is_featured'] = (bool)$row['is_featured'];
+    $row['featured_rank'] = $row['featured_rank'] === null ? null : (int)$row['featured_rank'];
     $row['view_count'] = (int)($row['view_count'] ?? 0);
     $row['seo_word_count'] = (int)($row['seo_word_count'] ?? 0);
     $row['category_id'] = empty($row['category_id']) ? null : (string)$row['category_id'];
@@ -1802,7 +1811,7 @@ try {
             $where[] = 'EXISTS (SELECT 1 FROM shop_product_brands pb WHERE pb.product_id = p.id AND pb.brand_id = ?)';
             $params[] = $brandId;
         }
-        $sql = productSelectSql() . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.is_featured DESC, p.created_at DESC LIMIT 2500';
+        $sql = productSelectSql() . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.is_featured DESC, COALESCE(p.featured_rank, 2147483647) ASC, p.created_at DESC LIMIT 2500';
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         jsonResponse(productRows($db, $stmt->fetchAll(), $config, false, false));
@@ -1979,6 +1988,97 @@ try {
     if ($action === 'auditBoomagImport' && in_array($method, ['GET', 'POST'], true)) {
         verifyBoomagImportKey($config, $body);
         jsonResponse(boomagImportAudit($db, $config));
+    }
+
+    if ($action === 'applyFeaturedProducts' && $method === 'POST') {
+        verifyBoomagImportKey($config, $body);
+        $rawCodes = $body['codes'] ?? null;
+        if (!is_array($rawCodes) || count($rawCodes) < 1 || count($rawCodes) > 2500) {
+            throw new InvalidArgumentException('Lista produselor recomandate trebuie sa contina intre 1 si 2500 de coduri.');
+        }
+
+        $codes = [];
+        $seenCodes = [];
+        foreach ($rawCodes as $rawCode) {
+            if (!is_scalar($rawCode)) throw new InvalidArgumentException('Lista produselor recomandate contine o valoare invalida.');
+            $code = mb_substr(trim((string)$rawCode), 0, 120);
+            if ($code === '') throw new InvalidArgumentException('Lista produselor recomandate contine un cod gol.');
+            $key = mb_strtolower($code);
+            if (isset($seenCodes[$key])) throw new InvalidArgumentException('Cod duplicat in lista produselor recomandate: ' . $code . '.');
+            $seenCodes[$key] = true;
+            $codes[] = $code;
+        }
+
+        $identifierRows = $db->query(
+            'SELECT id, name, sku, supplier_product_code, supplier_external_id FROM shop_products'
+        )->fetchAll();
+        $productsByCode = [];
+        foreach ($identifierRows as $row) {
+            foreach (['sku', 'supplier_product_code', 'supplier_external_id'] as $field) {
+                $value = trim((string)($row[$field] ?? ''));
+                if ($value === '') continue;
+                $key = mb_strtolower($value);
+                $productsByCode[$key][(string)$row['id']] = $row;
+            }
+        }
+
+        $resolved = [];
+        $missing = [];
+        $ambiguous = [];
+        $usedProductIds = [];
+        foreach ($codes as $index => $code) {
+            $key = mb_strtolower($code);
+            $candidates = array_values($productsByCode[$key] ?? []);
+            if (count($candidates) === 0) {
+                $missing[] = $code;
+                continue;
+            }
+            if (count($candidates) > 1) {
+                $ambiguous[] = $code;
+                continue;
+            }
+            $product = $candidates[0];
+            $productId = (string)$product['id'];
+            if (isset($usedProductIds[$productId])) {
+                $ambiguous[] = $code;
+                continue;
+            }
+            $usedProductIds[$productId] = true;
+            $resolved[] = [
+                'rank' => $index + 1,
+                'code' => $code,
+                'id' => $productId,
+                'name' => (string)$product['name'],
+            ];
+        }
+
+        if ($missing || $ambiguous) {
+            jsonResponse([
+                'error' => 'Lista nu a fost aplicata deoarece asocierea nu este completa si univoca.',
+                'matched_count' => count($resolved),
+                'missing_codes' => $missing,
+                'ambiguous_codes' => $ambiguous,
+            ], 422);
+        }
+
+        $db->beginTransaction();
+        try {
+            $db->exec('UPDATE shop_products SET is_featured = 0, featured_rank = NULL, updated_at = updated_at');
+            $update = $db->prepare(
+                'UPDATE shop_products SET is_featured = 1, featured_rank = ?, updated_at = updated_at WHERE id = ?'
+            );
+            foreach ($resolved as $product) $update->execute([$product['rank'], $product['id']]);
+            $db->commit();
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
+
+        jsonResponse([
+            'success' => true,
+            'featured_count' => count($resolved),
+            'products' => $resolved,
+        ]);
     }
 
     if ($action === 'saveBoomagSeoProduct' && $method === 'POST') {

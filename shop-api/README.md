@@ -40,6 +40,11 @@ Rutele administrative cer cheia SHOP și tokenul utilizatorului autentificat.
 Sunt disponibile operații CRUD pentru produse și surse, gestiunea comenzilor,
 ajustări și istoric de stoc, metode de plată și livrări.
 
+Ruta protejată `applyFeaturedProducts` primește un array ordonat de SKU-uri,
+înlocuiește atomic selecția produselor recomandate și salvează rangul comercial.
+Magazinul păstrează prioritatea de stoc, iar în interiorul fiecărui nivel afișează
+produsele recomandate în ordinea primită.
+
 Comenzile păstrează un istoric separat al statusurilor. Rambursul pornește în
 `processing` și trimite automat mesajul de primire; plata Stripe confirmată trece
 idempotent în `confirmed` și trimite bonul o singură dată. La schimbarea manuală

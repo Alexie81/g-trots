@@ -191,6 +191,14 @@ const productGrid = document.querySelector("#product-grid");
 let productCards = [...document.querySelectorAll(".product-card")];
 const searchInput = document.querySelector("#product-search");
 const searchClear = document.querySelector(".shop-search-clear");
+const searchDeck = document.querySelector(".shop-search-deck");
+const smartSearchPanel = document.querySelector("#smart-search-panel");
+const smartSearchContent = document.querySelector("[data-smart-search-content]");
+const smartSearchOverlay = document.querySelector("[data-smart-search-overlay]");
+const smartSearchClose = document.querySelector("[data-smart-search-close]");
+const smartSearchBack = document.querySelector("[data-smart-search-back]");
+const smartSearchSubmit = document.querySelector("[data-smart-search-submit]");
+let smartSearchActiveIndex = -1;
 const categoryTree = document.querySelector(".category-tree");
 const compatibilityOptions = document.querySelector(".compatibility-filter .filter-options-scroll");
 const manufacturerOptions = document.querySelector(".manufacturer-filter .filter-options-scroll");
@@ -275,6 +283,13 @@ function liveProductCard(product, index) {
   const stockClass = stockKey === "out-of-stock" ? " is-out" : stockLabel === "Stoc limitat" ? " is-low" : "";
   const shortDescription = String(product.short_description || "Produs disponibil în magazinul G-Trots.");
   const route = `/magazin/produs/${encodeURIComponent(slug)}/`;
+  const specificationText = (() => {
+    try {
+      return JSON.stringify(product.specifications || product.specifications_json || "").replace(/[{}\[\]":,]/g, " ");
+    } catch {
+      return "";
+    }
+  })();
   const brandBadges = brandNames
     .slice(0, 4)
     .map(name => `<span>${escapeCatalogHtml(name)}</span>`)
@@ -308,7 +323,14 @@ function liveProductCard(product, index) {
   article.dataset.manufacturer = manufacturerSlug;
   article.dataset.price = String(currentPrice);
   article.dataset.name = String(product.name || "Produs G-Trots");
-  article.dataset.search = `${product.name || ""} ${shortDescription} ${brandNames.join(" ")} ${product.sku || ""}`;
+  article.dataset.search = `${product.name || ""} ${categoryName} ${manufacturerName} ${shortDescription} ${brandNames.join(" ")} ${product.sku || ""} ${product.ean || ""} ${specificationText}`;
+  article.dataset.route = route;
+  article.dataset.image = imageUrl || "assets/logo.png";
+  article.dataset.categoryName = categoryName;
+  article.dataset.manufacturerName = manufacturerName;
+  article.dataset.brandNames = brandNames.join(", ");
+  article.dataset.stockLabel = stockLabel;
+  article.dataset.shortDescription = shortDescription;
   article.dataset.index = String(index);
   article.innerHTML = `
     <div class="product-stage">
@@ -358,6 +380,7 @@ function renderLiveProducts(products) {
   }
   currentPage = 1;
   applyFilters();
+  if (searchDeck?.classList.contains("is-search-open")) renderSmartSearch();
   productGrid.dataset.catalogSource = "shop-api";
   return true;
 }
@@ -653,11 +676,244 @@ function renderChoiceFilters(container, rows, emptyLabel) {
 }
 
 function normalizeText(value) {
-  return value
+  return String(value ?? "")
     .toLocaleLowerCase("ro-RO")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9+.-]+/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
+}
+
+const smartSearchPopularTerms = [
+  ["cauciuc trotineta", "Cauciucuri și anvelope"],
+  ["camera trotineta", "Camere pentru roți"],
+  ["controller", "Controlere"],
+  ["display", "Display-uri"],
+  ["frana", "Sisteme de frânare"],
+  ["disc frana", "Discuri de frână"],
+  ["cablu frana", "Cabluri de frână"],
+  ["sonerie", "Sonerii"],
+  ["casca", "Căști de protecție"],
+  ["incarcator", "Încărcătoare"]
+];
+
+const smartSearchSynonymGroups = [
+  ["cauciuc", "anvelopa", "pneu", "roata"],
+  ["camera", "tub", "inner tube"],
+  ["frana", "franare", "etrier", "placute", "sabot"],
+  ["disc", "rotor"],
+  ["cablu", "cablaj", "fir"],
+  ["controller", "controler", "unitate control"],
+  ["display", "ecran", "bord", "dashboard"],
+  ["incarcator", "charger", "alimentator"],
+  ["baterie", "acumulator"],
+  ["sonerie", "claxon", "avertizor"],
+  ["casca", "helmet", "protectie cap"],
+  ["aripa", "aparatoare", "mudguard"],
+  ["acceleratie", "accelerator", "maneta"],
+  ["lumina", "far", "stop", "semnalizare", "led"],
+  ["pliere", "folding", "balama", "mecanism pliere"],
+  ["rulment", "bearing"],
+  ["surub", "piulita", "bolt"],
+  ["motor", "hub", "butuc motor"],
+  ["suport", "prindere", "bracket"],
+  ["ghidon", "handlebar"],
+  ["amortizor", "suspensie", "shock"],
+  ["electric", "electrica", "trotineta"]
+].map(group => group.map(normalizeText));
+
+const semanticSearchCache = new WeakMap();
+const smartSearchStopWords = new Set(["vreau", "caut", "cauta", "pentru", "trotineta", "trotinete", "electrica", "electric", "piesa", "piese", "produs", "produse", "un", "una", "unei", "de", "la", "cu", "si", "sau", "din"]);
+
+function semanticTermsForToken(token) {
+  const matchingGroup = smartSearchSynonymGroups.find(group => group.some(term => term === token));
+  return matchingGroup || [token];
+}
+
+function smartSearchWordDistance(first, second, limit = 1) {
+  if (Math.abs(first.length - second.length) > limit) return limit + 1;
+  let previous = Array.from({ length: second.length + 1 }, (_, index) => index);
+  for (let firstIndex = 1; firstIndex <= first.length; firstIndex += 1) {
+    const current = [firstIndex];
+    let rowMinimum = current[0];
+    for (let secondIndex = 1; secondIndex <= second.length; secondIndex += 1) {
+      const cost = first[firstIndex - 1] === second[secondIndex - 1] ? 0 : 1;
+      current[secondIndex] = Math.min(
+        current[secondIndex - 1] + 1,
+        previous[secondIndex] + 1,
+        previous[secondIndex - 1] + cost
+      );
+      rowMinimum = Math.min(rowMinimum, current[secondIndex]);
+    }
+    if (rowMinimum > limit) return limit + 1;
+    previous = current;
+  }
+  return previous[second.length];
+}
+
+function semanticCardData(card) {
+  if (semanticSearchCache.has(card)) return semanticSearchCache.get(card);
+  const title = normalizeText(card.dataset.name || "");
+  const search = normalizeText(`${card.dataset.name || ""} ${card.dataset.search || ""}`);
+  const titleWords = [...new Set(title.split(" ").filter(Boolean))];
+  const words = [...new Set(search.split(" ").filter(Boolean))].slice(0, 260);
+  const data = { title, search, titleWords, words };
+  semanticSearchCache.set(card, data);
+  return data;
+}
+
+function semanticSearchScore(card, rawQuery) {
+  const query = normalizeText(rawQuery);
+  if (!query) return 0;
+  const { title, search, titleWords, words } = semanticCardData(card);
+  const queryTokens = [...new Set(query.split(" ").filter(token => token.length > 1 && !smartSearchStopWords.has(token)))];
+  let score = 0;
+  let matchedTokens = 0;
+
+  if (title === query) score += 240;
+  else if (title.startsWith(query)) score += 130;
+  else if (title.includes(query)) score += 90;
+  else if (search.includes(query)) score += 52;
+
+  queryTokens.forEach(token => {
+    const terms = semanticTermsForToken(token);
+    let tokenScore = 0;
+    terms.forEach((term, termIndex) => {
+      const directWeight = termIndex === 0 ? 1 : 0.78;
+      if (titleWords.includes(term)) tokenScore = Math.max(tokenScore, 34 * directWeight);
+      else if (titleWords.some(word => word.startsWith(term) || term.startsWith(word))) tokenScore = Math.max(tokenScore, 25 * directWeight);
+      else if (title.includes(term)) tokenScore = Math.max(tokenScore, 22 * directWeight);
+      else if (words.includes(term)) tokenScore = Math.max(tokenScore, 16 * directWeight);
+      else if (search.includes(term)) tokenScore = Math.max(tokenScore, 11 * directWeight);
+    });
+
+    if (tokenScore === 0 && token.length >= 4) {
+      const fuzzyTitle = titleWords.some(word => word.length >= 4 && smartSearchWordDistance(token, word, 1) <= 1);
+      const fuzzyBody = !fuzzyTitle && words.some(word => word.length >= 4 && smartSearchWordDistance(token, word, 1) <= 1);
+      if (fuzzyTitle) tokenScore = 13;
+      else if (fuzzyBody) tokenScore = 7;
+    }
+
+    if (tokenScore > 0) {
+      matchedTokens += 1;
+      score += tokenScore;
+    }
+  });
+
+  if (queryTokens.length && matchedTokens === queryTokens.length) score += 55 + queryTokens.length * 5;
+  else if (queryTokens.length <= 3) return 0;
+  else if (matchedTokens / queryTokens.length >= 0.7) score += 18;
+  else return 0;
+
+  const stockRank = Number(card.dataset.stockRank || 0);
+  if (stockRank === 0) score += 5;
+  else if (stockRank === 2) score -= 3;
+  return Math.max(0, Math.round(score * 10) / 10);
+}
+
+function smartSearchCards(query) {
+  return productCards
+    .map(card => ({ card, score: semanticSearchScore(card, query) }))
+    .filter(result => result.score >= 8)
+    .sort((first, second) => {
+      if (second.score !== first.score) return second.score - first.score;
+      const stockDifference = Number(first.card.dataset.stockRank || 0) - Number(second.card.dataset.stockRank || 0);
+      if (stockDifference !== 0) return stockDifference;
+      return Number(first.card.dataset.index || 0) - Number(second.card.dataset.index || 0);
+    });
+}
+
+function formatSmartSearchPrice(value) {
+  return new Intl.NumberFormat("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0));
+}
+
+function smartSearchStockClass(card) {
+  const label = normalizeText(card.dataset.stockLabel || "");
+  if (label.includes("epuizat")) return " is-out";
+  if (label.includes("limitat")) return " is-low";
+  return "";
+}
+
+function smartSearchResultMarkup(card) {
+  const name = card.dataset.name || "Produs G-Trots";
+  const route = card.dataset.route || card.querySelector(".product-card-link")?.getAttribute("href") || "#catalog";
+  const image = card.dataset.image || "assets/logo.png";
+  const category = card.dataset.categoryName || "Produs";
+  const compatibility = card.dataset.brandNames || card.dataset.manufacturerName || card.dataset.shortDescription || "Disponibil în catalog";
+  const stockLabel = card.dataset.stockLabel || "În stoc";
+  return `<a class="smart-search-result" href="${escapeCatalogHtml(route)}" data-search-choice>
+    <span class="smart-search-result-image" style="background-image:url(&quot;${escapeCatalogHtml(image)}&quot;)" aria-hidden="true"></span>
+    <span class="smart-search-result-copy"><small>${escapeCatalogHtml(category)}</small><strong>${escapeCatalogHtml(name)}</strong><span>${escapeCatalogHtml(compatibility)}</span></span>
+    <span class="smart-search-result-stock${smartSearchStockClass(card)}">${escapeCatalogHtml(stockLabel)}</span>
+    <span class="smart-search-result-price"><strong>${formatSmartSearchPrice(card.dataset.price)} lei</strong><small>Vezi produsul</small></span>
+  </a>`;
+}
+
+function renderSmartSearch(rawQuery = searchInput?.value || "") {
+  if (!smartSearchContent) return;
+  const query = normalizeText(rawQuery);
+  smartSearchActiveIndex = -1;
+
+  if (!query) {
+    smartSearchContent.innerHTML = `
+      <div class="smart-search-section-head"><span><strong>Căutări populare în G-Trots</strong><small>Alege rapid piesa de care ai nevoie</small></span><b class="smart-search-count">Sugestii</b></div>
+      <div class="smart-search-popular">
+        ${smartSearchPopularTerms.map(([term, label], index) => `<button type="button" data-popular-search="${escapeCatalogHtml(term)}" data-search-choice><i aria-hidden="true">${String(index + 1).padStart(2, "0")}</i><span><strong>${escapeCatalogHtml(label)}</strong><small>Caută în catalog</small></span><b aria-hidden="true">›</b></button>`).join("")}
+      </div>`;
+    return;
+  }
+
+  const results = smartSearchCards(query);
+  if (!results.length) {
+    smartSearchContent.innerHTML = `<div class="smart-search-empty"><i aria-hidden="true">⌕</i><strong>Nu am găsit încă piesa.</strong><p>Încearcă denumirea componentei, modelul trotinetei sau marca. Poți scrie și aproximativ — căutarea corectează greșelile mici.</p></div>`;
+    return;
+  }
+
+  smartSearchContent.innerHTML = `
+    <div class="smart-search-section-head"><span><strong>Rezultate potrivite</strong><small>Ordonate după relevanță și disponibilitate</small></span><b class="smart-search-count">${results.length} ${results.length === 1 ? "produs" : "produse"}</b></div>
+    <div class="smart-search-results">${results.slice(0, 6).map(result => smartSearchResultMarkup(result.card)).join("")}</div>
+    <button class="smart-search-all" type="button" data-smart-search-all data-search-choice>Vezi toate cele ${results.length} rezultate în catalog <span aria-hidden="true">↓</span></button>`;
+}
+
+function openSmartSearch() {
+  if (!smartSearchPanel || !searchDeck) return;
+  searchDeck.classList.add("is-search-open");
+  document.body.classList.add("smart-search-open");
+  smartSearchPanel.hidden = false;
+  if (smartSearchOverlay) smartSearchOverlay.hidden = false;
+  renderSmartSearch();
+}
+
+function closeSmartSearch({ restoreFocus = false } = {}) {
+  if (!smartSearchPanel || !searchDeck) return;
+  searchDeck.classList.remove("is-search-open");
+  document.body.classList.remove("smart-search-open");
+  smartSearchPanel.hidden = true;
+  if (smartSearchOverlay) smartSearchOverlay.hidden = true;
+  smartSearchActiveIndex = -1;
+  if (restoreFocus) searchInput?.focus();
+}
+
+function showSmartSearchCatalogResults() {
+  applyFilters();
+  closeSmartSearch();
+  searchInput?.blur();
+  window.setTimeout(() => {
+    document.querySelector("#catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 30);
+}
+
+function smartSearchChoices() {
+  return [...(smartSearchContent?.querySelectorAll("[data-search-choice]") || [])];
+}
+
+function setSmartSearchActive(index) {
+  const choices = smartSearchChoices();
+  if (!choices.length) return;
+  smartSearchActiveIndex = (index + choices.length) % choices.length;
+  choices.forEach((choice, choiceIndex) => choice.classList.toggle("is-active", choiceIndex === smartSearchActiveIndex));
+  choices[smartSearchActiveIndex].scrollIntoView({ block: "nearest" });
 }
 
 function formatPrice(value) {
@@ -731,6 +987,7 @@ function updateMobileFilterCount() {
 
 function sortCards(cards) {
   const mode = sortSelect?.value || "featured";
+  const activeSearchQuery = normalizeText(searchInput?.value || "");
   return [...cards].sort((first, second) => {
     const stockRank = card => {
       const explicitRank = Number(card.dataset.stockRank);
@@ -740,6 +997,10 @@ function sortCards(cards) {
       if (label.includes("limitat")) return 1;
       return 0;
     };
+    if (activeSearchQuery) {
+      const searchDifference = Number(second.dataset.searchScore || 0) - Number(first.dataset.searchScore || 0);
+      if (searchDifference !== 0) return searchDifference;
+    }
     if (mode === "featured") {
       const featuredRank = card => {
         const rank = Number(card.dataset.featuredRank);
@@ -816,10 +1077,11 @@ function applyFilters({ resetPage = true } = {}) {
   const hiddenCards = [];
 
   productCards.forEach(card => {
-    const searchableText = normalizeText(`${card.dataset.name} ${card.dataset.search}`);
     const cardBrands = (card.dataset.brand || "").split(" ");
     const cardTaxonomy = `${card.dataset.category || ""} ${card.dataset.taxonomy || ""}`.split(" ").filter(Boolean);
-    const matchesSearch = !query || searchableText.includes(query);
+    const searchScore = query ? semanticSearchScore(card, query) : 0;
+    card.dataset.searchScore = String(searchScore);
+    const matchesSearch = !query || searchScore >= 8;
     const matchesCategory = activeCategory === "all"
       || cardTaxonomy.some(category => activeCategoryScope.has(category));
     const matchesBrand = selectedBrands.length === 0 || selectedBrands.some(brand => cardBrands.includes(brand));
@@ -945,6 +1207,32 @@ if (searchInput) {
   searchInput.addEventListener("input", () => {
     if (searchClear) searchClear.hidden = searchInput.value.length === 0;
     applyFilters();
+    openSmartSearch();
+    renderSmartSearch();
+  });
+  searchInput.addEventListener("focus", openSmartSearch);
+  searchInput.addEventListener("click", openSmartSearch);
+  searchInput.addEventListener("keydown", event => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setSmartSearchActive(smartSearchActiveIndex + 1);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setSmartSearchActive(smartSearchActiveIndex - 1);
+    } else if (event.key === "Enter") {
+      const activeChoice = smartSearchChoices()[smartSearchActiveIndex];
+      if (activeChoice) {
+        event.preventDefault();
+        activeChoice.click();
+      } else if (normalizeText(searchInput.value)) {
+        event.preventDefault();
+        showSmartSearchCatalogResults();
+      }
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      closeSmartSearch();
+      searchInput.blur();
+    }
   });
 }
 
@@ -955,7 +1243,42 @@ searchClear?.addEventListener("click", event => {
   searchInput.value = "";
   searchClear.hidden = true;
   applyFilters();
+  renderSmartSearch();
   searchInput.focus();
+});
+
+smartSearchContent?.addEventListener("click", event => {
+  const popularButton = event.target.closest("[data-popular-search]");
+  if (popularButton && searchInput) {
+    searchInput.value = popularButton.dataset.popularSearch || "";
+    if (searchClear) searchClear.hidden = false;
+    applyFilters();
+    renderSmartSearch();
+    searchInput.focus();
+    return;
+  }
+
+  const showAllButton = event.target.closest("[data-smart-search-all]");
+  if (showAllButton) {
+    showSmartSearchCatalogResults();
+  }
+});
+
+smartSearchClose?.addEventListener("click", () => closeSmartSearch());
+smartSearchBack?.addEventListener("click", () => closeSmartSearch());
+smartSearchSubmit?.addEventListener("click", event => {
+  event.preventDefault();
+  event.stopPropagation();
+  showSmartSearchCatalogResults();
+});
+smartSearchOverlay?.addEventListener("click", () => closeSmartSearch());
+
+document.addEventListener("keydown", event => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase("ro-RO") === "k") {
+    event.preventDefault();
+    openSmartSearch();
+    searchInput?.focus();
+  }
 });
 
 if (priceRange) {

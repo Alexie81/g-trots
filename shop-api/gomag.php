@@ -477,11 +477,14 @@ function boomagSalePriceForBase(float $price, ?string $discountType, $discountVa
 
 function gomagSyncProductFromFeed(PDO $db, array $config, string $idOrSlug): array {
     $stmt = $db->prepare(
-        'SELECT id, slug, sku, supplier_product_code, supplier_external_id, source_domain, price, sale_price,
-                discount_type, discount_value, stock_quantity, supplier_stock_quantity,
-                supplier_stock_status, supplier_base_price, supplier_price_difference
-         FROM shop_products
-         WHERE id = ? OR slug = ?
+        'SELECT p.id, p.slug, p.sku, p.supplier_product_code, p.supplier_external_id,
+                LOWER(COALESCE(s.domain, p.source_domain, "")) AS source_domain,
+                p.price, p.sale_price, p.discount_type, p.discount_value, p.stock_quantity,
+                p.supplier_stock_quantity, p.supplier_stock_status, p.supplier_base_price,
+                p.supplier_price_difference
+         FROM shop_products p
+         LEFT JOIN shop_product_sources s ON s.id = p.source_id
+         WHERE p.id = ? OR p.slug = ?
          LIMIT 1'
     );
     $stmt->execute([$idOrSlug, $idOrSlug]);
@@ -1123,7 +1126,9 @@ function boomagImportAudit(PDO $db, array $config): array {
 }
 
 function gomagSyncSupplierStock(PDO $db, array $config): array {
-    $rows = boomagFeedRows($config);
+    // Catalogul poate fi accesat foarte des, dar feedul nu trebuie cerut la fiecare request.
+    // O fereastră de 15 minute surprinde și actualizările multiple din aceeași zi.
+    $rows = boomagFeedRows($config, false, 900);
     $source = $db->query("SELECT id FROM shop_product_sources WHERE domain = 'boomag.ro' LIMIT 1")->fetchColumn();
     if (!$source) throw new RuntimeException('Sursa boomag.ro nu exista in catalog.');
 
@@ -1197,10 +1202,11 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
     ];
 }
 
-function gomagMaybeSyncSupplierStock(PDO $db, array $config, int $maxAgeHours = 20): ?array {
+function gomagMaybeSyncSupplierStock(PDO $db, array $config, int $maxAgeMinutes = 15): ?array {
+    $maxAgeSeconds = max(1, $maxAgeMinutes) * 60;
     $state = $db->query("SELECT last_synced_at FROM shop_supplier_sync_state WHERE source_domain = 'boomag.ro' LIMIT 1")->fetch();
     $lastSyncedAt = trim((string)($state['last_synced_at'] ?? ''));
-    if ($lastSyncedAt !== '' && strtotime($lastSyncedAt) >= time() - ($maxAgeHours * 3600)) return null;
+    if ($lastSyncedAt !== '' && strtotime($lastSyncedAt) >= time() - $maxAgeSeconds) return null;
 
     $lockName = 'g-trots-boomag-stock-sync';
     $lock = $db->prepare('SELECT GET_LOCK(?, 0)');
@@ -1209,7 +1215,7 @@ function gomagMaybeSyncSupplierStock(PDO $db, array $config, int $maxAgeHours = 
     try {
         $state = $db->query("SELECT last_synced_at FROM shop_supplier_sync_state WHERE source_domain = 'boomag.ro' LIMIT 1")->fetch();
         $lastSyncedAt = trim((string)($state['last_synced_at'] ?? ''));
-        if ($lastSyncedAt !== '' && strtotime($lastSyncedAt) >= time() - ($maxAgeHours * 3600)) return null;
+        if ($lastSyncedAt !== '' && strtotime($lastSyncedAt) >= time() - $maxAgeSeconds) return null;
         return gomagSyncSupplierStock($db, $config);
     } catch (Throwable $error) {
         error_log('[G-Trots Boomag stock] ' . $error->getMessage());

@@ -2081,6 +2081,69 @@ try {
         ]);
     }
 
+    if ($action === 'pruneUnusedTaxonomy' && $method === 'POST') {
+        verifyBoomagImportKey($config, $body);
+        $unusedBrands = $db->query(
+            'SELECT b.id, b.name
+             FROM shop_brands b
+             LEFT JOIN shop_product_brands pb ON pb.brand_id = b.id
+             WHERE pb.brand_id IS NULL
+             ORDER BY b.name ASC'
+        )->fetchAll();
+        $unusedManufacturers = $db->query(
+            'SELECT m.id, m.name
+             FROM shop_manufacturers m
+             LEFT JOIN shop_products p ON p.manufacturer_id = m.id
+             WHERE p.id IS NULL
+             ORDER BY m.name ASC'
+        )->fetchAll();
+
+        if (!empty($body['dry_run'])) {
+            jsonResponse([
+                'success' => true,
+                'dry_run' => true,
+                'unused_brands' => count($unusedBrands),
+                'unused_manufacturers' => count($unusedManufacturers),
+            ]);
+        }
+
+        $db->beginTransaction();
+        try {
+            $deletedBrands = $db->exec(
+                'DELETE b FROM shop_brands b
+                 LEFT JOIN shop_product_brands pb ON pb.brand_id = b.id
+                 WHERE pb.brand_id IS NULL'
+            );
+            $deletedManufacturers = $db->exec(
+                'DELETE m FROM shop_manufacturers m
+                 LEFT JOIN shop_products p ON p.manufacturer_id = m.id
+                 WHERE p.id IS NULL'
+            );
+            $db->commit();
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
+
+        $remainingBrands = (int)$db->query(
+            'SELECT COUNT(*) FROM shop_brands b
+             LEFT JOIN shop_product_brands pb ON pb.brand_id = b.id
+             WHERE pb.brand_id IS NULL'
+        )->fetchColumn();
+        $remainingManufacturers = (int)$db->query(
+            'SELECT COUNT(*) FROM shop_manufacturers m
+             LEFT JOIN shop_products p ON p.manufacturer_id = m.id
+             WHERE p.id IS NULL'
+        )->fetchColumn();
+        jsonResponse([
+            'success' => true,
+            'deleted_brands' => (int)$deletedBrands,
+            'deleted_manufacturers' => (int)$deletedManufacturers,
+            'remaining_unused_brands' => $remainingBrands,
+            'remaining_unused_manufacturers' => $remainingManufacturers,
+        ]);
+    }
+
     if ($action === 'saveBoomagSeoProduct' && $method === 'POST') {
         verifyBoomagImportKey($config, $body);
         $id = trim((string)($body['id'] ?? ''));

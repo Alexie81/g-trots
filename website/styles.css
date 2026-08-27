@@ -1013,25 +1013,112 @@ h1 em {
   gap: 0.75rem;
 }
 
+.hero-actions .hero-shop-button,
 .hero-actions .call-button {
-  flex: 1 1 24rem;
+  flex: 1 1 15rem;
   min-width: 0;
   max-width: 100%;
   min-height: 4.35rem;
   padding: 0.85rem 0.95rem 0.85rem 1.65rem;
+  gap: 0.85rem;
   font-size: clamp(1rem, 1.15vw, 1.13rem);
-  box-shadow: 0 1rem 2.4rem rgba(240, 127, 0, 0.25);
+}
+
+.hero-actions .hero-shop-button {
+  border: 1px solid rgba(255, 190, 112, 0.68);
+  background: linear-gradient(135deg, #ffa12c 0%, #f07f00 58%, #d96800 100%);
+  color: #180b04;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 1rem 2.5rem rgba(240, 127, 0, 0.28);
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.hero-actions .hero-shop-button span {
+  width: 2.65rem;
+  height: 2.65rem;
+  flex: 0 0 2.65rem;
+  border: 1px solid rgba(53, 23, 5, 0.18);
+  background: rgba(53, 23, 5, 0.16);
+  color: #241006;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.hero-actions .hero-shop-button svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hero-actions .hero-shop-button:hover,
+.hero-actions .hero-shop-button:focus-visible {
+  outline: 0;
+  border-color: rgba(255, 215, 166, 0.92);
+  background: linear-gradient(135deg, #ffb24f 0%, #ff8a0a 58%, #ea7100 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 1.25rem 2.8rem rgba(240, 127, 0, 0.34);
+  transform: translateY(-2px);
+}
+
+.hero-actions .hero-shop-button:hover span,
+.hero-actions .hero-shop-button:focus-visible span {
+  background: rgba(53, 23, 5, 0.22);
+  transform: translateX(2px);
+}
+
+.hero-actions .call-button {
+  border: 1px solid rgba(255, 151, 35, 0.3);
+  background:
+    linear-gradient(135deg, rgba(255, 145, 0, 0.19), rgba(78, 47, 23, 0.48)),
+    rgba(255, 255, 255, 0.035);
+  color: #fff8ef;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 0.85rem 2rem rgba(0, 0, 0, 0.22);
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease, color 180ms ease;
 }
 
 .hero-actions .call-button span {
   width: 2.65rem;
   height: 2.65rem;
   flex: 0 0 2.65rem;
+  border: 1px solid rgba(255, 166, 57, 0.16);
+  background: rgba(255, 151, 28, 0.17);
+  color: #ffad4a;
+  box-shadow: inset 0 0 0 1px rgba(255, 166, 57, 0.1);
 }
 
 .hero-actions .call-button svg {
   width: 1.25rem;
   height: 1.25rem;
+}
+
+.hero-actions .call-button:hover,
+.hero-actions .call-button:focus-visible {
+  outline: 0;
+  border-color: rgba(255, 161, 50, 0.62);
+  background:
+    linear-gradient(135deg, rgba(255, 145, 0, 0.3), rgba(96, 54, 24, 0.58)),
+    rgba(255, 255, 255, 0.045);
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    0 1rem 2.35rem rgba(240, 127, 0, 0.17);
+  transform: translateY(-2px);
+}
+
+.hero-actions .call-button:hover span,
+.hero-actions .call-button:focus-visible span {
+  background: rgba(255, 151, 28, 0.25);
+  color: #ffc06f;
+  box-shadow: inset 0 0 0 1px rgba(255, 178, 84, 0.26);
+  transform: none;
 }
 
 .hero-notes {
@@ -3411,6 +3498,7 @@ footer nav {
     max-width: 100%;
   }
 
+  .hero-actions .hero-shop-button,
   .hero-actions .call-button {
     min-height: 4.8rem;
     padding: 0.92rem 0.95rem 0.92rem 1.25rem;
@@ -3418,6 +3506,7 @@ footer nav {
     letter-spacing: -0.015em;
   }
 
+  .hero-actions .hero-shop-button span,
   .hero-actions .call-button span {
     width: 2.9rem;
     height: 2.9rem;

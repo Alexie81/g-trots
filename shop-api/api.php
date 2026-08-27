@@ -237,6 +237,9 @@ function ensureShopSchema(PDO $db): void {
             meta_description VARCHAR(320) NULL,
             cost_price DECIMAL(12,2) NOT NULL DEFAULT 0,
             price DECIMAL(12,2) NOT NULL DEFAULT 0,
+            supplier_base_price DECIMAL(12,2) NULL,
+            supplier_price_difference DECIMAL(12,2) NULL,
+            supplier_price_updated_at DATETIME NULL,
             sale_price DECIMAL(12,2) NULL,
             discount_type VARCHAR(20) NOT NULL DEFAULT 'percent',
             discount_value DECIMAL(12,2) NULL,
@@ -306,6 +309,16 @@ function ensureShopSchema(PDO $db): void {
     $costPriceColumn = $db->query("SHOW COLUMNS FROM shop_products LIKE 'cost_price'")->fetch();
     if (!$costPriceColumn) {
         $db->exec('ALTER TABLE shop_products ADD COLUMN cost_price DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER meta_description');
+    }
+    $supplierPriceColumns = [
+        'supplier_base_price' => 'DECIMAL(12,2) NULL AFTER price',
+        'supplier_price_difference' => 'DECIMAL(12,2) NULL AFTER supplier_base_price',
+        'supplier_price_updated_at' => 'DATETIME NULL AFTER supplier_price_difference',
+    ];
+    foreach ($supplierPriceColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_products LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_products ADD COLUMN {$column} {$definition}");
+        }
     }
     $viewCountColumn = $db->query("SHOW COLUMNS FROM shop_products LIKE 'view_count'")->fetch();
     if (!$viewCountColumn) {
@@ -960,6 +973,8 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     unset($row['_preloaded_brands']);
     $row['price'] = (float)$row['price'];
     $row['cost_price'] = (float)($row['cost_price'] ?? 0);
+    $row['supplier_base_price'] = $row['supplier_base_price'] === null ? null : (float)$row['supplier_base_price'];
+    $row['supplier_price_difference'] = $row['supplier_price_difference'] === null ? null : (float)$row['supplier_price_difference'];
     $row['sale_price'] = $row['sale_price'] === null ? null : (float)$row['sale_price'];
     $row['discount_type'] = in_array((string)($row['discount_type'] ?? ''), ['percent', 'fixed'], true)
         ? (string)$row['discount_type']
@@ -994,7 +1009,7 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['stock_available'] = $row['stock_mode'] === 'unlimited' || $row['stock_quantity'] > 0;
     if (!$withDescription) unset($row['description_html']);
     if (!$includeInternal) {
-        unset($row['source_id'], $row['source_domain'], $row['source_url'], $row['source_name'], $row['source_is_active'], $row['supplier_external_id'], $row['supplier_product_code'], $row['ean'], $row['content_status'], $row['seo_researched_at'], $row['seo_word_count'], $row['seo_sources']);
+        unset($row['source_id'], $row['source_domain'], $row['source_url'], $row['source_name'], $row['source_is_active'], $row['supplier_external_id'], $row['supplier_product_code'], $row['ean'], $row['supplier_base_price'], $row['supplier_price_difference'], $row['supplier_price_updated_at'], $row['content_status'], $row['seo_researched_at'], $row['seo_word_count'], $row['seo_sources']);
     }
     return $row;
 }
@@ -1367,7 +1382,10 @@ function seoResearchPayload(array $body, bool $finalCatalog = false): array {
         $specifications[] = ['group' => $group ?: 'Specificatii', 'label' => $label, 'value' => $value];
         if (count($specifications) >= 60) break;
     }
-    if (count($specifications) < 8) throw new InvalidArgumentException('O fisa SEO finalizata trebuie sa aiba minimum 8 specificatii verificate.');
+    $minimumSpecifications = $finalCatalog ? 5 : 8;
+    if (count($specifications) < $minimumSpecifications) {
+        throw new InvalidArgumentException('O fisa SEO finalizata trebuie sa aiba minimum ' . $minimumSpecifications . ' specificatii verificate.');
+    }
 
     $questions = [];
     $questionKeys = [];
@@ -1737,7 +1755,7 @@ try {
     $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     $db = shopDb($config);
 
-    if (in_array($action, ['publicProducts', 'publicProduct', 'publicShopConfig', 'productManagerBootstrap', 'listProducts', 'listInventory', 'getDashboardStats'], true)) {
+    if (in_array($action, ['publicProducts', 'publicShopConfig', 'productManagerBootstrap', 'listProducts', 'listInventory', 'getDashboardStats'], true)) {
         gomagMaybeSyncSupplierStock($db, $config);
     }
 
@@ -1794,6 +1812,14 @@ try {
         $idOrSlug = trim((string)($_GET['id'] ?? $_GET['slug'] ?? ''));
         if ($idOrSlug === '') jsonResponse(['error' => 'Produsul nu a fost specificat.'], 400);
         try {
+            try {
+                $feedSync = gomagSyncProductFromFeed($db, $config, $idOrSlug);
+                if (!empty($feedSync['price_changed']) && !empty($feedSync['product_id'])) {
+                    stripeSyncProductSafe($db, $config, (string)$feedSync['product_id']);
+                }
+            } catch (Throwable $syncError) {
+                error_log('[G-Trots Boomag product sync] ' . $syncError->getMessage());
+            }
             $product = findProduct($db, $idOrSlug, $config, true);
             $db->prepare('UPDATE shop_products SET view_count = view_count + 1 WHERE id = ?')->execute([$product['id']]);
             $product['view_count'] = (int)$product['view_count'] + 1;
@@ -2318,6 +2344,18 @@ try {
                 $payload['meta_title'], $payload['meta_description'], $payload['cost_price'], $payload['price'], $payload['sale_price'], $payload['discount_type'], $payload['discount_value'], $payload['currency'],
                 $payload['stock_mode'], $payload['stock_quantity'], $payload['low_stock_threshold'], $payload['is_active'] ? 1 : 0, $payload['is_featured'] ? 1 : 0, $nextContentStatus, $id
             ]);
+            if (mb_strtolower(trim((string)$payload['source_domain'])) === 'boomag.ro') {
+                $difference = $db->prepare(
+                    'UPDATE shop_products
+                     SET supplier_price_difference = CASE
+                         WHEN supplier_base_price IS NULL THEN NULL
+                         ELSE ROUND(? - supplier_base_price, 2)
+                     END,
+                     updated_at = updated_at
+                     WHERE id = ?'
+                );
+                $difference->execute([$payload['price'], $id]);
+            }
             syncProductBrands($db, $id, $payload['brand_ids']);
             syncProductImages($db, $id, $payload['images'], $payload['name']);
             $oldQuantity = $current['stock_mode'] === 'tracked' ? (int)$current['stock_quantity'] : 0;

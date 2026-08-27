@@ -7,6 +7,7 @@ import json
 import os
 import re
 import threading
+import unicodedata
 import urllib.parse
 import urllib.request
 from collections import Counter
@@ -35,7 +36,9 @@ ACCESSORY_FAMILIES = {"accessory", "bag", "grip", "helmet", "lock", "mirror", "p
 
 
 def normalized(value: Any) -> str:
-    return " ".join(re.findall(r"[^\W_]+", str(value or "").lower(), flags=re.UNICODE))
+    folded = unicodedata.normalize("NFKD", str(value or "").lower())
+    without_marks = "".join(character for character in folded if not unicodedata.combining(character))
+    return " ".join(re.findall(r"[^\W_]+", without_marks, flags=re.UNICODE))
 
 
 def word_count(value: Any) -> int:
@@ -108,8 +111,29 @@ def is_accessory_source(product: dict[str, Any]) -> bool:
     )
 
 
-def audit_product(product: dict[str, Any], accessory: bool = False) -> dict[str, Any]:
+def expected_compatibility_names(source: dict[str, Any], accessory: bool) -> list[str]:
+    if accessory:
+        return []
+    compatibility = source.get("compatibility") if isinstance(source.get("compatibility"), dict) else {}
+    names = [str(value).strip() for value in compatibility.get("confirmed_brand_names") or []]
+    for item in compatibility.get("brand_associations") or []:
+        if not isinstance(item, dict):
+            continue
+        if item.get("technical_compatibility_confirmed") and str(item.get("confidence") or "").lower() == "high":
+            names.append(str(item.get("brand") or "").strip())
+    result: list[str] = []
+    seen: set[str] = set()
+    for name in names:
+        key = normalized(name)
+        if name and key not in seen:
+            seen.add(key)
+            result.append(name)
+    return result
+
+
+def audit_product(product: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
     external_id = str(product.get("supplier_external_id") or "")
+    accessory = is_accessory_source(source)
     issues: list[str] = []
     words = word_count(product.get("description_html"))
     questions = [item for item in product.get("questions") or [] if isinstance(item, dict)]
@@ -129,7 +153,7 @@ def audit_product(product: dict[str, Any], accessory: bool = False) -> dict[str,
         issues.append("meta_title_length")
     if not 120 <= len(str(product.get("meta_description") or "").strip()) <= 180:
         issues.append("meta_description_length")
-    if len(specifications) < 8:
+    if len(specifications) < 5:
         issues.append("specifications")
     if not 5 <= len(questions) <= 8:
         issues.append("faq_count")
@@ -153,6 +177,34 @@ def audit_product(product: dict[str, Any], accessory: bool = False) -> dict[str,
     copy = visible_copy(product)
     prohibited = [name for name, pattern in PROHIBITED_VISIBLE_PATTERNS.items() if pattern.search(copy)]
     issues.extend(f"visible_reference:{name}" for name in prohibited)
+    for identifier in (
+        str(source.get("supplier_sku") or "").strip(),
+        str(source.get("supplier_external_id") or "").strip(),
+        str(source.get("ean") or "").strip(),
+    ):
+        if len(identifier) < 4:
+            continue
+        pattern = re.compile(rf"(?<![\w]){re.escape(identifier)}(?![\w])", re.IGNORECASE)
+        if pattern.search(str(product.get("name") or "")):
+            issues.append("identifier_in_title")
+        if pattern.search(str(product.get("meta_title") or "")):
+            issues.append("identifier_in_meta_title")
+    for item in specifications:
+        group = normalized(item.get("group"))
+        label = normalized(item.get("label"))
+        if group == "stoc furnizor" or label == "cantitate in feed":
+            issues.append("supplier_stock_in_specifications")
+        if group == "date tehnice extrase":
+            issues.append("old_technical_group_title")
+        if label in {"marci asociate pentru filtrare", "marci conditionate", "status"}:
+            issues.append("internal_compatibility_specification")
+    expected_brands = {normalized(value) for value in expected_compatibility_names(source, accessory)}
+    live_brands = {
+        normalized(item.get("name"))
+        for item in product.get("brands") or [] if isinstance(item, dict) and normalized(item.get("name"))
+    }
+    if live_brands != expected_brands:
+        issues.append("compatibility_associations")
     return {
         "supplier_external_id": external_id,
         "id": str(product.get("id") or ""),
@@ -178,9 +230,9 @@ def main() -> int:
     if not isinstance(expected_products, list):
         raise RuntimeError("Catalogul sursa nu contine products.")
     expected_ids = {str(item.get("supplier_external_id") or "") for item in expected_products if isinstance(item, dict)}
-    accessory_ids = {
-        str(item.get("supplier_external_id") or "")
-        for item in expected_products if isinstance(item, dict) and is_accessory_source(item)
+    expected_sources = {
+        str(item.get("supplier_external_id") or ""): item
+        for item in expected_products if isinstance(item, dict)
     }
     base = args.endpoint + "?"
     listed = request_json(base + urllib.parse.urlencode({"action": "publicProducts"}))
@@ -211,7 +263,7 @@ def main() -> int:
         if not isinstance(value, dict):
             raise RuntimeError("Raspuns produs invalid.")
         value["supplier_external_id"] = external_id
-        return audit_product(value, external_id in accessory_ids)
+        return audit_product(value, expected_sources[external_id])
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(args.workers, 6))) as executor:
         future_map = {executor.submit(fetch, external_id): external_id for external_id in matching_ids}

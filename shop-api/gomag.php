@@ -428,10 +428,11 @@ function boomagParseFeedRows(string $raw): array {
     return $rows;
 }
 
-function boomagFeedRows(array $config, bool $forceRefresh = false): array {
+function boomagFeedRows(array $config, bool $forceRefresh = false, int $maxCacheAgeSeconds = 21600): array {
     $directory = __DIR__ . '/uploads/import';
     $cacheFile = $directory . '/boomag-products.csv';
-    $cacheIsFresh = is_file($cacheFile) && filemtime($cacheFile) >= time() - 21600;
+    $maxCacheAgeSeconds = max(60, min($maxCacheAgeSeconds, 21600));
+    $cacheIsFresh = is_file($cacheFile) && filemtime($cacheFile) >= time() - $maxCacheAgeSeconds;
     if (!$forceRefresh && $cacheIsFresh) {
         $cached = @file_get_contents($cacheFile);
         if (is_string($cached) && strlen($cached) >= 100) return boomagParseFeedRows($cached);
@@ -452,6 +453,112 @@ function boomagFeedRows(array $config, bool $forceRefresh = false): array {
 
 function boomagStockAvailable($value): bool {
     return in_array(mb_strtolower(trim((string)$value)), ['1', 'true', 'yes', 'da', 'in_stock', 'instock', 'in stoc'], true);
+}
+
+function boomagFeedPrice(array $row): ?float {
+    $raw = str_replace([' ', ','], ['', '.'], trim((string)($row['base_price'] ?? '')));
+    if ($raw === '' || !is_numeric($raw)) return null;
+    $price = round((float)$raw, 2);
+    return $price > 0 ? $price : null;
+}
+
+function boomagSalePriceForBase(float $price, ?string $discountType, $discountValue): ?float {
+    $value = $discountValue === null ? 0.0 : (float)$discountValue;
+    if ($value <= 0) return null;
+    if ($discountType === 'fixed') {
+        return $value < $price ? round($price - $value, 2) : null;
+    }
+    return $value < 100 ? round($price * (1 - $value / 100), 2) : null;
+}
+
+function gomagSyncProductFromFeed(PDO $db, array $config, string $idOrSlug): array {
+    $stmt = $db->prepare(
+        'SELECT id, slug, sku, supplier_product_code, source_domain, price, sale_price,
+                discount_type, discount_value, stock_quantity, supplier_stock_quantity,
+                supplier_stock_status, supplier_base_price, supplier_price_difference
+         FROM shop_products
+         WHERE id = ? OR slug = ?
+         LIMIT 1'
+    );
+    $stmt->execute([$idOrSlug, $idOrSlug]);
+    $product = $stmt->fetch();
+    if (!$product || mb_strtolower(trim((string)($product['source_domain'] ?? ''))) !== 'boomag.ro') {
+        return ['synced' => false, 'reason' => 'not_boomag'];
+    }
+
+    $codes = [];
+    foreach ([$product['sku'] ?? '', $product['supplier_product_code'] ?? ''] as $code) {
+        $key = mb_strtolower(trim((string)$code));
+        if ($key !== '') $codes[$key] = true;
+    }
+    if (!$codes) return ['synced' => false, 'reason' => 'missing_code', 'product_id' => (string)$product['id']];
+
+    $feedRow = null;
+    foreach (boomagFeedRows($config, false, 900) as $row) {
+        $key = mb_strtolower(trim((string)($row['sku'] ?? '')));
+        if ($key !== '' && isset($codes[$key])) {
+            $feedRow = $row;
+            break;
+        }
+    }
+    if (!is_array($feedRow)) {
+        return ['synced' => false, 'reason' => 'not_in_feed', 'product_id' => (string)$product['id']];
+    }
+
+    $available = boomagStockAvailable($feedRow['stock_status'] ?? '0');
+    $stock = max(0, (int)floor((float)str_replace(',', '.', trim((string)($feedRow['stock'] ?? '0')))));
+    if (!$available) $stock = 0;
+    $supplierBase = boomagFeedPrice($feedRow);
+    $difference = $product['supplier_price_difference'] === null
+        ? null
+        : round((float)$product['supplier_price_difference'], 2);
+    $currentPrice = round((float)$product['price'], 2);
+    $nextPrice = $currentPrice;
+    if ($supplierBase !== null) {
+        if ($difference === null) $difference = round($currentPrice - $supplierBase, 2);
+        $nextPrice = max(0.01, round($supplierBase + $difference, 2));
+    }
+    $nextSalePrice = boomagSalePriceForBase(
+        $nextPrice,
+        isset($product['discount_type']) ? (string)$product['discount_type'] : null,
+        $product['discount_value'] ?? null
+    );
+    $priceChanged = abs($nextPrice - $currentPrice) >= 0.005
+        || (($product['sale_price'] === null) !== ($nextSalePrice === null))
+        || ($nextSalePrice !== null && abs((float)$product['sale_price'] - $nextSalePrice) >= 0.005);
+    $stockChanged = (int)$product['stock_quantity'] !== $stock
+        || (int)$product['supplier_stock_quantity'] !== $stock
+        || (bool)$product['supplier_stock_status'] !== $available;
+
+    $update = $db->prepare(
+        'UPDATE shop_products
+         SET supplier_base_price = ?, supplier_price_difference = ?, supplier_price_updated_at = NOW(),
+             price = ?, sale_price = ?, stock_mode = "tracked", stock_quantity = ?,
+             supplier_stock_quantity = ?, supplier_stock_status = ?, supplier_stock_updated_at = NOW(),
+             updated_at = updated_at
+         WHERE id = ?'
+    );
+    $update->execute([
+        $supplierBase,
+        $difference,
+        $nextPrice,
+        $nextSalePrice,
+        $stock,
+        $stock,
+        $available ? 1 : 0,
+        (string)$product['id'],
+    ]);
+
+    return [
+        'synced' => true,
+        'product_id' => (string)$product['id'],
+        'price_changed' => $priceChanged,
+        'stock_changed' => $stockChanged,
+        'supplier_base_price' => $supplierBase,
+        'price_difference' => $difference,
+        'price' => $nextPrice,
+        'stock' => $stock,
+    ];
 }
 
 function boomagNormalizeKey(string $value): string {

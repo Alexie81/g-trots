@@ -8,6 +8,7 @@ import json
 import os
 import re
 import threading
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -82,6 +83,24 @@ ACCESSORY_CARE = {
     "mirror": "Curăță lentila cu o lavetă moale și verifică periodic articulația și prinderea pe ghidon.",
     "accessory": "Curăță produsul conform materialului său și verifică periodic prinderile, uzura și stabilitatea.",
 }
+PUBLIC_TITLE_FALLBACKS = {
+    "57651": "Stop spate cu semnalizări pentru trotinetă electrică",
+}
+SPECIFICATION_GROUP_RENAMES = {
+    "date tehnice extrase": "Detalii tehnice",
+}
+HIDDEN_SPECIFICATION_GROUPS = {"stoc furnizor"}
+HIDDEN_SPECIFICATION_LABELS = {
+    "cantitate in feed",
+    "marci asociate pentru filtrare",
+    "marci conditionate",
+    "status",
+}
+VARIANT_SPECIFICATION_TERMS = (
+    "culoare", "pozitie", "varianta", "model", "dimensiune", "diametru", "lungime",
+    "latime", "inaltime", "grosime", "tensiune", "putere", "material", "mufa",
+    "conector", "numar pini", "tip prindere", "marime",
+)
 
 
 def clean_string(value: str) -> str:
@@ -134,7 +153,7 @@ def accessory_faq(product: dict[str, Any]) -> list[dict[str, str]]:
     checks = accessory_checks(product)
     usage = accessory_family_text(product, ACCESSORY_USAGE)
     care = accessory_family_text(product, ACCESSORY_CARE)
-    brands = [str(value).strip() for value in product.get("compatible_brands_for_filtering") or [] if str(value).strip()]
+    brands = confirmed_compatibility_names(product)
     brand_copy = ", ".join(brands[:6])
     if family == "helmet":
         compatibility = "Marca trotinetei nu stabilește mărimea căștii. Potrivirea se verifică după circumferința capului, forma interioară, reglaje și informațiile de protecție declarate."
@@ -251,11 +270,159 @@ def word_count(value: Any) -> int:
 
 
 def normalized(value: Any) -> str:
-    return " ".join(re.findall(r"[^\W_]+", str(value or "").lower(), flags=re.UNICODE))
+    folded = unicodedata.normalize("NFKD", str(value or "").lower())
+    without_marks = "".join(character for character in folded if not unicodedata.combining(character))
+    return " ".join(re.findall(r"[^\W_]+", without_marks, flags=re.UNICODE))
 
 
-def fit_meta_title(product: dict[str, Any]) -> str:
-    original = clean_string(str(product.get("meta_title") or product.get("title") or "").strip())
+def public_identifiers(product: dict[str, Any]) -> list[str]:
+    values = [
+        str(product.get("supplier_sku") or "").strip(),
+        str(product.get("supplier_external_id") or "").strip(),
+        str(product.get("ean") or "").strip(),
+    ]
+    return sorted({value for value in values if len(value) >= 4}, key=len, reverse=True)
+
+
+def remove_public_identifiers(value: Any, product: dict[str, Any]) -> str:
+    result = clean_string(str(value or "").strip())
+    for identifier in public_identifiers(product):
+        escaped = re.escape(identifier)
+        result = re.sub(
+            rf"\s*(?:[|–—-]\s*)?(?:(?:sku|cod(?:ul)?(?:\s+(?:produs|furnizor))?|ean|reper)\s*[:#-]?\s*)?(?<![\w]){escaped}(?![\w])",
+            " ",
+            result,
+            flags=re.IGNORECASE,
+        )
+    result = re.sub(r"\(\s*\)|\[\s*\]", " ", result)
+    result = re.sub(r"\s+[|–—-]\s*$", "", result)
+    result = re.sub(r"^[|–—-]\s+", "", result)
+    result = re.sub(r"\s+([,.;:])", r"\1", result)
+    return re.sub(r"\s+", " ", result).strip(" |–—-,.;:")
+
+
+def base_public_title(product: dict[str, Any]) -> str:
+    title = remove_public_identifiers(product.get("title"), product)
+    if not title:
+        title = remove_public_identifiers(product.get("original_name"), product)
+    if not title:
+        title = PUBLIC_TITLE_FALLBACKS.get(str(product.get("supplier_external_id") or "").strip(), "")
+    if not title:
+        category = str(product.get("category_name") or "Produs pentru trotinetă electrică").strip()
+        family = str(product.get("product_family") or "").strip().replace("_", " ")
+        title = f"{category} {family}".strip()
+    return title[:180].strip()
+
+
+def title_variant_values(product: dict[str, Any]) -> list[str]:
+    identifiers = {normalized(value) for value in public_identifiers(product)}
+    result: list[str] = []
+    for item in product.get("specifications") or []:
+        if not isinstance(item, dict):
+            continue
+        label = normalized(item.get("label"))
+        value = str(item.get("value") or "").strip()
+        if not value or normalized(value) in identifiers or len(value) > 48:
+            continue
+        if any(term in label for term in VARIANT_SPECIFICATION_TERMS):
+            if normalized(value) not in {normalized(existing) for existing in result}:
+                result.append(value)
+    brand = str(product.get("brand_name") or "").strip()
+    if brand:
+        result.append(brand)
+    return result
+
+
+def prepare_public_titles(products: list[dict[str, Any]]) -> dict[str, str]:
+    titles = {
+        str(product.get("supplier_external_id") or index): base_public_title(product)
+        for index, product in enumerate(products)
+    }
+    grouped: dict[str, list[tuple[str, dict[str, Any]]]] = {}
+    for index, product in enumerate(products):
+        key = str(product.get("supplier_external_id") or index)
+        grouped.setdefault(normalized(titles[key]), []).append((key, product))
+    for matches in grouped.values():
+        if len(matches) < 2:
+            continue
+        used: set[str] = set()
+        unresolved: list[tuple[str, dict[str, Any]]] = []
+        for key, product in matches:
+            base = titles[key]
+            selected = ""
+            for variant in title_variant_values(product):
+                candidate = f"{base} – {variant}"[:180].strip()
+                if normalized(variant) in normalized(base) or normalized(candidate) in used:
+                    continue
+                selected = candidate
+                break
+            if selected:
+                titles[key] = selected
+                used.add(normalized(selected))
+            else:
+                unresolved.append((key, product))
+        for position, (key, _product) in enumerate(unresolved, start=1):
+            candidate = titles[key]
+            if normalized(candidate) in used or len(unresolved) > 1:
+                candidate = f"{candidate} – varianta {position}"[:180].strip()
+            titles[key] = candidate
+            used.add(normalized(candidate))
+    return titles
+
+
+def confirmed_compatibility_names(product: dict[str, Any]) -> list[str]:
+    if is_accessory(product):
+        return []
+    compatibility = product.get("compatibility") if isinstance(product.get("compatibility"), dict) else {}
+    candidates: list[str] = []
+    for value in compatibility.get("confirmed_brand_names") or []:
+        candidates.append(str(value).strip())
+    for item in compatibility.get("brand_associations") or []:
+        if not isinstance(item, dict) or not item.get("technical_compatibility_confirmed"):
+            continue
+        if str(item.get("confidence") or "").strip().lower() != "high":
+            continue
+        candidates.append(str(item.get("brand") or "").strip())
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in candidates:
+        key = normalized(value)
+        if value and key not in seen:
+            seen.add(key)
+            result.append(value)
+    return result
+
+
+def clean_specifications(product: dict[str, Any]) -> list[dict[str, str]]:
+    confirmed = confirmed_compatibility_names(product)
+    result: list[dict[str, str]] = []
+    for item in product.get("specifications") or []:
+        if not isinstance(item, dict):
+            continue
+        group = str(item.get("group") or "Specificații").strip()
+        label = str(item.get("label") or "").strip()
+        value = str(item.get("value") or "").strip()
+        group_key = normalized(group)
+        label_key = normalized(label)
+        if group_key in HIDDEN_SPECIFICATION_GROUPS or label_key in HIDDEN_SPECIFICATION_LABELS:
+            continue
+        if label_key == "marci confirmate":
+            if not confirmed:
+                continue
+            value = ", ".join(confirmed)
+        if not label or not value:
+            continue
+        group = SPECIFICATION_GROUP_RENAMES.get(group_key, group)
+        result.append({"group": group, "label": label, "value": value})
+    return result
+
+
+def fit_meta_title(product: dict[str, Any], public_title: str) -> str:
+    original = remove_public_identifiers(product.get("meta_title") or public_title, product)
+    if not original:
+        original = public_title
+    if normalized(original) == normalized(base_public_title(product)) and normalized(public_title) != normalized(original):
+        original = public_title
     if 35 <= len(original) <= 70:
         return original
     additions = [
@@ -278,6 +445,47 @@ def fit_meta_title(product: dict[str, Any]) -> str:
         return candidate
     clipped = candidate[:70].rsplit(" ", 1)[0].rstrip(" –|,.;:")
     return clipped if len(clipped) >= 15 else candidate[:70].rstrip()
+
+
+def compact_meta_title(public_title: str) -> str:
+    if len(public_title) <= 70:
+        return public_title
+    tail = public_title[-27:].lstrip(" ,.;:–—-")
+    if " " in tail and len(tail) > 22:
+        tail = tail.split(" ", 1)[1].lstrip(" ,.;:–—-")
+    available = max(20, 70 - len(tail) - 3)
+    start = public_title[:available].rsplit(" ", 1)[0].rstrip(" ,.;:–—-")
+    return f"{start} … {tail}"[:70].rstrip(" ,.;:–—-")
+
+
+def prepare_public_meta_titles(
+    products: list[dict[str, Any]], public_titles: dict[str, str]
+) -> dict[str, str]:
+    metas: dict[str, str] = {}
+    sources: dict[str, dict[str, Any]] = {}
+    for index, product in enumerate(products):
+        key = str(product.get("supplier_external_id") or index)
+        sources[key] = product
+        metas[key] = fit_meta_title(product, public_titles[key])
+
+    for _attempt in range(2):
+        grouped: dict[str, list[str]] = {}
+        for key, value in metas.items():
+            grouped.setdefault(normalized(value), []).append(key)
+        duplicates = [keys for keys in grouped.values() if len(keys) > 1]
+        if not duplicates:
+            break
+        for keys in duplicates:
+            for position, key in enumerate(keys, start=1):
+                candidate = compact_meta_title(public_titles[key])
+                if _attempt or normalized(candidate) in {
+                    normalized(metas[other]) for other in keys if other != key
+                }:
+                    suffix = f" – varianta {position}"
+                    prefix = candidate[: 70 - len(suffix)].rsplit(" ", 1)[0].rstrip(" ,.;:–—-")
+                    candidate = prefix + suffix
+                metas[key] = candidate
+    return metas
 
 
 def image_alt_texts(product: dict[str, Any]) -> list[str]:
@@ -331,8 +539,13 @@ def concise_questions(product: dict[str, Any]) -> list[dict[str, str]]:
     return result
 
 
-def payload_for(product: dict[str, Any]) -> dict[str, Any]:
+def payload_for(
+    product: dict[str, Any],
+    public_title: str | None = None,
+    public_meta_title: str | None = None,
+) -> dict[str, Any]:
     cleaned = clean_tree(product)
+    public_title = public_title or base_public_title(cleaned)
     accessory = is_accessory(cleaned)
     short_description = str(cleaned.get("short_description") or "").strip()
     description_html = str(cleaned.get("description_html") or "").strip()
@@ -343,16 +556,16 @@ def payload_for(product: dict[str, Any]) -> dict[str, Any]:
         meta_description = fit_accessory_meta_description(meta_description, cleaned)
     return {
         "supplier_external_id": str(cleaned.get("supplier_external_id") or "").strip(),
-        "name": str(cleaned.get("title") or "").strip(),
+        "name": public_title,
         "slug": str(cleaned.get("slug") or "").strip(),
         "short_description": short_description,
         "description_title": str(cleaned.get("description_title") or "").strip(),
         "description_html": description_html,
-        "meta_title": fit_meta_title(cleaned),
+        "meta_title": public_meta_title or fit_meta_title(cleaned, public_title),
         "meta_description": meta_description,
-        "specifications": list(cleaned.get("specifications") or []),
+        "specifications": clean_specifications(cleaned),
         "questions": concise_questions(cleaned),
-        "compatibility_names": list(cleaned.get("compatible_brands_for_filtering") or []),
+        "compatibility_names": confirmed_compatibility_names(cleaned),
         "image_alt_texts": image_alt_texts(cleaned),
         "research_sources": list(cleaned.get("research_sources") or []),
         "final_catalog": True,
@@ -380,21 +593,48 @@ def validate_catalog(catalog_path: Path, validation_path: Path) -> tuple[list[di
         "title": set(),
         "slug": set(),
         "short_description": set(),
+        "meta_title": set(),
         "meta_description": set(),
     }
     payloads: list[dict[str, Any]] = []
-    repairs = {"semantic_phrases": 0, "meta_titles": 0}
+    repairs = {
+        "semantic_phrases": 0,
+        "meta_titles": 0,
+        "public_titles_without_codes": 0,
+        "supplier_stock_specifications_removed": 0,
+        "compatibility_associations_reduced": 0,
+    }
+    public_titles = prepare_public_titles([item for item in products if isinstance(item, dict)])
+    public_meta_titles = prepare_public_meta_titles(
+        [item for item in products if isinstance(item, dict)], public_titles
+    )
     for index, product in enumerate(products):
         if not isinstance(product, dict):
             errors.append(f"Pozitia {index}: produs invalid.")
             continue
         external_id = str(product.get("supplier_external_id") or "").strip()
         before = json.dumps(product, ensure_ascii=False)
-        payload = payload_for(product)
+        payload = payload_for(
+            product,
+            public_titles.get(external_id),
+            public_meta_titles.get(external_id),
+        )
         after = json.dumps(payload, ensure_ascii=False)
         repairs["semantic_phrases"] += len(re.findall(r"componenta de tip componentă", before, flags=re.IGNORECASE))
         if payload["meta_title"] != str(product.get("meta_title") or "").strip():
             repairs["meta_titles"] += 1
+        if payload["name"] != str(product.get("title") or "").strip():
+            repairs["public_titles_without_codes"] += 1
+        source_specs = [item for item in product.get("specifications") or [] if isinstance(item, dict)]
+        repairs["supplier_stock_specifications_removed"] += sum(
+            normalized(item.get("group")) in HIDDEN_SPECIFICATION_GROUPS
+            or normalized(item.get("label")) == "cantitate in feed"
+            for item in source_specs
+        )
+        repairs["compatibility_associations_reduced"] += max(
+            0,
+            len(product.get("compatible_brands_for_filtering") or []) - len(payload["compatibility_names"]),
+        )
         required = (
             "supplier_external_id", "name", "slug", "short_description", "description_title",
             "description_html", "meta_title", "meta_description",
@@ -411,8 +651,8 @@ def validate_catalog(catalog_path: Path, validation_path: Path) -> tuple[list[di
             errors.append(f"Produs {external_id}: meta titlu in afara limitei.")
         if not 120 <= text_length(payload["meta_description"]) <= 180:
             errors.append(f"Produs {external_id}: meta descriere in afara limitei.")
-        if len(payload["specifications"]) < 8:
-            errors.append(f"Produs {external_id}: mai putin de 8 specificatii.")
+        if len(payload["specifications"]) < 5:
+            errors.append(f"Produs {external_id}: mai putin de 5 specificatii publice utile.")
         if not 5 <= len(payload["questions"]) <= 8:
             errors.append(f"Produs {external_id}: numar FAQ invalid.")
         if not payload["research_sources"]:
@@ -425,6 +665,23 @@ def validate_catalog(catalog_path: Path, validation_path: Path) -> tuple[list[di
             errors.append(f"Produs {external_id}: taguri HTML nepermise: {', '.join(sorted(unsupported))}.")
         if "componenta de tip componentă" in after.lower():
             errors.append(f"Produs {external_id}: formularea semantica nu a fost curatata.")
+        for identifier in public_identifiers(product):
+            identifier_pattern = re.compile(rf"(?<![\w]){re.escape(identifier)}(?![\w])", re.IGNORECASE)
+            if identifier_pattern.search(payload["name"]):
+                errors.append(f"Produs {external_id}: codul {identifier} apare in titlul public.")
+            if identifier_pattern.search(payload["meta_title"]):
+                errors.append(f"Produs {external_id}: codul {identifier} apare in meta titlu.")
+        for specification in payload["specifications"]:
+            if normalized(specification.get("group")) in HIDDEN_SPECIFICATION_GROUPS:
+                errors.append(f"Produs {external_id}: stocul furnizorului apare in specificatii.")
+            if normalized(specification.get("label")) in HIDDEN_SPECIFICATION_LABELS:
+                errors.append(f"Produs {external_id}: specificatie interna publicata ({specification.get('label')}).")
+            if normalized(specification.get("group")) == "date tehnice extrase":
+                errors.append(f"Produs {external_id}: denumirea veche a grupei tehnice este inca prezenta.")
+        confirmed_keys = {normalized(value) for value in confirmed_compatibility_names(product)}
+        payload_keys = {normalized(value) for value in payload["compatibility_names"]}
+        if payload_keys != confirmed_keys:
+            errors.append(f"Produs {external_id}: asocierile de compatibilitate nu sunt strict confirmate.")
         visible_copy = " ".join([
             str(payload["name"]),
             str(payload["short_description"]),
@@ -450,6 +707,7 @@ def validate_catalog(catalog_path: Path, validation_path: Path) -> tuple[list[di
             ("title", "name"),
             ("slug", "slug"),
             ("short_description", "short_description"),
+            ("meta_title", "meta_title"),
             ("meta_description", "meta_description"),
         ):
             value = product.get(source_field) if payload_field is None else payload.get(payload_field)

@@ -63,5 +63,14 @@ Dezactivarea unei surse ascunde imediat toate produsele sale din rutele publice,
 fără să le șteargă din CRM. Ștergerea definitivă a unui produs elimină imaginile
 încărcate de pe disc și păstrează în comenzile istorice datele comerciale salvate.
 
+Pentru produsele Boomag nu este necesar un cron. La deschiderea paginii publice a
+produsului, API-ul verifică rândul corespunzător din feed (cache comun de maximum
+15 minute), actualizează stocul și prețul furnizorului și păstrează diferența
+comercială G-Trots. Prețul public devine `preț furnizor + diferență G-Trots`.
+Prima verificare inițializează diferența din prețul public existent, astfel încât
+activarea mecanismului să nu modifice brusc prețurile deja stabilite. Dacă feedul
+este temporar indisponibil, pagina folosește ultima valoare validă și rămâne
+accesibilă.
+
 Fișierul `.user.ini` permite cereri suficient de mari pentru încărcarea simultană
 a celor 12 imagini, respectând limita de 6 MB pentru fiecare imagine impusă de API.

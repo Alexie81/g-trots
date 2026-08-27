@@ -45,7 +45,9 @@ function shopConfig(): array {
         'gomag_shop_url' => 'https://www.boomag.ro',
         'boomag_feed_url' => 'https://www.boomag.ro/feed/doctor-trotineta.csv',
         'boomag_import_key' => '',
-        'google_client_id' => '',
+        // Client IDs are public identifiers used by Google Identity Services.
+        // The OAuth client secret is intentionally never stored in this application.
+        'google_client_id' => '540664392313-id3lsk8ah1u9j8k5oagt3153t62albqp.apps.googleusercontent.com',
     ];
 
     $config = $defaults;
@@ -147,8 +149,47 @@ function shopDb(array $config): PDO {
         $db = new PDO("mysql:host={$host};dbname={$name};charset=utf8mb4", $user, $pass, $options);
     }
 
-    ensureShopSchema($db);
+    ensureShopSchemaIsCurrent($db);
     return $db;
+}
+
+/**
+ * Schema migrations are intentionally expensive (many metadata checks). Running
+ * them for every mobile API request made simple catalog screens wait seconds.
+ * Keep one tiny version check per request and execute the full migration only
+ * after an actual schema version bump.
+ */
+function ensureShopSchemaIsCurrent(PDO $db): void {
+    $schemaVersion = 2026082801;
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_schema_meta (
+            meta_key VARCHAR(80) NOT NULL PRIMARY KEY,
+            meta_value VARCHAR(120) NOT NULL,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $stmt = $db->prepare('SELECT meta_value FROM shop_schema_meta WHERE meta_key = ? LIMIT 1');
+    $stmt->execute(['schema_version']);
+    if ((int)$stmt->fetchColumn() >= $schemaVersion) return;
+
+    $lockName = 'g-trots-shop-schema-migration';
+    $lock = $db->prepare('SELECT GET_LOCK(?, 15)');
+    $lock->execute([$lockName]);
+    if ((int)$lock->fetchColumn() !== 1) throw new RuntimeException('Actualizarea bazei SHOP este ocupată. Reîncearcă imediat.');
+    try {
+        $stmt->execute(['schema_version']);
+        if ((int)$stmt->fetchColumn() < $schemaVersion) {
+            ensureShopSchema($db);
+            $save = $db->prepare(
+                'INSERT INTO shop_schema_meta (meta_key, meta_value) VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE meta_value = VALUES(meta_value)'
+            );
+            $save->execute(['schema_version', (string)$schemaVersion]);
+        }
+    } finally {
+        $release = $db->prepare('SELECT RELEASE_LOCK(?)');
+        $release->execute([$lockName]);
+    }
 }
 
 function ensureShopSchema(PDO $db): void {
@@ -452,6 +493,38 @@ function ensureShopSchema(PDO $db): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_company_settings (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            legal_name VARCHAR(180) NOT NULL DEFAULT '',
+            trade_name VARCHAR(180) NOT NULL DEFAULT 'G-Trots România',
+            cui VARCHAR(60) NOT NULL DEFAULT '',
+            registration_number VARCHAR(80) NOT NULL DEFAULT '',
+            address VARCHAR(255) NOT NULL DEFAULT '',
+            city VARCHAR(120) NOT NULL DEFAULT '',
+            county VARCHAR(120) NOT NULL DEFAULT '',
+            postal_code VARCHAR(30) NOT NULL DEFAULT '',
+            country VARCHAR(80) NOT NULL DEFAULT 'România',
+            email VARCHAR(180) NOT NULL DEFAULT '',
+            phone VARCHAR(50) NOT NULL DEFAULT '',
+            website VARCHAR(180) NOT NULL DEFAULT 'https://g-trots.ro',
+            bank_name VARCHAR(180) NOT NULL DEFAULT '',
+            iban VARCHAR(80) NOT NULL DEFAULT '',
+            share_capital VARCHAR(80) NOT NULL DEFAULT '',
+            stamp_path VARCHAR(500) NULL,
+            is_default TINYINT(1) NOT NULL DEFAULT 0,
+            vat_payer TINYINT(1) NOT NULL DEFAULT 0,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    if (!$db->query("SHOW COLUMNS FROM shop_company_settings LIKE 'stamp_path'")->fetch()) {
+        $db->exec("ALTER TABLE shop_company_settings ADD COLUMN stamp_path VARCHAR(500) NULL AFTER share_capital");
+    }
+    if (!$db->query("SHOW COLUMNS FROM shop_company_settings LIKE 'is_default'")->fetch()) {
+        $db->exec("ALTER TABLE shop_company_settings ADD COLUMN is_default TINYINT(1) NOT NULL DEFAULT 0 AFTER stamp_path");
+    }
+    $db->exec("ALTER TABLE shop_company_settings MODIFY id INT UNSIGNED NOT NULL AUTO_INCREMENT");
+    $db->exec("INSERT IGNORE INTO shop_company_settings (id, is_default) VALUES (1, 1)");
+    $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_orders (
             id CHAR(36) NOT NULL PRIMARY KEY,
             order_number VARCHAR(40) NOT NULL UNIQUE,
@@ -624,6 +697,7 @@ function ensureShopSchema(PDO $db): void {
             audience VARCHAR(20) NOT NULL DEFAULT 'all',
             scope VARCHAR(20) NOT NULL DEFAULT 'global',
             product_id CHAR(36) NULL,
+            usage_mode VARCHAR(30) NOT NULL DEFAULT 'unlimited',
             auto_apply TINYINT(1) NOT NULL DEFAULT 1,
             show_banner TINYINT(1) NOT NULL DEFAULT 1,
             banner_text VARCHAR(260) NULL,
@@ -639,7 +713,8 @@ function ensureShopSchema(PDO $db): void {
         'audience' => "VARCHAR(20) NOT NULL DEFAULT 'all' AFTER min_order_value",
         'scope' => "VARCHAR(20) NOT NULL DEFAULT 'global' AFTER audience",
         'product_id' => 'CHAR(36) NULL AFTER scope',
-        'auto_apply' => 'TINYINT(1) NOT NULL DEFAULT 1 AFTER product_id',
+        'usage_mode' => "VARCHAR(30) NOT NULL DEFAULT 'unlimited' AFTER product_id",
+        'auto_apply' => 'TINYINT(1) NOT NULL DEFAULT 1 AFTER usage_mode',
         'show_banner' => 'TINYINT(1) NOT NULL DEFAULT 1 AFTER auto_apply',
         'banner_text' => 'VARCHAR(260) NULL AFTER show_banner',
     ];
@@ -656,6 +731,24 @@ function ensureShopSchema(PDO $db): void {
             used_at DATETIME NULL,
             PRIMARY KEY (customer_id, coupon_id),
             INDEX idx_shop_customer_coupons_coupon (coupon_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_coupon_products (
+            coupon_id CHAR(36) NOT NULL,
+            product_id CHAR(36) NOT NULL,
+            PRIMARY KEY (coupon_id, product_id),
+            INDEX idx_shop_coupon_products_product (product_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_coupon_device_usage (
+            coupon_id CHAR(36) NOT NULL,
+            device_hash CHAR(64) NOT NULL,
+            order_id CHAR(36) NULL,
+            used_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (coupon_id, device_hash),
+            INDEX idx_shop_coupon_device_order (order_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     $db->exec(
@@ -1126,7 +1219,7 @@ function saveShopImage(?string $encoded, string $folder = 'products'): ?string {
 
 function removeShopImage(?string $path): bool {
     $path = trim((string)$path);
-    if ($path === '' || !preg_match('#^uploads/(products|descriptions)/[a-f0-9]{32}\.(jpg|png|webp|gif)$#i', $path)) return false;
+    if ($path === '' || !preg_match('#^uploads/(products|descriptions|company)/[a-f0-9]{32}\.(jpg|png|webp|gif)$#i', $path)) return false;
     $absolute = __DIR__ . '/' . $path;
     return is_file($absolute) ? @unlink($absolute) : false;
 }
@@ -1309,6 +1402,50 @@ function productStockOrderSql(): string {
                 WHEN p.stock_quantity > 0 THEN 1
                 ELSE 2
             END';
+}
+
+function productListSql(): string {
+    return 'SELECT p.id, p.category_id, p.manufacturer_id, p.source_id, p.sku,
+                   p.supplier_product_code, p.ean, p.source_domain, p.name, p.slug,
+                   p.price, p.sale_price, p.discount_type, p.discount_value, p.currency,
+                   p.stock_mode, p.stock_quantity, p.supplier_stock_quantity,
+                   p.accounting_stock_quantity, p.low_stock_threshold, p.is_active,
+                   p.is_featured, c.name AS category_name, m.name AS manufacturer_name,
+                   s.name AS source_name,
+                   (SELECT pi.image_path FROM shop_product_images pi
+                    WHERE pi.product_id = p.id
+                    ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS image_path
+            FROM shop_products p
+            LEFT JOIN shop_categories c ON c.id = p.category_id
+            LEFT JOIN shop_manufacturers m ON m.id = p.manufacturer_id
+            LEFT JOIN shop_product_sources s ON s.id = p.source_id';
+}
+
+function productListRows(array $rows, array $config): array {
+    return array_map(static function (array $row) use ($config): array {
+        $path = trim((string)($row['image_path'] ?? ''));
+        unset($row['image_path']);
+        $row['id'] = (string)$row['id'];
+        $row['category_id'] = empty($row['category_id']) ? null : (string)$row['category_id'];
+        $row['manufacturer_id'] = empty($row['manufacturer_id']) ? null : (string)$row['manufacturer_id'];
+        $row['source_id'] = empty($row['source_id']) ? null : (string)$row['source_id'];
+        $row['price'] = (float)($row['price'] ?? 0);
+        $row['sale_price'] = $row['sale_price'] === null ? null : (float)$row['sale_price'];
+        $row['discount_value'] = $row['discount_value'] === null ? null : (float)$row['discount_value'];
+        $row['stock_quantity'] = (int)($row['stock_quantity'] ?? 0);
+        $row['supplier_stock_quantity'] = (int)($row['supplier_stock_quantity'] ?? 0);
+        $row['accounting_stock_quantity'] = (int)($row['accounting_stock_quantity'] ?? 0);
+        $row['low_stock_threshold'] = (int)($row['low_stock_threshold'] ?? 0);
+        $row['is_active'] = (bool)($row['is_active'] ?? false);
+        $row['is_featured'] = (bool)($row['is_featured'] ?? false);
+        $row['images'] = $path === '' ? [] : [[
+            'id' => 'primary-' . (string)$row['id'],
+            'url' => preg_match('#^https?://#i', $path) ? $path : rtrim((string)$config['public_base_url'], '/') . '/' . ltrim($path, '/'),
+            'alt_text' => (string)($row['name'] ?? ''),
+            'sort_order' => 0,
+        ]];
+        return $row;
+    }, $rows);
 }
 
 function reviewRow(array $row): array {
@@ -1762,6 +1899,45 @@ function paymentSettings(PDO $db, ?array $config = null): array {
     ];
 }
 
+function companySettingsRow(array $row, array $config): array {
+    $row['id'] = (int)($row['id'] ?? 0);
+    $row['vat_payer'] = (bool)($row['vat_payer'] ?? false);
+    $row['is_default'] = (bool)($row['is_default'] ?? false);
+    $row['stamp_url'] = !empty($row['stamp_path']) ? rtrim((string)$config['public_base_url'], '/') . '/' . ltrim((string)$row['stamp_path'], '/') : null;
+    return $row;
+}
+
+function companySettingsList(PDO $db, array $config): array {
+    return array_map(fn(array $row): array => companySettingsRow($row, $config), $db->query('SELECT * FROM shop_company_settings ORDER BY is_default DESC, legal_name ASC, id ASC')->fetchAll());
+}
+
+function companySettingsPayload(array $body): array {
+    $field = static fn(string $key, int $max): string => mb_substr(trim((string)($body[$key] ?? '')), 0, $max);
+    $email = $field('email', 180);
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) throw new InvalidArgumentException('Adresa de e-mail a firmei nu este validă.');
+    $website = $field('website', 180);
+    if ($website !== '' && !filter_var($website, FILTER_VALIDATE_URL)) throw new InvalidArgumentException('Adresa website-ului nu este validă.');
+    return [
+        'legal_name' => $field('legal_name', 180),
+        'trade_name' => $field('trade_name', 180),
+        'cui' => $field('cui', 60),
+        'registration_number' => $field('registration_number', 80),
+        'address' => $field('address', 255),
+        'city' => $field('city', 120),
+        'county' => $field('county', 120),
+        'postal_code' => $field('postal_code', 30),
+        'country' => $field('country', 80),
+        'email' => $email,
+        'phone' => $field('phone', 50),
+        'website' => $website,
+        'bank_name' => $field('bank_name', 180),
+        'iban' => strtoupper(str_replace(' ', '', $field('iban', 80))),
+        'share_capital' => $field('share_capital', 80),
+        'vat_payer' => boolValue($body['vat_payer'] ?? false),
+        'is_default' => boolValue($body['is_default'] ?? false),
+    ];
+}
+
 function shippingRow(array $row): array {
     $row['cost'] = (float)$row['cost'];
     $row['free_above'] = $row['free_above'] === null ? null : (float)$row['free_above'];
@@ -1805,15 +1981,24 @@ function promotionPayload(PDO $db, array $body): array {
     $discountValue = round((float)($body['discount_value'] ?? 0), 2);
     $audience = trim((string)($body['audience'] ?? 'all'));
     $scope = trim((string)($body['scope'] ?? 'global'));
-    $productId = $scope === 'product' ? trim((string)($body['product_id'] ?? '')) : null;
+    $usageMode = trim((string)($body['usage_mode'] ?? 'unlimited'));
+    $rawProductIds = is_array($body['product_ids'] ?? null) ? $body['product_ids'] : [];
+    if (!$rawProductIds && trim((string)($body['product_id'] ?? '')) !== '') $rawProductIds = [$body['product_id']];
+    $productIds = $scope === 'product'
+        ? array_values(array_unique(array_filter(array_map(static fn($value): string => trim((string)$value), $rawProductIds))))
+        : [];
+    $productId = $productIds[0] ?? null;
     if ($code === '' || $title === '') throw new InvalidArgumentException('Completează codul și titlul reducerii.');
     if (!in_array($discountType, ['percent', 'fixed'], true) || $discountValue <= 0 || ($discountType === 'percent' && $discountValue > 100)) throw new InvalidArgumentException('Valoarea reducerii nu este validă.');
     if (!in_array($audience, ['all', 'registered'], true)) throw new InvalidArgumentException('Publicul reducerii nu este valid.');
     if (!in_array($scope, ['global', 'product'], true)) throw new InvalidArgumentException('Tipul aplicării nu este valid.');
+    if (!in_array($usageMode, ['unlimited', 'once_per_customer', 'once_per_device'], true)) throw new InvalidArgumentException('Limita de utilizare nu este validă.');
     if ($scope === 'product') {
-        $exists = $db->prepare('SELECT id FROM shop_products WHERE id = ?');
-        $exists->execute([$productId]);
-        if (!$exists->fetchColumn()) throw new InvalidArgumentException('Alege un produs valid pentru reducere.');
+        if (!$productIds || count($productIds) > 2500) throw new InvalidArgumentException('Alege cel puțin un produs valid pentru reducere.');
+        $placeholders = implode(',', array_fill(0, count($productIds), '?'));
+        $exists = $db->prepare("SELECT COUNT(*) FROM shop_products WHERE id IN ({$placeholders})");
+        $exists->execute($productIds);
+        if ((int)$exists->fetchColumn() !== count($productIds)) throw new InvalidArgumentException('Unul dintre produsele selectate nu mai există.');
     }
     $normalizeDate = static function ($value): ?string {
         $value = trim((string)$value);
@@ -1835,6 +2020,8 @@ function promotionPayload(PDO $db, array $body): array {
         'audience' => $audience,
         'scope' => $scope,
         'product_id' => $productId,
+        'product_ids' => $productIds,
+        'usage_mode' => $usageMode,
         'auto_apply' => boolValue($body['auto_apply'] ?? true, true),
         'show_banner' => boolValue($body['show_banner'] ?? true, true),
         'banner_text' => mb_substr(trim((string)($body['banner_text'] ?? $title)), 0, 260),
@@ -1844,10 +2031,27 @@ function promotionPayload(PDO $db, array $body): array {
     ];
 }
 
-function promotionRow(array $row): array {
+function promotionProductIds(PDO $db, string $couponId, ?string $legacyProductId = null): array {
+    $stmt = $db->prepare('SELECT product_id FROM shop_coupon_products WHERE coupon_id = ? ORDER BY product_id ASC');
+    $stmt->execute([$couponId]);
+    $ids = array_values(array_filter(array_map('strval', $stmt->fetchAll(PDO::FETCH_COLUMN))));
+    if (!$ids && $legacyProductId) $ids = [$legacyProductId];
+    return $ids;
+}
+
+function syncPromotionProducts(PDO $db, string $couponId, array $productIds): void {
+    $db->prepare('DELETE FROM shop_coupon_products WHERE coupon_id = ?')->execute([$couponId]);
+    if (!$productIds) return;
+    $insert = $db->prepare('INSERT INTO shop_coupon_products (coupon_id, product_id) VALUES (?, ?)');
+    foreach ($productIds as $productId) $insert->execute([$couponId, $productId]);
+}
+
+function promotionRow(PDO $db, array $row): array {
     $row['discount_value'] = (float)$row['discount_value'];
     $row['min_order_value'] = $row['min_order_value'] === null ? null : (float)$row['min_order_value'];
     foreach (['auto_apply', 'show_banner', 'is_active'] as $key) $row[$key] = (bool)$row[$key];
+    $row['usage_mode'] = (string)($row['usage_mode'] ?? 'unlimited');
+    $row['product_ids'] = promotionProductIds($db, (string)$row['id'], $row['product_id'] ? (string)$row['product_id'] : null);
     return $row;
 }
 
@@ -1868,9 +2072,10 @@ function bestOrderPromotion(PDO $db, array $resolvedItems, float $subtotal, ?arr
         if ($promotion['min_order_value'] !== null && $subtotal < (float)$promotion['min_order_value']) continue;
         $eligibleBase = $subtotal;
         if ((string)$promotion['scope'] === 'product') {
+            $eligibleProductIds = promotionProductIds($db, (string)$promotion['id'], $promotion['product_id'] ? (string)$promotion['product_id'] : null);
             $eligibleBase = 0.0;
             foreach ($resolvedItems as $item) {
-                if ((string)($item['product']['id'] ?? '') === (string)$promotion['product_id']) $eligibleBase += (float)$item['line_total'];
+                if (in_array((string)($item['product']['id'] ?? ''), $eligibleProductIds, true)) $eligibleBase += (float)$item['line_total'];
             }
         }
         if ($eligibleBase <= 0) continue;
@@ -2091,7 +2296,10 @@ try {
     $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     $db = shopDb($config);
 
-    if (in_array($action, ['publicProducts', 'publicShopConfig', 'productManagerBootstrap', 'listProducts', 'listInventory', 'getDashboardStats'], true)) {
+    // Only the public catalog needs a periodic full-feed refresh. CRM lists and
+    // lightweight selectors must return immediately; an individual Boomag
+    // product is refreshed separately by the publicProduct action below.
+    if ($action === 'publicProducts') {
         gomagMaybeSyncSupplierStock($db, $config);
     }
 
@@ -2860,7 +3068,7 @@ try {
 
     if ($action === 'listPromotions' && $method === 'GET') {
         $rows = $db->query('SELECT c.*, p.name AS product_name, p.slug AS product_slug FROM shop_coupons c LEFT JOIN shop_products p ON p.id = c.product_id ORDER BY c.is_active DESC, c.created_at DESC')->fetchAll();
-        jsonResponse(array_map('promotionRow', $rows));
+        jsonResponse(array_map(fn(array $row): array => promotionRow($db, $row), $rows));
     }
 
     if ($action === 'createPromotion' && $method === 'POST') {
@@ -2869,11 +3077,12 @@ try {
         $duplicate->execute([$payload['code']]);
         if ($duplicate->fetchColumn()) jsonResponse(['error' => 'Există deja o reducere cu acest cod.'], 409);
         $id = uuidV4();
-        $stmt = $db->prepare('INSERT INTO shop_coupons (id, code, title, description, discount_type, discount_value, min_order_value, audience, scope, product_id, auto_apply, show_banner, banner_text, valid_from, valid_until, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([$id, $payload['code'], $payload['title'], $payload['description'], $payload['discount_type'], $payload['discount_value'], $payload['min_order_value'], $payload['audience'], $payload['scope'], $payload['product_id'], $payload['auto_apply'] ? 1 : 0, $payload['show_banner'] ? 1 : 0, $payload['banner_text'], $payload['valid_from'], $payload['valid_until'], $payload['is_active'] ? 1 : 0]);
+        $stmt = $db->prepare('INSERT INTO shop_coupons (id, code, title, description, discount_type, discount_value, min_order_value, audience, scope, product_id, usage_mode, auto_apply, show_banner, banner_text, valid_from, valid_until, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt->execute([$id, $payload['code'], $payload['title'], $payload['description'], $payload['discount_type'], $payload['discount_value'], $payload['min_order_value'], $payload['audience'], $payload['scope'], $payload['product_id'], $payload['usage_mode'], $payload['auto_apply'] ? 1 : 0, $payload['show_banner'] ? 1 : 0, $payload['banner_text'], $payload['valid_from'], $payload['valid_until'], $payload['is_active'] ? 1 : 0]);
+        syncPromotionProducts($db, $id, $payload['product_ids']);
         $stmt = $db->prepare('SELECT c.*, p.name AS product_name, p.slug AS product_slug FROM shop_coupons c LEFT JOIN shop_products p ON p.id = c.product_id WHERE c.id = ?');
         $stmt->execute([$id]);
-        jsonResponse(promotionRow($stmt->fetch()), 201);
+        jsonResponse(promotionRow($db, $stmt->fetch()), 201);
     }
 
     if ($action === 'updatePromotion' && $method === 'PATCH') {
@@ -2882,16 +3091,19 @@ try {
         $duplicate = $db->prepare('SELECT id FROM shop_coupons WHERE code = ? AND id <> ? LIMIT 1');
         $duplicate->execute([$payload['code'], $id]);
         if ($duplicate->fetchColumn()) jsonResponse(['error' => 'Există deja o reducere cu acest cod.'], 409);
-        $stmt = $db->prepare('UPDATE shop_coupons SET code = ?, title = ?, description = ?, discount_type = ?, discount_value = ?, min_order_value = ?, audience = ?, scope = ?, product_id = ?, auto_apply = ?, show_banner = ?, banner_text = ?, valid_from = ?, valid_until = ?, is_active = ? WHERE id = ?');
-        $stmt->execute([$payload['code'], $payload['title'], $payload['description'], $payload['discount_type'], $payload['discount_value'], $payload['min_order_value'], $payload['audience'], $payload['scope'], $payload['product_id'], $payload['auto_apply'] ? 1 : 0, $payload['show_banner'] ? 1 : 0, $payload['banner_text'], $payload['valid_from'], $payload['valid_until'], $payload['is_active'] ? 1 : 0, $id]);
+        $stmt = $db->prepare('UPDATE shop_coupons SET code = ?, title = ?, description = ?, discount_type = ?, discount_value = ?, min_order_value = ?, audience = ?, scope = ?, product_id = ?, usage_mode = ?, auto_apply = ?, show_banner = ?, banner_text = ?, valid_from = ?, valid_until = ?, is_active = ? WHERE id = ?');
+        $stmt->execute([$payload['code'], $payload['title'], $payload['description'], $payload['discount_type'], $payload['discount_value'], $payload['min_order_value'], $payload['audience'], $payload['scope'], $payload['product_id'], $payload['usage_mode'], $payload['auto_apply'] ? 1 : 0, $payload['show_banner'] ? 1 : 0, $payload['banner_text'], $payload['valid_from'], $payload['valid_until'], $payload['is_active'] ? 1 : 0, $id]);
         if ($stmt->rowCount() === 0) { $exists = $db->prepare('SELECT id FROM shop_coupons WHERE id = ?'); $exists->execute([$id]); if (!$exists->fetchColumn()) jsonResponse(['error' => 'Reducerea nu există.'], 404); }
+        syncPromotionProducts($db, $id, $payload['product_ids']);
         $stmt = $db->prepare('SELECT c.*, p.name AS product_name, p.slug AS product_slug FROM shop_coupons c LEFT JOIN shop_products p ON p.id = c.product_id WHERE c.id = ?'); $stmt->execute([$id]);
-        jsonResponse(promotionRow($stmt->fetch()));
+        jsonResponse(promotionRow($db, $stmt->fetch()));
     }
 
     if ($action === 'deletePromotion' && $method === 'DELETE') {
         $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
         $db->prepare('DELETE FROM shop_customer_coupons WHERE coupon_id = ?')->execute([$id]);
+        $db->prepare('DELETE FROM shop_coupon_device_usage WHERE coupon_id = ?')->execute([$id]);
+        $db->prepare('DELETE FROM shop_coupon_products WHERE coupon_id = ?')->execute([$id]);
         $stmt = $db->prepare('DELETE FROM shop_coupons WHERE id = ?'); $stmt->execute([$id]);
         if ($stmt->rowCount() === 0) jsonResponse(['error' => 'Reducerea nu există.'], 404);
         jsonResponse(['success' => true]);
@@ -3018,19 +3230,48 @@ try {
         ]);
     }
 
-    if ($action === 'productManagerBootstrap' && $method === 'GET') {
-        $products = $db->query(productSelectSql() . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.updated_at DESC, p.name ASC')->fetchAll();
-        $categories = $db->query('SELECT c.*, p.name AS parent_name FROM shop_categories c LEFT JOIN shop_categories p ON p.id = c.parent_id ORDER BY COALESCE(p.name, c.name) ASC, c.parent_id IS NOT NULL ASC, c.name ASC')->fetchAll();
-        $brands = $db->query('SELECT * FROM shop_brands ORDER BY name ASC')->fetchAll();
-        $manufacturers = $db->query('SELECT * FROM shop_manufacturers ORDER BY name ASC')->fetchAll();
-        $sources = $db->query(
+    if ($action === 'productManagerBootstrap' && in_array($method, ['GET', 'POST'], true)) {
+        // Catalogul CRM este paginat chiar pe server. In acest fel telefonul nu
+        // mai descarca si nu mai transforma mii de produse doar pentru a afisa
+        // primele zece randuri.
+        $page = max(1, (int)($body['page'] ?? ($_GET['page'] ?? 1)));
+        $pageSize = max(5, min(100, (int)($body['page_size'] ?? ($_GET['page_size'] ?? 10))));
+        $query = mb_substr(trim((string)($body['q'] ?? ($_GET['q'] ?? ''))), 0, 160);
+        $includeMetadata = filter_var($body['include_metadata'] ?? ($_GET['include_metadata'] ?? true), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        if ($includeMetadata === null) $includeMetadata = true;
+        $where = '';
+        $params = [];
+        if ($query !== '') {
+            $where = ' WHERE (p.name LIKE ? OR p.sku LIKE ? OR p.supplier_product_code LIKE ? OR p.ean LIKE ? OR c.name LIKE ? OR m.name LIKE ?)';
+            $needle = '%' . $query . '%';
+            $params = array_fill(0, 6, $needle);
+        }
+        $countSql = 'SELECT COUNT(*) FROM shop_products p
+                     LEFT JOIN shop_categories c ON c.id = p.category_id
+                     LEFT JOIN shop_manufacturers m ON m.id = p.manufacturer_id' . $where;
+        $countStmt = $db->prepare($countSql);
+        $countStmt->execute($params);
+        $total = (int)$countStmt->fetchColumn();
+        $lastPage = max(1, (int)ceil($total / $pageSize));
+        $page = min($page, $lastPage);
+        $offset = ($page - 1) * $pageSize;
+        $productStmt = $db->prepare(productListSql() . $where . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.updated_at DESC, p.name ASC LIMIT ' . $pageSize . ' OFFSET ' . $offset);
+        $productStmt->execute($params);
+        $products = $productStmt->fetchAll();
+        $categories = $includeMetadata ? $db->query('SELECT c.*, p.name AS parent_name FROM shop_categories c LEFT JOIN shop_categories p ON p.id = c.parent_id ORDER BY COALESCE(p.name, c.name) ASC, c.parent_id IS NOT NULL ASC, c.name ASC')->fetchAll() : [];
+        $brands = $includeMetadata ? $db->query('SELECT * FROM shop_brands ORDER BY name ASC')->fetchAll() : [];
+        $manufacturers = $includeMetadata ? $db->query('SELECT * FROM shop_manufacturers ORDER BY name ASC')->fetchAll() : [];
+        $sources = $includeMetadata ? $db->query(
             'SELECT s.*,
                     (SELECT COUNT(*) FROM shop_products p WHERE p.source_id = s.id) AS product_count
              FROM shop_product_sources s
              ORDER BY s.is_default DESC, s.sort_order ASC, s.name ASC'
-        )->fetchAll();
+        )->fetchAll() : [];
         jsonResponse([
-            'products' => productRows($db, $products, $config, false),
+            'products' => productListRows($products, $config),
+            'total' => $total,
+            'page' => $page,
+            'page_size' => $pageSize,
             'categories' => array_map(fn(array $row): array => categoryRow($row, $config), $categories),
             'brands' => array_map('brandRow', $brands),
             'manufacturers' => array_map('brandRow', $manufacturers),
@@ -3100,11 +3341,15 @@ try {
             if ($db->inTransaction()) $db->rollBack();
             throw $error;
         }
-        $stripeSummary = stripeSyncCatalog($db, $config, $id);
+        // Vizibilitatea sursei este deja citita imediat de website. Stripe va
+        // prelua aceste produse prin sincronizarea in loturi, fara blocarea
+        // salvarii sursei intr-o singura cerere lunga.
+        $markStripePending = $db->prepare('UPDATE shop_products SET stripe_synced_at = NULL, updated_at = updated_at WHERE source_id = ?');
+        $markStripePending->execute([$id]);
         $stmt = $db->prepare('SELECT * FROM shop_product_sources WHERE id = ?');
         $stmt->execute([$id]);
         $sourceResponse = sourceRow($stmt->fetch());
-        $sourceResponse['stripe_sync'] = $stripeSummary;
+        $sourceResponse['stripe_sync'] = ['queued' => $markStripePending->rowCount()];
         jsonResponse($sourceResponse);
     }
 
@@ -3123,8 +3368,75 @@ try {
     }
 
     if ($action === 'listProducts' && $method === 'GET') {
-        $rows = $db->query(productSelectSql() . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.updated_at DESC, p.name ASC')->fetchAll();
-        jsonResponse(productRows($db, $rows, $config, false));
+        $rows = $db->query(productListSql() . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.updated_at DESC, p.name ASC')->fetchAll();
+        jsonResponse(productListRows($rows, $config));
+    }
+
+    if ($action === 'listProductOptions' && in_array($method, ['GET', 'POST'], true)) {
+        // Selectorul nu descarca intregul catalog. Intoarce doar rezultatele
+        // cautarii si produsele deja selectate, ca sa ramana rapid si la zeci
+        // de mii de produse.
+        $query = mb_substr(trim((string)($body['q'] ?? ($_GET['q'] ?? ''))), 0, 160);
+        $rawIds = is_array($body['ids'] ?? null) ? $body['ids'] : [];
+        $ids = array_values(array_unique(array_filter(array_map(static fn($value): string => trim((string)$value), $rawIds))));
+        $ids = array_slice($ids, 0, 250);
+        $limit = max(1, min($ids ? 250 : 50, (int)($body['limit'] ?? ($_GET['limit'] ?? 40))));
+
+        if ($query === '' && !$ids) jsonResponse([]);
+
+        $conditions = [];
+        $params = [];
+        if ($query !== '') {
+            $needle = '%' . $query . '%';
+            $conditions[] = '(p.name LIKE ? OR p.sku LIKE ? OR p.supplier_product_code LIKE ? OR p.ean LIKE ?)';
+            array_push($params, $needle, $needle, $needle, $needle);
+        }
+        if ($ids) {
+            $conditions[] = 'p.id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')';
+            array_push($params, ...$ids);
+        }
+
+        $sql = "SELECT p.id, p.name, p.sku, p.supplier_product_code, p.stock_mode, p.stock_quantity,
+                       (SELECT pi.image_path
+                        FROM shop_product_images pi
+                        WHERE pi.product_id = p.id
+                        ORDER BY pi.sort_order ASC, pi.created_at ASC
+                        LIMIT 1) AS image_path
+                FROM shop_products p
+                WHERE " . implode(' OR ', $conditions) . "
+                ORDER BY p.name ASC, p.id ASC
+                LIMIT " . $limit;
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        jsonResponse(array_map(static function (array $row) use ($config): array {
+            $path = trim((string)($row['image_path'] ?? ''));
+            $images = [];
+            if ($path !== '') {
+                $images[] = [
+                    'id' => 'primary-' . (string)$row['id'],
+                    'url' => preg_match('#^https?://#i', $path) ? $path : rtrim((string)$config['public_base_url'], '/') . '/' . ltrim($path, '/'),
+                    'alt_text' => (string)$row['name'],
+                    'sort_order' => 0,
+                ];
+            }
+            return [
+                'id' => (string)$row['id'],
+                'name' => (string)$row['name'],
+                'sku' => (string)($row['sku'] ?? ''),
+                'supplier_product_code' => (string)($row['supplier_product_code'] ?? ''),
+                'stock_mode' => (string)($row['stock_mode'] ?? 'tracked'),
+                'stock_quantity' => (int)($row['stock_quantity'] ?? 0),
+                'images' => $images,
+            ];
+        }, $rows));
+    }
+
+    if ($action === 'listProductOptionIds' && in_array($method, ['GET', 'POST'], true)) {
+        // Pentru „Selecteaza toate” trimitem doar ID-urile, fara imagini sau
+        // continutul produselor. Chiar si cataloagele foarte mari raman rapide.
+        $rows = $db->query('SELECT id FROM shop_products WHERE is_active = 1 ORDER BY name ASC, id ASC')->fetchAll(PDO::FETCH_COLUMN);
+        jsonResponse(array_values(array_map('strval', $rows)));
     }
 
     if ($action === 'getProduct' && $method === 'GET') {
@@ -3274,8 +3586,8 @@ try {
     }
 
     if ($action === 'listInventory' && $method === 'GET') {
-        $rows = $db->query(productSelectSql() . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.name ASC')->fetchAll();
-        jsonResponse(productRows($db, $rows, $config, false));
+        $rows = $db->query(productListSql() . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.name ASC')->fetchAll();
+        jsonResponse(productListRows($rows, $config));
     }
 
     if ($action === 'listInventoryMovements' && $method === 'GET') {
@@ -3422,8 +3734,69 @@ try {
 
     if ($action === 'getPaymentSettings' && $method === 'GET') jsonResponse(paymentSettings($db, $config));
 
+    if ($action === 'listCompanySettings' && $method === 'GET') jsonResponse(companySettingsList($db, $config));
+
+    if ($action === 'getCompanySettings' && $method === 'GET') {
+        $row = $db->query('SELECT * FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch();
+        jsonResponse($row ? companySettingsRow($row, $config) : null);
+    }
+
+    if ($action === 'createCompanySettings' && $method === 'POST') {
+        $company = companySettingsPayload($body);
+        $stampPath = !empty($body['stamp_base64']) ? saveShopImage((string)$body['stamp_base64'], 'company') : null;
+        if ($company['is_default']) $db->exec('UPDATE shop_company_settings SET is_default = 0');
+        $stmt = $db->prepare('INSERT INTO shop_company_settings (legal_name, trade_name, cui, registration_number, address, city, county, postal_code, country, email, phone, website, bank_name, iban, share_capital, stamp_path, is_default, vat_payer) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt->execute([$company['legal_name'], $company['trade_name'], $company['cui'], $company['registration_number'], $company['address'], $company['city'], $company['county'], $company['postal_code'], $company['country'], $company['email'], $company['phone'], $company['website'], $company['bank_name'], $company['iban'], $company['share_capital'], $stampPath, $company['is_default'] ? 1 : 0, $company['vat_payer'] ? 1 : 0]);
+        $id = (int)$db->lastInsertId();
+        if (!$company['is_default'] && (int)$db->query('SELECT COUNT(*) FROM shop_company_settings WHERE is_default = 1')->fetchColumn() === 0) $db->prepare('UPDATE shop_company_settings SET is_default = 1 WHERE id = ?')->execute([$id]);
+        $stmt = $db->prepare('SELECT * FROM shop_company_settings WHERE id = ?'); $stmt->execute([$id]);
+        jsonResponse(companySettingsRow($stmt->fetch(), $config), 201);
+    }
+
+    if ($action === 'updateCompanySettings' && in_array($method, ['PUT', 'PATCH'], true)) {
+        $id = max(1, (int)($_GET['id'] ?? ($body['id'] ?? 0)));
+        $company = companySettingsPayload($body);
+        $currentStmt = $db->prepare('SELECT * FROM shop_company_settings WHERE id = ?'); $currentStmt->execute([$id]);
+        $currentCompany = $currentStmt->fetch();
+        if (!$currentCompany) jsonResponse(['error' => 'Firma nu există.'], 404);
+        $stampPath = (string)($currentCompany['stamp_path'] ?? '');
+        $oldStampPath = '';
+        if (boolValue($body['remove_stamp'] ?? false)) { $oldStampPath = $stampPath; $stampPath = ''; }
+        if (!empty($body['stamp_base64'])) { $newPath = saveShopImage((string)$body['stamp_base64'], 'company'); $oldStampPath = $stampPath; $stampPath = (string)$newPath; }
+        if ($company['is_default']) $db->exec('UPDATE shop_company_settings SET is_default = 0');
+        $stmt = $db->prepare('UPDATE shop_company_settings SET legal_name = ?, trade_name = ?, cui = ?, registration_number = ?, address = ?, city = ?, county = ?, postal_code = ?, country = ?, email = ?, phone = ?, website = ?, bank_name = ?, iban = ?, share_capital = ?, stamp_path = ?, is_default = ?, vat_payer = ? WHERE id = ?');
+        $stmt->execute([$company['legal_name'], $company['trade_name'], $company['cui'], $company['registration_number'], $company['address'], $company['city'], $company['county'], $company['postal_code'], $company['country'], $company['email'], $company['phone'], $company['website'], $company['bank_name'], $company['iban'], $company['share_capital'], $stampPath ?: null, $company['is_default'] ? 1 : 0, $company['vat_payer'] ? 1 : 0, $id]);
+        if (!$company['is_default'] && (int)$db->query('SELECT COUNT(*) FROM shop_company_settings WHERE is_default = 1')->fetchColumn() === 0) $db->prepare('UPDATE shop_company_settings SET is_default = 1 WHERE id = ?')->execute([$id]);
+        if ($oldStampPath && $oldStampPath !== $stampPath) removeShopImage($oldStampPath);
+        $stmt = $db->prepare('SELECT * FROM shop_company_settings WHERE id = ?'); $stmt->execute([$id]);
+        jsonResponse(companySettingsRow($stmt->fetch(), $config));
+    }
+
+    if ($action === 'deleteCompanySettings' && $method === 'DELETE') {
+        $id = max(1, (int)($_GET['id'] ?? ($body['id'] ?? 0)));
+        if ((int)$db->query('SELECT COUNT(*) FROM shop_company_settings')->fetchColumn() <= 1) throw new InvalidArgumentException('Trebuie să rămână cel puțin o firmă.');
+        $stmt = $db->prepare('SELECT stamp_path, is_default FROM shop_company_settings WHERE id = ?'); $stmt->execute([$id]); $company = $stmt->fetch();
+        if (!$company) jsonResponse(['error' => 'Firma nu există.'], 404);
+        $db->prepare('DELETE FROM shop_company_settings WHERE id = ?')->execute([$id]);
+        if ((bool)$company['is_default']) $db->exec('UPDATE shop_company_settings SET is_default = 1 ORDER BY id ASC LIMIT 1');
+        if (!empty($company['stamp_path'])) removeShopImage((string)$company['stamp_path']);
+        jsonResponse(['success' => true]);
+    }
+
     if ($action === 'syncStripeCatalog' && $method === 'POST') {
-        jsonResponse(stripeSyncCatalog($db, $config));
+        // Un lot are propriul raspuns, evitand timeout-ul unei sincronizari
+        // monolitice pentru peste o mie de produse.
+        @set_time_limit(90);
+        ignore_user_abort(true);
+        if (boolValue($body['prepare'] ?? false)) {
+            jsonResponse(stripeCatalogSyncPlan($db, null, boolValue($body['force'] ?? false)));
+        }
+        if (is_array($body['product_ids'] ?? null)) {
+            jsonResponse(stripeSyncCatalogSelection($db, $config, $body['product_ids']));
+        }
+        $cursor = trim((string)($body['cursor'] ?? ''));
+        $batchSize = max(1, min(5, (int)($body['batch_size'] ?? 1)));
+        jsonResponse(stripeSyncCatalogBatch($db, $config, $cursor, $batchSize));
     }
 
     if ($action === 'updatePaymentSettings' && in_array($method, ['PUT', 'PATCH'], true)) {

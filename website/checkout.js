@@ -2,9 +2,11 @@
   const API_URL = "https://g-trots.ro/shop-api/api-v2.php";
   const ORDER_STATE_KEY = "g-trots-last-checkout-v1";
   const CUSTOMER_TOKEN_KEY = "g-trots-customer-session-v1";
+  const CUSTOMER_PROFILE_KEY = "g-trots-customer-profile-v1";
   const $ = selector => document.querySelector(selector);
   let activePromotionQuote = { subtotal: 0, discount_total: 0, promotion_code: "", promotion_title: "" };
   let promotionQuoteSequence = 0;
+  const customerCheckout = { customer: null, addresses: [], selectedAddressId: "new" };
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, character => ({
@@ -52,7 +54,12 @@
         signal: controller.signal
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || `Comanda nu a putut fi procesată (${response.status}).`);
+      if (!response.ok) {
+        const error = new Error(payload.error || `Comanda nu a putut fi procesată (${response.status}).`);
+        error.status = response.status;
+        error.code = payload.code || "";
+        throw error;
+      }
       return payload;
     } catch (error) {
       if (error?.name === "AbortError") throw new Error("Conexiunea a durat prea mult. Verifică internetul și încearcă din nou.");
@@ -60,6 +67,107 @@
     } finally {
       window.clearTimeout(timeout);
     }
+  }
+
+  function cachedCustomer() {
+    try { return JSON.parse(localStorage.getItem(CUSTOMER_PROFILE_KEY) || "null"); }
+    catch { return null; }
+  }
+
+  function setCheckoutField(form, name, value, overwrite = false) {
+    const field = form.elements[name];
+    if (!field || value == null || String(value).trim() === "") return;
+    if (overwrite || !String(field.value || "").trim()) field.value = String(value);
+  }
+
+  function fillCustomerFields(form, customer, overwrite = false) {
+    if (!customer) return;
+    setCheckoutField(form, "customer_name", customer.full_name, overwrite);
+    setCheckoutField(form, "customer_phone", customer.phone, overwrite);
+    setCheckoutField(form, "customer_email", customer.email, overwrite);
+  }
+
+  function fillAddressFields(form, address) {
+    if (!address) {
+      ["address", "city", "county", "postal_code"].forEach(name => { if (form.elements[name]) form.elements[name].value = ""; });
+      fillCustomerFields(form, customerCheckout.customer, true);
+      return;
+    }
+    setCheckoutField(form, "customer_name", address.recipient_name, true);
+    setCheckoutField(form, "customer_phone", address.phone, true);
+    ["address", "city", "county", "postal_code"].forEach(name => setCheckoutField(form, name, address[name], true));
+  }
+
+  function addressIcon(isNew = false) {
+    return isNew
+      ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`
+      : `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>`;
+  }
+
+  function addressSelectionIcon() {
+    return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7.5 12.5 3 3 6-7"/></svg>`;
+  }
+
+  function renderCheckoutAddresses(form) {
+    const section = $("[data-checkout-address-book]");
+    const host = $("[data-checkout-address-options]");
+    const saveOption = $("[data-checkout-save-address]");
+    if (!section || !host || !localStorage.getItem(CUSTOMER_TOKEN_KEY)) return;
+    section.hidden = false;
+    const rows = customerCheckout.addresses.map(address => `<button type="button" class="checkout-address-option${address.id === customerCheckout.selectedAddressId ? " is-selected" : ""}" data-checkout-address-id="${escapeHtml(address.id)}" aria-pressed="${address.id === customerCheckout.selectedAddressId ? "true" : "false"}">
+      <span class="checkout-address-option-icon">${addressIcon()}</span><span class="checkout-address-option-copy"><span><strong>${escapeHtml(address.label || "Adresă salvată")}</strong>${address.is_default ? "<em>Principală</em>" : ""}</span><small>${escapeHtml(address.address)}, ${escapeHtml(address.city)}</small></span><span class="checkout-address-option-check">${addressSelectionIcon()}</span>
+    </button>`);
+    rows.push(`<button type="button" class="checkout-address-option is-new${customerCheckout.selectedAddressId === "new" ? " is-selected" : ""}" data-checkout-address-id="new" aria-pressed="${customerCheckout.selectedAddressId === "new" ? "true" : "false"}"><span class="checkout-address-option-icon">${addressIcon(true)}</span><span class="checkout-address-option-copy"><span><strong>Folosește o adresă nouă</strong></span><small>Completează datele de livrare mai jos</small></span><span class="checkout-address-option-check">${addressSelectionIcon()}</span></button>`);
+    host.innerHTML = rows.join("");
+    saveOption.hidden = customerCheckout.selectedAddressId !== "new";
+    host.querySelectorAll("[data-checkout-address-id]").forEach(button => button.addEventListener("click", () => {
+      customerCheckout.selectedAddressId = button.dataset.checkoutAddressId;
+      const address = customerCheckout.addresses.find(item => String(item.id) === customerCheckout.selectedAddressId) || null;
+      fillAddressFields(form, address);
+      renderCheckoutAddresses(form);
+    }));
+  }
+
+  async function hydrateCheckoutCustomer(form) {
+    if (!localStorage.getItem(CUSTOMER_TOKEN_KEY)) return;
+    const cached = cachedCustomer();
+    customerCheckout.customer = cached;
+    fillCustomerFields(form, cached);
+    const [meResult, addressResult] = await Promise.allSettled([api("customerMe"), api("customerAddresses")]);
+    if (meResult.status === "rejected" && [401, 403].includes(Number(meResult.reason?.status))) {
+      localStorage.removeItem(CUSTOMER_TOKEN_KEY);
+      localStorage.removeItem(CUSTOMER_PROFILE_KEY);
+      document.dispatchEvent(new CustomEvent("g-trots:customer-changed", { detail: null }));
+      return;
+    }
+    if (meResult.status === "fulfilled") {
+      customerCheckout.customer = meResult.value?.customer || meResult.value;
+      fillCustomerFields(form, customerCheckout.customer);
+      localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(customerCheckout.customer));
+      document.dispatchEvent(new CustomEvent("g-trots:customer-changed", { detail: customerCheckout.customer }));
+    }
+    customerCheckout.addresses = addressResult.status === "fulfilled" && Array.isArray(addressResult.value) ? addressResult.value : [];
+    const selected = customerCheckout.addresses.find(address => address.is_default) || customerCheckout.addresses[0] || null;
+    customerCheckout.selectedAddressId = selected ? String(selected.id) : "new";
+    fillAddressFields(form, selected);
+    renderCheckoutAddresses(form);
+  }
+
+  async function saveCheckoutAddress(fields) {
+    if (!localStorage.getItem(CUSTOMER_TOKEN_KEY)) return;
+    return api("customerAddresses", {
+      method: "POST",
+      body: {
+        label: "Comanda mea",
+        recipient_name: fields.customer_name,
+        phone: fields.customer_phone,
+        address: fields.address,
+        city: fields.city,
+        county: fields.county || "",
+        postal_code: fields.postal_code || "",
+        is_default: customerCheckout.addresses.length === 0,
+      }
+    });
   }
 
   function stockLabel(product) {
@@ -320,6 +428,7 @@
       renderShipping(config);
       renderPayments(config);
       renderSummary(cart, config);
+      await hydrateCheckoutCustomer(form);
       form.hidden = false;
       updateSubmitLabel(form, submit);
 
@@ -360,12 +469,26 @@
 
         const fields = Object.fromEntries(new FormData(form).entries());
         delete fields.confirm_order;
+        const shouldSaveAddress = Boolean(fields.save_address_for_later && customerCheckout.selectedAddressId === "new");
+        delete fields.save_address_for_later;
         submit.disabled = true;
         submit.querySelector("strong").textContent = "Se trimite comanda…";
         message.textContent = "Rezervăm produsele și înregistrăm comanda.";
 
         try {
           const totals = updateTotals(currentCart, config);
+          if (shouldSaveAddress) {
+            message.textContent = "Salvăm adresa în contul tău…";
+            const savedAddress = await saveCheckoutAddress(fields);
+            if (!savedAddress?.id) throw new Error("Adresa nu a putut fi salvată în cont. Încearcă din nou sau debifează opțiunea de salvare.");
+            customerCheckout.addresses = [
+              savedAddress,
+              ...customerCheckout.addresses.filter(address => String(address.id) !== String(savedAddress.id))
+            ];
+            customerCheckout.selectedAddressId = String(savedAddress.id);
+            renderCheckoutAddresses(form);
+            message.textContent = "Adresa a fost salvată în cont. Înregistrăm comanda…";
+          }
           const order = await api("createPublicOrder", {
             method: "POST",
             body: { ...fields, items, return_base_url: window.location.origin }

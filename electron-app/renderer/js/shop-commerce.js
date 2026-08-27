@@ -1,8 +1,8 @@
 (function () {
   const { shell } = require('electron');
   const state = {
-    products: [], orders: [], inventory: [], sources: [], categories: [], brands: [], manufacturers: [], shipping: [],
-    editingProduct: null, editingOrder: null, editingStock: null, editingSource: null, editingShipping: null,
+    products: [], orders: [], inventory: [], sources: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], promotions: [], companies: [],
+    editingProduct: null, editingOrder: null, editingStock: null, editingSource: null, editingShipping: null, editingPromotion: null, editingCompany: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null,
     productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, slugTouched: false, productQuery: '', orderQuery: '', orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
     pages: { products: 1, orders: 1, inventory: 1, productSales: 1 },
     pageSizes: { products: 10, orders: 10, inventory: 10, productSales: 5 },
@@ -56,20 +56,26 @@
       <div class="tab-panel shop-tab-panel" id="tab-shop-sources">${commercePage('Surse produse', 'Gestioneaza provenienta produselor si sursa implicita.', 'shop-sources-content', true)}</div>
       <div class="tab-panel shop-tab-panel" id="tab-shop-payments">${commercePage('Metode de plata', 'Controleaza optiunile disponibile la finalizarea comenzii.', 'shop-payments-content')}</div>
       <div class="tab-panel shop-tab-panel" id="tab-shop-shipping">${commercePage('Livrari', 'Costuri, transport gratuit si termene estimate.', 'shop-shipping-content', true)}</div>
+      <div class="tab-panel shop-tab-panel" id="tab-shop-customers">${commercePage('Clienti', 'Conturi, comenzi, valoare totala si controlul accesului.', 'shop-customers-content')}</div>
+      <div class="tab-panel shop-tab-panel" id="tab-shop-discounts">${commercePage('Reduceri', 'Campanii globale sau per produs, pentru toti clientii ori doar pentru conturile autentificate.', 'shop-discounts-content', true)}</div>
+      <div class="tab-panel shop-tab-panel" id="tab-shop-company">${commercePage('Datele firmei', 'Societati, date bancare, stampila si firma folosita implicit.', 'shop-company-content', true)}</div>
     `);
     document.querySelector('#tab-shop-dashboard .shop-area-grid')?.insertAdjacentHTML('beforeend', `
       ${dashboardCard('shop-sources', 'blue', 'SURSE', 'Surse produse', 'Magazinele si furnizorii produselor.')}
       ${dashboardCard('shop-payments', 'purple', 'CHECKOUT', 'Metode de plata', 'Card online si ramburs la curier.')}
       ${dashboardCard('shop-shipping', 'green', 'LOGISTICA', 'Livrari', 'Costuri si praguri de gratuitate.')}
+      ${dashboardCard('shop-customers', 'blue', 'RELATII CLIENTI', 'Clienti', 'Conturi, comenzi si acces la magazin.')}
+      ${dashboardCard('shop-discounts', 'amber', 'PROMOTII', 'Reduceri', 'Campanii, cupoane si anunturi pe site.')}
+      ${dashboardCard('shop-company', 'purple', 'IDENTITATE', 'Datele firmei', 'Societati, conturi bancare si stampila.')}
     `);
-    document.body.insertAdjacentHTML('beforeend', productModal() + productDetailModal() + orderModal() + stockModal() + sourceModal() + shippingModal());
+    document.body.insertAdjacentHTML('beforeend', productModal() + productDetailModal() + orderModal() + stockModal() + sourceModal() + shippingModal() + customerModal() + promotionModal() + companyModal());
     wire();
     if ($('tab-shop-dashboard')?.classList.contains('active')) void loadDashboard();
   }
 
   function commercePage(title, description, contentId, hasAdd = false) {
     const kind = contentId.replace('shop-', '').replace('-content', '');
-    const symbols = { products: '◇', orders: '✓', inventory: '▦', sources: '◎', payments: '▣', shipping: '⇢' };
+    const symbols = { products: '◇', orders: '✓', inventory: '▦', sources: '◎', payments: '▣', shipping: '⇢', customers: '◉', discounts: '%', company: '▤' };
     return `<div class="shop-commerce-page"><header class="shop-commerce-head shop-commerce-hero" data-commerce-kind="${kind}"><span class="shop-commerce-hero-glow"></span><button type="button" class="shop-back-btn" data-shop-open="shop-dashboard">&larr; Panou SHOP</button><div class="shop-commerce-title"><span>G-TROTS SHOP CRM</span><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="shop-commerce-hero-symbol" aria-hidden="true">${symbols[kind] || '◇'}</div><div class="shop-commerce-head-actions"><button type="button" class="shop-commerce-refresh" data-commerce-refresh="${contentId}" title="Reincarca" aria-label="Reincarca datele"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0 2 5"/><path d="M20 4v7h-7"/></svg></button>${hasAdd ? `<button type="button" class="shop-commerce-add" data-commerce-add="${contentId}">+ Adauga</button>` : ''}</div></header><main id="${contentId}" class="shop-commerce-content"><div class="shop-commerce-loading">Se incarca...</div></main></div>`;
   }
   function dashboardCard(target, tone, kicker, title, description) {
@@ -120,10 +126,47 @@
   function shippingModal() {
     return `<div class="shop-commerce-overlay" id="shop-shipping-modal" hidden><form class="shop-commerce-modal mini" id="shop-shipping-form"><header><div><small>LIVRARE SHOP</small><h2 id="shop-shipping-title">Livrare noua</h2></div><button type="button" data-commerce-close="shop-shipping-modal">×</button></header><div class="shop-commerce-modal-scroll"><label>Nume *<input id="shop-shipping-name" required maxlength="120" /></label><label>Descriere<textarea id="shop-shipping-description" rows="3" maxlength="500"></textarea></label><div class="shop-commerce-columns"><label>Cost lei<input id="shop-shipping-cost" type="number" min="0" step="0.01" required /></label><label>Gratuit peste<input id="shop-shipping-free" type="number" min="0" step="0.01" placeholder="Optional" /></label></div><label>Termen estimat<input id="shop-shipping-eta" maxlength="120" placeholder="1-3 zile lucratoare" /></label><div class="shop-editor-toggles"><label><span><b>Livrare activa</b><small>Este disponibila pe site.</small></span><input id="shop-shipping-active" type="checkbox" checked /></label></div></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-shipping-modal">Renunta</button><button type="submit" class="btn-primary" id="shop-shipping-save">Salveaza livrarea</button></footer></form></div>`;
   }
+  function customerModal() {
+    return `<div class="shop-commerce-overlay" id="shop-customer-modal" hidden><section class="shop-commerce-modal shop-customer-modal"><header><div><small>FISA CLIENT</small><h2 id="shop-customer-title">Client</h2></div><button type="button" data-commerce-close="shop-customer-modal">×</button></header><div class="shop-commerce-modal-scroll" id="shop-customer-details"></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-customer-modal">Inchide</button><button type="button" class="btn-primary" id="shop-customer-status">Dezactiveaza contul</button></footer></section></div>`;
+  }
+  function promotionModal() {
+    return `<div class="shop-commerce-overlay" id="shop-promotion-modal" hidden><form class="shop-commerce-modal shop-promotion-modal" id="shop-promotion-form"><header><div><small>PROMOTII G-TROTS</small><h2 id="shop-promotion-title">Reducere noua</h2></div><button type="button" data-commerce-close="shop-promotion-modal">×</button></header><div class="shop-commerce-modal-scroll">
+      <div class="shop-commerce-columns"><label>Cod reducere *<input id="shop-promotion-code" maxlength="80" placeholder="GTROTS10" required /></label><label>Titlu *<input id="shop-promotion-name" maxlength="180" required /></label></div>
+      <label>Descriere<textarea id="shop-promotion-description" rows="3" maxlength="800"></textarea></label>
+      <div class="shop-commerce-columns three"><label>Tip reducere<select id="shop-promotion-type"><option value="percent">Procent (%)</option><option value="fixed">Suma fixa (lei)</option></select></label><label>Valoare *<input id="shop-promotion-value" type="number" min="0.01" step="0.01" required /></label><label>Comanda minima<input id="shop-promotion-minimum" type="number" min="0" step="0.01" placeholder="Fara prag" /></label></div>
+      <div class="shop-commerce-columns"><label>Cine beneficiaza<select id="shop-promotion-audience"><option value="all">Toti utilizatorii</option><option value="registered">Doar utilizatorii inregistrati</option></select></label><label>Unde se aplica<select id="shop-promotion-scope"><option value="global">Toata comanda</option><option value="product">Produse selectate</option></select></label></div>
+      <button type="button" id="shop-promotion-product-shortcut" class="shop-promotion-product-shortcut"><span>%</span><b>Alege produse din catalog</b><small>Caută instant după nume sau cod. Catalogul nu se încarcă în fundal.</small><i>›</i></button>
+      <label>Limita de utilizare<select id="shop-promotion-usage"><option value="unlimited">Fara limita de aplicari</option><option value="once_per_customer">O singura data per utilizator</option><option value="once_per_device">O singura data per dispozitiv</option></select></label>
+      <section id="shop-promotion-product-wrap" class="shop-promotion-product-picker" hidden>
+        <header><div><b>Produse incluse</b><small id="shop-promotion-product-count">0 selectate</small></div><div class="shop-promotion-product-actions"><button type="button" id="shop-promotion-product-all">Selecteaza toate produsele</button><button type="button" id="shop-promotion-product-results-all" hidden>Selecteaza rezultatele</button></div></header>
+        <label class="shop-promotion-product-search"><span>⌕</span><input id="shop-promotion-product-search" type="search" placeholder="Cauta dupa nume sau cod produs" autocomplete="off" /></label>
+        <div id="shop-promotion-product-selected" class="shop-promotion-product-selected"></div>
+        <div id="shop-promotion-product-results" class="shop-promotion-product-results"><p class="shop-promotion-product-empty">Scrie numele sau codul produsului. Rezultatele apar pe măsură ce scrii.</p></div>
+      </section>
+      <div class="shop-commerce-columns"><label>Incepe la<input id="shop-promotion-from" type="datetime-local" /></label><label>Se termina la<input id="shop-promotion-until" type="datetime-local" /></label></div>
+      <label>Text in bara site-ului<input id="shop-promotion-banner" maxlength="220" placeholder="Oferta speciala G-Trots" /></label>
+      <div class="shop-editor-toggles"><label><span><b>Reducere activa</b><small>Poate fi folosita in perioada configurata.</small></span><input id="shop-promotion-active" type="checkbox" checked /></label><label><span><b>Aplicare automata</b><small>Se aplica fara introducerea codului.</small></span><input id="shop-promotion-auto" type="checkbox" checked /></label><label><span><b>Afiseaza in bara site-ului</b><small>Anuntul apare deasupra meniului magazinului.</small></span><input id="shop-promotion-show-banner" type="checkbox" checked /></label></div>
+    </div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-promotion-modal">Renunta</button><button type="submit" class="btn-primary" id="shop-promotion-save">Salveaza reducerea</button></footer></form></div>`;
+  }
+  function companyModal() {
+    return `<div class="shop-commerce-overlay" id="shop-company-modal" hidden><form class="shop-commerce-modal shop-company-modal" id="shop-company-form"><header><div><small>DATELE FIRMEI</small><h2 id="shop-company-title">Firma noua</h2></div><button type="button" data-commerce-close="shop-company-modal">×</button></header><div class="shop-commerce-modal-scroll">
+      ${section('01', 'Identitate juridica', 'Datele oficiale ale societatii si numele folosit comercial.')}
+      <div class="shop-commerce-columns"><label>Denumire legala *<input id="shop-company-legal-name" required /></label><label>Nume comercial<input id="shop-company-trade-name" placeholder="G-Trots Romania" /></label></div>
+      <div class="shop-commerce-columns"><label>CUI / CIF<input id="shop-company-cui" /></label><label>Registrul comertului<input id="shop-company-registration" /></label></div>
+      <div class="shop-editor-toggles"><label><span><b>Firma implicita</b><small>Este folosita automat pe documente si comenzi.</small></span><input id="shop-company-default" type="checkbox" /></label><label><span><b>Platitoare de TVA</b><small>Societate inregistrata in scopuri de TVA.</small></span><input id="shop-company-vat" type="checkbox" /></label></div>
+      ${section('02', 'Sediu si contact', 'Adresa completa si datele publice de contact.')}
+      <label>Adresa completa<input id="shop-company-address" /></label><div class="shop-commerce-columns three"><label>Localitate<input id="shop-company-city" /></label><label>Judet<input id="shop-company-county" /></label><label>Cod postal<input id="shop-company-postal" /></label></div>
+      <div class="shop-commerce-columns three"><label>Tara<input id="shop-company-country" value="Romania" /></label><label>E-mail<input id="shop-company-email" type="email" /></label><label>Telefon<input id="shop-company-phone" /></label></div><label>Website<input id="shop-company-website" placeholder="https://g-trots.ro" /></label>
+      ${section('03', 'Date bancare', 'Informatii folosite in documentele financiare.')}
+      <div class="shop-commerce-columns"><label>Banca<input id="shop-company-bank" /></label><label>IBAN<input id="shop-company-iban" /></label></div><label>Capital social<input id="shop-company-capital" /></label>
+      ${section('04', 'Stampila firmei', 'Imaginea poate fi folosita pe documentele generate.')}
+      <div class="shop-company-stamp"><div id="shop-company-stamp-preview"><span>Fara stampila</span></div><div><input id="shop-company-stamp-input" type="file" accept="image/png,image/jpeg,image/webp" hidden /><button type="button" class="btn-ghost" id="shop-company-stamp-pick">Alege stampila</button><button type="button" class="btn-ghost danger" id="shop-company-stamp-remove">Sterge stampila</button></div></div>
+    </div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-company-modal">Renunta</button><button type="submit" class="btn-primary" id="shop-company-save">Salveaza firma</button></footer></form></div>`;
+  }
   function section(number, title, text) { return `<div class="shop-editor-section"><b>${number}</b><span><strong>${title}</strong><small>${text}</small></span></div>`; }
 
   function wire() {
-    const loaders = { 'shop-dashboard': loadDashboard, 'shop-products': loadProducts, 'shop-orders': loadOrders, 'shop-inventory': loadInventory, 'shop-sources': loadSourcesPage, 'shop-payments': loadPayments, 'shop-shipping': loadShippingPage };
+    const loaders = { 'shop-dashboard': loadDashboard, 'shop-products': loadProducts, 'shop-orders': loadOrders, 'shop-inventory': loadInventory, 'shop-sources': loadSourcesPage, 'shop-payments': loadPayments, 'shop-shipping': loadShippingPage, 'shop-customers': loadCustomers, 'shop-discounts': loadPromotions, 'shop-company': loadCompanies };
     window.addEventListener('tab-change', event => {
       loaders[event.detail]?.();
     });
@@ -135,8 +178,8 @@
     });
     document.querySelectorAll('[data-commerce-close]').forEach(button => button.addEventListener('click', () => closeModal(button.dataset.commerceClose)));
     document.querySelectorAll('.shop-commerce-overlay').forEach(overlay => overlay.addEventListener('mousedown', event => { if (event.target === overlay) closeModal(overlay.id); }));
-    document.querySelectorAll('[data-commerce-refresh]').forEach(button => button.addEventListener('click', () => ({ 'shop-products-content': loadProducts, 'shop-orders-content': loadOrders, 'shop-inventory-content': loadInventory, 'shop-sources-content': loadSourcesPage, 'shop-shipping-content': loadShippingPage })[button.dataset.commerceRefresh]?.()));
-    document.querySelectorAll('[data-commerce-add]').forEach(button => button.addEventListener('click', () => ({ 'shop-products-content': openProduct, 'shop-sources-content': openSource, 'shop-shipping-content': openShipping })[button.dataset.commerceAdd]?.()));
+    document.querySelectorAll('[data-commerce-refresh]').forEach(button => button.addEventListener('click', () => ({ 'shop-products-content': loadProducts, 'shop-orders-content': loadOrders, 'shop-inventory-content': loadInventory, 'shop-sources-content': loadSourcesPage, 'shop-shipping-content': loadShippingPage, 'shop-customers-content': loadCustomers, 'shop-discounts-content': loadPromotions, 'shop-company-content': loadCompanies })[button.dataset.commerceRefresh]?.()));
+    document.querySelectorAll('[data-commerce-add]').forEach(button => button.addEventListener('click', () => ({ 'shop-products-content': openProduct, 'shop-sources-content': openSource, 'shop-shipping-content': openShipping, 'shop-discounts-content': openPromotion, 'shop-company-content': openCompany })[button.dataset.commerceAdd]?.()));
     document.addEventListener('click', event => {
       const trigger = event.target.closest('[data-shop-order-filter]');
       if (!trigger) return;
@@ -148,6 +191,29 @@
     $('shop-stock-form').addEventListener('submit', saveStock);
     $('shop-source-form').addEventListener('submit', saveSource);
     $('shop-shipping-form').addEventListener('submit', saveShipping);
+    $('shop-promotion-form').addEventListener('submit', savePromotion);
+    $('shop-company-form').addEventListener('submit', saveCompany);
+    $('shop-company-stamp-pick').addEventListener('click', () => $('shop-company-stamp-input').click());
+    $('shop-company-stamp-input').addEventListener('change', readCompanyStamp);
+    $('shop-company-stamp-remove').addEventListener('click', removeCompanyStamp);
+    $('shop-promotion-scope').addEventListener('change', updatePromotionProductVisibility);
+    $('shop-promotion-product-shortcut').addEventListener('click', () => { $('shop-promotion-scope').value = 'product'; updatePromotionProductVisibility(); setTimeout(() => $('shop-promotion-product-search').focus(), 30); });
+    $('shop-promotion-product-search').addEventListener('input', event => {
+      state.promotionProductQuery = event.target.value;
+      clearTimeout(state.promotionProductSearchTimer);
+      renderPromotionProductPicker();
+      const query = state.promotionProductQuery.trim();
+      if (!query) return;
+      state.promotionProductSearchTimer = setTimeout(() => void ensurePromotionProducts(query, [...state.promotionSelectedProductIds]), 170);
+    });
+    $('shop-promotion-product-results-all').addEventListener('click', () => {
+      const query = state.promotionProductQuery.trim().toLocaleLowerCase('ro');
+      const results = promotionProductsSorted().filter(product => query && (String(product.name || '') + ' ' + String(product.sku || '') + ' ' + String(product.supplier_product_code || '')).toLocaleLowerCase('ro').includes(query));
+      results.forEach(product => state.promotionSelectedProductIds.add(product.id));
+      renderPromotionProductPicker();
+    });
+    $('shop-promotion-product-all').addEventListener('click', toggleAllPromotionProducts);
+    $('shop-customer-status').addEventListener('click', toggleCustomerStatus);
     $('shop-product-images-input').addEventListener('change', addProductImages);
     $('shop-product-add-specification').addEventListener('click', () => { state.productSpecifications.push({ group: 'Caracteristici generale', label: '', value: '' }); renderProductSpecifications(); });
     $('shop-product-add-question').addEventListener('click', () => { state.productQuestions.push({ question: '', answer: '' }); renderProductQuestions(); });
@@ -459,6 +525,64 @@
 
   function openModal(id) { const modal = $(id); modal.hidden = false; requestAnimationFrame(() => modal.classList.add('visible')); }
   function closeModal(id) { const modal = $(id); modal?.classList.remove('visible'); setTimeout(() => { if (modal) modal.hidden = true; }, 180); }
+
+  function openStripeSyncProgress() {
+    document.getElementById('stripe-sync-progress')?.remove();
+    const startedAt = Date.now();
+    const overlay = document.createElement('div');
+    overlay.id = 'stripe-sync-progress';
+    overlay.className = 'stripe-sync-progress-overlay';
+    overlay.innerHTML = `<section class="stripe-sync-progress-card" role="dialog" aria-modal="true" aria-labelledby="stripe-sync-progress-title">
+      <div class="stripe-sync-progress-orb" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6.1 9a7 7 0 0 1 11.6-2.6L20 9M4 15l2.3 2.6A7 7 0 0 0 17.9 15"/></svg><i></i></div>
+      <span class="stripe-sync-progress-kicker">CATALOG STRIPE</span>
+      <h2 id="stripe-sync-progress-title">Sincronizam catalogul</h2>
+      <p data-sync-status>Pregatim produsele si conexiunea securizata...</p>
+      <div class="stripe-sync-progress-track"><i data-sync-progress-fill></i></div>
+      <div class="stripe-sync-progress-numbers"><span data-sync-count>Se pregateste...</span><strong data-sync-percent>0%</strong></div>
+      <div class="stripe-sync-progress-stats"><span><b data-sync-synced>0</b><small>sincronizate</small></span><span><b data-sync-archived>0</b><small>arhivate</small></span><span><b data-sync-errors>0</b><small>erori</small></span></div>
+      <small class="stripe-sync-progress-elapsed" data-sync-elapsed>Timp scurs 00:00 · lasa aplicatia deschisa</small>
+      <button type="button" data-sync-close hidden>Inchide</button>
+    </section>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('visible'));
+    const elapsed = overlay.querySelector('[data-sync-elapsed]');
+    const timer = setInterval(() => {
+      const seconds = Math.floor((Date.now() - startedAt) / 1000);
+      elapsed.textContent = `Timp scurs ${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')} · lasa aplicatia deschisa`;
+    }, 1000);
+    const close = () => {
+      clearInterval(timer);
+      overlay.classList.remove('visible');
+      setTimeout(() => overlay.remove(), 220);
+    };
+    overlay.querySelector('[data-sync-close]').addEventListener('click', close);
+    return {
+      update(progress) {
+        const percent = Number(progress.percent || 0);
+        overlay.querySelector('[data-sync-progress-fill]').style.width = `${Math.max(3, percent)}%`;
+        overlay.querySelector('[data-sync-percent]').textContent = `${percent}%`;
+        overlay.querySelector('[data-sync-count]').textContent = progress.total ? `${progress.processed} din ${progress.total} produse` : 'Se pregateste...';
+        overlay.querySelector('[data-sync-synced]').textContent = Number(progress.synced || 0);
+        overlay.querySelector('[data-sync-archived]').textContent = Number(progress.archived || 0);
+        overlay.querySelector('[data-sync-errors]').textContent = Number(progress.errors?.length || 0);
+        overlay.querySelector('[data-sync-status]').textContent = percent < 75 ? 'Actualizam produsele, imaginile si preturile...' : 'Verificam ultimele produse si inchidem sincronizarea...';
+      },
+      complete(summary) {
+        overlay.classList.add('is-complete');
+        overlay.querySelector('[data-sync-status]').textContent = `Gata · ${Number(summary.synced || 0)} produse sincronizate.`;
+        overlay.querySelector('[data-sync-progress-fill]').style.width = '100%';
+        overlay.querySelector('[data-sync-percent]').textContent = '100%';
+        clearInterval(timer);
+      },
+      fail(message) {
+        overlay.classList.add('is-error');
+        overlay.querySelector('[data-sync-status]').textContent = message;
+        overlay.querySelector('[data-sync-close]').hidden = false;
+        clearInterval(timer);
+      },
+      close,
+    };
+  }
   async function metadata() {
     [state.categories, state.brands, state.manufacturers, state.sources] = await Promise.all([window.SHOP_API.listCategories(), window.SHOP_API.listBrands(), window.SHOP_API.listManufacturers(), window.SHOP_API.listProductSources()]);
   }
@@ -986,13 +1110,18 @@
         </form>`;
       $('shop-payments-content').querySelector('[data-stripe-sync]')?.addEventListener('click', async event => {
         const button = event.currentTarget;
+        const progress = openStripeSyncProgress();
         button.disabled = true;
         button.textContent = 'Se sincronizeaza...';
         try {
-          const result = await window.SHOP_API.syncStripeCatalog();
+          const result = await window.SHOP_API.syncStripeCatalog(next => progress.update(next));
+          progress.complete(result);
           toast(`${result.synced} produse sincronizate${result.errors.length ? ` · ${result.errors.length} erori` : ''}.`, result.errors.length ? 'error' : 'success');
+          await new Promise(resolve => setTimeout(resolve, 900));
+          progress.close();
           await loadPayments();
         } catch (error) {
+          progress.fail(error.message || 'Sincronizarea nu a putut continua.');
           toast(error.message, 'error');
           button.disabled = false;
           button.textContent = 'Sincronizeaza acum catalogul';
@@ -1013,6 +1142,282 @@
   function openShipping(id = '') { const item = state.shipping.find(entry => entry.id === id) || null; state.editingShipping = item; $('shop-shipping-title').textContent = item ? 'Editeaza livrarea' : 'Livrare noua'; $('shop-shipping-name').value = item?.name || ''; $('shop-shipping-description').value = item?.description || ''; $('shop-shipping-cost').value = item?.cost ?? 0; $('shop-shipping-free').value = item?.free_above ?? ''; $('shop-shipping-eta').value = item?.eta_label || ''; $('shop-shipping-active').checked = item?.is_active ?? true; openModal('shop-shipping-modal'); }
   async function saveShipping(event) { event.preventDefault(); const button = $('shop-shipping-save'); button.disabled = true; try { const payload = { name: $('shop-shipping-name').value.trim(), description: $('shop-shipping-description').value.trim(), cost: Number($('shop-shipping-cost').value || 0), free_above: $('shop-shipping-free').value === '' ? null : Number($('shop-shipping-free').value), eta_label: $('shop-shipping-eta').value.trim(), is_active: $('shop-shipping-active').checked, sort_order: state.editingShipping?.sort_order || state.shipping.length }; if (state.editingShipping) await window.SHOP_API.updateShippingMethod(state.editingShipping.id, payload); else await window.SHOP_API.createShippingMethod(payload); closeModal('shop-shipping-modal'); toast('Livrarea a fost salvata.'); await loadShippingPage(); } catch (error) { toast(error.message, 'error'); } finally { button.disabled = false; } }
   async function deleteShipping(id) { const item = state.shipping.find(entry => entry.id === id); if (!item || !confirm(`Stergi metoda ${item.name}?`)) return; try { await window.SHOP_API.deleteShippingMethod(id); toast('Livrarea a fost stearsa.'); await loadShippingPage(); } catch (error) { toast(error.message, 'error'); } }
+
+  function dateTime(value) {
+    if (!value) return '—';
+    const parsed = new Date(String(value).replace(' ', 'T'));
+    return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString('ro-RO', { dateStyle: 'medium', timeStyle: 'short' });
+  }
+
+  async function loadCustomers() {
+    loading('shop-customers-content', 'Se incarca clientii...');
+    try {
+      const customers = await window.SHOP_API.listCustomers();
+      state.customers = Array.isArray(customers) ? customers : [];
+      renderCustomers();
+    } catch (error) { failure('shop-customers-content', error); }
+  }
+
+  function renderCustomers() {
+    const active = state.customers.filter(item => item.is_active).length;
+    const orders = state.customers.reduce((sum, item) => sum + Number(item.orders_count || 0), 0);
+    const value = state.customers.reduce((sum, item) => sum + Number(item.orders_total || 0), 0);
+    const rows = state.customers.map(customer => `<button type="button" class="shop-customer-card" data-customer-open="${esc(customer.id)}"><span class="shop-customer-avatar">${esc(String(customer.full_name || customer.email || '?').trim().charAt(0).toUpperCase())}</span><span class="shop-customer-copy"><strong>${esc(customer.full_name || 'Client fara nume')}</strong><small>${esc(customer.email)}${customer.phone ? ` · ${esc(customer.phone)}` : ''}</small><em>Ultima comanda: ${esc(dateTime(customer.last_order_at))}</em></span><span class="shop-customer-numbers"><b>${Number(customer.orders_count || 0)} comenzi</b><strong>${money(customer.orders_total)}</strong></span><span class="commerce-pill ${customer.is_active ? 'active' : 'inactive'}">${customer.is_active ? 'ACTIV' : 'DEZACTIVAT'}</span><i aria-hidden="true">›</i></button>`).join('');
+    $('shop-customers-content').innerHTML = `<section class="shop-customer-metrics">${detailMetric('Clienti inregistrati', state.customers.length)}${detailMetric('Conturi active', active, true)}${detailMetric('Comenzi asociate', orders)}${detailMetric('Valoare comenzi', money(value))}</section><div class="shop-customer-list">${rows || empty('Niciun client inregistrat', 'Conturile create in magazin vor aparea aici.')}</div>`;
+    $('shop-customers-content').querySelectorAll('[data-customer-open]').forEach(button => button.addEventListener('click', () => openCustomer(button.dataset.customerOpen)));
+  }
+
+  async function openCustomer(id) {
+    $('shop-customer-title').textContent = 'Se incarca...';
+    $('shop-customer-details').innerHTML = '<div class="shop-commerce-loading">Se pregateste fisa clientului...</div>';
+    openModal('shop-customer-modal');
+    try {
+      const customer = await window.SHOP_API.getCustomer(id);
+      state.customerDetail = customer;
+      $('shop-customer-title').textContent = customer.full_name || customer.email;
+      const orders = (Array.isArray(customer.orders) ? customer.orders : []).map(order => `<button type="button" class="shop-customer-order" data-customer-order="${esc(order.id)}"><span><strong>${esc(order.order_number)}</strong><small>${esc(dateTime(order.created_at))}</small></span><span><em class="commerce-pill" style="--pill:${statusColors[order.status] || '#aaa'}">${esc(statusLabels[order.status] || order.status)}</em><b>${money(order.total)}</b></span><i>›</i></button>`).join('');
+      $('shop-customer-details').innerHTML = `<section class="shop-customer-profile"><span class="shop-customer-avatar large">${esc(String(customer.full_name || customer.email || '?').trim().charAt(0).toUpperCase())}</span><div><small>CLIENT G-TROTS</small><h3>${esc(customer.full_name || 'Client fara nume')}</h3><p>${esc(customer.email)}${customer.phone ? ` · ${esc(customer.phone)}` : ''}</p><em>Cont creat ${esc(dateTime(customer.created_at))} · ultima autentificare ${esc(dateTime(customer.last_login_at))}</em></div><span class="commerce-pill ${customer.is_active ? 'active' : 'inactive'}">${customer.is_active ? 'CONT ACTIV' : 'CONT DEZACTIVAT'}</span></section><section class="shop-customer-metrics modal-metrics">${detailMetric('Comenzi', Number(customer.orders_count || 0))}${detailMetric('Valoare totala', money(customer.orders_total), true)}${detailMetric('Ultima comanda', dateTime(customer.orders?.[0]?.created_at))}</section>${section('01', 'Comenzile clientului', 'Apasa pe o comanda pentru a vedea toate detaliile.')}<div class="shop-customer-orders">${orders || empty('Nicio comanda', 'Clientul nu are inca nicio comanda asociata.')}</div>`;
+      $('shop-customer-status').textContent = customer.is_active ? 'Dezactiveaza contul' : 'Reactiveaza contul';
+      $('shop-customer-status').classList.toggle('danger', customer.is_active);
+      $('shop-customer-details').querySelectorAll('[data-customer-order]').forEach(button => button.addEventListener('click', () => { closeModal('shop-customer-modal'); setTimeout(() => openOrder(button.dataset.customerOrder), 190); }));
+    } catch (error) { $('shop-customer-details').innerHTML = `<div class="shop-commerce-error">${esc(error.message)}</div>`; }
+  }
+
+  async function toggleCustomerStatus() {
+    const customer = state.customerDetail;
+    if (!customer) return;
+    const next = !customer.is_active;
+    if (!next && !confirm(`Dezactivezi contul lui ${customer.full_name || customer.email}? Sesiunile active vor fi inchise.`)) return;
+    const button = $('shop-customer-status'); button.disabled = true;
+    try {
+      await window.SHOP_API.updateCustomerStatus(customer.id, next);
+      toast(next ? 'Contul clientului a fost reactivat.' : 'Contul clientului a fost dezactivat.');
+      await loadCustomers();
+      await openCustomer(customer.id);
+    } catch (error) { toast(error.message, 'error'); }
+    finally { button.disabled = false; }
+  }
+
+  async function loadPromotions() {
+    loading('shop-discounts-content', 'Se incarca reducerile...');
+    try {
+      const promotions = await window.SHOP_API.listPromotions();
+      state.promotions = Array.isArray(promotions) ? promotions : [];
+      renderPromotions();
+    } catch (error) { failure('shop-discounts-content', error); }
+  }
+
+  async function ensurePromotionProducts(query = '', ids = []) {
+    const cleanQuery = String(query || '').trim();
+    const cleanIds = [...new Set((Array.isArray(ids) ? ids : []).map(String).filter(Boolean))];
+    if (!cleanQuery && !cleanIds.length) {
+      state.products = [];
+      renderPromotionProductPicker();
+      return;
+    }
+    state.promotionProductsLoading = true;
+    if (!$('shop-promotion-product-wrap').hidden) renderPromotionProductPicker();
+    try {
+      const products = await window.SHOP_API.listProductOptions({ q: cleanQuery, ids: cleanIds, limit: cleanIds.length ? 250 : 40 });
+      state.products = Array.isArray(products) ? products : [];
+    } catch (error) {
+      if (!$('shop-promotion-product-wrap').hidden) $('shop-promotion-product-results').innerHTML = '<p class="shop-promotion-product-empty">' + esc(error.message || 'Produsele nu s-au putut incarca.') + '</p>';
+    } finally {
+      state.promotionProductsLoading = false;
+      if (!$('shop-promotion-product-wrap').hidden) renderPromotionProductPicker();
+    }
+  }
+
+  function promotionValue(item) { return item.discount_type === 'percent' ? `${Number(item.discount_value)}%` : money(item.discount_value); }
+  function renderPromotions() {
+    const active = state.promotions.filter(item => item.is_active).length;
+    const automatic = state.promotions.filter(item => item.auto_apply).length;
+    const banners = state.promotions.filter(item => item.show_banner).length;
+    const cards = state.promotions.map(item => `<article class="shop-promotion-card ${item.is_active ? '' : 'is-off'}"><span class="shop-promotion-icon">${item.discount_type === 'percent' ? '%' : '✦'}</span><div class="shop-promotion-copy"><div><strong>${esc(item.title)}</strong><span class="commerce-pill ${item.is_active ? 'active' : 'inactive'}">${item.is_active ? 'ACTIVA' : 'OPRITA'}</span></div><b>${esc(promotionValue(item))}<small> · ${item.scope === 'product' ? esc(item.product_name || 'produs selectat') : 'toata comanda'}</small></b><p>${esc(item.audience === 'registered' ? 'Doar clienti autentificati' : 'Toti clientii')} · ${Number(item.min_order_value || 0) ? `minim ${money(item.min_order_value)}` : 'fara prag'} · ${esc(dateTime(item.valid_from))} — ${esc(dateTime(item.valid_until))}</p><span>${item.auto_apply ? 'AUTOMATA' : `COD ${esc(item.code)}`}${item.show_banner ? ' · BARA SITE' : ''}</span></div><button type="button" data-promotion-edit="${esc(item.id)}" aria-label="Editeaza">✎</button><button type="button" class="danger" data-promotion-delete="${esc(item.id)}" aria-label="Sterge">×</button></article>`).join('');
+    $('shop-discounts-content').innerHTML = `<section class="shop-customer-metrics">${detailMetric('Campanii', state.promotions.length)}${detailMetric('Active', active, true)}${detailMetric('Automate', automatic)}${detailMetric('Anunturi pe site', banners)}</section><div class="shop-promotion-list">${cards || empty('Nicio reducere configurata', 'Adauga prima campanie promotionala G-Trots.')}</div>`;
+    $('shop-discounts-content').querySelectorAll('[data-promotion-edit]').forEach(button => button.addEventListener('click', () => openPromotion(button.dataset.promotionEdit)));
+    $('shop-discounts-content').querySelectorAll('[data-promotion-delete]').forEach(button => button.addEventListener('click', () => deletePromotion(button.dataset.promotionDelete)));
+  }
+
+  function promotionDateInput(value) { return value ? String(value).replace(' ', 'T').slice(0, 16) : ''; }
+  function updatePromotionProductVisibility() {
+    const productScope = $('shop-promotion-scope').value === 'product';
+    $('shop-promotion-product-wrap').hidden = !productScope;
+    $('shop-promotion-product-shortcut').hidden = productScope;
+    if (productScope) renderPromotionProductPicker();
+  }
+  function promotionStockLabel(product) {
+    if (product.stock_mode === 'unlimited') return ['Nelimitat', 'in'];
+    return Number(product.stock_quantity || 0) > 0 ? [String(Number(product.stock_quantity)) + ' in stoc', 'in'] : ['Stoc epuizat', 'out'];
+  }
+  function promotionProductsSorted() {
+    return [...state.products].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ro', { sensitivity: 'base' }));
+  }
+  async function toggleAllPromotionProducts() {
+    if (state.promotionSelectingAll) return;
+    state.promotionSelectingAll = true;
+    renderPromotionProductPicker();
+    try {
+      const ids = Array.isArray(state.promotionAllProductIds) ? state.promotionAllProductIds : await window.SHOP_API.listProductOptionIds();
+      state.promotionAllProductIds = Array.isArray(ids) ? ids.map(String).filter(Boolean) : [];
+      const allSelected = state.promotionAllProductIds.length > 0 && state.promotionAllProductIds.every(id => state.promotionSelectedProductIds.has(id));
+      state.promotionSelectedProductIds = allSelected ? new Set() : new Set(state.promotionAllProductIds);
+    } catch (error) {
+      toast(error.message || 'Produsele nu au putut fi selectate.', 'error');
+    } finally {
+      state.promotionSelectingAll = false;
+      renderPromotionProductPicker();
+    }
+  }
+  function renderPromotionProductPicker() {
+    const selected = state.promotionSelectedProductIds;
+    const all = promotionProductsSorted();
+    const query = String(state.promotionProductQuery || '').trim().toLocaleLowerCase('ro');
+    const matches = all.filter(product => query && (String(product.name || '') + ' ' + String(product.sku || '') + ' ' + String(product.supplier_product_code || '')).toLocaleLowerCase('ro').includes(query));
+    $('shop-promotion-product-count').textContent = selected.size + ' selectate' + (query ? ' · ' + matches.length + ' rezultate' : '');
+    const knownAllIds = Array.isArray(state.promotionAllProductIds) ? state.promotionAllProductIds : [];
+    const allSelected = knownAllIds.length > 0 && knownAllIds.every(id => selected.has(id));
+    $('shop-promotion-product-all').disabled = state.promotionSelectingAll;
+    $('shop-promotion-product-all').textContent = state.promotionSelectingAll ? 'Se selecteaza...' : allSelected ? 'Deselecteaza toate' : 'Selecteaza toate produsele';
+    $('shop-promotion-product-all').classList.toggle('is-all', allSelected);
+    $('shop-promotion-product-results-all').hidden = !matches.length;
+    $('shop-promotion-product-selected').innerHTML = all.filter(product => selected.has(product.id)).map(product => '<button type="button" data-promotion-product-remove="' + esc(product.id) + '">' + productPicture(product.images?.[0], 'shop-promotion-product-chip-image') + '<span>' + esc(product.name) + '</span><b>×</b></button>').join('');
+    $('shop-promotion-product-selected').hidden = selected.size === 0;
+    if (state.promotionProductsLoading && !all.length) {
+      $('shop-promotion-product-results').innerHTML = '<div class="shop-commerce-loading">Cautam produsele...</div>';
+      return;
+    }
+    if (!query) {
+      $('shop-promotion-product-results').innerHTML = '<p class="shop-promotion-product-empty">Scrie numele sau codul produsului. Catalogul nu este incarcat in fundal.</p>';
+      return;
+    }
+    $('shop-promotion-product-results').innerHTML = matches.slice(0, 100).map(product => {
+      const isSelected = selected.has(product.id);
+      const stock = promotionStockLabel(product);
+      return '<button type="button" class="shop-promotion-product-result ' + (isSelected ? 'selected' : '') + '" data-promotion-product-toggle="' + esc(product.id) + '">' + productPicture(product.images?.[0], 'shop-promotion-product-image') + '<span><strong>' + esc(product.name) + '</strong><small><b>' + esc(product.sku || product.supplier_product_code || 'Fara cod') + '</b><em class="' + stock[1] + '">' + esc(stock[0]) + '</em></small></span><i>' + (isSelected ? '✓' : '') + '</i></button>';
+    }).join('') || '<p class="shop-promotion-product-empty">Nu am gasit niciun produs.</p>';
+    $('shop-promotion-product-results').querySelectorAll('[data-promotion-product-toggle]').forEach(button => button.addEventListener('click', () => {
+      const id = button.dataset.promotionProductToggle;
+      if (selected.has(id)) selected.delete(id); else selected.add(id);
+      renderPromotionProductPicker();
+    }));
+    $('shop-promotion-product-selected').querySelectorAll('[data-promotion-product-remove]').forEach(button => button.addEventListener('click', () => {
+      selected.delete(button.dataset.promotionProductRemove);
+      renderPromotionProductPicker();
+    }));
+  }
+  function openPromotion(id = '') {
+    const item = state.promotions.find(entry => entry.id === id) || null;
+    state.editingPromotion = item;
+    $('shop-promotion-title').textContent = item ? 'Editeaza reducerea' : 'Reducere noua';
+    $('shop-promotion-code').value = item?.code || '';
+    $('shop-promotion-name').value = item?.title || '';
+    $('shop-promotion-description').value = item?.description || '';
+    $('shop-promotion-type').value = item?.discount_type || 'percent';
+    $('shop-promotion-value').value = item?.discount_value ?? 10;
+    $('shop-promotion-minimum').value = item?.min_order_value ?? '';
+    $('shop-promotion-audience').value = item?.audience || 'all';
+    $('shop-promotion-scope').value = item?.scope || 'global';
+    $('shop-promotion-usage').value = item?.usage_mode || 'unlimited';
+    state.promotionSelectedProductIds = new Set(Array.isArray(item?.product_ids) && item.product_ids.length ? item.product_ids : item?.product_id ? [item.product_id] : []);
+    state.promotionAllProductIds = null;
+    state.promotionSelectingAll = false;
+    state.products = [];
+    state.promotionProductQuery = '';
+    $('shop-promotion-product-search').value = '';
+    $('shop-promotion-from').value = promotionDateInput(item?.valid_from);
+    $('shop-promotion-until').value = promotionDateInput(item?.valid_until);
+    $('shop-promotion-banner').value = item?.banner_text || '';
+    $('shop-promotion-active').checked = item?.is_active ?? true;
+    $('shop-promotion-auto').checked = item?.auto_apply ?? true;
+    $('shop-promotion-show-banner').checked = item?.show_banner ?? true;
+    updatePromotionProductVisibility();
+    openModal('shop-promotion-modal');
+    if (state.promotionSelectedProductIds.size) void ensurePromotionProducts('', [...state.promotionSelectedProductIds]);
+  }
+
+  async function savePromotion(event) {
+    event.preventDefault();
+    const button = $('shop-promotion-save'); button.disabled = true;
+    try {
+      const scope = $('shop-promotion-scope').value;
+      const productIds = scope === 'product' ? [...state.promotionSelectedProductIds] : [];
+      const payload = { code: $('shop-promotion-code').value.trim().toUpperCase(), title: $('shop-promotion-name').value.trim(), description: $('shop-promotion-description').value.trim(), discount_type: $('shop-promotion-type').value, discount_value: Number($('shop-promotion-value').value || 0), min_order_value: $('shop-promotion-minimum').value === '' ? null : Number($('shop-promotion-minimum').value), audience: $('shop-promotion-audience').value, scope, product_ids: productIds, product_id: productIds[0] || null, usage_mode: $('shop-promotion-usage').value, auto_apply: $('shop-promotion-auto').checked, show_banner: $('shop-promotion-show-banner').checked, banner_text: $('shop-promotion-banner').value.trim() || $('shop-promotion-name').value.trim(), valid_from: $('shop-promotion-from').value || null, valid_until: $('shop-promotion-until').value || null, is_active: $('shop-promotion-active').checked };
+      if (!payload.code || !payload.title || payload.discount_value <= 0) throw new Error('Completeaza codul, titlul si o valoare valida.');
+      if (scope === 'product' && !payload.product_ids.length) throw new Error('Alege cel putin un produs pentru aceasta reducere.');
+      if (state.editingPromotion) await window.SHOP_API.updatePromotion(state.editingPromotion.id, payload); else await window.SHOP_API.createPromotion(payload);
+      closeModal('shop-promotion-modal'); toast('Reducerea a fost salvata.'); await loadPromotions();
+    } catch (error) { toast(error.message, 'error'); }
+    finally { button.disabled = false; }
+  }
+
+  async function deletePromotion(id) {
+    const item = state.promotions.find(entry => entry.id === id);
+    if (!item || !confirm(`Stergi reducerea „${item.title}”?`)) return;
+    try { await window.SHOP_API.deletePromotion(id); toast('Reducerea a fost stearsa.'); await loadPromotions(); }
+    catch (error) { toast(error.message, 'error'); }
+  }
+
+  async function loadCompanies() {
+    loading('shop-company-content', 'Se incarca firmele...');
+    try {
+      const companies = await window.SHOP_API.listCompanySettings();
+      state.companies = Array.isArray(companies) ? companies : [];
+      renderCompanies();
+    } catch (error) { failure('shop-company-content', error); }
+  }
+
+  function renderCompanies() {
+    const cards = state.companies.map(company => `<article class="shop-company-card ${company.is_default ? 'is-default' : ''}"><span class="shop-company-card-icon">▤</span><div><small>${company.is_default ? 'FIRMA IMPLICITA' : 'SOCIETATE'}</small><strong>${esc(company.trade_name || company.legal_name || 'Firma fara nume')}</strong><p>${esc(company.legal_name || '')}${company.cui ? ' · CUI ' + esc(company.cui) : ''}</p><em>${esc([company.city, company.county].filter(Boolean).join(', ') || 'Adresa necompletata')}</em></div><span class="commerce-pill ${company.is_default ? 'active' : 'inactive'}">${company.is_default ? 'IMPLICITA' : 'DISPONIBILA'}</span><button type="button" data-company-open="${esc(company.id)}" aria-label="Editeaza">✎</button><button type="button" class="danger" data-company-delete="${esc(company.id)}" aria-label="Sterge">×</button></article>`).join('');
+    $('shop-company-content').innerHTML = `<section class="shop-customer-metrics">${detailMetric('Firme salvate', state.companies.length)}${detailMetric('Firma implicita', state.companies.find(item => item.is_default)?.trade_name || state.companies.find(item => item.is_default)?.legal_name || '—', true)}${detailMetric('Cu stampila', state.companies.filter(item => item.stamp_url).length)}${detailMetric('Platitoare TVA', state.companies.filter(item => item.vat_payer).length)}</section><div class="shop-company-list">${cards || empty('Nicio firma salvata', 'Adauga societatea folosita pentru documentele G-Trots.')}</div>`;
+    $('shop-company-content').querySelectorAll('[data-company-open]').forEach(button => button.addEventListener('click', () => openCompany(button.dataset.companyOpen)));
+    $('shop-company-content').querySelectorAll('[data-company-delete]').forEach(button => button.addEventListener('click', () => deleteCompany(button.dataset.companyDelete)));
+  }
+
+  function companyValue(id, value = undefined) { const input = $(id); if (value === undefined) return input.value; input.value = value ?? ''; }
+  function renderCompanyStamp(url = '') {
+    $('shop-company-stamp-preview').innerHTML = url ? `<img src="${esc(url)}" alt="Stampila firmei" />` : '<span>Fara stampila</span>';
+    $('shop-company-stamp-remove').hidden = !url;
+  }
+  function openCompany(id = '') {
+    const company = state.companies.find(item => String(item.id) === String(id)) || null;
+    state.editingCompany = company;
+    state.companyStampBase64 = null;
+    state.companyStampRemove = false;
+    $('shop-company-title').textContent = company ? 'Editeaza firma' : 'Firma noua';
+    companyValue('shop-company-legal-name', company?.legal_name || ''); companyValue('shop-company-trade-name', company?.trade_name || 'G-Trots Romania');
+    companyValue('shop-company-cui', company?.cui || ''); companyValue('shop-company-registration', company?.registration_number || '');
+    companyValue('shop-company-address', company?.address || ''); companyValue('shop-company-city', company?.city || ''); companyValue('shop-company-county', company?.county || ''); companyValue('shop-company-postal', company?.postal_code || '');
+    companyValue('shop-company-country', company?.country || 'Romania'); companyValue('shop-company-email', company?.email || ''); companyValue('shop-company-phone', company?.phone || ''); companyValue('shop-company-website', company?.website || 'https://g-trots.ro');
+    companyValue('shop-company-bank', company?.bank_name || ''); companyValue('shop-company-iban', company?.iban || ''); companyValue('shop-company-capital', company?.share_capital || '');
+    $('shop-company-default').checked = company?.is_default ?? state.companies.length === 0; $('shop-company-vat').checked = company?.vat_payer ?? false;
+    renderCompanyStamp(company?.stamp_url || '');
+    openModal('shop-company-modal');
+  }
+  function readCompanyStamp(event) {
+    const file = event.target.files?.[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { state.companyStampBase64 = String(reader.result || ''); state.companyStampRemove = false; renderCompanyStamp(state.companyStampBase64); };
+    reader.readAsDataURL(file); event.target.value = '';
+  }
+  function removeCompanyStamp() { state.companyStampBase64 = null; state.companyStampRemove = true; renderCompanyStamp(''); }
+  async function saveCompany(event) {
+    event.preventDefault();
+    const button = $('shop-company-save'); button.disabled = true;
+    try {
+      const payload = { legal_name: companyValue('shop-company-legal-name').trim(), trade_name: companyValue('shop-company-trade-name').trim(), cui: companyValue('shop-company-cui').trim(), registration_number: companyValue('shop-company-registration').trim(), address: companyValue('shop-company-address').trim(), city: companyValue('shop-company-city').trim(), county: companyValue('shop-company-county').trim(), postal_code: companyValue('shop-company-postal').trim(), country: companyValue('shop-company-country').trim(), email: companyValue('shop-company-email').trim(), phone: companyValue('shop-company-phone').trim(), website: companyValue('shop-company-website').trim(), bank_name: companyValue('shop-company-bank').trim(), iban: companyValue('shop-company-iban').trim().replace(/\s/g, '').toUpperCase(), share_capital: companyValue('shop-company-capital').trim(), is_default: $('shop-company-default').checked, vat_payer: $('shop-company-vat').checked, ...(state.companyStampBase64 ? { stamp_base64: state.companyStampBase64 } : {}), ...(state.companyStampRemove ? { remove_stamp: true } : {}) };
+      if (!payload.legal_name) throw new Error('Completeaza denumirea legala a firmei.');
+      if (state.editingCompany) await window.SHOP_API.updateCompanySettings(state.editingCompany.id, payload); else await window.SHOP_API.createCompanySettings(payload);
+      closeModal('shop-company-modal'); toast('Datele firmei au fost salvate.'); await loadCompanies();
+    } catch (error) { toast(error.message || 'Firma nu a putut fi salvata.', 'error'); }
+    finally { button.disabled = false; }
+  }
+  async function deleteCompany(id) {
+    const company = state.companies.find(item => String(item.id) === String(id));
+    if (!company || !confirm(`Stergi firma „${company.trade_name || company.legal_name}”?`)) return;
+    try { await window.SHOP_API.deleteCompanySettings(company.id); toast('Firma a fost stearsa.'); await loadCompanies(); }
+    catch (error) { toast(error.message || 'Firma nu a putut fi stearsa.', 'error'); }
+  }
 
   function empty(title, text) { return `<div class="shop-commerce-empty"><b>◇</b><strong>${esc(title)}</strong><p>${esc(text)}</p></div>`; }
   mount();

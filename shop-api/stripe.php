@@ -102,7 +102,8 @@ function stripeProductParams(array $product, array $config, string $stripeProduc
 }
 
 function stripeRecordProductSync(PDO $db, string $productId, ?string $productStripeId, ?string $priceStripeId, ?string $error): void {
-    $stmt = $db->prepare('UPDATE shop_products SET stripe_product_id = ?, stripe_price_id = ?, stripe_synced_at = ?, stripe_sync_error = ? WHERE id = ?');
+    // Sincronizarea tehnica nu trebuie sa para o editare noua de continut.
+    $stmt = $db->prepare('UPDATE shop_products SET stripe_product_id = ?, stripe_price_id = ?, stripe_synced_at = ?, stripe_sync_error = ?, updated_at = updated_at WHERE id = ?');
     $stmt->execute([
         $productStripeId ?: null,
         $priceStripeId ?: null,
@@ -267,6 +268,122 @@ function stripeSyncCatalog(PDO $db, array $config, ?string $sourceId = null): ar
         if ($result['status'] === 'synced') $summary['synced']++;
         elseif ($result['status'] === 'archived') $summary['archived']++;
         elseif ($result['status'] === 'error') $summary['errors'][] = ['product_id' => (string)$productId, 'error' => (string)$result['error']];
+        else $summary['skipped']++;
+    }
+    return $summary;
+}
+
+/**
+ * Raspuns rapid folosit inaintea sincronizarii. Interfata afla imediat cate
+ * produse urmeaza sa proceseze, fara sa astepte primul apel catre Stripe.
+ */
+function stripeCatalogSyncPlan(PDO $db, ?string $sourceId = null, bool $force = false): array {
+    $conditions = [];
+    $params = [];
+    if ($sourceId) {
+        $conditions[] = 'source_id = ?';
+        $params[] = $sourceId;
+    }
+    if (!$force) {
+        $conditions[] = '(stripe_synced_at IS NULL OR stripe_sync_error IS NOT NULL OR updated_at > stripe_synced_at)';
+    }
+    $where = $conditions ? ' WHERE ' . implode(' AND ', $conditions) : '';
+    $stmt = $db->prepare('SELECT COUNT(*) FROM shop_products' . $where);
+    $stmt->execute($params);
+    $idsStmt = $db->prepare('SELECT id FROM shop_products' . $where . ' ORDER BY id ASC');
+    $idsStmt->execute($params);
+    return [
+        'synced' => 0,
+        'archived' => 0,
+        'skipped' => 0,
+        'errors' => [],
+        'total' => (int)$stmt->fetchColumn(),
+        'batch_processed' => 0,
+        'next_cursor' => '',
+        'completed' => false,
+        'prepared' => true,
+        'product_ids' => array_values(array_map('strval', $idsStmt->fetchAll(PDO::FETCH_COLUMN))),
+    ];
+}
+
+/** Sincronizeaza explicit un grup mic, folosit de worker-ele paralele CRM. */
+function stripeSyncCatalogSelection(PDO $db, array $config, array $productIds): array {
+    $productIds = array_values(array_unique(array_filter(array_map(
+        static fn($value): string => trim((string)$value),
+        $productIds
+    ))));
+    $productIds = array_slice($productIds, 0, 5);
+    $summary = [
+        'synced' => 0,
+        'archived' => 0,
+        'skipped' => 0,
+        'errors' => [],
+        'total' => count($productIds),
+        'batch_processed' => 0,
+        'next_cursor' => '',
+        'completed' => true,
+    ];
+    if (!$productIds) return $summary;
+
+    $placeholders = implode(',', array_fill(0, count($productIds), '?'));
+    $existingStmt = $db->prepare('SELECT id FROM shop_products WHERE id IN (' . $placeholders . ')');
+    $existingStmt->execute($productIds);
+    $existing = array_fill_keys(array_map('strval', $existingStmt->fetchAll(PDO::FETCH_COLUMN)), true);
+    foreach ($productIds as $productId) {
+        if (!isset($existing[$productId])) {
+            $summary['skipped']++;
+            $summary['batch_processed']++;
+            continue;
+        }
+        $result = stripeSyncProductSafe($db, $config, $productId);
+        if ($result['status'] === 'synced') $summary['synced']++;
+        elseif ($result['status'] === 'archived') $summary['archived']++;
+        elseif ($result['status'] === 'error') $summary['errors'][] = ['product_id' => $productId, 'error' => (string)$result['error']];
+        else $summary['skipped']++;
+        $summary['batch_processed']++;
+    }
+    return $summary;
+}
+
+/**
+ * Sincronizeaza un lot stabil din catalog. Clientii CRM apeleaza loturile
+ * succesiv, astfel incat Apache/PHP sa poata raspunde periodic chiar si pentru
+ * cataloage foarte mari, iar interfata sa poata afisa progresul real.
+ */
+function stripeSyncCatalogBatch(PDO $db, array $config, string $afterId = '', int $limit = 8, ?string $sourceId = null): array {
+    $limit = max(1, min(20, $limit));
+    $conditions = [];
+    $params = [];
+    if ($sourceId !== null && $sourceId !== '') {
+        $conditions[] = 'source_id = ?';
+        $params[] = $sourceId;
+    }
+    if ($afterId !== '') {
+        $conditions[] = 'id > ?';
+        $params[] = $afterId;
+    }
+    $where = $conditions ? ' WHERE ' . implode(' AND ', $conditions) : '';
+    $stmt = $db->prepare('SELECT id FROM shop_products' . $where . ' ORDER BY id ASC LIMIT ' . $limit);
+    $stmt->execute($params);
+    $productIds = array_map('strval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+
+    $totalStmt = $db->prepare('SELECT COUNT(*) FROM shop_products' . ($sourceId ? ' WHERE source_id = ?' : ''));
+    $totalStmt->execute($sourceId ? [$sourceId] : []);
+    $summary = [
+        'synced' => 0,
+        'archived' => 0,
+        'skipped' => 0,
+        'errors' => [],
+        'total' => (int)$totalStmt->fetchColumn(),
+        'batch_processed' => count($productIds),
+        'next_cursor' => $productIds ? (string)end($productIds) : $afterId,
+        'completed' => count($productIds) < $limit,
+    ];
+    foreach ($productIds as $productId) {
+        $result = stripeSyncProductSafe($db, $config, $productId);
+        if ($result['status'] === 'synced') $summary['synced']++;
+        elseif ($result['status'] === 'archived') $summary['archived']++;
+        elseif ($result['status'] === 'error') $summary['errors'][] = ['product_id' => $productId, 'error' => (string)$result['error']];
         else $summary['skipped']++;
     }
     return $summary;

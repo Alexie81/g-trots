@@ -5,6 +5,10 @@
   flex: 0 0 auto;
 }
 
+.mobile-nav-account {
+  display: none;
+}
+
 .global-account-nav {
   min-width: 8.4rem;
   height: 3.15rem;
@@ -804,6 +808,60 @@
   text-align: right;
 }
 
+.cart-summary-lines > .cart-summary-discount {
+  min-height: 3.7rem;
+  margin: 0.2rem -0.35rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(52, 211, 153, 0.18);
+  border-radius: 0.95rem;
+  background: linear-gradient(100deg, rgba(52, 211, 153, 0.085), rgba(52, 211, 153, 0.025));
+}
+
+.cart-summary-discount[hidden] {
+  display: none;
+}
+
+.cart-summary-discount > span {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1.4rem minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 0.16rem;
+  column-gap: 0.45rem;
+  color: #a7f3d0;
+  font-weight: 850;
+}
+
+.cart-summary-discount > span::before {
+  content: "−%";
+  width: 1.4rem;
+  height: 1.4rem;
+  display: inline-grid;
+  place-items: center;
+  grid-row: 1 / 3;
+  border-radius: 0.45rem;
+  background: rgba(52, 211, 153, 0.13);
+  color: #6ee7b7;
+  font-size: 0.52rem;
+}
+
+.cart-summary-discount small {
+  grid-column: 2;
+  max-width: 11rem;
+  overflow: hidden;
+  color: #7b9e8f;
+  font-size: 0.5rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cart-summary-lines .cart-summary-discount > strong {
+  color: #6ee7b7;
+  font-size: 0.82rem;
+}
+
 .cart-summary-total {
   padding: 1.15rem 0;
   display: flex;
@@ -1036,8 +1094,7 @@
   }
 
   .global-favorites-nav,
-  .global-cart-nav,
-  .global-account-nav {
+  .global-cart-nav {
     width: 2.9rem;
     min-width: 2.9rem;
     height: 2.9rem;
@@ -1046,8 +1103,119 @@
     border-radius: 0.95rem;
   }
 
-  .global-account-copy { display: none; }
-  .global-account-avatar { width: 2.42rem; height: 2.42rem; }
+  .global-account-nav {
+    display: none !important;
+  }
+
+  .main-nav > a.mobile-nav-account:not(.mobile-nav-call) {
+    min-height: 4.65rem;
+    margin-top: 0.35rem;
+    padding: 0.55rem 0.65rem;
+    display: grid;
+    grid-template-columns: 3.15rem minmax(0, 1fr) 2rem;
+    gap: 0.8rem;
+    overflow: hidden;
+    border: 1px solid rgba(255, 149, 30, 0.28);
+    border-radius: 1.25rem;
+    background: linear-gradient(135deg, rgba(255, 139, 14, 0.15), rgba(255, 255, 255, 0.035));
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  }
+
+  .main-nav > a.mobile-nav-account:not(.mobile-nav-call)::before,
+  .main-nav > a.mobile-nav-account:not(.mobile-nav-call)::after {
+    content: none;
+  }
+
+  .mobile-nav-account-avatar {
+    width: 3.15rem;
+    height: 3.15rem;
+    padding: 0.2rem;
+    display: grid;
+    place-items: center;
+    border-radius: 1rem;
+    background: conic-gradient(from 20deg, #ff8500, #ffd05d, #41d6a3, #55bfff, #b77cff, #ff8500);
+  }
+
+  .mobile-nav-account-avatar i {
+    width: 100%;
+    height: 100%;
+    display: block;
+    position: relative;
+    border-radius: 0.82rem;
+    background: #171411;
+  }
+
+  .mobile-nav-account-avatar i::before {
+    content: "";
+    width: 0.65rem;
+    height: 0.65rem;
+    position: absolute;
+    left: 50%;
+    top: 0.55rem;
+    border-radius: 50%;
+    background: #fff;
+    transform: translateX(-50%);
+  }
+
+  .mobile-nav-account-avatar i::after {
+    content: "";
+    width: 1.4rem;
+    height: 0.75rem;
+    position: absolute;
+    left: 50%;
+    bottom: 0.42rem;
+    border-radius: 1rem 1rem 0.5rem 0.5rem;
+    background: #fff;
+    transform: translateX(-50%);
+  }
+
+  .mobile-nav-account-copy {
+    min-width: 0;
+    display: grid;
+    align-content: center;
+    gap: 0.2rem;
+  }
+
+  .mobile-nav-account-copy small {
+    color: #d58b43;
+    font-size: 0.56rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+  }
+
+  .mobile-nav-account-copy strong {
+    overflow: hidden;
+    color: #fff;
+    font-size: 1rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+.mobile-nav-account > b {
+    width: 2rem;
+    height: 2rem;
+    display: grid;
+    place-items: center;
+    border-radius: 0.72rem;
+    background: rgba(255, 139, 14, 0.13);
+    color: #ff9b2f;
+    font-size: 1.25rem;
+  }
+
+/* Avatar cont premium: un singur accent cald, fara inel multicolor. */
+.global-account-avatar,
+.mobile-nav-account-avatar {
+  padding: 0.16rem;
+  background: linear-gradient(145deg, #ff941f, #b75200);
+  box-shadow: 0 0 0 1px rgba(255, 167, 73, 0.34), 0 0.55rem 1.4rem rgba(0, 0, 0, 0.24);
+}
+
+.global-account-avatar i,
+.mobile-nav-account-avatar i {
+  background: linear-gradient(145deg, #29231e, #151311);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
 
   .global-shop-actions {
     margin-left: auto;
@@ -1314,6 +1482,131 @@
   }
 }
 
+/* Coșul așteaptă catalogul real și nu mai afișează produse demonstrative. */
+.cart-loading-state {
+  min-height: clamp(24rem, 46vw, 34rem);
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  position: relative;
+  overflow: hidden;
+  padding: clamp(2rem, 5vw, 4.5rem);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: clamp(1.5rem, 3vw, 2.35rem);
+  background: radial-gradient(circle at 50% 8%, rgba(255, 133, 0, 0.14), transparent 18rem), linear-gradient(145deg, #1b1815, #0e0d0c);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.045), 0 1.5rem 4rem rgba(0,0,0,.22);
+  text-align: center;
+}
+
+.cart-loading-state[hidden] { display: none; }
+
+.cart-loading-orbit {
+  width: 8.6rem;
+  height: 8.6rem;
+  display: grid;
+  place-items: center;
+  position: relative;
+  margin-bottom: 1.4rem;
+  border: 1px solid rgba(255, 133, 0, 0.24);
+  border-radius: 50%;
+  background: rgba(8, 8, 8, 0.45);
+}
+
+.cart-loading-orbit::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border: 2px solid transparent;
+  border-top-color: #ff8500;
+  border-right-color: rgba(255, 133, 0, 0.24);
+  border-radius: inherit;
+  animation: cart-loader-spin 1.25s linear infinite;
+}
+
+.cart-loading-orbit img {
+  width: 4.4rem;
+  height: 4.4rem;
+  display: block;
+  border-radius: 1.35rem;
+  object-fit: cover;
+  box-shadow: 0 .8rem 2rem rgba(255,133,0,.2);
+}
+
+.cart-loading-state > span {
+  color: #f69936;
+  font-size: .7rem;
+  font-weight: 900;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.cart-loading-state h2 {
+  margin: .6rem 0 0;
+  color: #f8f4ef;
+  font-size: clamp(2rem, 4vw, 3.25rem);
+  letter-spacing: -.055em;
+}
+
+.cart-loading-state p {
+  margin: .8rem 0 0;
+  color: #a39c95;
+  font-size: clamp(.82rem, 1.2vw, 1rem);
+}
+
+.cart-loading-progress {
+  width: min(100%, 24rem);
+  height: .3rem;
+  display: block;
+  overflow: hidden;
+  margin-top: 1.6rem;
+  border-radius: 999px;
+  background: rgba(255,255,255,.075);
+}
+
+.cart-loading-progress b {
+  width: 42%;
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, #ff9418 28%, #ffd19a 68%, transparent);
+  animation: cart-loader-progress 1.35s cubic-bezier(.4,0,.2,1) infinite;
+}
+
+@keyframes cart-loader-spin { to { transform: rotate(360deg); } }
+@keyframes cart-loader-progress { from { transform: translateX(-120%); } to { transform: translateX(340%); } }
+
+@media (max-width: 700px) {
+  .cart-loading-state { min-height: 27rem; padding: 2rem 1.25rem; }
+  .cart-loading-orbit { width: 7.5rem; height: 7.5rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cart-loading-orbit::before,
+  .cart-loading-progress b { animation: none; }
+}
+
+/* Cont premium, Material-like: o singura paleta neutra cu accent portocaliu. */
+.global-account-avatar,
+.mobile-nav-account-avatar {
+  padding: 0.16rem;
+  border: 1px solid rgba(255, 151, 45, 0.48);
+  background: linear-gradient(145deg, #30251d, #1c1815);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0.55rem 1.35rem rgba(0, 0, 0, 0.24);
+}
+
+.global-account-avatar i,
+.mobile-nav-account-avatar i {
+  background: linear-gradient(145deg, #27231f, #161412);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.065);
+}
+
+.global-account-avatar i::before,
+.global-account-avatar i::after,
+.mobile-nav-account-avatar i::before,
+.mobile-nav-account-avatar i::after {
+  background: #fff7ee;
+}
+
 /* Credit CAB-IT: common footer signature */
 .footer-inner .cab-it-credit {
   grid-column: 1 / -1;
@@ -1379,4 +1672,9 @@
   .cab-it-credit strong {
     font-size: 0.88rem;
   }
+}
+.site-header .logo b {
+  font-family: Manrope, Arial, sans-serif;
+  font-weight: 700 !important;
+  letter-spacing: -0.025em !important;
 }

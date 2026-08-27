@@ -198,7 +198,9 @@ const smartSearchOverlay = document.querySelector("[data-smart-search-overlay]")
 const smartSearchClose = document.querySelector("[data-smart-search-close]");
 const smartSearchBack = document.querySelector("[data-smart-search-back]");
 const smartSearchSubmit = document.querySelector("[data-smart-search-submit]");
+const smartSearchMobileBack = document.querySelector("[data-smart-search-mobile-back]");
 let smartSearchActiveIndex = -1;
+let smartSearchClosingTimer = 0;
 const categoryTree = document.querySelector(".category-tree");
 const compatibilityOptions = document.querySelector(".compatibility-filter .filter-options-scroll");
 const manufacturerOptions = document.querySelector(".manufacturer-filter .filter-options-scroll");
@@ -878,6 +880,13 @@ function renderSmartSearch(rawQuery = searchInput?.value || "") {
 
 function openSmartSearch() {
   if (!smartSearchPanel || !searchDeck) return;
+  window.clearTimeout(smartSearchClosingTimer);
+  searchDeck.classList.remove("is-search-closing");
+  const collapseTarget = smartSearchMobileBack?.getBoundingClientRect();
+  if (collapseTarget) {
+    searchDeck.style.setProperty("--smart-search-collapse-x", `${collapseTarget.left + collapseTarget.width / 2}px`);
+    searchDeck.style.setProperty("--smart-search-collapse-y", `${collapseTarget.top + collapseTarget.height / 2}px`);
+  }
   const searchTop = searchDeck.getBoundingClientRect().top + window.scrollY - 10;
   if (Math.abs(window.scrollY - searchTop) > 18) {
     window.scrollTo({
@@ -894,12 +903,22 @@ function openSmartSearch() {
 
 function closeSmartSearch({ restoreFocus = false } = {}) {
   if (!smartSearchPanel || !searchDeck) return;
-  searchDeck.classList.remove("is-search-open");
-  document.body.classList.remove("smart-search-open");
-  smartSearchPanel.hidden = true;
-  if (smartSearchOverlay) smartSearchOverlay.hidden = true;
-  smartSearchActiveIndex = -1;
-  if (restoreFocus) searchInput?.focus();
+  const finishClose = () => {
+    window.clearTimeout(smartSearchClosingTimer);
+    searchDeck.classList.remove("is-search-open", "is-search-closing");
+    document.body.classList.remove("smart-search-open", "smart-search-closing");
+    smartSearchPanel.hidden = true;
+    if (smartSearchOverlay) smartSearchOverlay.hidden = true;
+    smartSearchActiveIndex = -1;
+    if (restoreFocus) searchInput?.focus();
+  };
+  if (window.matchMedia("(max-width: 700px)").matches && !prefersReducedMotion && searchDeck.classList.contains("is-search-open")) {
+    searchDeck.classList.add("is-search-closing");
+    document.body.classList.add("smart-search-closing");
+    smartSearchClosingTimer = window.setTimeout(finishClose, 330);
+    return;
+  }
+  finishClose();
 }
 
 function showSmartSearchCatalogResults() {
@@ -1278,6 +1297,17 @@ smartSearchContent?.addEventListener("click", event => {
 
 smartSearchClose?.addEventListener("click", () => closeSmartSearch());
 smartSearchBack?.addEventListener("click", () => closeSmartSearch());
+smartSearchMobileBack?.addEventListener("click", event => {
+  event.preventDefault();
+  event.stopPropagation();
+  if (searchDeck?.classList.contains("is-search-open")) {
+    searchInput?.blur();
+    closeSmartSearch();
+  } else {
+    openSmartSearch();
+    searchInput?.focus();
+  }
+});
 smartSearchSubmit?.addEventListener("click", event => {
   event.preventDefault();
   event.stopPropagation();

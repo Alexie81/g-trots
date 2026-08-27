@@ -17,6 +17,14 @@ class CleanUrlHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEBSITE_ROOT), **kwargs)
 
+    def end_headers(self):
+        # În dezvoltarea locală vrem întotdeauna ultima versiune a stilurilor și
+        # scripturilor; altfel browserul poate păstra mult timp interfața veche.
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
+
     def send_head(self):
         parsed = urlsplit(self.path)
         request_path = unquote(parsed.path)

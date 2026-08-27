@@ -317,8 +317,10 @@ export type ShopPromotion = {
   audience: 'all' | 'registered';
   scope: 'global' | 'product';
   product_id: string | null;
+  product_ids: string[];
   product_name: string | null;
   product_slug: string | null;
+  usage_mode: 'unlimited' | 'once_per_customer' | 'once_per_device';
   auto_apply: boolean;
   show_banner: boolean;
   banner_text: string;
@@ -343,11 +345,51 @@ export type ShopPaymentSettings = {
   updated_at?: string | null;
 };
 
+export type ShopCompanySettings = {
+  id: number;
+  legal_name: string;
+  trade_name: string;
+  cui: string;
+  registration_number: string;
+  address: string;
+  city: string;
+  county: string;
+  postal_code: string;
+  country: string;
+  email: string;
+  phone: string;
+  website: string;
+  bank_name: string;
+  iban: string;
+  share_capital: string;
+  stamp_url: string | null;
+  is_default: boolean;
+  vat_payer: boolean;
+  stamp_base64?: string;
+  remove_stamp?: boolean;
+  updated_at?: string | null;
+};
+
 export type ShopStripeSyncSummary = {
   synced: number;
   archived: number;
   skipped: number;
   errors: { product_id: string; error: string }[];
+};
+
+export type ShopStripeSyncProgress = ShopStripeSyncSummary & {
+  processed: number;
+  total: number;
+  percent: number;
+};
+
+type ShopStripeSyncBatch = ShopStripeSyncSummary & {
+  total: number;
+  batch_processed: number;
+  next_cursor: string;
+  completed: boolean;
+  prepared?: boolean;
+  product_ids?: string[];
 };
 
 export type ShopShippingMethod = {
@@ -379,6 +421,9 @@ export type ShopInventoryMovement = {
 
 export type ShopProductManagerBootstrap = {
   products: ShopProduct[];
+  total: number;
+  page: number;
+  page_size: number;
   categories: ShopCategory[];
   brands: ShopBrand[];
   manufacturers: ShopManufacturer[];
@@ -392,7 +437,7 @@ async function shopCall<T>(action: string, token: string, init?: RequestInit, id
   const controller = new AbortController();
   // Stergerea sincronizeaza arhivarea cu Stripe inainte de eliminarea locala.
   // O lasam sa se incheie si pe conexiuni mobile mai lente.
-  const timeoutMs = ['syncBoomagTaxonomy', 'syncBoomagStock'].includes(action) ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
+  const timeoutMs = action === 'syncStripeCatalog' ? 90000 : ['syncBoomagTaxonomy', 'syncBoomagStock'].includes(action) ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const isGet = !init?.method || init.method === 'GET';
   const cacheBuster = isGet ? `&_=${Date.now()}` : '';
@@ -435,9 +480,69 @@ async function shopCall<T>(action: string, token: string, init?: RequestInit, id
   }
 }
 
+async function syncStripeCatalogInBatches(token: string, onProgress?: (progress: ShopStripeSyncProgress) => void): Promise<ShopStripeSyncSummary> {
+  const summary: ShopStripeSyncSummary = { synced: 0, archived: 0, skipped: 0, errors: [] };
+  const plan = await shopCall<ShopStripeSyncBatch>('syncStripeCatalog', token, {
+    method: 'POST',
+    body: JSON.stringify({ prepare: true }),
+  });
+  const plannedTotal = Number(plan.total || 0);
+  onProgress?.({ ...summary, processed: 0, total: plannedTotal, percent: plannedTotal ? 0 : 100 });
+  if (plannedTotal === 0) return summary;
+  const productIds = Array.isArray(plan.product_ids) ? plan.product_ids.map(String).filter(Boolean) : [];
+  if (productIds.length) {
+    let nextIndex = 0;
+    let processed = 0;
+    const worker = async () => {
+      while (nextIndex < productIds.length) {
+        const productId = productIds[nextIndex++];
+        const batch = await shopCall<ShopStripeSyncBatch>('syncStripeCatalog', token, {
+          method: 'POST',
+          body: JSON.stringify({ product_ids: [productId] }),
+        });
+        summary.synced += Number(batch.synced || 0);
+        summary.archived += Number(batch.archived || 0);
+        summary.skipped += Number(batch.skipped || 0);
+        summary.errors.push(...(Array.isArray(batch.errors) ? batch.errors : []));
+        processed += Number(batch.batch_processed || 1);
+        onProgress?.({ ...summary, processed, total: plannedTotal, percent: Math.min(100, Math.round((processed / plannedTotal) * 100)) });
+      }
+    };
+    // Opt workeri mentin Stripe Test sub limita sa normala, dar reduc masiv
+    // timpul fata de procesarea secventiala a celor peste 1.600 de produse.
+    await Promise.all(Array.from({ length: Math.min(8, productIds.length) }, () => worker()));
+    return summary;
+  }
+  let cursor = '';
+  let processed = 0;
+  let completed = false;
+  while (!completed) {
+    const batch = await shopCall<ShopStripeSyncBatch>('syncStripeCatalog', token, {
+      method: 'POST',
+      body: JSON.stringify({ cursor, batch_size: 1 }),
+    });
+    summary.synced += Number(batch.synced || 0);
+    summary.archived += Number(batch.archived || 0);
+    summary.skipped += Number(batch.skipped || 0);
+    summary.errors.push(...(Array.isArray(batch.errors) ? batch.errors : []));
+    processed += Number(batch.batch_processed || 0);
+    cursor = String(batch.next_cursor || cursor);
+    completed = Boolean(batch.completed) || Number(batch.batch_processed || 0) === 0;
+    const total = Number(batch.total || plannedTotal || processed);
+    onProgress?.({ ...summary, processed, total, percent: total ? Math.min(100, Math.round((processed / total) * 100)) : 100 });
+  }
+  return summary;
+}
+
 export const shopApi = {
   getDashboardStats: (token: string) => shopCall<ShopDashboardStats>('getDashboardStats', token),
-  loadProductManager: (token: string) => shopCall<ShopProductManagerBootstrap>('productManagerBootstrap', token),
+  loadProductManager: (
+    token: string,
+    options: { page?: number; page_size?: number; q?: string; include_metadata?: boolean } = {},
+  ) => shopCall<ShopProductManagerBootstrap>('productManagerBootstrap', token, {
+    method: 'POST',
+    body: JSON.stringify(options),
+  }),
   listCategories: (token: string) => shopCall<ShopCategory[]>('listCategories', token),
   createCategory: (token: string, payload: ShopCategoryPayload) => shopCall<ShopCategory>('createCategory', token, { method: 'POST', body: JSON.stringify(payload) }),
   updateCategory: (token: string, id: string, payload: ShopCategoryPayload) => shopCall<ShopCategory>('updateCategory', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
@@ -457,6 +562,8 @@ export const shopApi = {
   syncBoomagTaxonomy: (token: string) => shopCall<ShopTaxonomySyncResult>('syncBoomagTaxonomy', token, { method: 'POST', body: '{}' }),
   syncBoomagStock: (token: string) => shopCall<{ success: true; feed_products: number; matched_products: number; synced_at: string }>('syncBoomagStock', token, { method: 'POST', body: '{}' }),
   listProducts: (token: string) => shopCall<ShopProduct[]>('listProducts', token),
+  listProductOptions: (token: string, options: { q?: string; ids?: string[]; limit?: number } = {}) => shopCall<ShopProduct[]>('listProductOptions', token, { method: 'POST', body: JSON.stringify(options) }),
+  listProductOptionIds: (token: string) => shopCall<string[]>('listProductOptionIds', token, { method: 'POST', body: '{}' }),
   getProduct: (token: string, id: string) => shopCall<ShopProduct>('getProduct', token, undefined, id),
   getProductStats: (token: string, id: string) => shopCall<ShopProductStats>('getProductStats', token, undefined, id),
   createProduct: (token: string, payload: ShopProductPayload) => shopCall<ShopProduct>('createProduct', token, { method: 'POST', body: JSON.stringify(payload) }),
@@ -481,7 +588,12 @@ export const shopApi = {
   deletePromotion: (token: string, id: string) => shopCall<{ success: true }>('deletePromotion', token, { method: 'DELETE' }, id),
   getPaymentSettings: (token: string) => shopCall<ShopPaymentSettings>('getPaymentSettings', token),
   updatePaymentSettings: (token: string, payload: ShopPaymentSettings) => shopCall<ShopPaymentSettings>('updatePaymentSettings', token, { method: 'PUT', body: JSON.stringify(payload) }),
-  syncStripeCatalog: (token: string) => shopCall<ShopStripeSyncSummary>('syncStripeCatalog', token, { method: 'POST', body: '{}' }),
+  listCompanySettings: (token: string) => shopCall<ShopCompanySettings[]>('listCompanySettings', token),
+  getCompanySettings: (token: string) => shopCall<ShopCompanySettings>('getCompanySettings', token),
+  createCompanySettings: (token: string, payload: ShopCompanySettings) => shopCall<ShopCompanySettings>('createCompanySettings', token, { method: 'POST', body: JSON.stringify(payload) }),
+  updateCompanySettings: (token: string, id: number, payload: ShopCompanySettings) => shopCall<ShopCompanySettings>('updateCompanySettings', token, { method: 'PUT', body: JSON.stringify(payload) }, String(id)),
+  deleteCompanySettings: (token: string, id: number) => shopCall<{ success: true }>('deleteCompanySettings', token, { method: 'DELETE' }, String(id)),
+  syncStripeCatalog: (token: string, onProgress?: (progress: ShopStripeSyncProgress) => void) => syncStripeCatalogInBatches(token, onProgress),
   listShippingMethods: (token: string) => shopCall<ShopShippingMethod[]>('listShippingMethods', token),
   createShippingMethod: (token: string, payload: Omit<ShopShippingMethod, 'id'>) => shopCall<ShopShippingMethod>('createShippingMethod', token, { method: 'POST', body: JSON.stringify(payload) }),
   updateShippingMethod: (token: string, id: string, payload: Omit<ShopShippingMethod, 'id'>) => shopCall<ShopShippingMethod>('updateShippingMethod', token, { method: 'PUT', body: JSON.stringify(payload) }, id),

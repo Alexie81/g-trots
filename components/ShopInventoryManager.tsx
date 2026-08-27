@@ -8,14 +8,16 @@ import { shopApi, ShopInventoryMovement, ShopProduct } from '@/services/shopApi'
 import ShopPagination from '@/components/ShopPagination';
 import ShopProductPicture from '@/components/ShopProductPicture';
 
+let inventoryProductsCache: ShopProduct[] = [];
+
 export default function ShopInventoryManager() {
   const { token } = useAuth();
-  const [products, setProducts] = useState<ShopProduct[]>([]);
+  const [products, setProducts] = useState<ShopProduct[]>(inventoryProductsCache);
   const [movements, setMovements] = useState<ShopInventoryMovement[]>([]);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(inventoryProductsCache.length === 0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<ShopProduct | null>(null);
@@ -24,8 +26,8 @@ export default function ShopInventoryManager() {
 
   const load = useCallback(async () => {
     if (!token) return;
-    setLoading(true); setError('');
-    try { setProducts(await shopApi.listInventory(token)); }
+    if (!inventoryProductsCache.length) setLoading(true); setError('');
+    try { const next = await shopApi.listInventory(token); inventoryProductsCache = next; setProducts(next); }
     catch (loadError) { setError(loadError instanceof Error ? loadError.message : 'Stocurile nu au putut fi incarcate.'); }
     finally { setLoading(false); }
   }, [token]);

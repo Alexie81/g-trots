@@ -1,9 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as SecureStore from 'expo-secure-store';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BarChart3,
@@ -34,6 +37,7 @@ import {
   RefreshCw,
   Save,
   BadgePercent,
+  Building2,
   ShoppingCart,
   Sparkles,
   Tags,
@@ -49,6 +53,7 @@ import ShopOrdersManager from '@/components/ShopOrdersManager';
 import ShopProductsManager from '@/components/ShopProductsManager';
 import ShopCustomersManager from '@/components/ShopCustomersManager';
 import ShopDiscountsManager from '@/components/ShopDiscountsManager';
+import ShopCompanySettingsManager from '@/components/ShopCompanySettingsManager';
 import { ShopPaymentMethodsManager, ShopProductSourcesManager, ShopShippingManager } from '@/components/ShopMoreManagers';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -64,10 +69,16 @@ import {
 } from '@/services/shopApi';
 
 type CatalogView = 'categories' | 'brands' | 'manufacturers';
-type SettingsView = 'sources' | 'payments' | 'shipping' | 'customers' | 'discounts';
+type SettingsView = 'sources' | 'payments' | 'shipping' | 'customers' | 'discounts' | 'company';
 type PrimaryTab = 'home' | 'orders' | 'products' | 'inventory' | 'more';
 type ShopView = PrimaryTab | CatalogView | SettingsView;
 type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; item: ShopBrand } | { type: 'manufacturer'; item: ShopManufacturer };
+
+// Revalidarea sesiunii poate reconstrui layout-ul Expo. Pastram sectiunea
+// SHOP activa, astfel incat utilizatorul sa nu fie trimis inapoi pe Acasa.
+let persistedShopView: ShopView = 'home';
+const SHOP_VIEW_STORAGE_KEY = 'gtrots.shopView.v2';
+const shopViews = new Set<ShopView>(['home', 'orders', 'products', 'inventory', 'more', 'categories', 'brands', 'manufacturers', 'sources', 'payments', 'shipping', 'customers', 'discounts', 'company']);
 
 const orderStatusLabels: Record<string, string> = {
   new: 'NOUĂ',
@@ -137,6 +148,7 @@ const primaryTabDetails = {
 } as const;
 
 const moreAreas = [
+  { key: 'company', title: 'Datele firmei', description: 'Identitate juridică, sediu, contact și date bancare.', Icon: Building2, color: '#FE8C19' },
   { key: 'customers', title: 'Clienți', description: 'Conturi, comenzi, valoare totală și controlul accesului.', Icon: UsersRound, color: '#38BDF8' },
   { key: 'discounts', title: 'Reduceri', description: 'Campanii globale sau per produs și anunțuri pe site.', Icon: BadgePercent, color: '#F59E0B' },
   { key: 'sources', title: 'Surse produse', description: 'Magazinele si furnizorii din care provin produsele.', Icon: Globe2, color: '#38BDF8' },
@@ -151,7 +163,15 @@ const moreAreas = [
 export default function ShopModuleScreen() {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
-  const [view, setView] = useState<ShopView>('home');
+  const [view, setView] = useState<ShopView>(persistedShopView);
+  const viewRef = useRef<ShopView>(persistedShopView);
+  const settingsScrollRef = useRef<ScrollView | null>(null);
+  const revealSettingsField = useCallback((target: number) => {
+    setTimeout(() => {
+      const responder = settingsScrollRef.current?.getScrollResponder?.() as { scrollResponderScrollNativeHandleToKeyboard?: (nodeHandle: number, extraHeight: number, preventNegativeScrollOffset: boolean) => void } | undefined;
+      responder?.scrollResponderScrollNativeHandleToKeyboard?.(target, 150, true);
+    }, 180);
+  }, []);
   const [ordersInitialFilter, setOrdersInitialFilter] = useState<'all' | 'new'>('all');
   const [initialOrderId, setInitialOrderId] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<ShopDashboardStats | null>(null);
@@ -182,6 +202,22 @@ export default function ShopModuleScreen() {
   const [manufacturerName, setManufacturerName] = useState('');
   const [manufacturerWebsite, setManufacturerWebsite] = useState('');
   const [manufacturerActive, setManufacturerActive] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    void SecureStore.getItemAsync(SHOP_VIEW_STORAGE_KEY).then((stored) => {
+      if (!active || !stored || !shopViews.has(stored as ShopView)) return;
+      // Do not override a navigation action that happened while storage loaded.
+      if (viewRef.current === 'home' && persistedShopView === 'home') setView(stored as ShopView);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    persistedShopView = view;
+    viewRef.current = view;
+    void SecureStore.setItemAsync(SHOP_VIEW_STORAGE_KEY, view).catch(() => {});
+  }, [view]);
 
   const loadCatalog = useCallback(async (quiet = false) => {
     if (!token) return;
@@ -494,14 +530,22 @@ export default function ShopModuleScreen() {
     );
   }
 
-  if (view === 'sources' || view === 'payments' || view === 'shipping' || view === 'customers' || view === 'discounts') {
-    const title = view === 'sources' ? 'Surse produse' : view === 'payments' ? 'Metode de plată' : view === 'shipping' ? 'Livrări' : view === 'customers' ? 'Clienți' : 'Reduceri';
+  if (view === 'sources' || view === 'payments' || view === 'shipping' || view === 'customers' || view === 'discounts' || view === 'company') {
+    const title = view === 'sources' ? 'Surse produse' : view === 'payments' ? 'Metode de plată' : view === 'shipping' ? 'Livrări' : view === 'customers' ? 'Clienți' : view === 'company' ? 'Datele firmei' : 'Reduceri';
     return (
       <View style={styles.container}>
         <Header title={title} showBack onBack={() => setView('more')} />
-        <ScrollView contentContainerStyle={{ paddingBottom: 88 + insets.bottom }} showsVerticalScrollIndicator={false}>
-          {view === 'sources' ? <ShopProductSourcesManager /> : view === 'payments' ? <ShopPaymentMethodsManager /> : view === 'shipping' ? <ShopShippingManager /> : view === 'customers' ? <ShopCustomersManager /> : <ShopDiscountsManager />}
-        </ScrollView>
+        <KeyboardAvoidingView style={styles.settingsKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
+          <ScrollView
+            ref={settingsScrollRef}
+            contentContainerStyle={{ paddingBottom: 180 + insets.bottom }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            automaticallyAdjustKeyboardInsets>
+            {view === 'sources' ? <ShopProductSourcesManager /> : view === 'payments' ? <ShopPaymentMethodsManager /> : view === 'shipping' ? <ShopShippingManager /> : view === 'customers' ? <ShopCustomersManager onSearchFocus={() => setTimeout(() => settingsScrollRef.current?.scrollTo({ y: 390, animated: true }), 120)} /> : view === 'company' ? <ShopCompanySettingsManager onFieldFocus={revealSettingsField} /> : <ShopDiscountsManager />}
+          </ScrollView>
+        </KeyboardAvoidingView>
         <ShopBottomNavigation activeTab="more" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
       </View>
     );
@@ -807,6 +851,7 @@ function EmptyCatalog({ icon, title, text }: { icon: React.ReactNode; title: str
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
+  settingsKeyboard: { flex: 1 },
   content: { padding: 16, paddingBottom: 38 },
   hero: { overflow: 'hidden', borderWidth: 0, borderRadius: 28, padding: 24, backgroundColor: '#151B1E' },
   heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }, heroIcon: { width: 44, height: 44, borderWidth: 1, borderColor: 'rgba(56,189,248,0.30)', borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(56,189,248,0.10)' }, heroRefresh: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.06)' },

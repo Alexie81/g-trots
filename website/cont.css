@@ -2,5 +2,135 @@
 @media(max-width:900px){.auth-shell{grid-template-columns:1fr;max-width:36rem}.auth-brand-panel{display:none}.auth-form-panel{min-height:calc(100vh - 8rem);justify-content:center}.auth-mobile-brand{margin-bottom:2rem;display:flex;align-items:center;gap:.8rem}.auth-mobile-brand img{width:3rem;height:3rem;border-radius:1rem}.auth-mobile-brand span{display:grid}.auth-mobile-brand b{font-size:1rem}.auth-mobile-brand small{color:#807970;font-size:.6rem}.account-layout{grid-template-columns:1fr}.account-nav{padding:.45rem;position:static;grid-template-columns:repeat(4,1fr)}.account-nav button{min-width:0;padding:.45rem;justify-content:center}.account-nav button span{display:none}.account-nav button b{margin:0;position:absolute;transform:translate(1rem,-1rem)}.account-nav button i{width:2.55rem;height:2.55rem}.overview-grid{grid-template-columns:1fr}.account-hero:after{display:none}}
 @media(max-width:620px){.customer-auth-page .site-header,.customer-account-page .site-header{display:none}.auth-shell{width:100%;min-height:100vh;margin:0;border:0;border-radius:0}.auth-form-panel{min-height:100vh;padding:max(1.4rem,env(safe-area-inset-top)) 1rem max(1.5rem,env(safe-area-inset-bottom))}.auth-heading h2{font-size:2.2rem}.auth-form-grid,.address-form-grid{grid-template-columns:1fr;gap:.85rem}.auth-input{height:3.45rem}.auth-primary{height:3.7rem}.account-shell{width:100%;margin:0;padding:env(safe-area-inset-top) .65rem calc(2rem + env(safe-area-inset-bottom))}.account-hero{min-height:11rem;padding:1.2rem;align-items:flex-start;border-radius:1.4rem}.account-avatar{width:3.8rem;height:3.8rem;border-radius:1.15rem}.account-avatar span{width:3.2rem;height:3.2rem;border-radius:.9rem}.account-avatar span:before{width:.9rem;height:.9rem;top:.65rem}.account-avatar span:after{width:1.8rem;height:1rem;bottom:.45rem}.account-welcome{min-width:0}.account-welcome h1{font-size:1.65rem;line-height:1.05}.account-welcome p{max-width:12rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.65rem}.account-welcome>span{font-size:.53rem}.account-logout{width:2.8rem;height:2.8rem;margin-left:auto;padding:0;justify-content:center}.account-logout b{display:none}.account-layout{margin-top:.65rem;gap:.65rem}.account-panel{min-height:calc(100vh - 16rem);padding:1rem;border-radius:1.3rem}.account-section-head{align-items:flex-start;flex-direction:column;gap:.6rem}.account-section-head h2{font-size:1.75rem}.account-section-head>p{font-size:.68rem}.account-metrics{grid-template-columns:repeat(3,1fr);gap:.4rem}.account-metrics article{min-height:6.4rem;padding:.65rem;display:grid;gap:.35rem}.account-metrics article>i{width:2rem;height:2rem;border-radius:.65rem;font-size:.8rem}.account-metrics strong{font-size:.9rem}.account-metrics em{display:none}.account-metrics small{font-size:.48rem}.overview-grid{gap:.5rem}.latest-order-card,.account-help-card{min-height:12rem;padding:1rem}.customer-order-card{grid-template-columns:auto minmax(0,1fr);gap:.7rem}.customer-order-card>div:last-child{grid-column:2;justify-items:start}.order-card-icon{width:2.8rem;height:2.8rem}.address-card,.coupon-card{grid-template-columns:auto minmax(0,1fr)}.address-card-actions{grid-column:2}.account-dialog{width:100%;max-height:96vh;margin:auto 0 0;border-radius:1.5rem 1.5rem 0 0}.order-detail,.address-dialog form{padding:1rem}.order-detail-head{align-items:flex-start}.order-detail-head em{margin-left:0}.order-product{grid-template-columns:3.1rem minmax(0,1fr)}.order-product img{width:3.1rem;height:3.1rem}.order-product>b{grid-column:2}.order-timeline{overflow-x:auto;grid-template-columns:repeat(5,5.5rem);padding-bottom:.4rem}.address-form-grid label.wide{grid-column:auto}}
 @media(prefers-reduced-motion:reduce){.auth-brand-orbit,.account-loader i{animation:none!important}}
+
+/* Cont desktop aliniat exact cu lățimea navbarului. */
+@media(min-width:621px){
+  .customer-account-page .account-shell{width:min(1480px,calc(100% - 2rem))}
+}
+
+.customer-account-page .account-nav .account-promotion-icon{
+  color:#ff930f;
+  font-size:.9rem;
+  font-weight:950;
+  letter-spacing:-.08em;
+}
+
+.customer-account-page .account-nav .account-promotion-icon>span{
+  display:block;
+  transform:translateX(-.03rem);
+}
+
+/* Buton Google premium; butonul oficial ramane deasupra pentru fluxul securizat Google. */
+[data-google-auth]{min-height:4.35rem}
+.google-auth-ready{height:4.35rem;position:relative}
+.google-auth-ready>.google-auth-button{position:absolute;inset:0;pointer-events:none}
+.google-auth-ready>[data-google-official]{position:absolute;inset:0;z-index:2;display:grid;place-items:center;overflow:hidden;border-radius:1.25rem;opacity:.001;cursor:pointer}
+.google-auth-ready>[data-google-official]>div,.google-auth-ready>[data-google-official] iframe{width:100%!important;max-width:none!important}
+.google-auth-button{height:4.35rem;padding:0 .7rem 0 1.15rem;justify-content:flex-start;gap:1rem;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.7);border-radius:1.25rem;background:linear-gradient(180deg,#fff,#f4f1ed);box-shadow:0 .85rem 2.2rem rgba(0,0,0,.24),inset 0 1px 0 #fff;color:#211f1d;font-size:.92rem}
+.google-auth-button:before{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 20%,rgba(255,255,255,.8) 45%,transparent 70%);transform:translateX(-120%);transition:transform .65s ease}
+.google-auth-button:hover:before{transform:translateX(120%)}
+.google-auth-button span{position:relative;z-index:1;font-weight:850}
+.google-auth-button i{width:2.65rem;height:2.65rem;margin-left:auto;display:grid;place-items:center;position:relative;z-index:1;border:0;border-radius:.9rem;background:#f2f0ed;box-shadow:none;color:#e86f00;font:750 1.18rem/1 Manrope;font-style:normal;transition:background-color .2s ease,color .2s ease,transform .2s ease}
+.google-auth-button:hover i{background:#ebe8e4;color:#c95f00;transform:translateX(1px)}
+
+/* Contul foloseste acelasi loader ca magazinul, iar navbarul ramane vizibil la scroll. */
+.customer-account-page .site-header{position:fixed;z-index:50}
+.customer-account-page .account-shell{margin-top:7.25rem}
+.account-page-loading{min-height:34rem;border-radius:2rem}
+.account-page-loading>.empty-account-state{grid-column:1/-1;width:100%}
+.customer-account-page .account-avatar{border:1px solid rgba(255,133,0,.5);background:#211d19;box-shadow:0 .85rem 2rem rgba(0,0,0,.28),0 0 0 .35rem rgba(255,133,0,.055)}
+.customer-account-page .account-avatar span{background:linear-gradient(145deg,#1b1815,#12100f)}
+.customer-account-page .account-nav button{min-height:4.65rem;gap:.9rem;font-size:.84rem}
+.customer-account-page .account-nav button i{width:3rem;height:3rem;flex:0 0 3rem;border-radius:.95rem;background:rgba(255,133,0,.075)}
+.customer-account-page .account-nav button i svg{width:1.45rem;height:1.45rem;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.customer-account-page .account-nav button.active i{background:rgba(255,133,0,.14);box-shadow:inset 0 0 0 1px rgba(255,133,0,.11)}
+.address-dialog .auth-primary{width:100%;height:4rem;margin-top:1.25rem;padding:.4rem .45rem .4rem 1.3rem;border-radius:1.15rem;background:#f57c00;color:#fff;box-shadow:0 .8rem 2rem rgba(245,124,0,.16);font-size:.9rem}
+.address-dialog .auth-primary:hover{transform:translateY(-1px);filter:brightness(1.04)}
+.address-dialog .auth-primary i{width:3.05rem;height:3.05rem;border-radius:.9rem;background:rgba(63,28,0,.18);box-shadow:none;color:#fff}
+.address-dialog .auth-primary i svg{width:1.35rem;height:1.35rem;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* Cont client - suprafete Material 3, touch friendly */
+.account-logout{min-height:3.5rem;padding:.55rem .7rem .55rem .62rem;border-color:rgba(255,133,0,.2);border-radius:1.15rem;background:rgba(255,255,255,.045);font-weight:850;transition:background .2s,border-color .2s,transform .2s}
+.account-logout:hover{border-color:rgba(255,133,0,.42);background:rgba(255,133,0,.09);transform:translateY(-1px)}
+.account-logout span{width:2.45rem;height:2.45rem;border-radius:.85rem;color:var(--account-orange);background:rgba(255,133,0,.11)}
+.account-logout span svg{width:1.25rem;height:1.25rem;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.account-help-card{position:relative;overflow:hidden;border-color:rgba(255,133,0,.16);background:radial-gradient(circle at 100% 0,rgba(255,133,0,.16),transparent 12rem),linear-gradient(145deg,#1e1914,#171513)}
+.account-help-card:after{content:"G";position:absolute;right:-.7rem;bottom:-3.6rem;color:rgba(255,133,0,.04);font-size:10rem;font-weight:900}
+.account-help-card>span{display:flex;align-items:center;gap:.5rem;position:relative;z-index:1}
+.account-help-card>span i{width:1.7rem;height:1.7rem;display:grid;place-items:center;border-radius:.6rem;background:rgba(255,133,0,.12)}
+.account-help-card>span svg,.account-help-card a svg{width:1rem;height:1rem;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.account-help-card h3,.account-help-card p,.account-help-card div{position:relative;z-index:1}.account-help-card h3 b{color:var(--account-orange)}
+.account-help-card a{min-height:2.8rem;display:inline-flex;align-items:center;justify-content:center;gap:.48rem;padding:.7rem 1rem;border:1px solid rgba(255,255,255,.07);border-radius:.9rem;transition:transform .18s,background .18s}.account-help-card a:hover{transform:translateY(-1px)}
+.account-add-button{min-height:3rem;padding:.42rem .9rem .42rem .45rem;gap:.65rem;border:1px solid rgba(255,158,78,.42);border-radius:1rem;background:#f57c00;color:#fff;box-shadow:0 .6rem 1.4rem rgba(245,124,0,.14);font-size:.75rem}
+.account-add-button span{width:2.1rem;height:2.1rem;display:grid;place-items:center;border-radius:.7rem;background:rgba(255,255,255,.15)}
+.account-add-button svg{width:1.15rem;height:1.15rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.address-card{min-height:7.2rem;align-items:center;padding:1rem 1.05rem;border-color:rgba(255,255,255,.085);border-radius:1.35rem;background:linear-gradient(145deg,rgba(255,255,255,.025),transparent),#191715;transition:transform .18s,border-color .18s}
+.address-card:hover{transform:translateY(-1px);border-color:rgba(255,133,0,.25)}
+.address-card>i{width:3.35rem;height:3.35rem;border-radius:1.05rem;color:var(--account-orange);background:rgba(255,133,0,.1)}
+.address-card>i svg{width:1.55rem;height:1.55rem;fill:none;stroke:currentColor;stroke-width:1.7}
+.address-card h3{display:flex;align-items:center;gap:.45rem;font-size:1rem}.address-card p{line-height:1.55}
+.default-pill{margin:0;padding:.25rem .45rem;border-radius:99px}
+.address-card-actions button{width:2.75rem;height:2.75rem;display:grid;place-items:center;border-radius:.9rem;transition:background .18s,transform .18s}.address-card-actions button:hover{background:#302b27;transform:translateY(-1px)}
+.address-card-actions button svg{width:1.1rem;height:1.1rem;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.account-dialog{opacity:0;transform:translateY(2.2rem) scale(.985);transition:opacity .22s ease,transform .22s cubic-bezier(.2,.8,.2,1),overlay .22s ease allow-discrete,display .22s ease allow-discrete}
+.account-dialog[open].is-visible{opacity:1;transform:translateY(0) scale(1)}
+.account-dialog.is-closing{opacity:0;transform:translateY(2.6rem) scale(.985)}
+.dialog-close{width:3rem;height:3rem;display:grid;place-items:center;border-radius:1rem;background:#27231f;font-size:1.05rem;transition:background .18s,transform .18s}.dialog-close:hover{background:#332d28;transform:scale(1.03)}
+.address-dialog form{padding:2rem 2rem 2.2rem}.address-dialog h2{font-size:clamp(1.8rem,4vw,2.45rem)}
+.address-form-grid input:not([type=checkbox]){height:3.55rem;border-radius:1rem;background:#0e0d0c;font-size:.84rem;transition:border-color .18s,box-shadow .18s}.address-form-grid input:focus{box-shadow:0 0 0 .2rem rgba(255,133,0,.1)}
+.address-default{min-height:3.1rem;padding:.6rem .75rem;border:1px solid rgba(255,255,255,.07);border-radius:1rem;background:rgba(255,255,255,.02)}
+@media(max-width:620px){.account-logout{width:3.15rem;height:3.15rem}.account-logout span{width:2.25rem;height:2.25rem}.account-dialog{transform:translateY(100%);border-radius:1.7rem 1.7rem 0 0}.account-dialog[open].is-visible{transform:translateY(0)}.account-dialog.is-closing{transform:translateY(100%)}.address-dialog form{padding:1rem 1rem 1.35rem}.dialog-close{top:.65rem;margin:.65rem .65rem 0 0}.account-add-button{width:100%;justify-content:flex-start}.address-card{grid-template-columns:3rem minmax(0,1fr);padding:.85rem}.address-card>i{width:3rem;height:3rem}.address-card-actions{grid-column:2}.account-help-card div{display:grid;grid-template-columns:1fr 1fr}.account-help-card a{padding:.65rem .5rem}}
+@media(max-width:620px){.customer-account-page .account-shell{margin-top:0}.account-page-loading{min-height:27rem;border-radius:1.4rem}}
+.google-auth-logo{width:2rem;height:2rem;flex:0 0 2rem;position:relative;z-index:1;filter:drop-shadow(0 .15rem .25rem rgba(0,0,0,.12))}
+.google-auth-button.is-retry{cursor:pointer}
+.google-auth-note{margin:.55rem 0 0}
+
+/* Autentificarea ramane parte din site si pe telefon. */
+@media(max-width:620px){
+  .customer-auth-page .site-header,.customer-account-page .site-header{display:block;position:sticky;z-index:60;top:0;background:rgba(10,9,8,.94);backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,.08)}
+  .customer-auth-page .main-nav,.customer-account-page .main-nav{backdrop-filter:blur(28px) saturate(1.05);-webkit-backdrop-filter:blur(28px) saturate(1.05)}
+  .customer-auth-page .auth-shell{min-height:calc(100vh - 4.9rem)}
+  .customer-auth-page .auth-form-panel{min-height:calc(100vh - 4.9rem);padding-top:2rem}
+  .customer-auth-page .auth-mobile-brand{display:none}
+}
+
+/* CTA Material 3: contrast mai bun, text alb si o actiune evidenta. */
+.auth-primary{min-height:4.15rem;padding:.4rem .45rem .4rem 1.5rem;border:1px solid rgba(255,181,92,.58);background:linear-gradient(135deg,#e96500 0%,#ff8500 52%,#ff9d28 100%);color:#fff;font-size:.94rem;letter-spacing:-.01em;box-shadow:0 1rem 2.5rem rgba(255,104,0,.23),inset 0 1px 0 rgba(255,255,255,.2)}
+.auth-primary i{width:3rem;height:3rem;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.72);border-radius:1rem;background:rgba(255,248,239,.9);color:#df6500;font-size:0;box-shadow:0 .28rem .85rem rgba(105,40,0,.15),inset 0 1px 0 #fff}
+.auth-primary i:before{content:"";width:1.15rem;height:1.15rem;position:absolute;inset:50% auto auto 50%;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='m9 5 7 7-7 7'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='m9 5 7 7-7 7'/%3E%3C/svg%3E") center/contain no-repeat;transform:translate(-50%,-50%)}
+.auth-primary:hover{transform:translateY(-2px);filter:none;box-shadow:0 1.2rem 2.8rem rgba(255,104,0,.3),inset 0 1px 0 rgba(255,255,255,.22)}
 .auth-message.account-disabled{position:relative;padding:1rem 1rem 1rem 3.65rem;border-color:rgba(255,133,0,.42);background:linear-gradient(135deg,rgba(255,133,0,.14),rgba(255,94,94,.07));color:#ffd6ae;box-shadow:0 .9rem 2.4rem rgba(0,0,0,.22)}
 .auth-message.account-disabled:before{content:"!";width:2rem;height:2rem;position:absolute;left:.85rem;top:50%;display:grid;place-items:center;border-radius:.7rem;background:linear-gradient(135deg,#ff8500,#ff9f43);color:#1b0c01;font-size:1rem;font-weight:950;transform:translateY(-50%);box-shadow:0 .5rem 1.3rem rgba(255,133,0,.22)}
+
+/* Auth desktop v2: aceeasi latime ca navbarul si formular fara overflow. */
+@media(min-width:901px){
+  .auth-shell{width:min(1480px,calc(100% - 2rem));grid-template-columns:minmax(0,1fr) minmax(36rem,.92fr)}
+  .auth-form-panel{min-width:0;padding:clamp(2.2rem,3.4vw,4rem)}
+  .auth-brand-copy ul{margin-top:2rem;gap:.62rem}
+  .auth-brand-copy li{padding:.78rem .9rem}
+  .auth-form-grid>*{min-width:0}
+  .auth-register-shell .auth-form-panel{padding-inline:clamp(2rem,3vw,3.4rem)}
+}
+
+.customer-auth-page[data-customer-page="login"] .auth-brand-panel:after{content:"LOGIN";right:-.55rem;bottom:-2.2rem;font-size:clamp(9rem,16vw,15rem);letter-spacing:-.085em}
+.customer-auth-page[data-customer-page="register"] .auth-brand-panel:after{content:"NEW";right:1rem;bottom:-2.2rem;font-size:clamp(10rem,17vw,16rem);letter-spacing:-.085em}
+
+/* Iconite explicite pentru campurile care nu folosesc simbolul generic. */
+.auth-input>i[data-icon="user"]:before,.auth-input>i[data-icon="phone"]:before{inset:0;border:0;border-radius:0;background:currentColor}
+.auth-input>i[data-icon="user"]:before{-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-5 0-8 2.5-8 6v1h16v-1c0-3.5-3-6-8-6Z'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-5 0-8 2.5-8 6v1h16v-1c0-3.5-3-6-8-6Z'/%3E%3C/svg%3E") center/contain no-repeat}
+.auth-input>i[data-icon="phone"]:before{-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='m7.1 2 3 5.4-2.1 2c1.1 2.4 3.2 4.5 5.7 5.6l2-2.1 5.3 3c.1.1.2.3.2.5 0 3.2-2.6 5.6-5.7 5.6C8.2 22 2 15.8 2 8.5 2 5.4 4.4 2.8 7.6 2.8c.2 0 .4.1.5.2Z'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='m7.1 2 3 5.4-2.1 2c1.1 2.4 3.2 4.5 5.7 5.6l2-2.1 5.3 3c.1.1.2.3.2.5 0 3.2-2.6 5.6-5.7 5.6C8.2 22 2 15.8 2 8.5 2 5.4 4.4 2.8 7.6 2.8c.2 0 .4.1.5.2Z'/%3E%3C/svg%3E") center/contain no-repeat}
+
+@media(min-width:901px) and (max-width:1220px){
+  .auth-shell{grid-template-columns:minmax(0,.92fr) minmax(35rem,1.08fr)}
+  .auth-brand-panel{padding:clamp(2.5rem,4vw,4rem)}
+  .auth-brand-copy h1{font-size:clamp(3rem,5vw,4.4rem)}
+}
+
+/* Efect de scriere fara layout shift: textul complet, invizibil, rezerva spatiul. */
+.auth-brand-copy em[data-auth-typewriter]{max-width:100%;display:inline-grid;position:relative;vertical-align:top}
+.auth-typewriter-reserve,.auth-typewriter-live{grid-area:1/1;white-space:pre-wrap}
+.auth-typewriter-reserve{visibility:hidden}
+.auth-typewriter-live{position:relative}
+.auth-typewriter-live.is-typing:after{content:"";width:.07em;height:.82em;margin-left:.08em;display:inline-block;border-radius:999px;background:currentColor;box-shadow:0 0 .8rem rgba(255,133,0,.7);vertical-align:-.02em;animation:auth-cursor 900ms steps(1,end) infinite}
+@keyframes auth-cursor{50%{opacity:0}}
+@media(prefers-reduced-motion:reduce){.auth-typewriter-live.is-typing:after{display:none}}

@@ -22,20 +22,34 @@
   const firstName = name => String(name || "client").trim().split(/\s+/)[0] || "client";
 
   async function api(action, { method = "GET", body, query = "", auth = true } = {}) {
-    const response = await fetch(`${API_URL}?action=${encodeURIComponent(action)}${query}`, {
-      method,
-      headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}), ...(auth && token() ? { "X-Customer-Token": token() } : {}) },
-      body: body ? JSON.stringify(body) : undefined,
-      cache: "no-store"
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const error = new Error(payload.error || "Cererea nu a putut fi procesată.");
-      error.code = payload.code || "";
-      error.status = response.status;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 12000);
+    try {
+      const response = await fetch(`${API_URL}?action=${encodeURIComponent(action)}${query}`, {
+        method,
+        headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}), ...(auth && token() ? { "X-Customer-Token": token() } : {}) },
+        body: body ? JSON.stringify(body) : undefined,
+        cache: "no-store",
+        signal: controller.signal
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(payload.error || "Cererea nu a putut fi procesată.");
+        error.code = payload.code || "";
+        error.status = response.status;
+        throw error;
+      }
+      return payload;
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        const timeoutError = new Error("Serverul răspunde prea greu. Reîncarcă pagina pentru a încerca din nou.");
+        timeoutError.code = "timeout";
+        throw timeoutError;
+      }
       throw error;
+    } finally {
+      window.clearTimeout(timeout);
     }
-    return payload;
   }
 
   function saveSession(payload) {
@@ -80,27 +94,41 @@
     }));
   }
 
+  const googleLogo = `
+    <svg class="google-auth-logo" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.91h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.24c1.9-1.75 2.98-4.33 2.98-7.4Z"/>
+      <path fill="#34A853" d="M12 22c2.7 0 4.97-.9 6.62-2.37l-3.24-2.54c-.9.6-2.05.96-3.38.96-2.6 0-4.81-1.76-5.6-4.13H3.06v2.62A10 10 0 0 0 12 22Z"/>
+      <path fill="#FBBC05" d="M6.4 13.92A6 6 0 0 1 6.08 12c0-.67.12-1.32.32-1.92V7.46H3.06A10 10 0 0 0 2 12c0 1.61.38 3.14 1.06 4.54l3.34-2.62Z"/>
+      <path fill="#EA4335" d="M12 5.95c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.63 9.63 0 0 0 12 2a10 10 0 0 0-8.94 5.46l3.34 2.62C7.19 7.7 9.4 5.95 12 5.95Z"/>
+    </svg>`;
+
+  function googleSurface(text, retry = false) {
+    return `<button class="google-auth-button${retry ? " is-retry" : ""}" type="button"${retry ? " data-google-retry" : ""}>${googleLogo}<span>${text}</span><i aria-hidden="true">&gt;</i></button>`;
+  }
+
   async function initializeGoogle() {
     const host = document.querySelector("[data-google-auth]");
     if (!host) return;
     try {
       const config = await api("customerAuthConfig", { auth: false });
       if (!config.google_client_id) {
-        host.innerHTML = '<button class="google-auth-button" type="button" disabled><span class="google-g">G</span><span>Continuă cu Google</span></button><p class="google-auth-note">Conectarea Google va fi disponibilă după activarea identității G-Trots.</p>';
+        host.innerHTML = `${googleSurface("Continuă cu Google", true)}<p class="google-auth-note">Reîncearcă autentificarea securizată cu Google.</p>`;
+        host.querySelector("[data-google-retry]")?.addEventListener("click", initializeGoogle, { once: true });
         return;
       }
       await new Promise((resolve, reject) => {
         if (window.google?.accounts?.id) return resolve();
         const script = document.createElement("script"); script.src = "https://accounts.google.com/gsi/client"; script.async = true; script.defer = true; script.onload = resolve; script.onerror = reject; document.head.append(script);
       });
-      host.innerHTML = '<div data-google-official></div>';
+      host.innerHTML = `<div class="google-auth-ready">${googleSurface(page === "register" ? "Creează cont cu Google" : "Continuă cu Google")}<div data-google-official aria-label="Continuă cu Google"></div></div>`;
       window.google.accounts.id.initialize({ client_id: config.google_client_id, callback: async response => {
         try { const session = await api("customerGoogleLogin", { method: "POST", body: { credential: response.credential }, auth: false }); saveSession(session); redirectAfterAuth(); }
         catch (error) { setMessage(document, error.message); }
       }});
-      window.google.accounts.id.renderButton(host.querySelector("[data-google-official]"), { theme: "outline", size: "large", shape: "pill", width: Math.min(420, host.clientWidth || 420), text: page === "register" ? "signup_with" : "signin_with", locale: "ro" });
+      window.google.accounts.id.renderButton(host.querySelector("[data-google-official]"), { theme: "outline", size: "large", shape: "pill", width: Math.max(240, host.clientWidth || 420), text: page === "register" ? "signup_with" : "signin_with", locale: "ro", logo_alignment: "left" });
     } catch (error) {
-      host.innerHTML = '<button class="google-auth-button" type="button" disabled><span class="google-g">G</span><span>Google este temporar indisponibil</span></button>';
+      host.innerHTML = `${googleSurface("Reîncearcă Google", true)}<p class="google-auth-note">Conexiunea nu a răspuns. Apasă pentru a reîncerca.</p>`;
+      host.querySelector("[data-google-retry]")?.addEventListener("click", initializeGoogle, { once: true });
     }
   }
 
@@ -177,7 +205,7 @@
   function renderAddresses() {
     const host = document.querySelector("[data-customer-addresses]"); if (!host) return;
     document.querySelectorAll("[data-address-count]").forEach(node => node.textContent = state.addresses.length);
-    host.innerHTML = state.addresses.length ? state.addresses.map(address => `<article class="address-card"><i>⌖</i><div><h3>${escapeHtml(address.label)}${address.is_default ? '<span class="default-pill">PRINCIPALĂ</span>' : ""}</h3><p><strong>${escapeHtml(address.recipient_name)}</strong> · ${escapeHtml(address.phone)}</p><p>${escapeHtml(address.address)}, ${escapeHtml(address.city)}, ${escapeHtml(address.county)}${address.postal_code ? ` · ${escapeHtml(address.postal_code)}` : ""}</p></div><div class="address-card-actions"><button type="button" data-edit-address="${escapeHtml(address.id)}" aria-label="Editează">✎</button><button type="button" data-delete-address="${escapeHtml(address.id)}" aria-label="Șterge">×</button></div></article>`).join("") : emptyState("⌖", "Nu ai adrese salvate", "Adaugă o adresă pentru un checkout mai rapid.");
+    host.innerHTML = state.addresses.length ? state.addresses.map(address => `<article class="address-card"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 10c0 5.25-7 10.25-7 10.25S5 15.25 5 10a7 7 0 1 1 14 0Z"></path><circle cx="12" cy="10" r="2.25"></circle></svg></i><div><h3>${escapeHtml(address.label)}${address.is_default ? '<span class="default-pill">PRINCIPALĂ</span>' : ""}</h3><p><strong>${escapeHtml(address.recipient_name)}</strong> · ${escapeHtml(address.phone)}</p><p>${escapeHtml(address.address)}, ${escapeHtml(address.city)}, ${escapeHtml(address.county)}${address.postal_code ? ` · ${escapeHtml(address.postal_code)}` : ""}</p></div><div class="address-card-actions"><button type="button" data-edit-address="${escapeHtml(address.id)}" aria-label="Editează"><svg viewBox="0 0 24 24"><path d="m4 20 4.25-1 10.5-10.5-3.25-3.25L5 15.75Z"></path><path d="m13.75 7 3.25 3.25"></path></svg></button><button type="button" data-delete-address="${escapeHtml(address.id)}" aria-label="Șterge"><svg viewBox="0 0 24 24"><path d="M5 7h14M9 7V4h6v3M8 10v7M12 10v7M16 10v7M7 7l1 13h8l1-13"></path></svg></button></div></article>`).join("") : emptyState("⌖", "Nu ai adrese salvate", "Adaugă o adresă pentru un checkout mai rapid.");
   }
 
   function renderCoupons() {
@@ -187,14 +215,23 @@
 
   function openAddress(address = null) {
     const dialog = document.querySelector("[data-address-dialog]"); const form = dialog.querySelector("form"); form.reset();
-    form.elements.id.value = address?.id || ""; ["label", "recipient_name", "phone", "address", "city", "county", "postal_code"].forEach(key => form.elements[key].value = address?.[key] || (key === "recipient_name" ? state.customer.full_name : key === "phone" ? state.customer.phone : "")); form.elements.is_default.checked = Boolean(address?.is_default); document.querySelector("[data-address-form-title]").textContent = address ? "Editează adresa" : "Adaugă o adresă"; dialog.showModal();
+    form.elements.id.value = address?.id || ""; ["label", "recipient_name", "phone", "address", "city", "county", "postal_code"].forEach(key => form.elements[key].value = address?.[key] || (key === "recipient_name" ? state.customer.full_name : key === "phone" ? state.customer.phone : "")); form.elements.is_default.checked = Boolean(address?.is_default); document.querySelector("[data-address-form-title]").textContent = address ? "Editează adresa" : "Adaugă o adresă"; dialog.showModal(); requestAnimationFrame(() => dialog.classList.add("is-visible"));
+  }
+
+  function closeAccountDialog(dialog) {
+    if (!dialog?.open || dialog.classList.contains("is-closing")) return;
+    dialog.classList.add("is-closing");
+    dialog.classList.remove("is-visible");
+    window.setTimeout(() => { dialog.close(); dialog.classList.remove("is-closing"); }, 220);
   }
 
   async function loadAccount() {
     if (!token()) { location.replace(`/login.html?redirect=${encodeURIComponent(location.pathname)}`); return; }
     try {
-      const [me, orders, addresses, coupons] = await Promise.all([api("customerMe"), api("customerOrders"), api("customerAddresses"), api("customerCoupons")]);
-      state.customer = me.customer; state.orders = Array.isArray(orders) ? orders : []; state.addresses = Array.isArray(addresses) ? addresses : []; state.coupons = Array.isArray(coupons) ? coupons : [];
+      const me = await api("customerMe");
+      const [ordersResult, addressesResult, couponsResult] = await Promise.allSettled([api("customerOrders"), api("customerAddresses"), api("customerCoupons")]);
+      const valueOrEmpty = result => result.status === "fulfilled" && Array.isArray(result.value) ? result.value : [];
+      state.customer = me.customer; state.orders = valueOrEmpty(ordersResult); state.addresses = valueOrEmpty(addressesResult); state.coupons = valueOrEmpty(couponsResult);
       localStorage.setItem(PROFILE_KEY, JSON.stringify(state.customer)); document.dispatchEvent(new CustomEvent("g-trots:customer-changed", { detail: state.customer }));
       document.querySelector("[data-customer-first-name]").textContent = firstName(state.customer.full_name); document.querySelector("[data-customer-email]").textContent = state.customer.email;
       renderOrders(); renderAddresses(); renderCoupons(); document.querySelector("[data-account-loading]").hidden = true; document.querySelector("[data-account-app]").hidden = false;
@@ -205,16 +242,74 @@
     document.addEventListener("click", async event => {
       const tab = event.target.closest("[data-account-tab]"); if (tab) { document.querySelectorAll("[data-account-tab]").forEach(node => node.classList.toggle("active", node === tab)); document.querySelectorAll("[data-account-panel]").forEach(node => node.classList.toggle("active", node.dataset.accountPanel === tab.dataset.accountTab)); return; }
       const orderButton = event.target.closest("[data-order-id]"); if (orderButton) return openOrder(orderButton.dataset.orderId);
-      if (event.target.closest("[data-dialog-close]")) return event.target.closest("dialog")?.close();
+      if (event.target.closest("[data-dialog-close]")) return closeAccountDialog(event.target.closest("dialog"));
       if (event.target.closest("[data-add-address]")) return openAddress();
       const edit = event.target.closest("[data-edit-address]"); if (edit) return openAddress(state.addresses.find(item => item.id === edit.dataset.editAddress));
       const remove = event.target.closest("[data-delete-address]"); if (remove) { if (!confirm("Ștergi această adresă salvată?")) return; try { await api("customerAddress", { method: "DELETE", query: `&id=${encodeURIComponent(remove.dataset.deleteAddress)}` }); state.addresses = await api("customerAddresses"); renderAddresses(); } catch (error) { alert(error.message); } return; }
       if (event.target.closest("[data-customer-logout]")) { try { await api("customerLogout", { method: "POST" }); } catch {} clearSession(); location.href = "/login.html"; return; }
       if (event.target.closest("[data-delete-account]")) { const confirmation = prompt('Pentru confirmare, scrie STERGE. Comenzile comerciale rămân păstrate în evidența G-Trots.'); if (confirmation !== "STERGE") return; try { await api("customerDeleteAccount", { method: "DELETE", body: { confirmation } }); clearSession(); location.href = "/magazin.html?cont=sters"; } catch (error) { alert(error.message); } }
     });
-    const form = document.querySelector("[data-address-form]"); form?.addEventListener("submit", async event => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); data.is_default = form.elements.is_default.checked; const id = data.id; delete data.id; setBusy(form, true); setMessage(form, ""); try { await api(id ? "customerAddress" : "customerAddresses", { method: id ? "PATCH" : "POST", query: id ? `&id=${encodeURIComponent(id)}` : "", body: data }); state.addresses = await api("customerAddresses"); renderAddresses(); form.closest("dialog").close(); } catch (error) { setMessage(form, error.message); } finally { setBusy(form, false); } });
+    const form = document.querySelector("[data-address-form]"); form?.addEventListener("submit", async event => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); data.is_default = form.elements.is_default.checked; const id = data.id; delete data.id; setBusy(form, true); setMessage(form, ""); try { await api(id ? "customerAddress" : "customerAddresses", { method: id ? "PATCH" : "POST", query: id ? `&id=${encodeURIComponent(id)}` : "", body: data }); state.addresses = await api("customerAddresses"); renderAddresses(); closeAccountDialog(form.closest("dialog")); } catch (error) { setMessage(form, error.message); } finally { setBusy(form, false); } });
+    document.querySelectorAll(".account-dialog").forEach(dialog => {
+      dialog.addEventListener("click", event => { if (event.target === dialog) closeAccountDialog(dialog); });
+      dialog.addEventListener("cancel", event => { event.preventDefault(); closeAccountDialog(dialog); });
+      dialog.addEventListener("close", () => dialog.classList.remove("is-visible", "is-closing"));
+    });
   }
 
+  function initializeAuthTypewriter() {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.querySelectorAll("[data-auth-typewriter]").forEach(node => {
+      const text = String(node.dataset.typeText || node.textContent || "").trim();
+      if (!text) return;
+      node.textContent = "";
+      node.setAttribute("aria-label", text);
+
+      const reserve = document.createElement("span");
+      reserve.className = "auth-typewriter-reserve";
+      reserve.setAttribute("aria-hidden", "true");
+      reserve.textContent = text;
+
+      const live = document.createElement("span");
+      live.className = "auth-typewriter-live";
+      live.setAttribute("aria-hidden", "true");
+      node.append(reserve, live);
+
+      if (reducedMotion) {
+        live.textContent = text;
+        return;
+      }
+
+      live.classList.add("is-typing");
+      let index = 0;
+      let deleting = false;
+      const animate = () => {
+        if (!deleting) {
+          index = Math.min(text.length, index + 1);
+          live.textContent = text.slice(0, index);
+          if (index === text.length) {
+            deleting = true;
+            window.setTimeout(animate, 2600);
+            return;
+          }
+          window.setTimeout(animate, 62 + Math.random() * 34);
+          return;
+        }
+
+        index = Math.max(0, index - 1);
+        live.textContent = text.slice(0, index);
+        if (index === 0) {
+          deleting = false;
+          window.setTimeout(animate, 520);
+          return;
+        }
+        window.setTimeout(animate, 36 + Math.random() * 24);
+      };
+      window.setTimeout(animate, 450);
+    });
+  }
+
+  initializeAuthTypewriter();
   bindPasswordToggles();
   if (page === "login") initializeLogin();
   else if (page === "register") initializeRegister();

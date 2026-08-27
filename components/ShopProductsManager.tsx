@@ -45,6 +45,7 @@ import {
   ShopManufacturer,
   ShopProduct,
   ShopProductImage,
+  ShopProductManagerBootstrap,
   ShopProductPayload,
   ShopProductQuestion,
   ShopProductReview,
@@ -198,22 +199,26 @@ function money(value: number) {
 }
 
 const PRODUCT_SALES_PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25, 50, 75, 100] as const;
+let productManagerCache: ShopProductManagerBootstrap | null = null;
 
 export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (orderId: string) => void }) {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
-  const [products, setProducts] = useState<ShopProduct[]>([]);
-  const [categories, setCategories] = useState<ShopCategory[]>([]);
-  const [brands, setBrands] = useState<ShopBrand[]>([]);
-  const [manufacturers, setManufacturers] = useState<ShopManufacturer[]>([]);
-  const [sources, setSources] = useState<ShopProductSource[]>([]);
+  const [products, setProducts] = useState<ShopProduct[]>(() => productManagerCache?.products || []);
+  const [categories, setCategories] = useState<ShopCategory[]>(() => productManagerCache?.categories || []);
+  const [brands, setBrands] = useState<ShopBrand[]>(() => productManagerCache?.brands || []);
+  const [manufacturers, setManufacturers] = useState<ShopManufacturer[]>(() => productManagerCache?.manufacturers || []);
+  const [sources, setSources] = useState<ShopProductSource[]>(() => productManagerCache?.sources || []);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [loading, setLoading] = useState(true);
+  const [productTotal, setProductTotal] = useState(productManagerCache?.total || productManagerCache?.products.length || 0);
+  const [loading, setLoading] = useState(!productManagerCache);
+  const [listRefreshing, setListRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [editorVisible, setEditorVisible] = useState(false);
+  const [editorLoading, setEditorLoading] = useState(false);
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState<ShopProductStats | null>(null);
@@ -223,36 +228,61 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
   const [galleryDragging, setGalleryDragging] = useState(false);
   const [slugTouched, setSlugTouched] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const requestSequence = useRef(0);
+  const metadataLoaded = useRef(Boolean(productManagerCache?.categories?.length));
 
-  const load = useCallback(async (quiet = false) => {
+  const load = useCallback(async (
+    quiet = false,
+    request: { page?: number; pageSize?: number; query?: string; includeMetadata?: boolean } = {},
+  ) => {
     if (!token) return;
+    const sequence = ++requestSequence.current;
     if (!quiet) setLoading(true);
+    else setListRefreshing(true);
     setError('');
     try {
-      const bootstrap = await shopApi.loadProductManager(token);
+      const bootstrap = await shopApi.loadProductManager(token, {
+        page: request.page ?? 1,
+        page_size: request.pageSize ?? 10,
+        q: request.query ?? '',
+        include_metadata: request.includeMetadata ?? !metadataLoaded.current,
+      });
+      if (sequence !== requestSequence.current) return undefined;
+      if ((request.query ?? '') === '') productManagerCache = bootstrap;
       setProducts(bootstrap.products);
-      setCategories(bootstrap.categories);
-      setBrands(bootstrap.brands);
-      setManufacturers(bootstrap.manufacturers);
-      setSources(bootstrap.sources);
+      setProductTotal(bootstrap.total ?? bootstrap.products.length);
+      if (bootstrap.categories.length || !metadataLoaded.current) setCategories(bootstrap.categories);
+      if (bootstrap.brands.length || !metadataLoaded.current) setBrands(bootstrap.brands);
+      if (bootstrap.manufacturers.length || !metadataLoaded.current) setManufacturers(bootstrap.manufacturers);
+      if (bootstrap.sources.length || !metadataLoaded.current) setSources(bootstrap.sources);
+      if (bootstrap.categories.length || bootstrap.brands.length || bootstrap.manufacturers.length || bootstrap.sources.length) metadataLoaded.current = true;
       return bootstrap;
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Produsele nu au putut fi incarcate.');
       return undefined;
     } finally {
-      setLoading(false);
+      if (sequence === requestSequence.current) {
+        setLoading(false);
+        setListRefreshing(false);
+      }
     }
   }, [token]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      void load(Boolean(productManagerCache || products.length), {
+        page,
+        pageSize,
+        query,
+        includeMetadata: !metadataLoaded.current,
+      });
+    }, query.trim() ? 220 : 0);
+    return () => clearTimeout(timeout);
+  }, [load, page, pageSize, query]);
 
-  const filtered = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    if (!term) return products;
-    return products.filter((product) => `${product.name} ${product.sku || ''} ${product.supplier_product_code || ''} ${product.ean || ''} ${product.category_name || ''}`.toLowerCase().includes(term));
-  }, [products, query]);
-  const safePage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
-  const pagedProducts = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const filtered = products;
+  const safePage = Math.min(page, Math.max(1, Math.ceil(productTotal / pageSize)));
+  const pagedProducts = products;
   const detailSalesTotal = detail?.orders.length || 0;
   const detailSalesSafePage = Math.min(detailSalesPage, Math.max(1, Math.ceil(detailSalesTotal / detailSalesPageSize)));
   const pagedDetailSales = detail?.orders.slice((detailSalesSafePage - 1) * detailSalesPageSize, detailSalesSafePage * detailSalesPageSize) || [];
@@ -274,12 +304,18 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
     }
     setForm(next);
     setSlugTouched(false);
+    setEditorLoading(false);
     setEditorVisible(true);
   };
 
   const openEdit = async (product: ShopProduct) => {
     if (!token) return;
-    setSaving(true);
+    // Open first, then hydrate the large editor payload in the background. A
+    // product can contain long HTML, many images, specs and FAQ entries, so
+    // waiting before showing the modal made the button look frozen.
+    setForm((current) => ({ ...current, id: product.id, name: product.name }));
+    setEditorLoading(true);
+    setEditorVisible(true);
     try {
       const full = await shopApi.getProduct(token, product.id);
       setForm({
@@ -316,11 +352,11 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
         questions: (full.questions || []).map((item, index) => ({ ...item, key: `question-${index}-${Date.now()}` })),
       });
       setSlugTouched(false);
-      setEditorVisible(true);
     } catch (editError) {
       Alert.alert('Produs indisponibil', editError instanceof Error ? editError.message : 'Nu s-a putut deschide produsul.');
+      setEditorVisible(false);
     } finally {
-      setSaving(false);
+      setEditorLoading(false);
     }
   };
 
@@ -341,6 +377,22 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
     } finally {
       setDetailLoading(false);
     }
+  };
+
+  const closeDetail = () => {
+    setDetailVisible(false);
+    setTimeout(() => {
+      setDetail(null);
+      setReviewReplies({});
+    }, 40);
+  };
+
+  const closeEditor = () => {
+    if (saving || editorLoading) return;
+    setEditorVisible(false);
+    // Continutul bogat (WebView, imagini si zeci de campuri) este curatat dupa
+    // ce panoul a disparut, astfel incat atingerea pe X raspunde imediat.
+    setTimeout(() => setForm(emptyForm()), 40);
   };
 
   const refreshDetail = async () => {
@@ -477,7 +529,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
         ? await shopApi.updateProduct(token, form.id, payload)
         : await shopApi.createProduct(token, payload);
       setEditorVisible(false);
-      await load(true);
+      await load(true, { page, pageSize, query, includeMetadata: false });
       if (saved.stripe_sync_status === 'error') {
         Alert.alert('Produs salvat in catalog', `Produsul este salvat, dar oglinda Stripe nu s-a actualizat: ${saved.stripe_sync_error || 'sincronizarea va trebui reincercata.'}`);
       }
@@ -498,7 +550,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
             const result = await shopApi.deleteProduct(token, product.id);
             if (!result.success || result.deleted_id !== product.id) throw new Error('Serverul nu a confirmat stergerea produsului.');
             setProducts((current) => current.filter((item) => item.id !== product.id));
-            const refreshed = await load(true);
+            const refreshed = await load(true, { page, pageSize, query, includeMetadata: false });
             if (refreshed?.products.some((item) => item.id === product.id)) throw new Error('Produsul apare inca in catalog dupa stergere. Reincarca si incearca din nou.');
           }
           catch (deleteError) { Alert.alert('Nu s-a putut sterge', deleteError instanceof Error ? deleteError.message : 'Incearca din nou.'); }
@@ -522,16 +574,16 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
   const seoDescription = form.meta_description.trim() || form.short_description.trim() || 'Descrierea produsului va aparea aici.';
 
   if (loading) return <View style={styles.state}><ActivityIndicator color={Colors.orange} /><Text style={styles.stateText}>Se incarca produsele...</Text></View>;
-  if (error) return <View style={styles.state}><Text style={styles.error}>{error}</Text><TouchableOpacity style={styles.retry} onPress={() => void load()}><Text style={styles.retryText}>Incearca din nou</Text></TouchableOpacity></View>;
+  if (error) return <View style={styles.state}><Text style={styles.error}>{error}</Text><TouchableOpacity style={styles.retry} onPress={() => void load(false, { page, pageSize, query, includeMetadata: !metadataLoaded.current })}><Text style={styles.retryText}>Incearca din nou</Text></TouchableOpacity></View>;
 
   return (
     <View style={styles.wrap}>
       <View style={styles.actions}>
         <View style={styles.search}><Search size={17} color={Colors.textMuted} /><TextInput value={query} onChangeText={(value) => { setQuery(value); setPage(1); }} placeholder="Cauta produs sau SKU" placeholderTextColor={Colors.textMuted} style={styles.searchInput} /></View>
-        <TouchableOpacity style={styles.refresh} onPress={() => void load()}><RefreshCw size={18} color={Colors.textSecondary} /></TouchableOpacity>
+        <TouchableOpacity style={styles.refresh} onPress={() => void load(true, { page, pageSize, query, includeMetadata: false })}>{listRefreshing ? <ActivityIndicator size="small" color={Colors.orange} /> : <RefreshCw size={18} color={Colors.textSecondary} />}</TouchableOpacity>
         <TouchableOpacity style={styles.add} onPress={openNew}><Plus size={19} color={Colors.white} /><Text style={styles.addText}>Produs</Text></TouchableOpacity>
       </View>
-      <View style={styles.summary}><Text style={styles.summaryLabel}>PRODUSE</Text><Text style={styles.summaryValue}>{filtered.length}</Text></View>
+      <View style={styles.summary}><Text style={styles.summaryLabel}>PRODUSE</Text><Text style={styles.summaryValue}>{productTotal}</Text></View>
       {filtered.length ? pagedProducts.map((product) => (
         <View key={product.id} style={styles.productCard}>
           <TouchableOpacity style={styles.productMain} activeOpacity={0.72} onPress={() => void openDetail(product)}>
@@ -550,14 +602,14 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
           <TouchableOpacity style={[styles.iconAction, styles.deleteAction]} onPress={() => removeProduct(product)}><Trash2 size={17} color={Colors.error} /></TouchableOpacity>
         </View>
       )) : <View style={styles.empty}><Package size={32} color="#A78BFA" /><Text style={styles.emptyTitle}>Niciun produs</Text><Text style={styles.emptyText}>Adauga primul produs pentru a-l publica pe site.</Text></View>}
-      <ShopPagination page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} onPageSizeChange={setPageSize} />
+      <ShopPagination page={safePage} pageSize={pageSize} total={productTotal} onPageChange={setPage} onPageSizeChange={(nextSize) => { setPage(1); setPageSize(nextSize); }} />
 
-      <Modal visible={detailVisible} animationType="slide" onRequestClose={() => setDetailVisible(false)}>
+      {detailVisible ? <Modal visible animationType="none" onRequestClose={closeDetail}>
         <SafeAreaView style={styles.editorSafe} edges={['top', 'bottom']}>
           <View style={styles.editorHeader}>
-            <TouchableOpacity style={styles.close} onPress={() => setDetailVisible(false)}><X size={21} color={Colors.textSecondary} /></TouchableOpacity>
+            <TouchableOpacity style={styles.close} onPress={closeDetail}><X size={21} color={Colors.textSecondary} /></TouchableOpacity>
             <View style={styles.editorHeaderCopy}><Text style={styles.editorKicker}>FISA PRODUSULUI</Text><Text numberOfLines={1} style={styles.editorTitle}>{detail?.product.name || 'Se incarca...'}</Text></View>
-            {detail ? <TouchableOpacity style={styles.saveTop} onPress={() => { setDetailVisible(false); void openEdit(detail.product); }}><Pencil size={17} color={Colors.white} /><Text style={styles.saveTopText}>Editeaza</Text></TouchableOpacity> : null}
+            {detail ? <TouchableOpacity style={styles.saveTop} onPress={() => { const product = detail.product; closeDetail(); setTimeout(() => void openEdit(product), 0); }}><Pencil size={17} color={Colors.white} /><Text style={styles.saveTopText}>Editeaza</Text></TouchableOpacity> : null}
           </View>
           {detailLoading || !detail ? <View style={styles.detailLoading}><ActivityIndicator color={Colors.orange} /><Text style={styles.stateText}>Se incarca fisa produsului...</Text></View> : <ScrollView contentContainerStyle={[styles.detailContent, { paddingBottom: Math.max(insets.bottom, 24) + 30 }]} showsVerticalScrollIndicator={false}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.detailGallery}>{detail.product.images.map((image, index) => <View key={image.id || index} style={styles.detailImage}><ShopProductPicture image={image} width={210} height={190} borderRadius={20} />{index === 0 ? <View style={styles.mainBadge}><Text style={styles.mainBadgeText}>PRINCIPALA</Text></View> : null}</View>)}</ScrollView>
@@ -576,7 +628,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
               const acquisitionPrice = Number(detail.product.cost_price || 0);
               const salePrice = Number(order.unit_price || 0);
               const orderProfit = Number(order.line_total || 0) - (acquisitionPrice * Number(order.quantity || 0));
-              return <TouchableOpacity key={order.id} activeOpacity={0.76} style={styles.saleCard} onPress={() => { setDetailVisible(false); onOpenOrder?.(order.id); }}>
+              return <TouchableOpacity key={order.id} activeOpacity={0.76} style={styles.saleCard} onPress={() => { closeDetail(); onOpenOrder?.(order.id); }}>
                 <View style={styles.saleHead}><View><Text style={styles.saleLabel}>NUMAR COMANDA</Text><Text style={styles.saleNumber}>{order.order_number}</Text></View><View style={styles.saleStatus}><Text style={styles.saleStatusText}>{order.status}</Text></View></View>
                 <Text style={styles.saleMeta}>{order.customer_name} · {order.created_at} · {order.quantity} buc.</Text>
                 <View style={styles.saleStats}>
@@ -591,16 +643,16 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
             {detail.reviews.length ? detail.reviews.map((review) => <View key={review.id} style={styles.reviewCard}><View style={styles.reviewHead}><View><Text style={styles.reviewName}>{review.customer_name}</Text><Text style={styles.reviewMeta}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)} · {review.created_at}</Text></View><TouchableOpacity style={styles.reviewDelete} onPress={() => removeReview(review)}><Trash2 size={16} color={Colors.error} /></TouchableOpacity></View><Text style={styles.reviewMessage}>{review.message}</Text><TextInput value={reviewReplies[review.id] || ''} onChangeText={(value) => setReviewReplies((current) => ({ ...current, [review.id]: value }))} placeholder="Scrie raspunsul magazinului..." placeholderTextColor={Colors.textMuted} multiline style={styles.reviewReply} /><TouchableOpacity style={styles.reviewSave} onPress={() => void saveReviewReply(review)}><MessageSquare size={15} color={Colors.white} /><Text style={styles.reviewSaveText}>Salveaza raspunsul</Text></TouchableOpacity></View>) : <Text style={styles.detailEmpty}>Produsul nu are inca recenzii.</Text>}
           </ScrollView>}
         </SafeAreaView>
-      </Modal>
+      </Modal> : null}
 
-      <Modal visible={editorVisible} animationType="slide" onRequestClose={() => !saving && setEditorVisible(false)}>
+      {editorVisible ? <Modal visible animationType="none" onRequestClose={closeEditor}>
         <SafeAreaView style={styles.editorSafe} edges={['top', 'bottom']}>
           <View style={styles.editorHeader}>
-            <TouchableOpacity style={styles.close} onPress={() => setEditorVisible(false)} disabled={saving}><X size={21} color={Colors.textSecondary} /></TouchableOpacity>
+            <TouchableOpacity style={styles.close} onPress={closeEditor} disabled={saving || editorLoading}><X size={21} color={Colors.textSecondary} /></TouchableOpacity>
             <View style={styles.editorHeaderCopy}><Text style={styles.editorKicker}>CRM PRODUSE</Text><Text style={styles.editorTitle}>{form.id ? 'Editeaza produsul' : 'Produs nou'}</Text></View>
-            <TouchableOpacity style={[styles.saveTop, saving && styles.disabled]} onPress={() => void save()} disabled={saving}>{saving ? <ActivityIndicator color={Colors.white} /> : <><Save size={17} color={Colors.white} /><Text style={styles.saveTopText}>Salveaza</Text></>}</TouchableOpacity>
+            <TouchableOpacity style={[styles.saveTop, (saving || editorLoading) && styles.disabled]} onPress={() => void save()} disabled={saving || editorLoading}>{saving ? <ActivityIndicator color={Colors.white} /> : <><Save size={17} color={Colors.white} /><Text style={styles.saveTopText}>Salveaza</Text></>}</TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={[styles.form, { paddingBottom: Math.max(insets.bottom, 24) + 36 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          {editorLoading ? <View style={styles.editorLoadingState}><View style={styles.editorLoadingIcon}><RefreshCw size={27} color={Colors.orange} /></View><ActivityIndicator size="large" color={Colors.orange} /><Text style={styles.editorLoadingTitle}>Se încarcă produsul</Text><Text style={styles.editorLoadingText}>Pregătim descrierea, imaginile, specificațiile și datele comerciale.</Text></View> : <ScrollView contentContainerStyle={[styles.form, { paddingBottom: Math.max(insets.bottom, 24) + 36 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <SectionTitle number="01" title="Sursa si identitate" text="Alege provenienta produsului si adresa lui publica." />
             <Text style={styles.label}>SURSA PRODUSULUI</Text>
             <View style={styles.sourceRow}>{sources.filter((source) => source.is_active || (Boolean(form.id) && source.id === form.source_id)).map((source) => <Choice key={source.id} label={`${source.name} · ${source.domain}${source.is_default ? ' (implicita)' : ''}${!source.is_active ? ' · ascunsa pe site' : ''}`} selected={form.source_id === source.id} onPress={() => { patchForm('source_id', source.id); patchForm('source_domain', source.domain); }} />)}</View>
@@ -677,9 +729,9 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
             <View style={styles.toggleCard}><View><Text style={styles.toggleTitle}>Produs activ</Text><Text style={styles.toggleText}>Este vizibil si poate fi comandat pe site.</Text></View><Switch value={form.is_active} onValueChange={(value) => patchForm('is_active', value)} trackColor={{ false: '#39363D', true: Colors.orangeMid }} thumbColor={form.is_active ? Colors.orange : '#8A8A8A'} /></View>
             <View style={styles.toggleCard}><View><Text style={styles.toggleTitle}>Produs recomandat</Text><Text style={styles.toggleText}>Apare prioritar in magazin.</Text></View><Switch value={form.is_featured} onValueChange={(value) => patchForm('is_featured', value)} trackColor={{ false: '#39363D', true: '#F59E0B55' }} thumbColor={form.is_featured ? '#F59E0B' : '#8A8A8A'} /></View>
             <TouchableOpacity style={[styles.saveBottom, saving && styles.disabled]} onPress={() => void save()} disabled={saving}>{saving ? <ActivityIndicator color={Colors.white} /> : <><Save size={19} color={Colors.white} /><Text style={styles.saveBottomText}>Salveaza produsul</Text></>}</TouchableOpacity>
-          </ScrollView>
+          </ScrollView>}
         </SafeAreaView>
-      </Modal>
+      </Modal> : null}
     </View>
   );
 }
@@ -734,7 +786,7 @@ const styles = StyleSheet.create({
   productCopy: { flex: 1, minWidth: 0 }, productTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 }, productName: { flex: 1, color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 12 }, productMeta: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 4 }, productBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 9 }, productPrice: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 11 }, stock: { color: '#9CD9AE', fontFamily: 'Inter-SemiBold', fontSize: 8 }, stockLow: { color: '#FCA5A5' },
   iconAction: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(56,189,248,0.11)' }, deleteAction: { backgroundColor: 'rgba(239,68,68,0.10)' },
   empty: { minHeight: 230, alignItems: 'center', justifyContent: 'center', borderRadius: 24, backgroundColor: '#1B1B1F' }, emptyTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 15, marginTop: 13 }, emptyText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, marginTop: 5 },
-  editorSafe: { flex: 1, backgroundColor: Colors.bg }, editorHeader: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#29272B', paddingHorizontal: 12, backgroundColor: '#171513' }, close: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#27242A' }, editorHeaderCopy: { flex: 1 }, editorKicker: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 1 }, editorTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 16, marginTop: 2 }, saveTop: { minWidth: 96, height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 13, backgroundColor: Colors.orange }, saveTopText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 }, disabled: { opacity: 0.55 },
+  editorSafe: { flex: 1, backgroundColor: Colors.bg }, editorHeader: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#29272B', paddingHorizontal: 12, backgroundColor: '#171513' }, close: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#27242A' }, editorHeaderCopy: { flex: 1 }, editorKicker: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 1 }, editorTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 16, marginTop: 2 }, saveTop: { minWidth: 96, height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 13, backgroundColor: Colors.orange }, saveTopText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 }, disabled: { opacity: 0.55 }, editorLoadingState: { flex: 1, paddingHorizontal: 32, alignItems: 'center', justifyContent: 'center' }, editorLoadingIcon: { width: 68, height: 68, marginBottom: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#70431D', borderRadius: 23, backgroundColor: '#2D1E14' }, editorLoadingTitle: { marginTop: 17, color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 20 }, editorLoadingText: { maxWidth: 330, marginTop: 7, color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 11, lineHeight: 17, textAlign: 'center' },
   form: { width: '100%', maxWidth: 920, alignSelf: 'center', padding: 16 },
   detailLoading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }, detailContent: { width: '100%', maxWidth: 920, alignSelf: 'center', padding: 16 }, detailGallery: { gap: 10, paddingBottom: 12 }, detailImage: { width: 210, height: 190, overflow: 'hidden', borderRadius: 20, backgroundColor: '#211F24' },
   metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }, metricCard: { width: '48%', minHeight: 72, justifyContent: 'space-between', borderWidth: 1, borderColor: '#343137', borderRadius: 16, padding: 11, backgroundColor: '#1B1B1F' }, metricCardAccent: { borderColor: 'rgba(34,197,94,0.35)', backgroundColor: 'rgba(34,197,94,0.07)' }, metricLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5 }, metricLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.55 }, metricValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 14, marginTop: 6 }, metricValueAccent: { color: '#9CD9AE' },

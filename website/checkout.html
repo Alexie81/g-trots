@@ -12,8 +12,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css?v=20260827-shop-call">
-    <link rel="stylesheet" href="favorites.css?v=20260825-3">
-    <link rel="stylesheet" href="checkout.css?v=20260826-6">
+    <link rel="stylesheet" href="favorites.css?v=20260827-account-v2">
+    <link rel="stylesheet" href="checkout.css?v=20260828-address-cards-m3">
   </head>
   <body class="shop-page favorites-page checkout-page">
     <a class="skip-link" href="#checkout-content">Sari la finalizarea comenzii</a>
@@ -72,6 +72,10 @@
                 <span>02</span>
                 <div><small>Adresa de livrare</small><h2 id="address-title">Unde trimitem comanda?</h2></div>
               </header>
+              <section class="checkout-address-book" data-checkout-address-book hidden>
+                <header><span><i aria-hidden="true"></i><b>Adresele contului tău</b></span><small>Alege una salvată sau completează o adresă nouă.</small></header>
+                <div class="checkout-address-options" data-checkout-address-options></div>
+              </section>
               <div class="checkout-fields">
                 <label class="is-wide"><span>Adresa completă <b>*</b></span><input name="address" autocomplete="street-address" required placeholder="Stradă, număr, bloc, scară, apartament"><small data-field-error="address"></small></label>
                 <label><span>Localitate <b>*</b></span><input name="city" autocomplete="address-level2" required placeholder="București"><small data-field-error="city"></small></label>
@@ -79,6 +83,11 @@
                 <label><span>Cod poștal</span><input name="postal_code" autocomplete="postal-code" inputmode="numeric" placeholder="000000"><small data-field-error="postal_code"></small></label>
                 <label class="is-wide"><span>Observații pentru comandă</span><textarea name="customer_notes" rows="4" placeholder="Modelul trotinetei, reper pentru curier sau alte detalii utile"></textarea><small data-field-error="customer_notes"></small></label>
               </div>
+              <label class="checkout-save-address" data-checkout-save-address hidden>
+                <input type="checkbox" name="save_address_for_later">
+                <span class="checkout-save-switch" aria-hidden="true"><i></i></span>
+                <span class="checkout-save-copy"><strong>Salvează adresa pentru comenzile viitoare</strong><small>O vei putea alege direct la următoarea comandă.</small></span>
+              </label>
             </section>
 
             <section class="checkout-panel" aria-labelledby="shipping-title">
@@ -119,14 +128,14 @@
               <p><strong>Confirm că datele comenzii sunt corecte.</strong><small>Produsele și compatibilitatea pot fi reverificate de echipa G-Trots înainte de expediere.</small></p>
             </label>
             <p class="checkout-submit-message" data-checkout-message aria-live="polite"></p>
-            <div class="checkout-security"><span aria-hidden="true">✓</span><p><strong>Date transmise în siguranță</strong><small>Nu salvăm date de card pe acest website.</small></p></div>
+            <div class="checkout-security"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3.25 19 6v5.25c0 4.35-2.9 7.65-7 9.5-4.1-1.85-7-5.15-7-9.5V6Z"></path><path d="m8.8 12 2.05 2.05 4.4-4.4"></path></svg></span><p><strong>Date protejate și transmise în siguranță</strong><small>Nu salvăm date de card pe acest website.</small></p></div>
           </aside>
         </form>
       </section>
     </main>
 
     <footer class="shell shop-footer"><div class="footer-inner"><a class="logo" href="index.html"><img src="assets/logo.png" width="1024" height="1024" alt=""><b><span>G</span>-Trots</b></a><p>Service și magazin pentru mobilitate electrică.</p><nav><a href="index.html">Acasă</a><a href="magazin.html">Magazin</a><a href="ghiduri-service-trotinete-electrice.html">Ghiduri</a><a href="index.html#contact">Contact</a></nav><a class="footer-phone" href="tel:+40762093915">+40 0762 093 915</a><small>© 2026 G-Trots</small></div></footer>
-<script src="favorites.js?v=20260827-shop-nav" defer></script>
-    <script src="checkout.js?v=20260826-2" defer></script>
+<script src="favorites.js?v=20260827-cart-loading" defer></script>
+    <script src="checkout.js?v=20260828-address-cards-m3" defer></script>
   </body>
 </html>

@@ -46,7 +46,7 @@ function initials(name: string) {
   return String(name || 'Client').trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'C';
 }
 
-export default function ShopCustomersManager() {
+export default function ShopCustomersManager({ onSearchFocus }: { onSearchFocus?: () => void }) {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -129,7 +129,7 @@ export default function ShopCustomersManager() {
       <Metric Icon={WalletCards} color="#34D399" label="VALOARE" value={money(totals.value)} note="comenzi valide" />
     </View>
 
-    <View style={styles.searchBox}><Search size={19} color="#FE8C19" /><View style={styles.searchCopy}><Text style={styles.searchLabel}>CAUTĂ UN CLIENT</Text><TextInput value={query} onChangeText={setQuery} placeholder="Nume, e-mail sau telefon" placeholderTextColor="#69636D" style={styles.searchInput} /></View>{query ? <TouchableOpacity style={styles.clear} onPress={() => setQuery('')}><X size={17} color="#CFC8D1" /></TouchableOpacity> : null}</View>
+    <View style={styles.searchBox}><Search size={19} color="#FE8C19" /><View style={styles.searchCopy}><Text style={styles.searchLabel}>CAUTĂ UN CLIENT</Text><TextInput value={query} onFocus={onSearchFocus} onChangeText={setQuery} placeholder="Nume, e-mail sau telefon" placeholderTextColor="#69636D" style={styles.searchInput} /></View>{query ? <TouchableOpacity style={styles.clear} onPress={() => setQuery('')}><X size={17} color="#CFC8D1" /></TouchableOpacity> : null}</View>
 
     <View style={styles.listHead}><Text style={styles.listTitle}>{filtered.length} {filtered.length === 1 ? 'client' : 'clienți'}</Text><Text style={styles.listHint}>Apasă pentru fișa completă</Text></View>
     <View style={styles.list}>

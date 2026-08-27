@@ -21,8 +21,8 @@
     <meta property="og:image" content="https://g-trots.ro/assets/vehicle-performance-scooter.png">
     <link rel="preload" href="assets/magazin-produse-v1.png" as="image" type="image/png">
     <link rel="stylesheet" href="styles.css?v=20260827-shop-call">
-    <link rel="stylesheet" href="magazin.css?v=20260827-5">
-    <link rel="stylesheet" href="favorites.css?v=20260825-2">
+    <link rel="stylesheet" href="magazin.css?v=20260828-mobile-search-back">
+    <link rel="stylesheet" href="favorites.css?v=20260827-cart-loading">
   </head>
   <body class="shop-page">
     <a class="skip-link" href="#catalog">Sari la produse</a>
@@ -98,7 +98,9 @@
         <div class="smart-search-overlay" data-smart-search-overlay hidden></div>
         <form class="shop-search-deck reveal" role="search" onsubmit="return false;">
           <label class="shop-search-field" for="product-search">
-            <span class="shop-search-icon-wrap" aria-hidden="true"><i class="shop-search-icon"></i></span>
+            <button class="shop-search-icon-wrap" type="button" data-smart-search-mobile-back aria-label="Închide căutarea">
+              <i class="shop-search-icon" aria-hidden="true"></i><i class="shop-search-back-icon" aria-hidden="true"></i>
+            </button>
             <span class="shop-search-copy">
               <small>Caută în magazin</small>
               <input id="product-search" type="search" autocomplete="off" placeholder="Anvelopă, baterie, display..." aria-describedby="search-hint">
@@ -289,7 +291,7 @@
             <div class="product-grid is-catalog-loading" id="product-grid" aria-busy="true">
               <section class="catalog-loading" id="catalog-loading" role="status" aria-live="polite" aria-label="Catalogul de produse se încarcă">
                 <div class="catalog-loading-orbit" aria-hidden="true">
-                  <span class="catalog-loading-logo"><b>G</b><i>T</i></span>
+                  <span class="catalog-loading-logo"><img src="assets/logo.png" alt="" width="71" height="71"></span>
                   <span class="catalog-loading-dot"></span>
                 </div>
                 <div class="catalog-loading-copy">
@@ -422,8 +424,8 @@
       <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3a12.8 12.8 0 0 0-11 19.3L3.4 29l6.9-1.6A12.9 12.9 0 1 0 16 3Zm0 23.3c-2 0-3.8-.5-5.4-1.5l-.4-.2-4 .9.9-3.9-.3-.4A10.3 10.3 0 1 1 16 26.3Zm5.7-7.7c-.3-.2-1.9-.9-2.2-1s-.5-.2-.7.2-.8 1-1 1.2-.4.2-.7.1a8.5 8.5 0 0 1-2.5-1.6 9.3 9.3 0 0 1-1.7-2.1c-.2-.3 0-.5.1-.7l.5-.6.3-.6c.1-.2 0-.4 0-.6l-1-2.3c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.6.1-.9.4-.3.4-1.2 1.2-1.2 2.9s1.3 3.4 1.5 3.6c.2.2 2.5 3.8 6 5.3 3.6 1.6 3.6 1 4.3.9.6 0 1.9-.8 2.2-1.6.3-.8.3-1.5.2-1.6-.1-.2-.3-.3-.6-.4Z"/></svg>
       <span>WhatsApp</span>
     </a>
-    <script src="favorites.js?v=20260827-shop-nav" defer></script>
-    <script src="magazin.js?v=20260827-5" defer></script>
+    <script src="favorites.js?v=20260827-cart-loading" defer></script>
+    <script src="magazin.js?v=20260828-mobile-search-back" defer></script>
     <script src="shop-live.js?v=20260827-2" defer></script>
   </body>
 </html>

@@ -20,6 +20,8 @@
 
   function render(items) {
     document.querySelector(".gt-promotion-bar")?.remove();
+    document.body.classList.remove("gt-has-promotion-bar");
+    document.documentElement.style.removeProperty("--gt-promotion-height");
     if (!items.length) return;
     const message = items.map(item => {
       const value = item.discount_type === "percent" ? `${Number(item.discount_value)}%` : `${Number(item.discount_value).toLocaleString("ro-RO")} lei`;
@@ -29,10 +31,24 @@
     const bar = document.createElement("section");
     bar.className = "gt-promotion-bar";
     bar.setAttribute("aria-label", "Oferte active G-Trots");
-    bar.innerHTML = `<div class="gt-promotion-track"><span>${escapeHtml(message)}</span><span aria-hidden="true">${escapeHtml(message)}</span></div>`;
+    bar.innerHTML = `
+      <div class="gt-promotion-shell">
+        <span class="gt-promotion-label" aria-hidden="true"><i>%</i><b>Ofertă activă</b></span>
+        <div class="gt-promotion-viewport">
+          <div class="gt-promotion-track"><span>${escapeHtml(message)}</span><span aria-hidden="true">${escapeHtml(message)}</span></div>
+        </div>
+      </div>`;
     const header = document.querySelector(".site-header, header");
     if (header?.parentNode) header.parentNode.insertBefore(bar, header);
     else document.body.prepend(bar);
+    document.body.classList.add("gt-has-promotion-bar");
+
+    const syncHeight = () => {
+      const height = Math.max(1, Math.round(bar.getBoundingClientRect().height));
+      document.documentElement.style.setProperty("--gt-promotion-height", `${height}px`);
+    };
+    requestAnimationFrame(syncHeight);
+    if ("ResizeObserver" in window) new ResizeObserver(syncHeight).observe(bar);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadPromotions, { once: true });

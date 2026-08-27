@@ -548,8 +548,8 @@ img {
 .logo b {
   color: var(--text);
   font-size: 1em;
-  font-weight: 900;
-  letter-spacing: -0.045em;
+  font-weight: 700;
+  letter-spacing: -0.025em;
 }
 
 .main-nav {

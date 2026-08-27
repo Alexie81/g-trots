@@ -1,4 +1,4 @@
-const CACHE='g-trots-search-v7.1';
+const CACHE='g-trots-search-v7.2';
 const CORE=[
  '/search/data/config.json',
  '/search/data/instant-core.json',

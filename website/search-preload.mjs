@@ -11,7 +11,7 @@ const core = [
 
 // Acțiunea globală pentru produsele favorite este disponibilă în toate paginile
 // care folosesc preîncărcarea comună a căutării.
-import(new URL('favorites.js', base).href).catch(() => {});
+import(new URL('favorites.js?v=20260828-global-cart-count', base).href).catch(() => {});
 
 // Pornește transferul înainte ca utilizatorul să atingă inputul. Fetch-urile ulterioare
 // folosesc cache-ul HTTP/Service Worker și nu descarcă din nou aceleași fișiere.

@@ -14,7 +14,7 @@
     <link rel="preload" href="assets/magazin-produse-v1.png" as="image" type="image/png">
     <link rel="stylesheet" href="styles.css?v=20260827-shop-call">
     <link rel="stylesheet" href="magazin.css?v=20260825-2">
-    <link rel="stylesheet" href="favorites.css?v=20260827-account-v2">
+    <link rel="stylesheet" href="favorites.css?v=20260828-favorite-fix">
   </head>
   <body class="shop-page favorites-page">
     <a class="skip-link" href="#favorites-content">Sari la favorite</a>
@@ -31,11 +31,26 @@
     </header>
 
     <main class="favorites-main" id="favorites-content">
-      <section class="favorites-hero shell">
+      <section class="catalog-loading favorites-loading shell" data-favorites-loading role="status" aria-live="polite" aria-label="Produsele favorite se încarcă">
+        <div class="catalog-loading-orbit" aria-hidden="true">
+          <span class="catalog-loading-logo"><img src="assets/logo.png" alt="" width="71" height="71"></span>
+          <span class="catalog-loading-dot"></span>
+        </div>
+        <div class="catalog-loading-copy">
+          <span class="catalog-loading-label">Favorite G-Trots</span>
+          <h3>Pregătim produsele tale favorite</h3>
+          <p>Verificăm produsele, prețurile și disponibilitatea actuală.</p>
+          <span class="catalog-loading-progress" aria-hidden="true"><i></i></span>
+        </div>
+        <div class="catalog-loading-steps" aria-hidden="true">
+          <span><i></i>Produse</span><span><i></i>Prețuri</span><span><i></i>Stoc</span>
+        </div>
+      </section>
+      <section class="favorites-hero shell" data-favorites-ready hidden>
         <div class="favorites-hero-copy"><span class="favorites-eyebrow">Lista ta G-Trots</span><h1>Produsele tale<br><em>favorite.</em></h1><p>Salvate direct în browserul tău, ca să revii rapid la piesele pe care vrei să le verifici.</p></div>
         <span class="favorites-total" data-favorites-total>0 produse</span>
       </section>
-      <section class="favorites-content shell" aria-live="polite">
+      <section class="favorites-content shell" data-favorites-ready aria-live="polite" hidden>
         <div class="favorites-grid" data-favorites-grid hidden></div>
         <div class="favorites-empty" data-favorites-empty>
           <div><span class="favorites-empty-icon" aria-hidden="true">♡</span><h2>Lista este încă goală.</h2><p>Apasă inimioara de pe orice produs, iar acesta va rămâne salvat aici și după ce închizi pagina.</p><a class="button" href="magazin.html#catalog">Descoperă produsele <span aria-hidden="true">›</span></a></div>
@@ -44,7 +59,7 @@
     </main>
 
     <footer class="shell shop-footer"><div class="footer-inner"><a class="logo" href="index.html"><img src="assets/logo.png" width="1024" height="1024" alt=""><b><span>G</span>-Trots</b></a><p>Service și magazin pentru mobilitate electrică.</p><nav><a href="index.html">Acasă</a><a href="magazin.html">Magazin</a><a href="ghiduri-service-trotinete-electrice.html">Ghiduri</a><a href="index.html#contact">Contact</a></nav><a class="footer-phone" href="tel:+40762093915">+40 0762 093 915</a><small>© 2026 G-Trots</small></div></footer>
-<script src="favorites.js?v=20260827-account-v2" defer></script>
+<script src="favorites.js?v=20260828-favorite-fix" defer></script>
     <script src="shop-live.js?v=20260825-2" defer></script>
   </body>
 </html>

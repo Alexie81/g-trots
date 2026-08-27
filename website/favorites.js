@@ -413,9 +413,29 @@
     const grid = document.querySelector("[data-favorites-grid]");
     const empty = document.querySelector("[data-favorites-empty]");
     if (!grid || !empty) return;
+
+    const loading = document.querySelector("[data-favorites-loading]");
+    const readySections = document.querySelectorAll("[data-favorites-ready]");
+    if (!catalogReady) {
+      if (loading) loading.hidden = false;
+      readySections.forEach(section => { section.hidden = true; });
+      return;
+    }
+
+    if (loading) loading.hidden = true;
+    readySections.forEach(section => { section.hidden = false; });
     grid.innerHTML = ids.map(favoriteCard).join("");
     grid.hidden = ids.length === 0;
     empty.hidden = ids.length !== 0;
+
+    grid.querySelectorAll("[data-remove-favorite]").forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const id = button.dataset.removeFavorite;
+        writeFavorites(readFavorites().filter(item => item !== id));
+      });
+    });
   }
 
   function cartCard(item) {
@@ -630,6 +650,7 @@
 
     document.addEventListener("g-trots:favorites-changed", event => refresh(event.detail));
     document.addEventListener("g-trots:cart-changed", event => refresh(readFavorites(), event.detail));
+    document.addEventListener("g-trots:live-products", () => refresh());
     document.addEventListener("g-trots:customer-changed", event => {
       updateCustomerNavigation(event.detail);
       cartPromotionSignature = "";

@@ -1678,3 +1678,12 @@
   font-weight: 700 !important;
   letter-spacing: -0.025em !important;
 }
+.favorites-loading {
+  width: min(100% - 2rem, 88rem);
+  min-height: min(42rem, calc(100svh - 8rem));
+  margin: 1.5rem auto 3rem;
+}
+
+.favorites-loading[hidden] {
+  display: none !important;
+}

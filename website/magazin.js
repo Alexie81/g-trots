@@ -439,6 +439,7 @@ if (filtersPanel && filtersStickyColumn) {
 }
 
 let activeCategory = "all";
+let activeCategoryScope = new Set();
 let currentPage = 1;
 
 function directTreeChild(node, selector) {
@@ -507,6 +508,24 @@ function initializeCategoryTree(root = document) {
       event.stopPropagation();
       setTreeNodeExpanded(node, toggle.getAttribute("aria-expanded") !== "true");
     });
+  });
+  refreshCategoryScopes(root);
+}
+
+function refreshCategoryScopes(root = document) {
+  [...root.querySelectorAll(".category-filter")].forEach(button => {
+    const category = String(button.dataset.category || "all");
+    if (category === "all") {
+      button.dataset.categoryScope = "all";
+      return;
+    }
+    const node = button.closest(".category-tree-node");
+    const scope = node
+      ? [...node.querySelectorAll(".category-filter")]
+          .map(item => String(item.dataset.category || "").trim())
+          .filter(value => value && value !== "all")
+      : [category];
+    button.dataset.categoryScope = [...new Set([category, ...scope])].join(" ");
   });
 }
 
@@ -780,7 +799,8 @@ function applyFilters({ resetPage = true } = {}) {
     const cardBrands = (card.dataset.brand || "").split(" ");
     const cardTaxonomy = `${card.dataset.category || ""} ${card.dataset.taxonomy || ""}`.split(" ").filter(Boolean);
     const matchesSearch = !query || searchableText.includes(query);
-    const matchesCategory = activeCategory === "all" || cardTaxonomy.includes(activeCategory);
+    const matchesCategory = activeCategory === "all"
+      || cardTaxonomy.some(category => activeCategoryScope.has(category));
     const matchesBrand = selectedBrands.length === 0 || selectedBrands.some(brand => cardBrands.includes(brand));
     const matchesStock = selectedStocks.length === 0 || selectedStocks.includes(card.dataset.stock);
     const matchesManufacturer = selectedManufacturers.length === 0 || selectedManufacturers.includes(card.dataset.manufacturer);
@@ -818,6 +838,7 @@ function applyFilters({ resetPage = true } = {}) {
 
 function resetFilters() {
   activeCategory = "all";
+  activeCategoryScope = new Set();
   if (searchInput) searchInput.value = "";
   if (searchClear) searchClear.hidden = true;
   if (priceRange) priceRange.value = priceRange.max;
@@ -843,6 +864,9 @@ function bindFilterControls() {
     button.dataset.filterBound = "true";
     button.addEventListener("click", () => {
       activeCategory = button.dataset.category || "all";
+      activeCategoryScope = activeCategory === "all"
+        ? new Set()
+        : new Set(String(button.dataset.categoryScope || activeCategory).split(" ").filter(Boolean));
       categoryButtons.forEach(item => item.classList.toggle("active", item === button));
       applyFilters();
     });
@@ -877,6 +901,7 @@ async function loadCatalogFilters() {
     renderChoiceFilters(compatibilityOptions, payload.brands, "Nu există mărci active.");
     renderChoiceFilters(manufacturerOptions, payload.manufacturers, "Nu există producători activi.");
     activeCategory = "all";
+    activeCategoryScope = new Set();
     bindFilterControls();
     applyFilters();
     filtersPanel?.setAttribute("data-catalog-source", "shop-api");

@@ -1176,13 +1176,50 @@ body.image-viewer-open {
 }
 
 .product-detail-meta small {
-  color: #6f6a64;
-  font-size: 0.55rem;
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.62rem;
+  padding: 0.34rem 0.38rem 0.34rem 0.42rem;
+  border: 1px solid rgba(255, 139, 20, 0.22);
+  border-radius: 1rem;
+  background:
+    linear-gradient(135deg, rgba(255, 139, 20, 0.1), rgba(255, 139, 20, 0.025) 58%),
+    #191816;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035),
+    0 0.45rem 1.2rem rgba(0, 0, 0, 0.16);
+  color: #aaa39b;
+  font-size: 0.65rem;
+  font-weight: 750;
+  letter-spacing: 0.025em;
+  line-height: 1;
   white-space: nowrap;
 }
 
+.product-detail-meta small::before {
+  content: "";
+  width: 1.95rem;
+  height: 1.95rem;
+  flex: 0 0 1.95rem;
+  border-radius: 0.72rem;
+  background-color: rgba(255, 139, 20, 0.14);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23ff8b14' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.6 13.6 13.7 20.5a2 2 0 0 1-2.8 0l-7.4-7.4a2 2 0 0 1 0-2.8V4.5a1 1 0 0 1 1-1h5.8a2 2 0 0 1 1.4.6l8.9 8.9a.85.85 0 0 1 0 1.2Z'/%3E%3Ccircle cx='7.7' cy='7.7' r='1.15'/%3E%3C/svg%3E");
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 0 1px rgba(255, 139, 20, 0.12);
+}
+
 .product-detail-meta small b {
-  color: #a49e97;
+  padding: 0.58rem 0.72rem;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 0.72rem;
+  background: rgba(255, 255, 255, 0.055);
+  color: #f4eee8;
+  font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.69rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
 }
 
 .product-purchase-row {

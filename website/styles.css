@@ -743,6 +743,59 @@ body.shop-page .main-nav .nav-shop-link[aria-current="page"] {
   color: #fff;
 }
 
+.button.header-cta.call-button {
+  min-height: 2.75rem;
+  padding: 0.34rem 0.38rem 0.34rem 0.92rem;
+  gap: 0.58rem;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 151, 35, 0.3);
+  background:
+    linear-gradient(135deg, rgba(255, 145, 0, 0.19), rgba(78, 47, 23, 0.48)),
+    rgba(255, 255, 255, 0.035);
+  color: #fff8ef;
+  font-size: 0.78rem;
+  font-weight: 820;
+  letter-spacing: -0.015em;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 0.55rem 1.35rem rgba(0, 0, 0, 0.18);
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease, color 180ms ease;
+}
+
+.button.header-cta.call-button span {
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 2rem;
+  border: 0;
+  border-radius: 0.72rem;
+  background: rgba(255, 151, 28, 0.17);
+  color: #ffad4a;
+  box-shadow: inset 0 0 0 1px rgba(255, 166, 57, 0.16);
+}
+
+.button.header-cta.call-button:hover,
+.button.header-cta.call-button:focus-visible {
+  outline: 0;
+  border-color: rgba(255, 161, 50, 0.62);
+  background:
+    linear-gradient(135deg, rgba(255, 145, 0, 0.3), rgba(96, 54, 24, 0.58)),
+    rgba(255, 255, 255, 0.045);
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    0 0.75rem 1.8rem rgba(240, 127, 0, 0.17);
+  transform: translateY(-1px);
+}
+
+.button.header-cta.call-button:hover span,
+.button.header-cta.call-button:focus-visible span {
+  background: rgba(255, 151, 28, 0.25);
+  color: #ffc06f;
+  box-shadow: inset 0 0 0 1px rgba(255, 178, 84, 0.26);
+  transform: none;
+}
+
 .button.call-button:hover span {
   background: var(--phone-green-soft);
   box-shadow: 0 0.5rem 1.15rem rgba(12, 35, 23, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.1);

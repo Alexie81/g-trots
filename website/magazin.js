@@ -289,6 +289,9 @@ function liveProductCard(product, index) {
     ? 0
     : Math.max(0, Math.round((1 - currentPrice / standardPrice) * 100));
   const discountBadge = discountPercent > 0 ? `<em class="product-discount">-${discountPercent}%</em>` : "";
+  const featuredBadge = product.is_featured
+    ? `<span class="product-badge">Recomandat</span>`
+    : "";
 
   const article = document.createElement("article");
   article.className = "product-card reveal visible live-product-card";
@@ -309,6 +312,7 @@ function liveProductCard(product, index) {
   article.dataset.index = String(index);
   article.innerHTML = `
     <div class="product-stage">
+      ${featuredBadge}
       <div class="product-card-actions">
         <button class="cart-button" type="button" data-add-cart aria-label="Adaugă ${escapeCatalogHtml(product.name)} în coș"><span class="global-cart-icon" aria-hidden="true"><i></i><i></i></span><b aria-hidden="true">+</b></button>
         <button class="favorite-button" type="button" aria-label="Adaugă ${escapeCatalogHtml(product.name)} la favorite" aria-pressed="false">♡</button>

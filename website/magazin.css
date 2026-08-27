@@ -4576,6 +4576,7 @@ body.filters-open {
   }
 
   .product-badge {
+    display: none;
     min-height: 1.4rem;
     padding: 0.25rem 0.42rem;
     top: 0.45rem;

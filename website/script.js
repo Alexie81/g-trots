@@ -1,3 +1,13 @@
+function ensureGlobalPromotionBar() {
+  if (!document.querySelector('link[href*="promotions.css"]')) {
+    const link = document.createElement("link"); link.rel = "stylesheet"; link.href = "/promotions.css?v=20260828-marquee-v5"; document.head.append(link);
+  }
+  if (!document.querySelector('script[src*="promotions.js"]')) {
+    const script = document.createElement("script"); script.src = "/promotions.js?v=20260828-global-v1"; document.head.append(script);
+  }
+}
+ensureGlobalPromotionBar();
+
 const menuButton = document.querySelector(".menu-toggle");
 const navigation = document.querySelector(".main-nav");
 

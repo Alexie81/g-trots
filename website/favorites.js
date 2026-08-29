@@ -5,13 +5,44 @@
   const CART_STORAGE_KEY = "g-trots-cart-products-v1";
   const CUSTOMER_TOKEN_KEY = "g-trots-customer-session-v1";
   const CUSTOMER_PROFILE_KEY = "g-trots-customer-profile-v1";
+  const SHOP_DEVICE_KEY = "g-trots-shop-device-v1";
   const SHOP_API_URL = "https://g-trots.ro/shop-api/api-v2.php";
   // Catalogul real este singura sursă. Nu randăm produse demonstrative cât timp API-ul răspunde.
   const PRODUCTS = {};
   let catalogReady = false;
-  let activeCartPromotionQuote = { subtotal: 0, discount_total: 0, promotion_code: "", promotion_title: "" };
+  let activeCartPromotionQuote = { subtotal: 0, discount_total: 0, promotion_code: "", promotion_title: "", promotion_scope: "", promotion_min_order_value: null, items: [] };
   let cartPromotionQuoteSequence = 0;
   let cartPromotionSignature = "";
+  let publicTax = { vat_payer: false, prices_include_vat: true };
+
+  async function refreshPublicTax() {
+    try {
+      const response = await fetch(`${SHOP_API_URL}?action=publicShopConfig&_=${Date.now()}`, { cache: "no-store", headers: { Accept: "application/json" } });
+      const config = await response.json();
+      if (response.ok && config?.tax) publicTax = config.tax;
+    } catch {
+      publicTax = { vat_payer: false, prices_include_vat: true };
+    }
+    updateCartSummary(readCart());
+  }
+
+  function shopDeviceToken() {
+    try {
+      let token = String(localStorage.getItem(SHOP_DEVICE_KEY) || "").trim();
+      if (/^[A-Za-z0-9_-]{20,128}$/.test(token)) return token;
+      if (window.crypto?.getRandomValues) {
+        const bytes = new Uint8Array(24);
+        window.crypto.getRandomValues(bytes);
+        token = Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+      } else {
+        token = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+      }
+      localStorage.setItem(SHOP_DEVICE_KEY, token);
+      return token;
+    } catch {
+      return "";
+    }
+  }
 
   function safeImageUrl(value) {
     try {
@@ -63,19 +94,11 @@
   }
 
   function ensureStyles() {
-    const version = "20260828-brand-final";
     const existing = document.querySelector('link[href*="favorites.css"]');
-    if (existing) {
-      const url = new URL(existing.href, window.location.href);
-      if (url.searchParams.get("ui") !== version) {
-        url.searchParams.set("ui", version);
-        existing.href = url.toString();
-      }
-      return;
-    }
+    if (existing) return;
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = `/favorites.css?v=20260828-global-cart-count&ui=${version}`;
+    link.href = "/favorites.css?v=20260828-line-promotions-v1";
     document.head.append(link);
   }
 
@@ -93,12 +116,12 @@
     if (!document.querySelector('link[href*="promotions.css"]')) {
       const link = document.createElement("link");
       link.rel = "stylesheet";
-      link.href = "/promotions.css?v=20260828-sticky-cart";
+      link.href = "/promotions.css?v=20260828-marquee-v5";
       document.head.append(link);
     }
     if (!document.querySelector('script[src*="promotions.js"]')) {
       const script = document.createElement("script");
-      script.src = "/promotions.js?v=20260828-sticky-cart";
+      script.src = "/promotions.js?v=20260828-usage-limits-v1";
       script.defer = true;
       document.head.append(script);
     }
@@ -214,8 +237,9 @@
     const cleanPath = currentPath.replace(/\/+$/, "").replace(/\.html$/, "");
     const favoritesActive = cleanPath.endsWith("/favorite");
     const cartActive = ["/cos", "/checkout", "/plata-finalizata", "/plata-esuata"].some(path => cleanPath.endsWith(path));
+    const accountActive = ["/cont", "/login", "/cont-nou", "/resetare-parola"].some(path => cleanPath.endsWith(path));
     const shopActive = !favoritesActive && !cartActive && /\/(magazin|produs)(?:\/|$)|anvelopa-g10|display-smart|incarcator-fastcharge|motor-dualhub|baterie-powercore|kit-frana/.test(cleanPath);
-    const guidesActive = !shopActive && !favoritesActive && !cartActive && currentPath !== "/" && !currentPath.endsWith("/index.html");
+    const guidesActive = !shopActive && !favoritesActive && !cartActive && !accountActive && currentPath !== "/" && !currentPath.endsWith("/index.html");
 
     document.querySelectorAll(".main-nav").forEach(nav => {
       nav.setAttribute("aria-label", "Navigație principală");
@@ -265,7 +289,7 @@
         const accountLink = document.createElement("a");
         accountLink.className = "global-account-nav";
         const activePath = window.location.pathname.toLowerCase().replace(/\/+$/, "").replace(/\.html$/, "");
-        if (["/cont", "/login", "/cont-nou"].some(path => activePath.endsWith(path))) accountLink.setAttribute("aria-current", "page");
+        if (["/cont", "/login", "/cont-nou", "/resetare-parola"].some(path => activePath.endsWith(path))) accountLink.setAttribute("aria-current", "page");
         actions.prepend(accountLink);
       }
       updateCustomerNavigation();
@@ -438,10 +462,30 @@
     });
   }
 
+  function cartLinePricing(product, quantity) {
+    const baseUnitPrice = cartUnitPrice(product);
+    const quoteItem = activeCartPromotionQuote.promotion_scope === "product"
+      ? activeCartPromotionQuote.items.find(row => String(row.product_id || "") === String(product?.apiId || ""))
+      : null;
+    const hasDiscount = Boolean(quoteItem?.is_discounted) && Number(quoteItem?.discount_total || 0) > 0;
+    return {
+      hasDiscount,
+      baseUnitPrice,
+      currentUnitPrice: hasDiscount ? Number(quoteItem.discounted_unit_price || 0) : baseUnitPrice,
+      baseLineTotal: hasDiscount ? Number(quoteItem.line_total || baseUnitPrice * quantity) : baseUnitPrice * quantity,
+      currentLineTotal: hasDiscount ? Number(quoteItem.discounted_line_total || 0) : baseUnitPrice * quantity
+    };
+  }
+
   function cartCard(item) {
     const product = PRODUCTS[item.id];
-    const unitPrice = parseProductPrice(product.price);
-    const lineTotal = formatProductPrice(unitPrice * item.quantity);
+    const pricing = cartLinePricing(product, item.quantity);
+    const unitPrice = pricing.hasDiscount
+      ? `<del>${formatProductPrice(pricing.baseUnitPrice)}</del><span>${formatProductPrice(pricing.currentUnitPrice)}</span>`
+      : formatProductPrice(pricing.baseUnitPrice);
+    const lineTotal = pricing.hasDiscount
+      ? `<del>${formatProductPrice(pricing.baseLineTotal)}</del><span>${formatProductPrice(pricing.currentLineTotal)}</span>`
+      : formatProductPrice(pricing.currentLineTotal);
     return `<article class="favorite-product-card cart-product-card" data-cart-card="${item.id}">
       <div class="favorite-product-stage">
         ${productImageMarkup(product)}
@@ -453,7 +497,7 @@
         <p>${escapeHtml(product.description)}</p>
       </div>
       <div class="favorite-product-bottom">
-        <div class="cart-line-price"><small>${item.quantity} × ${escapeHtml(product.price)}</small><strong>${lineTotal}</strong></div>
+        <div class="cart-line-price${pricing.hasDiscount ? " is-discounted" : ""}"><small>${item.quantity} × ${unitPrice}</small><strong>${lineTotal}</strong></div>
         <div class="cart-product-controls">
           <div class="cart-quantity" aria-label="Cantitate ${item.quantity}">
             <button type="button" data-cart-decrease="${item.id}" aria-label="Scade cantitatea pentru ${escapeHtml(product.name)}">−</button>
@@ -479,14 +523,21 @@
     }).format(value)} lei`;
   }
 
+  function cartUnitPrice(product) {
+    const value = Number(product?.basePriceValue);
+    return Number.isFinite(value) ? value : parseProductPrice(product?.price);
+  }
+
   function updateCartSummary(cart) {
     const itemCount = cart.reduce((total, item) => total + item.quantity, 0);
     const subtotal = cart.reduce((total, item) => {
-      return total + parseProductPrice(PRODUCTS[item.id]?.price) * item.quantity;
+      return total + cartUnitPrice(PRODUCTS[item.id]) * item.quantity;
     }, 0);
     const discount = Math.min(subtotal, Math.max(0, Number(activeCartPromotionQuote.discount_total || 0)));
-    const orderTotal = Math.max(0, subtotal - discount);
-    const formattedSubtotal = formatProductPrice(subtotal);
+    const productDiscount = activeCartPromotionQuote.promotion_scope === "product" ? discount : 0;
+    const orderDiscount = activeCartPromotionQuote.promotion_scope === "product" ? 0 : discount;
+    const orderTotal = Math.max(0, subtotal - productDiscount - orderDiscount);
+    const formattedSubtotal = formatProductPrice(subtotal - productDiscount);
 
     document.querySelectorAll("[data-cart-items-summary]").forEach(element => {
       element.textContent = `${itemCount} ${itemCount === 1 ? "produs" : "produse"}`;
@@ -498,14 +549,20 @@
       element.textContent = formatProductPrice(orderTotal);
     });
     document.querySelectorAll("[data-cart-discount-line]").forEach(element => {
-      element.hidden = discount <= 0;
+      element.hidden = orderDiscount <= 0;
     });
     document.querySelectorAll("[data-cart-discount]").forEach(element => {
-      element.textContent = `−${formatProductPrice(discount)}`;
+      element.textContent = `−${formatProductPrice(orderDiscount)}`;
     });
     document.querySelectorAll("[data-cart-promotion-title]").forEach(element => {
-      element.textContent = activeCartPromotionQuote.promotion_title || activeCartPromotionQuote.promotion_code || "Promoție aplicată";
+      const title = activeCartPromotionQuote.promotion_title || activeCartPromotionQuote.promotion_code || "Promoție aplicată";
+      const minimum = Number(activeCartPromotionQuote.promotion_min_order_value || 0);
+      element.textContent = minimum > 0 ? `${title} · Prag minim: ${formatProductPrice(minimum)}` : title;
     });
+    const hasVat = Boolean(publicTax.vat_payer);
+    document.querySelectorAll("[data-cart-subtotal-label]").forEach(element => { element.textContent = hasVat ? "Subtotal (TVA inclus)" : "Subtotal"; });
+    document.querySelectorAll("[data-cart-total-label]").forEach(element => { element.textContent = hasVat ? "Total de plată (TVA inclus)" : "Total de plată"; });
+    document.querySelectorAll("[data-cart-tax-note]").forEach(element => { element.textContent = "Fără costul livrării"; });
 
     const checkout = document.querySelector("[data-cart-checkout]");
     if (checkout) checkout.href = "/checkout.html";
@@ -518,12 +575,13 @@
       quantity: Number(item.quantity || 1)
     })).filter(item => item.product_id);
     const token = localStorage.getItem(CUSTOMER_TOKEN_KEY) || "";
-    const signature = `${JSON.stringify(items)}|${token}`;
+    const deviceToken = shopDeviceToken();
+    const signature = `${JSON.stringify(items)}|${token}|${deviceToken}`;
     if (!force && signature === cartPromotionSignature) return;
     cartPromotionSignature = signature;
     const sequence = ++cartPromotionQuoteSequence;
     if (!items.length) {
-      activeCartPromotionQuote = { subtotal: 0, discount_total: 0, promotion_code: "", promotion_title: "" };
+      activeCartPromotionQuote = { subtotal: 0, discount_total: 0, promotion_code: "", promotion_title: "", promotion_scope: "", promotion_min_order_value: null, items: [] };
       updateCartSummary(cart);
       return;
     }
@@ -534,9 +592,10 @@
         headers: {
           Accept: "application/json",
           "Content-Type": "application/json",
-          ...(token ? { "X-Customer-Token": token } : {})
+          ...(token ? { "X-Customer-Token": token } : {}),
+          ...(deviceToken ? { "X-Shop-Device": deviceToken } : {})
         },
-        body: JSON.stringify({ items })
+        body: JSON.stringify({ items, device_token: deviceToken })
       });
       const quote = await response.json();
       if (!response.ok) throw new Error(String(quote?.error || "Promoția nu a putut fi verificată."));
@@ -545,12 +604,17 @@
         subtotal: Number(quote.subtotal || 0),
         discount_total: Math.max(0, Number(quote.discount_total || 0)),
         promotion_code: String(quote.promotion_code || ""),
-        promotion_title: String(quote.promotion_title || "")
+        promotion_title: String(quote.promotion_title || ""),
+        promotion_scope: String(quote.promotion_scope || ""),
+        promotion_min_order_value: quote.promotion_min_order_value == null ? null : Number(quote.promotion_min_order_value),
+        items: Array.isArray(quote.items) ? quote.items : []
       };
     } catch {
       if (sequence !== cartPromotionQuoteSequence) return;
-      activeCartPromotionQuote = { subtotal: 0, discount_total: 0, promotion_code: "", promotion_title: "" };
+      activeCartPromotionQuote = { subtotal: 0, discount_total: 0, promotion_code: "", promotion_title: "", promotion_scope: "", promotion_min_order_value: null, items: [] };
     }
+    const grid = document.querySelector("[data-cart-grid]");
+    if (grid) grid.innerHTML = cart.map(cartCard).join("");
     updateCartSummary(cart);
   }
 
@@ -595,6 +659,7 @@
     createFavoriteNav();
     bindMobileMenu();
     refresh();
+    void refreshPublicTax();
 
     document.addEventListener("click", event => {
       const favoriteButton = event.target.closest(".favorite-button, .product-detail-favorite");

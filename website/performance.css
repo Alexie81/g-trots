@@ -1,0 +1,86 @@
+/* Lightweight rendering layer shared by the public website. */
+@supports (content-visibility: auto) {
+  .shop-bridge,
+  .service-section,
+  .seo-hub,
+  #proces,
+  .faq-section,
+  #contact,
+  .shop-service-bridge {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 48rem;
+  }
+}
+
+/* These controls already use opaque surfaces, so a live blur adds paint cost
+   without a meaningful visual gain. */
+.shop-page .favorite-button,
+.shop-page .cart-button,
+.shop-page .product-quick-note,
+.shop-page .shop-float-card,
+.shop-page .shop-search-deck,
+.shop-page .filters-panel,
+.shop-page .catalog-intro .shop-section-label,
+.shop-page .catalog-image-note,
+.shop-page .service-concierge {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.shop-page .favorite-button,
+.shop-page .cart-button,
+.shop-page .product-quick-note {
+  background-color: #f8f5f1;
+}
+
+@media (max-width: 900px) {
+  .site-header::before {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .header-inner {
+    -webkit-backdrop-filter: blur(8px) !important;
+    backdrop-filter: blur(8px) !important;
+  }
+
+  .main-nav {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background-color: rgba(10, 10, 10, 0.985) !important;
+  }
+
+  .service-heading-badge,
+  .service-panel,
+  .seo-hub-badge,
+  .seo-hub-grid a,
+  .seo-link-grid a,
+  .shop-bridge-count,
+  .map-zoom-card,
+  .map-legend,
+  .faq-heading-badge,
+  .faq-list,
+  .contact-form {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .hero-visual .vehicle-slide img,
+  .shop-page .shop-scooter-stage img,
+  .romania-map img {
+    filter: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gt-promotion-track span,
+  .gt-promotion-label i,
+  .shop-page .shop-float-card,
+  .shop-page .shop-verify-icon,
+  .shop-page .shop-fit-icon span,
+  .bucharest-pulse::before,
+  .bucharest-pulse::after,
+  .zoom-bucharest {
+    animation: none !important;
+  }
+}

@@ -135,6 +135,7 @@ function gtBuildOrderEmail(array $order, array $config, string $status): array {
     $logoUrl = (string)($config['order_email_logo_url'] ?? 'https://g-trots.ro/assets/logo.png');
     $firstName = trim(explode(' ', trim((string)($order['customer_name'] ?? '')), 2)[0] ?? '');
     $greeting = $firstName !== '' ? 'Salut, ' . gtEmailEscape($firstName) . '!' : 'Salut!';
+    $isProductPromotion = (string)($order['promotion_scope'] ?? '') === 'product';
     $itemsHtml = '';
     foreach (($order['items'] ?? []) as $item) {
         if (!is_array($item)) continue;
@@ -142,13 +143,20 @@ function gtBuildOrderEmail(array $order, array $config, string $status): array {
         $image = $imageUrl !== ''
             ? '<img src="' . gtEmailEscape($imageUrl) . '" width="72" height="72" alt="" style="display:block;width:72px;height:72px;object-fit:contain;border-radius:20px;background:#f7f2ed">'
             : '<span style="display:block;width:72px;height:72px;line-height:72px;text-align:center;border-radius:20px;background:#302d33;color:#ffb77a;font-size:21px;font-weight:900">GT</span>';
+        $hasItemDiscount = $isProductPromotion && (float)($item['discount_total'] ?? 0) > 0;
+        $unitPriceHtml = $hasItemDiscount
+            ? '<span style="text-decoration:line-through;color:#766f78">' . gtEmailMoney($item['unit_price'] ?? 0, $currency) . '</span> <strong style="color:#6ee7b7">' . gtEmailMoney($item['discounted_unit_price'] ?? 0, $currency) . '</strong>'
+            : gtEmailMoney($item['unit_price'] ?? 0, $currency);
+        $linePriceHtml = $hasItemDiscount
+            ? '<span style="display:block;text-decoration:line-through;color:#766f78;font-size:10px;font-weight:600">' . gtEmailMoney($item['line_total'] ?? 0, $currency) . '</span><strong style="display:block;margin-top:3px;color:#6ee7b7">' . gtEmailMoney($item['discounted_line_total'] ?? 0, $currency) . '</strong>'
+            : gtEmailMoney($item['line_total'] ?? 0, $currency);
         $itemsHtml .= '<tr>'
             . '<td style="padding:14px 0;border-bottom:1px solid #39353d;width:84px;vertical-align:middle">' . $image . '</td>'
             . '<td style="padding:14px 12px;border-bottom:1px solid #39353d;vertical-align:middle">'
             . '<strong style="display:block;color:#fff8f3;font-size:14px;line-height:1.35">' . gtEmailEscape($item['product_name'] ?? '') . '</strong>'
-            . '<span style="display:block;color:#9d959f;font-size:11px;margin-top:5px">' . (int)($item['quantity'] ?? 0) . ' × ' . gtEmailMoney($item['unit_price'] ?? 0, $currency) . '</span>'
+            . '<span style="display:block;color:#9d959f;font-size:11px;margin-top:5px">' . (int)($item['quantity'] ?? 0) . ' × ' . $unitPriceHtml . '</span>'
             . '</td>'
-            . '<td style="padding:14px 0;border-bottom:1px solid #39353d;text-align:right;vertical-align:middle;color:#fff8f3;font-size:13px;font-weight:900;white-space:nowrap">' . gtEmailMoney($item['line_total'] ?? 0, $currency) . '</td>'
+            . '<td style="padding:14px 0;border-bottom:1px solid #39353d;text-align:right;vertical-align:middle;color:#fff8f3;font-size:13px;font-weight:900;white-space:nowrap">' . $linePriceHtml . '</td>'
             . '</tr>';
     }
     $paymentLabel = ($order['payment_method'] ?? '') === 'card' ? 'Card online' : 'Ramburs la curier';
@@ -168,13 +176,29 @@ function gtBuildOrderEmail(array $order, array $config, string $status): array {
     $createdAt = gtEmailEscape(date('d.m.Y, H:i', strtotime((string)($order['created_at'] ?? 'now'))));
     $shippingName = gtEmailEscape($order['shipping_method_name'] ?? 'Curier standard');
     $paymentText = gtEmailEscape($paymentLabel);
-    $subtotal = gtEmailMoney($order['subtotal'] ?? 0, $currency);
     $discountValue = (float)($order['discount_total'] ?? 0);
-    $discountRow = $discountValue > 0
+    $displaySubtotal = (float)($order['subtotal'] ?? 0) - ($isProductPromotion ? $discountValue : 0);
+    $subtotal = gtEmailMoney(max(0, $displaySubtotal), $currency);
+    $hasVat = !empty($order['vat_payer']);
+    $subtotalLabel = ($isProductPromotion && $discountValue > 0 ? 'Subtotal după reducerile pe produse' : 'Subtotal') . ($hasVat ? ' (TVA inclus)' : '');
+    $vatTotalLabel = $hasVat ? ' (TVA inclus)' : '';
+    $discountRow = $discountValue > 0 && !$isProductPromotion
         ? '<tr><td style="padding:6px 0;color:#6ee7b7">Reducere' . (!empty($order['promotion_code']) ? ' · ' . gtEmailEscape((string)$order['promotion_code']) : '') . '</td><td align="right" style="color:#6ee7b7">−' . gtEmailMoney($discountValue, $currency) . '</td></tr>'
         : '';
     $shippingCost = gtEmailMoney($order['shipping_cost'] ?? 0, $currency);
     $total = gtEmailMoney($order['total'] ?? 0, $currency);
+    $customerType = ($order['customer_type'] ?? 'individual') === 'company' ? 'PJ' : 'PF';
+    $customerDataRows = '<tr><td style="padding:5px 0;color:#8f8790">Tip client</td><td align="right" style="color:#fff8f3;font-weight:900">' . $customerType . '</td></tr>'
+        . '<tr><td style="padding:5px 0;color:#8f8790">Nume</td><td align="right" style="color:#d8d1d9">' . gtEmailEscape($order['customer_name'] ?? '') . '</td></tr>'
+        . '<tr><td style="padding:5px 0;color:#8f8790">Telefon</td><td align="right" style="color:#d8d1d9">' . gtEmailEscape($order['customer_phone'] ?? '') . '</td></tr>';
+    if ($customerType === 'PJ') {
+        $customerDataRows .= '<tr><td style="padding:5px 0;color:#8f8790">Denumire firmă</td><td align="right" style="color:#6ee7b7;font-weight:900">' . gtEmailEscape($order['company_name'] ?? '') . '</td></tr>'
+            . '<tr><td style="padding:5px 0;color:#8f8790">CUI / CIF</td><td align="right" style="color:#d8d1d9">' . gtEmailEscape($order['company_cui'] ?? '') . '</td></tr>'
+            . '<tr><td style="padding:5px 0;color:#8f8790">Registrul Comerțului</td><td align="right" style="color:#d8d1d9">' . gtEmailEscape($order['company_registration_number'] ?? '') . '</td></tr>'
+            . '<tr><td style="padding:5px 0;color:#8f8790">Sediu social</td><td align="right" style="color:#d8d1d9">' . gtEmailEscape($order['company_address'] ?? '') . '</td></tr>';
+    }
+    $deliveryAddress = trim((string)($order['address'] ?? '') . ', ' . (string)($order['city'] ?? '') . ', ' . (string)($order['county'] ?? ''), ', ');
+    $customerDataRows .= '<tr><td style="padding:9px 0 5px;border-top:1px solid #39353d;color:#8f8790">Livrare</td><td align="right" style="padding:9px 0 5px;border-top:1px solid #39353d;color:#d8d1d9">' . gtEmailEscape($deliveryAddress) . '</td></tr>';
     $timeline = gtEmailStatusTimeline($status, (string)($order['payment_method'] ?? 'card'));
     $html = <<<HTML
 <!doctype html><html lang="ro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -191,8 +215,9 @@ function gtBuildOrderEmail(array $order, array $config, string $status): array {
 <div class="gt-summary" style="padding:24px;border:1px solid #403b43;border-radius:28px;background:#151318">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td><span style="display:block;color:#9d959f;font-size:9px;font-weight:900;letter-spacing:.12em">REZUMAT COMANDĂ</span><strong style="display:block;margin-top:6px;color:#ffb77a;font-size:17px;overflow-wrap:anywhere">{$orderNumber}</strong></td><td align="right"><span style="display:block;color:#9d959f;font-size:9px;font-weight:900;letter-spacing:.12em">DATA</span><strong style="display:block;margin-top:6px;color:#d8d1d9;font-size:12px">{$createdAt}</strong></td></tr></table>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px">{$itemsHtml}</table>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:17px;color:#aaa2ac;font-size:12px"><tr><td style="padding:6px 0">Subtotal</td><td align="right">{$subtotal}</td></tr>{$discountRow}<tr><td style="padding:6px 0">Livrare · {$shippingName}</td><td align="right">{$shippingCost}</td></tr><tr><td style="padding:6px 0">Plată</td><td align="right">{$paymentText}</td></tr><tr><td style="padding:19px 0 0;border-top:1px solid #403b43;color:#fff8f3;font-size:15px;font-weight:900">Total de plată</td><td align="right" style="padding:19px 0 0;border-top:1px solid #403b43;color:#ffb77a;font-size:24px;font-weight:1000">{$total}</td></tr></table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:17px;color:#aaa2ac;font-size:12px"><tr><td style="padding:6px 0">{$subtotalLabel}</td><td align="right">{$subtotal}</td></tr>{$discountRow}<tr><td style="padding:6px 0">Livrare · {$shippingName}</td><td align="right">{$shippingCost}</td></tr><tr><td style="padding:6px 0">Plată</td><td align="right">{$paymentText}</td></tr><tr><td style="padding:19px 0 0;border-top:1px solid #403b43;color:#fff8f3;font-size:15px;font-weight:900">Total de plată{$vatTotalLabel}</td><td align="right" style="padding:19px 0 0;border-top:1px solid #403b43;color:#ffb77a;font-size:24px;font-weight:1000">{$total}</td></tr></table>
 </div>
+<div style="margin-top:20px;padding:20px;border:1px solid #403b43;border-radius:24px;background:#1a181d"><span style="display:block;margin-bottom:10px;color:#a49ca6;font-size:9px;font-weight:900;letter-spacing:.12em">DATE CLIENT ȘI FACTURARE</span><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:11px">{$customerDataRows}</table></div>
 <div class="gt-timeline" style="margin-top:20px;padding:20px;border:1px solid #403b43;border-radius:28px;background:#211f24"><span style="display:block;margin-bottom:13px;color:#a49ca6;font-size:9px;font-weight:900;letter-spacing:.12em">EVOLUȚIA COMENZII</span>{$timeline}</div>
 <div style="padding:22px 0 6px;text-align:center"><a class="gt-action" href="{$safeTrackingUrl}" style="display:inline-block;padding:17px 30px;border-radius:20px;background:#ff8a00;color:#ffffff;text-decoration:none;font-size:14px;font-weight:900;box-shadow:0 13px 32px rgba(255,138,0,.25)">Urmărește comanda&nbsp;&nbsp;→</a></div>
 <div style="margin-top:15px;padding:15px 17px;border:1px solid #4a4035;border-radius:20px;background:#272018;color:#a9a1a9;font-size:11px;line-height:1.55"><strong style="display:block;margin-bottom:4px;color:#fff8f3">Acces direct și securizat</strong>Butonul deschide direct comanda, fără formular. Dacă intri manual pe pagina de urmărire, folosește codul <strong style="color:#ffb77a">{$orderNumber}</strong> și adresa de e-mail din comandă.</div>
@@ -276,6 +301,35 @@ function gtSmtpSend(array $config, string $recipient, string $subject, string $h
     } finally {
         fclose($socket);
     }
+}
+
+function gtSendPasswordResetEmail(array $customer, array $config, string $token): void {
+    $recipient = mb_strtolower(trim((string)($customer['email'] ?? '')));
+    if (!filter_var($recipient, FILTER_VALIDATE_EMAIL) || !preg_match('/^[a-f0-9]{64}$/', $token)) {
+        throw new RuntimeException('Datele pentru resetarea parolei nu sunt valide.');
+    }
+    $base = rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/');
+    $resetUrl = $base . '/resetare-parola.html?token=' . rawurlencode($token) . '&email=' . rawurlencode($recipient);
+    $safeUrl = gtEmailEscape($resetUrl);
+    $safeLogo = gtEmailEscape((string)($config['order_email_logo_url'] ?? 'https://g-trots.ro/assets/logo.png'));
+    $firstName = trim(explode(' ', trim((string)($customer['full_name'] ?? '')), 2)[0] ?? '');
+    $greeting = $firstName === '' ? 'Salut!' : 'Salut, ' . gtEmailEscape($firstName) . '!';
+    $html = <<<HTML
+<!doctype html><html lang="ro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;background:#09090a;color:#fff8f3;font-family:Roboto,'Segoe UI',Arial,sans-serif;-webkit-font-smoothing:antialiased">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0">Link securizat pentru resetarea parolei contului tău G-Trots.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#09090a"><tr><td style="padding:34px 16px" align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:640px;background:#1d1b20;border:1px solid #3a363e;border-radius:34px;overflow:hidden;box-shadow:0 30px 90px rgba(0,0,0,.45)">
+<tr><td style="height:8px;background:linear-gradient(90deg,#ff7900,#ffb14d)"></td></tr>
+<tr><td style="padding:30px 32px 34px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="width:58px"><img src="{$safeLogo}" width="54" height="54" alt="G-Trots România" style="display:block;width:54px;height:54px;border-radius:18px"></td><td style="padding-left:12px"><strong style="display:block;color:#fff8f3;font-size:17px">G-Trots România</strong><span style="display:block;margin-top:4px;color:#9f979f;font-size:9px;font-weight:800;letter-spacing:.1em">SECURITATEA CONTULUI</span></td></tr></table>
+<div style="padding:32px 0 20px"><span style="color:#ff9a2f;font-size:10px;font-weight:900;letter-spacing:.14em">RESETARE PAROLĂ</span><h1 style="margin:10px 0 13px;color:#fff8f3;font-size:40px;line-height:1.04;letter-spacing:-.05em">Alege o parolă nouă.</h1><p style="margin:0;color:#b1a9b2;font-size:15px;line-height:1.65">{$greeting} Am primit o solicitare de resetare a parolei pentru contul asociat acestei adrese.</p></div>
+<div style="padding:20px;border:1px solid #4a4035;border-radius:24px;background:#272018"><strong style="display:block;color:#fff8f3;font-size:14px">Link unic, valabil 30 de minute</strong><p style="margin:7px 0 0;color:#aaa2ac;font-size:12px;line-height:1.6">Butonul poate fi folosit o singură dată. După schimbarea parolei, sesiunile existente vor fi închise automat.</p></div>
+<div style="padding:24px 0 8px;text-align:center"><a href="{$safeUrl}" style="display:inline-block;padding:17px 28px;border-radius:18px;background:#ff8500;color:#ffffff;text-decoration:none;font-size:14px;font-weight:900;box-shadow:0 13px 32px rgba(255,133,0,.25)">Resetează parola&nbsp;&nbsp;→</a></div>
+<p style="margin:18px 0 0;color:#817981;font-size:11px;line-height:1.65">Dacă nu ai solicitat resetarea, ignoră acest e-mail. Parola ta actuală rămâne neschimbată.</p>
+<p style="margin:24px 0 0;text-align:center;color:#756e77;font-size:10px;line-height:1.65"><strong style="color:#aaa2ac">G-Trots România</strong> · g-trots.ro</p>
+</td></tr></table></td></tr></table></body></html>
+HTML;
+    gtSmtpSend($config, $recipient, 'Resetează parola contului tău G-Trots', $html);
 }
 
 function gtSendOrderStatusEmail(array $order, array $config, string $status): array {

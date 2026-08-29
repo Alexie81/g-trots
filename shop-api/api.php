@@ -1,18 +1,22 @@
 <?php
 declare(strict_types=1);
 
+date_default_timezone_set('Europe/Bucharest');
+
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, X-API-Key, X-Auth-Token, X-Import-Key, X-Customer-Token, Authorization');
+header('Access-Control-Allow-Headers: Content-Type, X-API-Key, X-Auth-Token, X-Import-Key, X-Customer-Token, X-Shop-Device, Authorization, Idempotency-Key');
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
 require_once __DIR__ . '/order-emails.php';
 require_once __DIR__ . '/stripe.php';
 require_once __DIR__ . '/gomag.php';
+require_once __DIR__ . '/nir-domain.php';
+require_once __DIR__ . '/nir-service.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(204);
@@ -160,7 +164,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026082801;
+    $schemaVersion = 2026082905;
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_schema_meta (
             meta_key VARCHAR(80) NOT NULL PRIMARY KEY,
@@ -373,8 +377,10 @@ function ensureShopSchema(PDO $db): void {
     }
     $accountingStockColumn = $db->query("SHOW COLUMNS FROM shop_products LIKE 'accounting_stock_quantity'")->fetch();
     if (!$accountingStockColumn) {
-        $db->exec('ALTER TABLE shop_products ADD COLUMN accounting_stock_quantity INT NOT NULL DEFAULT 0 AFTER stock_quantity');
+        $db->exec('ALTER TABLE shop_products ADD COLUMN accounting_stock_quantity DECIMAL(18,4) NOT NULL DEFAULT 0 AFTER stock_quantity');
         $db->exec('UPDATE shop_products SET accounting_stock_quantity = stock_quantity WHERE stock_mode = "tracked"');
+    } elseif (stripos((string)($accountingStockColumn['Type'] ?? ''), 'decimal') === false) {
+        $db->exec('ALTER TABLE shop_products MODIFY accounting_stock_quantity DECIMAL(18,4) NOT NULL DEFAULT 0');
     }
     $supplierStockColumns = [
         'supplier_stock_quantity' => 'INT NOT NULL DEFAULT 0 AFTER stock_quantity',
@@ -483,6 +489,411 @@ function ensureShopSchema(PDO $db): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_suppliers (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            name VARCHAR(180) NOT NULL,
+            contact_person VARCHAR(180) NULL,
+            email VARCHAR(180) NULL,
+            phone VARCHAR(50) NULL,
+            website VARCHAR(255) NULL,
+            cui VARCHAR(60) NULL,
+            registration_number VARCHAR(80) NULL,
+            address VARCHAR(255) NULL,
+            notes TEXT NULL,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_shop_suppliers_active (is_active, name),
+            INDEX idx_shop_suppliers_name (name)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    if (!$db->query("SHOW COLUMNS FROM shop_suppliers LIKE 'registration_number'")->fetch()) {
+        $db->exec("ALTER TABLE shop_suppliers ADD COLUMN registration_number VARCHAR(80) NULL AFTER cui");
+    }
+    $supplierDetailColumns = [
+        'vat_number' => 'VARCHAR(60) NULL AFTER registration_number',
+        'is_vat_payer' => 'TINYINT(1) NOT NULL DEFAULT 1 AFTER vat_number',
+        'default_vat_rate' => 'DECIMAL(7,4) NULL AFTER is_vat_payer',
+        'address_line2' => 'VARCHAR(255) NULL AFTER address',
+        'city' => 'VARCHAR(120) NULL AFTER address_line2',
+        'county' => 'VARCHAR(120) NULL AFTER city',
+        'postal_code' => 'VARCHAR(30) NULL AFTER county',
+        'country' => "VARCHAR(80) NOT NULL DEFAULT 'România' AFTER postal_code",
+        'default_currency' => "CHAR(3) NOT NULL DEFAULT 'RON' AFTER country",
+        'payment_terms' => 'VARCHAR(180) NULL AFTER default_currency',
+        'row_version' => 'INT UNSIGNED NOT NULL DEFAULT 1 AFTER is_active',
+    ];
+    foreach ($supplierDetailColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_suppliers LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_suppliers ADD COLUMN {$column} {$definition}");
+        }
+    }
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_warehouses (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            code VARCHAR(40) NOT NULL UNIQUE,
+            name VARCHAR(120) NOT NULL,
+            is_default TINYINT(1) NOT NULL DEFAULT 0,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_shop_warehouses_active (is_active, is_default)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec("INSERT IGNORE INTO shop_warehouses (id, code, name, is_default, is_active) VALUES ('00000000-0000-4000-8000-000000000001', 'MAIN', 'Gestiune principală', 1, 1)");
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_nir_settings (
+            id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+            default_warehouse_id CHAR(36) NOT NULL,
+            include_vat_in_inventory_cost TINYINT(1) NOT NULL DEFAULT 0,
+            price_variance_warning_percent DECIMAL(7,2) NOT NULL DEFAULT 20.00,
+            next_sequence BIGINT UNSIGNED NOT NULL DEFAULT 1,
+            number_prefix VARCHAR(30) NOT NULL DEFAULT 'NIR',
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec("INSERT IGNORE INTO shop_nir_settings (id, default_warehouse_id) VALUES (1, '00000000-0000-4000-8000-000000000001')");
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_supplier_product_references (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            supplier_id CHAR(36) NOT NULL,
+            product_id CHAR(36) NOT NULL,
+            supplier_product_code_original VARCHAR(180) NOT NULL,
+            supplier_product_code_normalized VARCHAR(180) NOT NULL,
+            supplier_product_name VARCHAR(255) NULL,
+            supplier_ean VARCHAR(120) NULL,
+            purchase_unit VARCHAR(40) NOT NULL DEFAULT 'buc',
+            stock_unit VARCHAR(40) NOT NULL DEFAULT 'buc',
+            conversion_factor DECIMAL(18,6) NOT NULL DEFAULT 1.000000,
+            is_primary_for_supplier TINYINT(1) NOT NULL DEFAULT 0,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            last_used_at DATETIME NULL,
+            last_confirmed_purchase_price DECIMAL(18,6) NULL,
+            last_confirmed_currency CHAR(3) NULL,
+            last_confirmed_price_ron DECIMAL(18,6) NULL,
+            last_confirmed_at DATETIME NULL,
+            created_by VARCHAR(180) NULL,
+            updated_by VARCHAR(180) NULL,
+            row_version INT UNSIGNED NOT NULL DEFAULT 1,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE INDEX uq_shop_supplier_code (supplier_id, supplier_product_code_normalized),
+            INDEX idx_shop_supplier_ref_product (product_id),
+            INDEX idx_shop_supplier_ref_supplier_product (supplier_id, product_id),
+            INDEX idx_shop_supplier_ref_code (supplier_product_code_normalized),
+            INDEX idx_shop_supplier_ref_ean (supplier_ean),
+            INDEX idx_shop_supplier_ref_last_used (last_used_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_legacy_supplier_codes (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            product_id CHAR(36) NOT NULL,
+            code_original VARCHAR(180) NOT NULL,
+            code_normalized VARCHAR(180) NOT NULL,
+            source_domain VARCHAR(120) NULL,
+            resolution_status VARCHAR(30) NOT NULL DEFAULT 'unresolved_supplier',
+            resolved_reference_id CHAR(36) NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            resolved_at DATETIME NULL,
+            UNIQUE INDEX uq_shop_legacy_product_code (product_id, code_normalized),
+            INDEX idx_shop_legacy_resolution (resolution_status, created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_nir_documents (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            temporary_number VARCHAR(80) NOT NULL,
+            nir_number VARCHAR(80) NULL,
+            status VARCHAR(30) NOT NULL DEFAULT 'draft',
+            supplier_id CHAR(36) NULL,
+            warehouse_id CHAR(36) NOT NULL,
+            supplier_invoice_series VARCHAR(60) NULL,
+            supplier_invoice_number VARCHAR(120) NULL,
+            supplier_invoice_date DATE NULL,
+            nir_date DATE NOT NULL,
+            nir_time TIME NULL,
+            reception_date DATE NOT NULL,
+            reception_time TIME NULL,
+            currency CHAR(3) NOT NULL DEFAULT 'RON',
+            exchange_rate DECIMAL(18,8) NOT NULL DEFAULT 1.00000000,
+            exchange_rate_date DATE NULL,
+            notes TEXT NULL,
+            source_type VARCHAR(30) NOT NULL DEFAULT 'manual',
+            external_identifier VARCHAR(180) NULL,
+            source_file_hash CHAR(64) NULL,
+            duplicate_fingerprint CHAR(64) NULL,
+            subtotal DECIMAL(18,2) NOT NULL DEFAULT 0,
+            vat_total DECIMAL(18,2) NOT NULL DEFAULT 0,
+            grand_total DECIMAL(18,2) NOT NULL DEFAULT 0,
+            subtotal_ron DECIMAL(18,2) NOT NULL DEFAULT 0,
+            vat_total_ron DECIMAL(18,2) NOT NULL DEFAULT 0,
+            grand_total_ron DECIMAL(18,2) NOT NULL DEFAULT 0,
+            inventory_cost_total_ron DECIMAL(18,2) NOT NULL DEFAULT 0,
+            total_difference_ron DECIMAL(18,2) NOT NULL DEFAULT 0,
+            row_version INT UNSIGNED NOT NULL DEFAULT 1,
+            confirmed_at DATETIME NULL,
+            confirmed_by VARCHAR(180) NULL,
+            reversed_at DATETIME NULL,
+            reversed_by VARCHAR(180) NULL,
+            reversal_of_id CHAR(36) NULL,
+            created_by VARCHAR(180) NULL,
+            updated_by VARCHAR(180) NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE INDEX uq_shop_nir_number (nir_number),
+            UNIQUE INDEX uq_shop_nir_temporary_number (temporary_number),
+            UNIQUE INDEX uq_shop_nir_confirmed_duplicate (duplicate_fingerprint),
+            INDEX idx_shop_nir_status_date (status, reception_date),
+            INDEX idx_shop_nir_supplier_date (supplier_id, reception_date),
+            INDEX idx_shop_nir_invoice (supplier_invoice_number, supplier_invoice_date),
+            INDEX idx_shop_nir_reversal (reversal_of_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $nirDocumentColumns = [
+        'temporary_number' => "VARCHAR(80) NOT NULL DEFAULT '' AFTER id",
+        'supplier_invoice_series' => 'VARCHAR(60) NULL AFTER warehouse_id',
+        'nir_date' => 'DATE NULL AFTER supplier_invoice_date',
+        'nir_time' => 'TIME NULL AFTER nir_date',
+        'reception_time' => 'TIME NULL AFTER reception_date',
+        'exchange_rate_date' => 'DATE NULL AFTER exchange_rate',
+        'external_identifier' => 'VARCHAR(180) NULL AFTER source_type',
+        'source_file_hash' => 'CHAR(64) NULL AFTER external_identifier',
+        'total_difference_ron' => 'DECIMAL(18,2) NOT NULL DEFAULT 0 AFTER inventory_cost_total_ron',
+    ];
+    foreach ($nirDocumentColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_nir_documents LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_nir_documents ADD COLUMN {$column} {$definition}");
+        }
+    }
+    $db->exec("UPDATE shop_nir_documents SET temporary_number = CONCAT('DRAFT-', LEFT(id, 8)) WHERE temporary_number = ''");
+    if (!$db->query("SHOW INDEX FROM shop_nir_documents WHERE Key_name = 'uq_shop_nir_temporary_number'")->fetch()) {
+        $db->exec('ALTER TABLE shop_nir_documents ADD UNIQUE INDEX uq_shop_nir_temporary_number (temporary_number)');
+    }
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_nir_lines (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            nir_document_id CHAR(36) NOT NULL,
+            line_number INT UNSIGNED NOT NULL,
+            product_id CHAR(36) NULL,
+            supplier_product_reference_id CHAR(36) NULL,
+            supplier_product_code VARCHAR(180) NULL,
+            supplier_product_code_normalized VARCHAR(180) NULL,
+            supplier_product_name VARCHAR(255) NOT NULL,
+            supplier_ean VARCHAR(120) NULL,
+            supplier_description TEXT NULL,
+            raw_description TEXT NULL,
+            product_snapshot_name VARCHAR(255) NULL,
+            sku_snapshot VARCHAR(120) NULL,
+            ean_snapshot VARCHAR(120) NULL,
+            purchase_unit VARCHAR(40) NOT NULL DEFAULT 'buc',
+            stock_unit VARCHAR(40) NOT NULL DEFAULT 'buc',
+            invoiced_quantity DECIMAL(18,4) NOT NULL DEFAULT 0,
+            received_quantity DECIMAL(18,4) NOT NULL DEFAULT 0,
+            accepted_quantity DECIMAL(18,4) NOT NULL DEFAULT 0,
+            rejected_quantity DECIMAL(18,4) NOT NULL DEFAULT 0,
+            conversion_factor DECIMAL(18,6) NOT NULL DEFAULT 1.000000,
+            stock_quantity DECIMAL(18,4) NOT NULL DEFAULT 0,
+            unit_price DECIMAL(18,6) NOT NULL DEFAULT 0,
+            discount_percent DECIMAL(9,4) NOT NULL DEFAULT 0,
+            discount_value DECIMAL(18,6) NOT NULL DEFAULT 0,
+            vat_rate DECIMAL(9,4) NOT NULL DEFAULT 0,
+            line_net DECIMAL(18,6) NOT NULL DEFAULT 0,
+            line_vat DECIMAL(18,6) NOT NULL DEFAULT 0,
+            line_total DECIMAL(18,6) NOT NULL DEFAULT 0,
+            line_net_ron DECIMAL(18,2) NOT NULL DEFAULT 0,
+            line_vat_ron DECIMAL(18,2) NOT NULL DEFAULT 0,
+            line_total_ron DECIMAL(18,2) NOT NULL DEFAULT 0,
+            allocated_cost_ron DECIMAL(18,2) NOT NULL DEFAULT 0,
+            inventory_unit_cost_ron DECIMAL(18,6) NOT NULL DEFAULT 0,
+            inventory_cost_total_ron DECIMAL(18,2) NOT NULL DEFAULT 0,
+            resolution_status VARCHAR(30) NOT NULL DEFAULT 'unmatched',
+            match_method VARCHAR(30) NOT NULL DEFAULT 'unmatched',
+            match_confidence DECIMAL(5,4) NOT NULL DEFAULT 0,
+            is_stock_item TINYINT(1) NOT NULL DEFAULT 1,
+            difference_reason VARCHAR(40) NULL,
+            difference_notes VARCHAR(500) NULL,
+            mismatch_reason VARCHAR(500) NULL,
+            row_version INT UNSIGNED NOT NULL DEFAULT 1,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE INDEX uq_shop_nir_line_number (nir_document_id, line_number),
+            INDEX idx_shop_nir_line_product (product_id),
+            INDEX idx_shop_nir_line_reference (supplier_product_reference_id),
+            INDEX idx_shop_nir_line_code (supplier_product_code)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $nirLineColumns = [
+        'supplier_product_code_normalized' => 'VARCHAR(180) NULL AFTER supplier_product_code',
+        'supplier_description' => 'TEXT NULL AFTER supplier_ean',
+        'raw_description' => 'TEXT NULL AFTER supplier_description',
+        'product_snapshot_name' => 'VARCHAR(255) NULL AFTER raw_description',
+        'sku_snapshot' => 'VARCHAR(120) NULL AFTER product_snapshot_name',
+        'ean_snapshot' => 'VARCHAR(120) NULL AFTER sku_snapshot',
+        'received_quantity' => 'DECIMAL(18,4) NOT NULL DEFAULT 0 AFTER invoiced_quantity',
+        'discount_value' => 'DECIMAL(18,6) NOT NULL DEFAULT 0 AFTER discount_percent',
+        'match_method' => "VARCHAR(30) NOT NULL DEFAULT 'unmatched' AFTER resolution_status",
+        'match_confidence' => 'DECIMAL(5,4) NOT NULL DEFAULT 0 AFTER match_method',
+        'is_stock_item' => 'TINYINT(1) NOT NULL DEFAULT 1 AFTER match_confidence',
+        'difference_reason' => 'VARCHAR(40) NULL AFTER is_stock_item',
+        'difference_notes' => 'VARCHAR(500) NULL AFTER difference_reason',
+    ];
+    foreach ($nirLineColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_nir_lines LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_nir_lines ADD COLUMN {$column} {$definition}");
+        }
+    }
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_nir_attachments (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            nir_document_id CHAR(36) NOT NULL,
+            original_name VARCHAR(255) NOT NULL,
+            storage_name VARCHAR(255) NOT NULL,
+            mime_type VARCHAR(120) NOT NULL,
+            extension VARCHAR(20) NOT NULL,
+            file_size BIGINT UNSIGNED NOT NULL,
+            sha256 CHAR(64) NOT NULL,
+            extraction_status VARCHAR(30) NOT NULL DEFAULT 'pending',
+            extraction_message VARCHAR(500) NULL,
+            extracted_json LONGTEXT NULL,
+            created_by VARCHAR(180) NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE INDEX uq_shop_nir_attachment_hash (nir_document_id, sha256),
+            INDEX idx_shop_nir_attachment_document (nir_document_id, created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_inventory_cost_layers (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            product_id CHAR(36) NOT NULL,
+            warehouse_id CHAR(36) NOT NULL,
+            supplier_id CHAR(36) NULL,
+            supplier_product_reference_id CHAR(36) NULL,
+            nir_document_id CHAR(36) NULL,
+            nir_line_id CHAR(36) NULL,
+            source_type VARCHAR(30) NOT NULL DEFAULT 'NIR',
+            source_reference VARCHAR(120) NULL,
+            invoice_number_snapshot VARCHAR(180) NULL,
+            supplier_code_snapshot VARCHAR(180) NULL,
+            reception_date DATE NOT NULL,
+            confirmed_at DATETIME NULL,
+            original_quantity DECIMAL(18,4) NOT NULL,
+            remaining_quantity DECIMAL(18,4) NOT NULL,
+            stock_unit VARCHAR(40) NOT NULL DEFAULT 'buc',
+            unit_cost_ron DECIMAL(18,6) NOT NULL,
+            total_cost_ron DECIMAL(18,2) NOT NULL,
+            currency CHAR(3) NOT NULL DEFAULT 'RON',
+            original_unit_price DECIMAL(18,6) NULL,
+            exchange_rate DECIMAL(18,8) NOT NULL DEFAULT 1.00000000,
+            status VARCHAR(30) NOT NULL DEFAULT 'open',
+            is_reversed TINYINT(1) NOT NULL DEFAULT 0,
+            reversed_at DATETIME NULL,
+            created_by VARCHAR(180) NULL,
+            row_version INT UNSIGNED NOT NULL DEFAULT 1,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE INDEX uq_shop_fifo_nir_line (nir_line_id),
+            INDEX idx_shop_fifo_product_order (product_id, warehouse_id, reception_date, created_at),
+            INDEX idx_shop_fifo_remaining (product_id, warehouse_id, is_reversed, remaining_quantity),
+            INDEX idx_shop_fifo_supplier (supplier_id, reception_date)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $fifoLayerColumns = [
+        'supplier_product_reference_id' => 'CHAR(36) NULL AFTER supplier_id',
+        'invoice_number_snapshot' => 'VARCHAR(180) NULL AFTER source_reference',
+        'supplier_code_snapshot' => 'VARCHAR(180) NULL AFTER invoice_number_snapshot',
+        'confirmed_at' => 'DATETIME NULL AFTER reception_date',
+        'stock_unit' => "VARCHAR(40) NOT NULL DEFAULT 'buc' AFTER remaining_quantity",
+        'exchange_rate' => 'DECIMAL(18,8) NOT NULL DEFAULT 1.00000000 AFTER original_unit_price',
+        'status' => "VARCHAR(30) NOT NULL DEFAULT 'open' AFTER exchange_rate",
+        'reversed_at' => 'DATETIME NULL AFTER is_reversed',
+        'created_by' => 'VARCHAR(180) NULL AFTER reversed_at',
+    ];
+    foreach ($fifoLayerColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_inventory_cost_layers LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_inventory_cost_layers ADD COLUMN {$column} {$definition}");
+        }
+    }
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_inventory_layer_consumptions (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            inventory_cost_layer_id CHAR(36) NOT NULL,
+            product_id CHAR(36) NOT NULL,
+            warehouse_id CHAR(36) NOT NULL,
+            source_document_type VARCHAR(40) NOT NULL,
+            source_document_id CHAR(36) NOT NULL,
+            source_line_id CHAR(36) NOT NULL,
+            quantity DECIMAL(18,4) NOT NULL,
+            unit_cost_ron DECIMAL(18,6) NOT NULL,
+            total_cost_ron DECIMAL(18,2) NOT NULL,
+            idempotency_key VARCHAR(120) NOT NULL,
+            consumed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            created_by VARCHAR(180) NULL,
+            reversal_consumption_id CHAR(36) NULL,
+            row_version INT UNSIGNED NOT NULL DEFAULT 1,
+            reversed_at DATETIME NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE INDEX uq_shop_fifo_consumption_source (source_document_type, source_line_id, inventory_cost_layer_id),
+            UNIQUE INDEX uq_shop_fifo_consumption_idempotency (idempotency_key, inventory_cost_layer_id),
+            INDEX idx_shop_fifo_consumption_layer (inventory_cost_layer_id, created_at),
+            INDEX idx_shop_fifo_consumption_source_document (source_document_type, source_document_id, source_line_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $fifoConsumptionColumns = [
+        'consumed_at' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER idempotency_key',
+        'created_by' => 'VARCHAR(180) NULL AFTER consumed_at',
+        'reversal_consumption_id' => 'CHAR(36) NULL AFTER created_by',
+        'row_version' => 'INT UNSIGNED NOT NULL DEFAULT 1 AFTER reversal_consumption_id',
+        'reversed_at' => 'DATETIME NULL AFTER row_version',
+    ];
+    foreach ($fifoConsumptionColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_inventory_layer_consumptions LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_inventory_layer_consumptions ADD COLUMN {$column} {$definition}");
+        }
+    }
+    if (!$db->query("SHOW INDEX FROM shop_inventory_layer_consumptions WHERE Key_name = 'idx_shop_fifo_consumption_source_document'")->fetch()) {
+        $db->exec('ALTER TABLE shop_inventory_layer_consumptions ADD INDEX idx_shop_fifo_consumption_source_document (source_document_type, source_document_id, source_line_id)');
+    }
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_domain_audit (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            action_type VARCHAR(80) NOT NULL,
+            entity_type VARCHAR(80) NOT NULL,
+            entity_id CHAR(36) NOT NULL,
+            actor_id VARCHAR(180) NULL,
+            actor_name VARCHAR(180) NULL,
+            old_values_json LONGTEXT NULL,
+            new_values_json LONGTEXT NULL,
+            context_json LONGTEXT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_shop_audit_entity (entity_type, entity_id, created_at),
+            INDEX idx_shop_audit_actor (actor_id, created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_nir_idempotency (
+            idempotency_key VARCHAR(120) NOT NULL PRIMARY KEY,
+            nir_document_id CHAR(36) NOT NULL,
+            request_hash CHAR(64) NOT NULL,
+            response_json LONGTEXT NULL,
+            completed_at DATETIME NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_shop_nir_idempotency_document (nir_document_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_domain_outbox (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            event_type VARCHAR(100) NOT NULL,
+            aggregate_type VARCHAR(80) NOT NULL,
+            aggregate_id CHAR(36) NOT NULL,
+            payload_json LONGTEXT NOT NULL,
+            published_at DATETIME NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_shop_outbox_pending (published_at, created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_payment_settings (
             id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
             card_enabled TINYINT(1) NOT NULL DEFAULT 0,
@@ -513,6 +924,7 @@ function ensureShopSchema(PDO $db): void {
             stamp_path VARCHAR(500) NULL,
             is_default TINYINT(1) NOT NULL DEFAULT 0,
             vat_payer TINYINT(1) NOT NULL DEFAULT 0,
+            vat_rate DECIMAL(5,2) NOT NULL DEFAULT 19.00,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
@@ -521,6 +933,12 @@ function ensureShopSchema(PDO $db): void {
     }
     if (!$db->query("SHOW COLUMNS FROM shop_company_settings LIKE 'is_default'")->fetch()) {
         $db->exec("ALTER TABLE shop_company_settings ADD COLUMN is_default TINYINT(1) NOT NULL DEFAULT 0 AFTER stamp_path");
+    }
+    if (!$db->query("SHOW COLUMNS FROM shop_company_settings LIKE 'vat_payer'")->fetch()) {
+        $db->exec("ALTER TABLE shop_company_settings ADD COLUMN vat_payer TINYINT(1) NOT NULL DEFAULT 0 AFTER is_default");
+    }
+    if (!$db->query("SHOW COLUMNS FROM shop_company_settings LIKE 'vat_rate'")->fetch()) {
+        $db->exec("ALTER TABLE shop_company_settings ADD COLUMN vat_rate DECIMAL(5,2) NOT NULL DEFAULT 19.00 AFTER vat_payer");
     }
     $db->exec("ALTER TABLE shop_company_settings MODIFY id INT UNSIGNED NOT NULL AUTO_INCREMENT");
     $db->exec("INSERT IGNORE INTO shop_company_settings (id, is_default) VALUES (1, 1)");
@@ -531,9 +949,15 @@ function ensureShopSchema(PDO $db): void {
             status VARCHAR(30) NOT NULL DEFAULT 'new',
             payment_status VARCHAR(30) NOT NULL DEFAULT 'pending',
             payment_method VARCHAR(40) NOT NULL,
+            customer_id CHAR(36) NULL,
             customer_name VARCHAR(180) NOT NULL,
             customer_email VARCHAR(180) NULL,
             customer_phone VARCHAR(50) NOT NULL,
+            customer_type VARCHAR(20) NOT NULL DEFAULT 'individual',
+            company_name VARCHAR(180) NULL,
+            company_cui VARCHAR(60) NULL,
+            company_registration_number VARCHAR(80) NULL,
+            company_address VARCHAR(255) NULL,
             address VARCHAR(255) NOT NULL,
             city VARCHAR(120) NOT NULL,
             county VARCHAR(120) NULL,
@@ -546,8 +970,13 @@ function ensureShopSchema(PDO $db): void {
             discount_total DECIMAL(12,2) NOT NULL DEFAULT 0,
             promotion_id CHAR(36) NULL,
             promotion_code VARCHAR(80) NULL,
+            promotion_scope VARCHAR(20) NULL,
             shipping_cost DECIMAL(12,2) NOT NULL DEFAULT 0,
             total DECIMAL(12,2) NOT NULL,
+            vat_payer TINYINT(1) NOT NULL DEFAULT 0,
+            vat_rate DECIMAL(5,2) NOT NULL DEFAULT 0,
+            vat_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+            net_total DECIMAL(12,2) NOT NULL DEFAULT 0,
             currency CHAR(3) NOT NULL DEFAULT 'RON',
             stripe_checkout_session_id VARCHAR(255) NULL,
             stripe_payment_intent_id VARCHAR(255) NULL,
@@ -558,6 +987,7 @@ function ensureShopSchema(PDO $db): void {
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_shop_orders_number (order_number),
             INDEX idx_shop_orders_status (status, created_at),
+            INDEX idx_shop_orders_customer_id (customer_id, created_at),
             INDEX idx_shop_orders_customer (customer_phone, customer_email),
             UNIQUE INDEX idx_shop_orders_stripe_session (stripe_checkout_session_id),
             INDEX idx_shop_orders_stripe_payment (stripe_payment_intent_id),
@@ -579,11 +1009,45 @@ function ensureShopSchema(PDO $db): void {
         'discount_total' => 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER subtotal',
         'promotion_id' => 'CHAR(36) NULL AFTER discount_total',
         'promotion_code' => 'VARCHAR(80) NULL AFTER promotion_id',
+        'promotion_scope' => 'VARCHAR(20) NULL AFTER promotion_code',
+        'customer_id' => 'CHAR(36) NULL AFTER payment_method',
     ];
     foreach ($promotionOrderColumns as $column => $definition) {
         if (!$db->query("SHOW COLUMNS FROM shop_orders LIKE " . $db->quote($column))->fetch()) {
             $db->exec("ALTER TABLE shop_orders ADD COLUMN {$column} {$definition}");
         }
+    }
+    $customerTypeOrderColumns = [
+        'customer_type' => "VARCHAR(20) NOT NULL DEFAULT 'individual' AFTER customer_phone",
+        'company_name' => 'VARCHAR(180) NULL AFTER customer_type',
+        'company_cui' => 'VARCHAR(60) NULL AFTER company_name',
+        'company_registration_number' => 'VARCHAR(80) NULL AFTER company_cui',
+        'company_address' => 'VARCHAR(255) NULL AFTER company_registration_number',
+    ];
+    foreach ($customerTypeOrderColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_orders LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_orders ADD COLUMN {$column} {$definition}");
+        }
+    }
+    $vatOrderColumns = [
+        'vat_payer' => 'TINYINT(1) NOT NULL DEFAULT 0 AFTER total',
+        'vat_rate' => 'DECIMAL(5,2) NOT NULL DEFAULT 0 AFTER vat_payer',
+        'vat_total' => 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER vat_rate',
+        'net_total' => 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER vat_total',
+    ];
+    $addedNetTotalColumn = false;
+    foreach ($vatOrderColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_orders LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_orders ADD COLUMN {$column} {$definition}");
+            if ($column === 'net_total') $addedNetTotalColumn = true;
+        }
+    }
+    if ($addedNetTotalColumn) {
+        // Migrare unică pentru comenzile istorice: păstrăm în DB brutul, TVA-ul și netul defalcate.
+        $db->exec('UPDATE shop_orders SET vat_total = CASE WHEN vat_payer = 1 AND vat_rate > 0 THEN ROUND(total * vat_rate / 100, 2) ELSE 0 END, net_total = CASE WHEN vat_payer = 1 AND vat_rate > 0 THEN ROUND(total - (total * vat_rate / 100), 2) ELSE total END');
+    }
+    if (!$db->query("SHOW INDEX FROM shop_orders WHERE Key_name = 'idx_shop_orders_customer_id'")->fetch()) {
+        $db->exec('ALTER TABLE shop_orders ADD INDEX idx_shop_orders_customer_id (customer_id, created_at)');
     }
     if (!$db->query("SHOW INDEX FROM shop_orders WHERE Key_name = 'idx_shop_orders_stripe_session'")->fetch()) {
         $db->exec('ALTER TABLE shop_orders ADD UNIQUE INDEX idx_shop_orders_stripe_session (stripe_checkout_session_id)');
@@ -621,9 +1085,22 @@ function ensureShopSchema(PDO $db): void {
             quantity INT NOT NULL,
             unit_price DECIMAL(12,2) NOT NULL,
             line_total DECIMAL(12,2) NOT NULL,
+            discount_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+            discounted_unit_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+            discounted_line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
             INDEX idx_shop_order_items_order (order_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+    $promotionItemColumns = [
+        'discount_total' => 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER line_total',
+        'discounted_unit_price' => 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER discount_total',
+        'discounted_line_total' => 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER discounted_unit_price',
+    ];
+    foreach ($promotionItemColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_order_items LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_order_items ADD COLUMN {$column} {$definition}");
+        }
+    }
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_order_status_history (
             id CHAR(36) NOT NULL PRIMARY KEY,
@@ -646,6 +1123,15 @@ function ensureShopSchema(PDO $db): void {
             password_hash VARCHAR(255) NULL,
             full_name VARCHAR(180) NOT NULL,
             phone VARCHAR(50) NULL,
+            customer_type VARCHAR(20) NOT NULL DEFAULT 'individual',
+            address VARCHAR(255) NULL,
+            city VARCHAR(120) NULL,
+            county VARCHAR(120) NULL,
+            postal_code VARCHAR(30) NULL,
+            company_name VARCHAR(180) NULL,
+            company_cui VARCHAR(60) NULL,
+            company_registration_number VARCHAR(80) NULL,
+            company_address VARCHAR(255) NULL,
             google_sub VARCHAR(190) NULL UNIQUE,
             avatar_url VARCHAR(500) NULL,
             is_active TINYINT(1) NOT NULL DEFAULT 1,
@@ -656,6 +1142,22 @@ function ensureShopSchema(PDO $db): void {
             INDEX idx_shop_customers_name (full_name)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+    $customerProfileColumns = [
+        'customer_type' => "VARCHAR(20) NOT NULL DEFAULT 'individual' AFTER phone",
+        'address' => 'VARCHAR(255) NULL AFTER customer_type',
+        'city' => 'VARCHAR(120) NULL AFTER address',
+        'county' => 'VARCHAR(120) NULL AFTER city',
+        'postal_code' => 'VARCHAR(30) NULL AFTER county',
+        'company_name' => 'VARCHAR(180) NULL AFTER postal_code',
+        'company_cui' => 'VARCHAR(60) NULL AFTER company_name',
+        'company_registration_number' => 'VARCHAR(80) NULL AFTER company_cui',
+        'company_address' => 'VARCHAR(255) NULL AFTER company_registration_number',
+    ];
+    foreach ($customerProfileColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_customers LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_customers ADD COLUMN {$column} {$definition}");
+        }
+    }
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_customer_sessions (
             id CHAR(36) NOT NULL PRIMARY KEY,
@@ -666,6 +1168,22 @@ function ensureShopSchema(PDO $db): void {
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_shop_customer_sessions_customer (customer_id, expires_at),
             INDEX idx_shop_customer_sessions_expiry (expires_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_customer_password_resets (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            customer_id CHAR(36) NULL,
+            email VARCHAR(190) NOT NULL,
+            token_hash CHAR(64) NOT NULL UNIQUE,
+            request_ip_hash CHAR(64) NOT NULL,
+            expires_at DATETIME NOT NULL,
+            used_at DATETIME NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_shop_password_resets_customer (customer_id, created_at),
+            INDEX idx_shop_password_resets_email (email, created_at),
+            INDEX idx_shop_password_resets_ip (request_ip_hash, created_at),
+            INDEX idx_shop_password_resets_expiry (expires_at, used_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     $db->exec(
@@ -752,6 +1270,33 @@ function ensureShopSchema(PDO $db): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_coupon_customer_usage (
+            coupon_id CHAR(36) NOT NULL,
+            customer_id CHAR(36) NOT NULL,
+            order_id CHAR(36) NULL,
+            used_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (coupon_id, customer_id),
+            INDEX idx_shop_coupon_customer_order (order_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "UPDATE shop_orders o
+         INNER JOIN shop_customers c ON LOWER(c.email) = LOWER(o.customer_email)
+         SET o.customer_id = c.id
+         WHERE o.customer_id IS NULL AND o.customer_email IS NOT NULL AND o.customer_email <> ''"
+    );
+    $db->exec(
+        "INSERT IGNORE INTO shop_coupon_customer_usage (coupon_id, customer_id, order_id, used_at)
+         SELECT o.promotion_id, o.customer_id, o.id, o.created_at
+         FROM shop_orders o
+         INNER JOIN shop_coupons c ON c.id = o.promotion_id AND c.usage_mode = 'once_per_customer'
+         WHERE o.customer_id IS NOT NULL
+           AND o.promotion_id IS NOT NULL
+           AND o.discount_total > 0
+           AND o.status NOT IN ('cancelled', 'refunded')
+         ORDER BY o.created_at ASC"
+    );
+    $db->exec(
         "INSERT INTO shop_order_status_history (id, order_id, from_status, to_status, changed_by, customer_notified, email_status, created_at)
          SELECT UUID(), o.id, NULL, o.status, 'Sistem', 0, 'not_requested', o.created_at
          FROM shop_orders o
@@ -772,6 +1317,63 @@ function ensureShopSchema(PDO $db): void {
             INDEX idx_shop_inventory_order (order_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+    $inventoryMovementColumns = [
+        'warehouse_id' => 'CHAR(36) NULL AFTER product_id',
+        'nir_document_id' => 'CHAR(36) NULL AFTER order_id',
+        'nir_line_id' => 'CHAR(36) NULL AFTER nir_document_id',
+        'inventory_cost_layer_id' => 'CHAR(36) NULL AFTER nir_line_id',
+        'accounting_quantity_delta' => 'DECIMAL(18,4) NULL AFTER quantity_delta',
+        'accounting_quantity_after' => 'DECIMAL(18,4) NULL AFTER quantity_after',
+        'inventory_unit_cost_ron' => 'DECIMAL(18,6) NULL AFTER accounting_quantity_after',
+        'inventory_cost_total_ron' => 'DECIMAL(18,2) NULL AFTER inventory_unit_cost_ron',
+        'reception_date' => 'DATE NULL AFTER inventory_cost_total_ron',
+        'reversal_of_movement_id' => 'CHAR(36) NULL AFTER reception_date',
+    ];
+    foreach ($inventoryMovementColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_inventory_movements LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_inventory_movements ADD COLUMN {$column} {$definition}");
+        }
+    }
+    foreach ([
+        'idx_shop_inventory_nir' => '(nir_document_id, nir_line_id)',
+        'idx_shop_inventory_fifo_layer' => '(inventory_cost_layer_id)',
+        'idx_shop_inventory_accounting' => '(product_id, warehouse_id, reception_date)',
+    ] as $indexName => $columns) {
+        if (!$db->query("SHOW INDEX FROM shop_inventory_movements WHERE Key_name = " . $db->quote($indexName))->fetch()) {
+            $db->exec("ALTER TABLE shop_inventory_movements ADD INDEX {$indexName} {$columns}");
+        }
+    }
+    if (!$db->query("SHOW INDEX FROM shop_inventory_movements WHERE Key_name = 'uq_shop_inventory_nir_line_type'")->fetch()) {
+        $db->exec('ALTER TABLE shop_inventory_movements ADD UNIQUE INDEX uq_shop_inventory_nir_line_type (nir_line_id, movement_type)');
+    }
+
+    // Codurile vechi nu au un SupplierId sigur. Le păstrăm explicit pentru
+    // reconciliere, în loc să inventăm o asociere la un furnizor arbitrar.
+    $legacyProducts = $db->query(
+        "SELECT id, supplier_product_code, source_domain
+         FROM shop_products
+         WHERE supplier_product_code IS NOT NULL AND TRIM(supplier_product_code) <> ''"
+    )->fetchAll();
+    $insertLegacy = $db->prepare(
+        'INSERT IGNORE INTO shop_legacy_supplier_codes
+         (id, product_id, code_original, code_normalized, source_domain)
+         VALUES (?, ?, ?, ?, ?)'
+    );
+    foreach ($legacyProducts as $legacyProduct) {
+        $legacyCode = trim((string)$legacyProduct['supplier_product_code']);
+        $insertLegacy->execute([
+            uuidV4(),
+            (string)$legacyProduct['id'],
+            $legacyCode,
+            shopNirNormalizeSupplierCode($legacyCode),
+            trim((string)($legacyProduct['source_domain'] ?? '')) ?: null,
+        ]);
+    }
+
+    // Asocierea Boomag -> KIDOTOYS SRL este o regulă contabilă de backend.
+    // Migrarea acoperă produsele deja existente; salvările și importurile noi
+    // apelează aceeași rutină idempotentă pentru fiecare produs.
+    shopNirEnsureBoomagKidotoysReferences($db);
 
     // Datele comerciale sunt administrate exclusiv din CRM. Schema nu
     // reintroduce automat surse, marci sau livrari demonstrative.
@@ -884,6 +1486,15 @@ function customerPublicRow(array $row): array {
         'email' => (string)$row['email'],
         'full_name' => (string)$row['full_name'],
         'phone' => (string)($row['phone'] ?? ''),
+        'customer_type' => (string)(($row['customer_type'] ?? 'individual') === 'company' ? 'company' : 'individual'),
+        'address' => (string)($row['address'] ?? ''),
+        'city' => (string)($row['city'] ?? ''),
+        'county' => (string)($row['county'] ?? ''),
+        'postal_code' => (string)($row['postal_code'] ?? ''),
+        'company_name' => (string)($row['company_name'] ?? ''),
+        'company_cui' => (string)($row['company_cui'] ?? ''),
+        'company_registration_number' => (string)($row['company_registration_number'] ?? ''),
+        'company_address' => (string)($row['company_address'] ?? ''),
         'avatar_url' => (string)($row['avatar_url'] ?? ''),
         'has_password' => !empty($row['password_hash']),
         'google_connected' => !empty($row['google_sub']),
@@ -926,6 +1537,21 @@ function optionalCustomer(PDO $db): ?array {
     return $customer ?: null;
 }
 
+function customerRequestIpHash(): string {
+    $ip = requestHeader('CF-Connecting-IP');
+    if (!filter_var($ip, FILTER_VALIDATE_IP)) $ip = trim((string)($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
+    return hash('sha256', $ip === '' ? 'unknown' : $ip);
+}
+
+function validatedCustomerPassword($value): string {
+    $password = (string)$value;
+    if (strlen($password) < 8 || !preg_match('/[A-Za-zĂÂÎȘȚăâîșț]/u', $password) || !preg_match('/\d/', $password)) {
+        throw new InvalidArgumentException('Parola trebuie să aibă minimum 8 caractere, cel puțin o literă și o cifră.');
+    }
+    if (strlen($password) > 200) throw new InvalidArgumentException('Parola introdusă este prea lungă.');
+    return $password;
+}
+
 function customerAddressPayload(array $body): array {
     $payload = [
         'label' => mb_substr(trim((string)($body['label'] ?? 'Acasă')), 0, 80),
@@ -947,8 +1573,9 @@ function customerAddressPayload(array $body): array {
 function customerOrderResponse(array $order): array {
     $allowed = [
         'id', 'order_number', 'status', 'payment_status', 'payment_method', 'customer_name', 'customer_email',
-        'customer_phone', 'address', 'city', 'county', 'postal_code', 'customer_notes', 'shipping_method_name',
-        'subtotal', 'discount_total', 'promotion_code', 'shipping_cost', 'total', 'currency', 'tracking_token', 'items', 'status_history', 'created_at', 'updated_at'
+        'customer_phone', 'customer_type', 'company_name', 'company_cui', 'company_registration_number', 'company_address',
+        'address', 'city', 'county', 'postal_code', 'customer_notes', 'shipping_method_name',
+        'subtotal', 'discount_total', 'promotion_code', 'promotion_scope', 'shipping_cost', 'total', 'vat_payer', 'currency', 'tracking_token', 'items', 'status_history', 'created_at', 'updated_at'
     ];
     $response = array_intersect_key($order, array_flip($allowed));
     $response['status_label'] = (string)gtOrderStatusMeta((string)($order['status'] ?? 'new'))['label'];
@@ -960,6 +1587,9 @@ function customerOrderResponse(array $order): array {
         'quantity' => (int)($item['quantity'] ?? 0),
         'unit_price' => (float)($item['unit_price'] ?? 0),
         'line_total' => (float)($item['line_total'] ?? 0),
+        'discount_total' => (float)($item['discount_total'] ?? 0),
+        'discounted_unit_price' => (float)($item['discounted_unit_price'] ?? $item['unit_price'] ?? 0),
+        'discounted_line_total' => (float)($item['discounted_line_total'] ?? $item['line_total'] ?? 0),
         'image_url' => (string)($item['image_url'] ?? ''),
     ], (array)($order['items'] ?? []));
     $response['status_history'] = array_map(fn(array $entry): array => [
@@ -1010,6 +1640,84 @@ function slugBase(string $value): string {
     $value = strtolower($value);
     $value = preg_replace('/[^a-z0-9]+/', '-', $value) ?? '';
     return trim($value, '-') ?: 'item';
+}
+
+function normalizedSearchText(mixed $value): string {
+    $text = trim((string)$value);
+    if ($text === '') return '';
+    if (function_exists('iconv')) {
+        $converted = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text);
+        if ($converted !== false) $text = $converted;
+    }
+    $text = strtolower($text);
+    $text = preg_replace('/[^a-z0-9]+/', ' ', $text) ?? '';
+    return trim(preg_replace('/\s+/', ' ', $text) ?? '');
+}
+
+function productSemanticSearchScore(array $row, string $query): float {
+    $normalizedQuery = normalizedSearchText($query);
+    if ($normalizedQuery === '') return 1.0;
+    $tokens = array_values(array_unique(array_filter(explode(' ', $normalizedQuery), static fn(string $token): bool => strlen($token) >= 2)));
+    if (!$tokens) return 0.0;
+    $synonyms = [
+        'controler' => ['controller'], 'controller' => ['controler'],
+        'incarcator' => ['charger', 'alimentator'], 'charger' => ['incarcator', 'alimentator'],
+        'anvelopa' => ['cauciuc', 'pneu'], 'cauciuc' => ['anvelopa', 'pneu'], 'pneu' => ['anvelopa', 'cauciuc'],
+        'display' => ['ecran', 'bord'], 'ecran' => ['display', 'bord'], 'bord' => ['display', 'ecran'],
+        'baterie' => ['acumulator'], 'acumulator' => ['baterie'],
+        'frana' => ['frane', 'placute'], 'frane' => ['frana', 'placute'], 'placute' => ['frana', 'frane'],
+        'furca' => ['suspensie', 'amortizor'], 'suspensie' => ['furca', 'amortizor'],
+        'trotineta' => ['scuter'], 'scuter' => ['trotineta'],
+        'lumina' => ['far', 'stop', 'lampa'], 'far' => ['lumina', 'lampa'],
+    ];
+    $fields = [
+        [normalizedSearchText($row['name'] ?? ''), 6.0],
+        [normalizedSearchText($row['sku'] ?? ''), 7.0],
+        [normalizedSearchText($row['supplier_product_code'] ?? ''), 7.0],
+        [normalizedSearchText($row['ean'] ?? ''), 7.0],
+        [normalizedSearchText($row['category_name'] ?? ''), 3.4],
+        [normalizedSearchText($row['manufacturer_name'] ?? ''), 4.0],
+        [normalizedSearchText($row['search_brand_names'] ?? ''), 4.5],
+        [normalizedSearchText($row['search_short_description'] ?? ''), 1.8],
+        [normalizedSearchText($row['search_description_title'] ?? ''), 2.2],
+        [normalizedSearchText($row['source_domain'] ?? ''), 1.2],
+    ];
+    $score = 0.0;
+    $matchedTokens = 0;
+    foreach ($tokens as $token) {
+        $alternatives = array_values(array_unique([$token, ...($synonyms[$token] ?? [])]));
+        $tokenBest = 0.0;
+        foreach ($fields as [$field, $weight]) {
+            if ($field === '') continue;
+            $fieldWords = explode(' ', $field);
+            foreach ($alternatives as $alternative) {
+                if ($field === $alternative) $tokenBest = max($tokenBest, 24.0 * $weight);
+                elseif (in_array($alternative, $fieldWords, true)) $tokenBest = max($tokenBest, 15.0 * $weight);
+                elseif (str_contains($field, $alternative)) $tokenBest = max($tokenBest, 10.0 * $weight);
+                elseif (strlen($alternative) >= 4) {
+                    foreach ($fieldWords as $word) {
+                        if (abs(strlen($word) - strlen($alternative)) > 2) continue;
+                        $distance = levenshtein($alternative, $word);
+                        $allowed = max(1, min(3, (int)floor(strlen($alternative) * 0.32)));
+                        if ($distance <= $allowed) $tokenBest = max($tokenBest, (8.5 - ($distance * 1.7)) * $weight);
+                    }
+                }
+            }
+        }
+        if ($tokenBest > 0) {
+            $matchedTokens++;
+            $score += $tokenBest;
+        } else {
+            $score -= 12.0;
+        }
+    }
+    $minimumMatches = max(1, (int)ceil(count($tokens) * 0.55));
+    if ($matchedTokens < $minimumMatches) return 0.0;
+    $name = normalizedSearchText($row['name'] ?? '');
+    if ($name === $normalizedQuery) $score += 220.0;
+    elseif (str_contains($name, $normalizedQuery)) $score += 110.0;
+    elseif (str_starts_with($name, $tokens[0])) $score += 35.0;
+    return $score;
 }
 
 function uniqueSlug(PDO $db, string $table, string $name, ?string $excludeId = null): string {
@@ -1322,7 +2030,7 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['stock_quantity'] = (int)$row['stock_quantity'];
     $row['supplier_stock_quantity'] = (int)($row['supplier_stock_quantity'] ?? 0);
     $row['supplier_stock_status'] = (bool)($row['supplier_stock_status'] ?? false);
-    $row['accounting_stock_quantity'] = (int)($row['accounting_stock_quantity'] ?? 0);
+    $row['accounting_stock_quantity'] = (float)($row['accounting_stock_quantity'] ?? 0);
     $row['low_stock_threshold'] = (int)$row['low_stock_threshold'];
     $row['is_active'] = (bool)$row['is_active'];
     $row['is_featured'] = (bool)$row['is_featured'];
@@ -1384,6 +2092,110 @@ function productRows(PDO $db, array $rows, array $config, bool $withDescription 
     }, $rows);
 }
 
+function normalizedCatalogIdentity(mixed $value): string {
+    $identity = html_entity_decode(trim((string)$value), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    if ($identity === '') return '';
+    if (function_exists('transliterator_transliterate')) {
+        $transliterated = transliterator_transliterate('NFD; [:Nonspacing Mark:] Remove; NFC', $identity);
+        if (is_string($transliterated)) $identity = $transliterated;
+    }
+    $identity = mb_strtolower($identity, 'UTF-8');
+    return trim((string)preg_replace('/[^\p{L}\p{N}]+/u', ' ', $identity));
+}
+
+function catalogProductSlugFamily(array $row): string {
+    $tokens = preg_split('/\s+/u', normalizedCatalogIdentity($row['slug'] ?? ''), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $count = count($tokens);
+    if ($count > 2 && preg_match('/^(?:varianta|variant)$/', $tokens[$count - 2]) && preg_match('/^\d+$/', $tokens[$count - 1])) {
+        array_splice($tokens, -2);
+    }
+    while (count($tokens) > 3) {
+        $last = (string)end($tokens);
+        if (preg_match('/^\d+$/', $last) || !in_array($last, array_slice($tokens, 0, -1), true)) break;
+        array_pop($tokens);
+    }
+    return implode('-', $tokens);
+}
+
+function deduplicateCatalogProductRows(array $rows): array {
+    $keyIndexes = [];
+    $unique = [];
+    foreach ($rows as $row) {
+        $keys = [];
+        foreach (['id', 'slug', 'sku', 'ean'] as $field) {
+            $value = normalizedCatalogIdentity($row[$field] ?? '');
+            if ($value !== '') $keys[] = $field . ':' . $value;
+        }
+        $name = normalizedCatalogIdentity($row['name'] ?? '');
+        if ($name !== '') $keys[] = 'name:' . $name;
+        $family = catalogProductSlugFamily($row);
+        if ($family !== '') $keys[] = 'family:' . $family;
+        $sourceId = normalizedCatalogIdentity($row['source_id'] ?? '');
+        $supplierId = normalizedCatalogIdentity($row['supplier_external_id'] ?? '');
+        $supplierCode = normalizedCatalogIdentity($row['supplier_product_code'] ?? '');
+        if ($sourceId !== '' && $supplierId !== '') $keys[] = 'supplier-id:' . $sourceId . ':' . $supplierId;
+        if ($sourceId !== '' && $supplierCode !== '') $keys[] = 'supplier-code:' . $sourceId . ':' . $supplierCode;
+        $duplicateIndex = null;
+        foreach ($keys as $key) {
+            if (isset($keyIndexes[$key])) {
+                $duplicateIndex = $keyIndexes[$key];
+                break;
+            }
+        }
+        if ($duplicateIndex !== null) {
+            $currentSlugLength = strlen((string)($unique[$duplicateIndex]['slug'] ?? '')) ?: PHP_INT_MAX;
+            $nextSlugLength = strlen((string)($row['slug'] ?? '')) ?: PHP_INT_MAX;
+            if ($nextSlugLength < $currentSlugLength) $unique[$duplicateIndex] = $row;
+            foreach ($keys as $key) $keyIndexes[$key] = $duplicateIndex;
+            continue;
+        }
+        $index = count($unique);
+        $unique[] = $row;
+        foreach ($keys as $key) $keyIndexes[$key] = $index;
+    }
+    return $unique;
+}
+
+function publicCatalogProductRow(array $row): array {
+    $images = is_array($row['images'] ?? null) ? array_slice($row['images'], 0, 1) : [];
+    $brands = is_array($row['brands'] ?? null) ? array_map(static fn(array $brand): array => [
+        'id' => (string)($brand['id'] ?? ''),
+        'name' => (string)($brand['name'] ?? ''),
+        'slug' => (string)($brand['slug'] ?? ''),
+    ], $row['brands']) : [];
+
+    return [
+        'id' => (string)($row['id'] ?? ''),
+        'slug' => (string)($row['slug'] ?? ''),
+        'sku' => (string)($row['sku'] ?? ''),
+        'ean' => (string)($row['ean'] ?? ''),
+        'name' => (string)($row['name'] ?? ''),
+        'short_description' => (string)($row['short_description'] ?? ''),
+        'category_id' => empty($row['category_id']) ? null : (string)$row['category_id'],
+        'category_name' => (string)($row['category_name'] ?? ''),
+        'category_slug' => (string)($row['category_slug'] ?? ''),
+        'manufacturer_id' => empty($row['manufacturer_id']) ? null : (string)$row['manufacturer_id'],
+        'manufacturer_name' => (string)($row['manufacturer_name'] ?? ''),
+        'manufacturer_slug' => (string)($row['manufacturer_slug'] ?? ''),
+        'brands' => $brands,
+        'images' => $images,
+        'price' => (float)($row['price'] ?? 0),
+        'sale_price' => $row['sale_price'] === null ? null : (float)$row['sale_price'],
+        'discount_type' => (string)($row['discount_type'] ?? 'percent'),
+        'discount_value' => $row['discount_value'] === null ? null : (float)$row['discount_value'],
+        'currency' => (string)($row['currency'] ?? 'RON'),
+        'stock_mode' => (string)($row['stock_mode'] ?? 'tracked'),
+        'stock_quantity' => (int)($row['stock_quantity'] ?? 0),
+        'low_stock_threshold' => (int)($row['low_stock_threshold'] ?? 0),
+        'is_featured' => (bool)($row['is_featured'] ?? false),
+        'featured_rank' => $row['featured_rank'] === null ? null : (int)$row['featured_rank'],
+        'promotion_price' => $row['promotion_price'] === null ? null : (float)$row['promotion_price'],
+        'price_before_promotion' => $row['price_before_promotion'] === null ? null : (float)$row['price_before_promotion'],
+        'promotion_discount_percent' => (float)($row['promotion_discount_percent'] ?? 0),
+        'active_promotion' => $row['active_promotion'] ?? null,
+    ];
+}
+
 function productSelectSql(): string {
     return 'SELECT p.*, c.name AS category_name, c.slug AS category_slug,
                    m.name AS manufacturer_name, m.slug AS manufacturer_slug,
@@ -1407,10 +2219,13 @@ function productStockOrderSql(): string {
 function productListSql(): string {
     return 'SELECT p.id, p.category_id, p.manufacturer_id, p.source_id, p.sku,
                    p.supplier_product_code, p.ean, p.source_domain, p.name, p.slug,
+                   p.short_description AS search_short_description,
+                   p.description_title AS search_description_title,
                    p.price, p.sale_price, p.discount_type, p.discount_value, p.currency,
                    p.stock_mode, p.stock_quantity, p.supplier_stock_quantity,
                    p.accounting_stock_quantity, p.low_stock_threshold, p.is_active,
                    p.is_featured, c.name AS category_name, m.name AS manufacturer_name,
+                   (SELECT GROUP_CONCAT(b.name SEPARATOR " ") FROM shop_product_brands pb INNER JOIN shop_brands b ON b.id = pb.brand_id WHERE pb.product_id = p.id) AS search_brand_names,
                    s.name AS source_name,
                    (SELECT pi.image_path FROM shop_product_images pi
                     WHERE pi.product_id = p.id
@@ -1424,7 +2239,7 @@ function productListSql(): string {
 function productListRows(array $rows, array $config): array {
     return array_map(static function (array $row) use ($config): array {
         $path = trim((string)($row['image_path'] ?? ''));
-        unset($row['image_path']);
+        unset($row['image_path'], $row['search_short_description'], $row['search_description_title'], $row['search_brand_names'], $row['_search_score']);
         $row['id'] = (string)$row['id'];
         $row['category_id'] = empty($row['category_id']) ? null : (string)$row['category_id'];
         $row['manufacturer_id'] = empty($row['manufacturer_id']) ? null : (string)$row['manufacturer_id'];
@@ -1902,6 +2717,7 @@ function paymentSettings(PDO $db, ?array $config = null): array {
 function companySettingsRow(array $row, array $config): array {
     $row['id'] = (int)($row['id'] ?? 0);
     $row['vat_payer'] = (bool)($row['vat_payer'] ?? false);
+    $row['vat_rate'] = (float)($row['vat_rate'] ?? 19);
     $row['is_default'] = (bool)($row['is_default'] ?? false);
     $row['stamp_url'] = !empty($row['stamp_path']) ? rtrim((string)$config['public_base_url'], '/') . '/' . ltrim((string)$row['stamp_path'], '/') : null;
     return $row;
@@ -1917,6 +2733,8 @@ function companySettingsPayload(array $body): array {
     if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) throw new InvalidArgumentException('Adresa de e-mail a firmei nu este validă.');
     $website = $field('website', 180);
     if ($website !== '' && !filter_var($website, FILTER_VALIDATE_URL)) throw new InvalidArgumentException('Adresa website-ului nu este validă.');
+    $vatRate = round((float)str_replace(',', '.', (string)($body['vat_rate'] ?? 19)), 2);
+    if ($vatRate < 0 || $vatRate > 100) throw new InvalidArgumentException('Cota TVA trebuie să fie între 0% și 100%.');
     return [
         'legal_name' => $field('legal_name', 180),
         'trade_name' => $field('trade_name', 180),
@@ -1934,6 +2752,7 @@ function companySettingsPayload(array $body): array {
         'iban' => strtoupper(str_replace(' ', '', $field('iban', 80))),
         'share_capital' => $field('share_capital', 80),
         'vat_payer' => boolValue($body['vat_payer'] ?? false),
+        'vat_rate' => $vatRate,
         'is_default' => boolValue($body['is_default'] ?? false),
     ];
 }
@@ -1944,6 +2763,44 @@ function shippingRow(array $row): array {
     $row['sort_order'] = (int)$row['sort_order'];
     $row['is_active'] = (bool)$row['is_active'];
     return $row;
+}
+
+function supplierRow(array $row): array {
+    $row['is_active'] = (bool)$row['is_active'];
+    $row['is_vat_payer'] = (bool)($row['is_vat_payer'] ?? true);
+    $row['row_version'] = (int)($row['row_version'] ?? 1);
+    return $row;
+}
+
+function supplierPayload(array $body): array {
+    $name = mb_substr(trim((string)($body['name'] ?? '')), 0, 180);
+    if ($name === '') throw new InvalidArgumentException('Numele furnizorului este obligatoriu.');
+    $email = mb_substr(strtolower(trim((string)($body['email'] ?? ''))), 0, 180);
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        throw new InvalidArgumentException('Adresa de e-mail a furnizorului nu este valida.');
+    }
+    return [
+        'name' => $name,
+        'contact_person' => mb_substr(trim((string)($body['contact_person'] ?? '')), 0, 180),
+        'email' => $email,
+        'phone' => mb_substr(trim((string)($body['phone'] ?? '')), 0, 50),
+        'website' => mb_substr(trim((string)($body['website'] ?? '')), 0, 255),
+        'cui' => mb_substr(strtoupper(trim((string)($body['cui'] ?? ''))), 0, 60),
+        'registration_number' => mb_substr(strtoupper(trim((string)($body['registration_number'] ?? ''))), 0, 80),
+        'vat_number' => mb_substr(strtoupper(trim((string)($body['vat_number'] ?? ''))), 0, 60),
+        'is_vat_payer' => boolValue($body['is_vat_payer'] ?? true, true),
+        'default_vat_rate' => trim((string)($body['default_vat_rate'] ?? '')) === '' ? null : shopNirScaledToDecimal(shopNirDecimalToScaled($body['default_vat_rate'], 4, 'Cota TVA implicită'), 4),
+        'address' => mb_substr(trim((string)($body['address'] ?? '')), 0, 255),
+        'address_line2' => mb_substr(trim((string)($body['address_line2'] ?? '')), 0, 255),
+        'city' => mb_substr(trim((string)($body['city'] ?? '')), 0, 120),
+        'county' => mb_substr(trim((string)($body['county'] ?? '')), 0, 120),
+        'postal_code' => mb_substr(trim((string)($body['postal_code'] ?? '')), 0, 30),
+        'country' => mb_substr(trim((string)($body['country'] ?? 'România')), 0, 80),
+        'default_currency' => strtoupper(mb_substr(trim((string)($body['default_currency'] ?? 'RON')), 0, 3)),
+        'payment_terms' => mb_substr(trim((string)($body['payment_terms'] ?? '')), 0, 180),
+        'notes' => trim((string)($body['notes'] ?? '')),
+        'is_active' => boolValue($body['is_active'] ?? true, true),
+    ];
 }
 
 function sourceRow(array $row): array {
@@ -1988,9 +2845,13 @@ function promotionPayload(PDO $db, array $body): array {
         ? array_values(array_unique(array_filter(array_map(static fn($value): string => trim((string)$value), $rawProductIds))))
         : [];
     $productId = $productIds[0] ?? null;
+    $rawCustomerIds = is_array($body['customer_ids'] ?? null) ? $body['customer_ids'] : [];
+    $customerIds = $audience === 'selected'
+        ? array_values(array_unique(array_filter(array_map(static fn($value): string => trim((string)$value), $rawCustomerIds))))
+        : [];
     if ($code === '' || $title === '') throw new InvalidArgumentException('Completează codul și titlul reducerii.');
     if (!in_array($discountType, ['percent', 'fixed'], true) || $discountValue <= 0 || ($discountType === 'percent' && $discountValue > 100)) throw new InvalidArgumentException('Valoarea reducerii nu este validă.');
-    if (!in_array($audience, ['all', 'registered'], true)) throw new InvalidArgumentException('Publicul reducerii nu este valid.');
+    if (!in_array($audience, ['all', 'registered', 'selected'], true)) throw new InvalidArgumentException('Publicul reducerii nu este valid.');
     if (!in_array($scope, ['global', 'product'], true)) throw new InvalidArgumentException('Tipul aplicării nu este valid.');
     if (!in_array($usageMode, ['unlimited', 'once_per_customer', 'once_per_device'], true)) throw new InvalidArgumentException('Limita de utilizare nu este validă.');
     if ($scope === 'product') {
@@ -1999,6 +2860,13 @@ function promotionPayload(PDO $db, array $body): array {
         $exists = $db->prepare("SELECT COUNT(*) FROM shop_products WHERE id IN ({$placeholders})");
         $exists->execute($productIds);
         if ((int)$exists->fetchColumn() !== count($productIds)) throw new InvalidArgumentException('Unul dintre produsele selectate nu mai există.');
+    }
+    if ($audience === 'selected') {
+        if (!$customerIds || count($customerIds) > 2500) throw new InvalidArgumentException('Alege cel puțin un client valid pentru reducere.');
+        $placeholders = implode(',', array_fill(0, count($customerIds), '?'));
+        $exists = $db->prepare("SELECT COUNT(*) FROM shop_customers WHERE id IN ({$placeholders})");
+        $exists->execute($customerIds);
+        if ((int)$exists->fetchColumn() !== count($customerIds)) throw new InvalidArgumentException('Unul dintre clienții selectați nu mai există.');
     }
     $normalizeDate = static function ($value): ?string {
         $value = trim((string)$value);
@@ -2021,6 +2889,7 @@ function promotionPayload(PDO $db, array $body): array {
         'scope' => $scope,
         'product_id' => $productId,
         'product_ids' => $productIds,
+        'customer_ids' => $customerIds,
         'usage_mode' => $usageMode,
         'auto_apply' => boolValue($body['auto_apply'] ?? true, true),
         'show_banner' => boolValue($body['show_banner'] ?? true, true),
@@ -2046,52 +2915,298 @@ function syncPromotionProducts(PDO $db, string $couponId, array $productIds): vo
     foreach ($productIds as $productId) $insert->execute([$couponId, $productId]);
 }
 
+function promotionCustomerIds(PDO $db, string $couponId): array {
+    $stmt = $db->prepare('SELECT customer_id FROM shop_customer_coupons WHERE coupon_id = ? ORDER BY customer_id ASC');
+    $stmt->execute([$couponId]);
+    return array_values(array_filter(array_map('strval', $stmt->fetchAll(PDO::FETCH_COLUMN))));
+}
+
+function syncPromotionCustomers(PDO $db, string $couponId, array $customerIds): void {
+    $db->prepare('DELETE FROM shop_customer_coupons WHERE coupon_id = ?')->execute([$couponId]);
+    if (!$customerIds) return;
+    $insert = $db->prepare('INSERT INTO shop_customer_coupons (customer_id, coupon_id) VALUES (?, ?)');
+    foreach ($customerIds as $customerId) $insert->execute([$customerId, $couponId]);
+}
+
+function promotionDeviceHash(array $body = []): string {
+    $token = trim((string)($body['device_token'] ?? requestHeader('X-Shop-Device')));
+    if ($token === '' || !preg_match('/^[A-Za-z0-9_-]{20,128}$/', $token)) return '';
+    return hash('sha256', $token);
+}
+
+function promotionUsageError(PDO $db, string $code, ?array $customer, string $deviceHash): ?string {
+    $stmt = $db->prepare(
+        "SELECT id, usage_mode
+         FROM shop_coupons
+         WHERE code = ? AND is_active = 1
+           AND (valid_from IS NULL OR valid_from <= NOW())
+           AND (valid_until IS NULL OR valid_until >= NOW())
+         LIMIT 1"
+    );
+    $stmt->execute([strtoupper(trim($code))]);
+    $promotion = $stmt->fetch();
+    if (!$promotion) return null;
+    $mode = (string)($promotion['usage_mode'] ?? 'unlimited');
+    if ($mode === 'once_per_customer') {
+        if (!$customer) return 'Autentifică-te în cont pentru a folosi această reducere o singură dată.';
+        $used = $db->prepare('SELECT 1 FROM shop_coupon_customer_usage WHERE coupon_id = ? AND customer_id = ? LIMIT 1');
+        $used->execute([(string)$promotion['id'], (string)$customer['id']]);
+        if ($used->fetchColumn()) return 'Această reducere a fost deja folosită pe contul tău.';
+    }
+    if ($mode === 'once_per_device') {
+        if ($deviceHash === '') return 'Dispozitivul nu a putut fi identificat. Reîncarcă pagina și încearcă din nou.';
+        $used = $db->prepare('SELECT 1 FROM shop_coupon_device_usage WHERE coupon_id = ? AND device_hash = ? LIMIT 1');
+        $used->execute([(string)$promotion['id'], $deviceHash]);
+        if ($used->fetchColumn()) return 'Această reducere a fost deja folosită pe acest dispozitiv.';
+    }
+    return null;
+}
+
+function reservePromotionUsage(PDO $db, array $promotion, ?array $customer, string $deviceHash, string $orderId): void {
+    if (empty($promotion['id'])) return;
+    $mode = (string)($promotion['usage_mode'] ?? 'unlimited');
+    if ($mode === 'once_per_customer') {
+        if (!$customer) throw new InvalidArgumentException('Autentifică-te în cont pentru a folosi această reducere o singură dată.');
+        $stmt = $db->prepare('INSERT IGNORE INTO shop_coupon_customer_usage (coupon_id, customer_id, order_id) VALUES (?, ?, ?)');
+        $stmt->execute([(string)$promotion['id'], (string)$customer['id'], $orderId]);
+        if ($stmt->rowCount() !== 1) throw new InvalidArgumentException('Această reducere a fost deja folosită pe contul tău.');
+    } elseif ($mode === 'once_per_device') {
+        if ($deviceHash === '') throw new InvalidArgumentException('Dispozitivul nu a putut fi identificat. Reîncarcă pagina și încearcă din nou.');
+        $stmt = $db->prepare('INSERT IGNORE INTO shop_coupon_device_usage (coupon_id, device_hash, order_id) VALUES (?, ?, ?)');
+        $stmt->execute([(string)$promotion['id'], $deviceHash, $orderId]);
+        if ($stmt->rowCount() !== 1) throw new InvalidArgumentException('Această reducere a fost deja folosită pe acest dispozitiv.');
+    }
+}
+
+function releasePromotionUsage(PDO $db, string $orderId): void {
+    $db->prepare('DELETE FROM shop_coupon_customer_usage WHERE order_id = ?')->execute([$orderId]);
+    $db->prepare('DELETE FROM shop_coupon_device_usage WHERE order_id = ?')->execute([$orderId]);
+}
+
+function activePromotionRowsForCustomer(PDO $db, ?array $customer, bool $autoOnly = false, ?string $requestedCode = null, string $deviceHash = ''): array {
+    $params = [];
+    $audienceSql = "c.audience = 'all'";
+    if ($customer) {
+        $audienceSql = "(c.audience IN ('all', 'registered') OR (c.audience = 'selected' AND EXISTS (
+            SELECT 1 FROM shop_customer_coupons eligible_customer
+            WHERE eligible_customer.coupon_id = c.id AND eligible_customer.customer_id = ?
+        )))";
+        $params[] = (string)$customer['id'];
+    }
+    $where = [
+        'c.is_active = 1',
+        '(' . $audienceSql . ')',
+        '(c.valid_from IS NULL OR c.valid_from <= NOW())',
+        '(c.valid_until IS NULL OR c.valid_until >= NOW())',
+    ];
+    if ($customer) {
+        $where[] = "(c.usage_mode <> 'once_per_customer' OR NOT EXISTS (
+            SELECT 1 FROM shop_coupon_customer_usage customer_usage
+            WHERE customer_usage.coupon_id = c.id AND customer_usage.customer_id = ?
+        ))";
+        $params[] = (string)$customer['id'];
+    } else {
+        $where[] = "c.usage_mode <> 'once_per_customer'";
+    }
+    if ($deviceHash !== '') {
+        $where[] = "(c.usage_mode <> 'once_per_device' OR NOT EXISTS (
+            SELECT 1 FROM shop_coupon_device_usage device_usage
+            WHERE device_usage.coupon_id = c.id AND device_usage.device_hash = ?
+        ))";
+        $params[] = $deviceHash;
+    } else {
+        $where[] = "c.usage_mode <> 'once_per_device'";
+    }
+    $cleanRequestedCode = strtoupper(trim((string)$requestedCode));
+    if ($cleanRequestedCode !== '') {
+        $where[] = 'c.code = ?';
+        $params[] = $cleanRequestedCode;
+    } elseif ($autoOnly || $requestedCode !== null) {
+        $where[] = 'c.auto_apply = 1';
+    }
+    $stmt = $db->prepare(
+        'SELECT c.*, p.name AS product_name, p.slug AS product_slug
+         FROM shop_coupons c
+         LEFT JOIN shop_products p ON p.id = c.product_id
+         WHERE ' . implode(' AND ', $where) . '
+         ORDER BY c.show_banner DESC, c.valid_until ASC, c.created_at DESC'
+    );
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
 function promotionRow(PDO $db, array $row): array {
     $row['discount_value'] = (float)$row['discount_value'];
     $row['min_order_value'] = $row['min_order_value'] === null ? null : (float)$row['min_order_value'];
     foreach (['auto_apply', 'show_banner', 'is_active'] as $key) $row[$key] = (bool)$row[$key];
     $row['usage_mode'] = (string)($row['usage_mode'] ?? 'unlimited');
     $row['product_ids'] = promotionProductIds($db, (string)$row['id'], $row['product_id'] ? (string)$row['product_id'] : null);
+    $row['customer_ids'] = promotionCustomerIds($db, (string)$row['id']);
+    $row['customer_count'] = count($row['customer_ids']);
+    $stats = promotionStatsSummary($db, (string)$row['id']);
+    $row['application_count'] = $stats['application_count'];
+    $row['total_discount_given'] = $stats['total_discount_given'];
+    $row['average_discount'] = $stats['average_discount'];
     return $row;
 }
 
-function bestOrderPromotion(PDO $db, array $resolvedItems, float $subtotal, ?array $customer, ?string $requestedCode = null): array {
+function promotionStatsSummary(PDO $db, string $promotionId): array {
+    $stmt = $db->prepare(
+        "SELECT
+            COUNT(*) AS all_application_count,
+            SUM(CASE WHEN status NOT IN ('cancelled', 'refunded') THEN 1 ELSE 0 END) AS application_count,
+            COALESCE(SUM(CASE WHEN status NOT IN ('cancelled', 'refunded') THEN discount_total ELSE 0 END), 0) AS total_discount_given,
+            COALESCE(AVG(CASE WHEN status NOT IN ('cancelled', 'refunded') THEN discount_total ELSE NULL END), 0) AS average_discount,
+            COALESCE(SUM(CASE WHEN status NOT IN ('cancelled', 'refunded') THEN total ELSE 0 END), 0) AS orders_total
+         FROM shop_orders
+         WHERE promotion_id = ? AND discount_total > 0"
+    );
+    $stmt->execute([$promotionId]);
+    $stats = $stmt->fetch() ?: [];
+    return [
+        'all_application_count' => (int)($stats['all_application_count'] ?? 0),
+        'application_count' => (int)($stats['application_count'] ?? 0),
+        'total_discount_given' => round((float)($stats['total_discount_given'] ?? 0), 2),
+        'average_discount' => round((float)($stats['average_discount'] ?? 0), 2),
+        'orders_total' => round((float)($stats['orders_total'] ?? 0), 2),
+    ];
+}
+
+function applyCatalogPromotionPrices(PDO $db, array $products, ?array $customer, string $deviceHash = ''): array {
+    if (!$products) return [];
+    $promotions = activePromotionRowsForCustomer($db, $customer, true, null, $deviceHash);
+    $productIdsByPromotion = [];
+    foreach ($promotions as $promotion) {
+        if ((string)$promotion['scope'] === 'product') {
+            $productIdsByPromotion[(string)$promotion['id']] = promotionProductIds(
+                $db,
+                (string)$promotion['id'],
+                $promotion['product_id'] ? (string)$promotion['product_id'] : null
+            );
+        }
+    }
+
+    foreach ($products as &$product) {
+        $basePrice = $product['sale_price'] !== null ? (float)$product['sale_price'] : (float)$product['price'];
+        $bestDiscount = 0.0;
+        $bestPromotion = null;
+        foreach ($promotions as $promotion) {
+            if ($promotion['min_order_value'] !== null && $basePrice < (float)$promotion['min_order_value']) continue;
+            // Reducerile aplicate întregii comenzi se calculează doar în coș/checkout.
+            // Catalogul afișează preț redus doar pentru promoțiile dedicate produselor.
+            if ((string)$promotion['scope'] === 'global') continue;
+            if ((string)$promotion['scope'] === 'product') {
+                $eligibleIds = $productIdsByPromotion[(string)$promotion['id']] ?? [];
+                if (!in_array((string)$product['id'], $eligibleIds, true)) continue;
+            }
+            $discount = (string)$promotion['discount_type'] === 'percent'
+                ? round($basePrice * min(100.0, (float)$promotion['discount_value']) / 100, 2)
+                : min($basePrice, round((float)$promotion['discount_value'], 2));
+            if ($discount > $bestDiscount) {
+                $bestDiscount = $discount;
+                $bestPromotion = $promotion;
+            }
+        }
+        $product['promotion_price'] = $bestPromotion ? round(max(0, $basePrice - $bestDiscount), 2) : null;
+        $product['price_before_promotion'] = $bestPromotion ? round($basePrice, 2) : null;
+        $product['promotion_discount_percent'] = $bestPromotion && $basePrice > 0
+            ? round(($bestDiscount / $basePrice) * 100, 2)
+            : 0.0;
+        $product['active_promotion'] = $bestPromotion ? [
+            'id' => (string)$bestPromotion['id'],
+            'code' => (string)$bestPromotion['code'],
+            'title' => (string)$bestPromotion['title'],
+            'discount_type' => (string)$bestPromotion['discount_type'],
+            'discount_value' => (float)$bestPromotion['discount_value'],
+        ] : null;
+    }
+    unset($product);
+    return $products;
+}
+
+function bestOrderPromotion(PDO $db, array $resolvedItems, float $subtotal, ?array $customer, ?string $requestedCode = null, string $deviceHash = ''): array {
     $requestedCode = strtoupper(trim((string)$requestedCode));
-    $audience = $customer ? ['all', 'registered'] : ['all'];
-    $placeholders = implode(',', array_fill(0, count($audience), '?'));
-    $sql = "SELECT * FROM shop_coupons
-            WHERE is_active = 1 AND audience IN ({$placeholders})
-              AND (valid_from IS NULL OR valid_from <= NOW())
-              AND (valid_until IS NULL OR valid_until >= NOW())
-              AND (auto_apply = 1 OR code = ?)";
-    $stmt = $db->prepare($sql);
-    $stmt->execute([...$audience, $requestedCode]);
-    $best = ['id' => null, 'code' => null, 'title' => null, 'discount_total' => 0.0];
-    foreach ($stmt->fetchAll() as $promotion) {
+    $best = [
+        'id' => null,
+        'code' => null,
+        'title' => null,
+        'scope' => null,
+        'discount_type' => null,
+        'discount_value' => 0.0,
+        'usage_mode' => 'unlimited',
+        'min_order_value' => null,
+        'eligible_product_ids' => [],
+        'discount_total' => 0.0,
+    ];
+    foreach (activePromotionRowsForCustomer($db, $customer, false, $requestedCode, $deviceHash) as $promotion) {
         if (!(bool)$promotion['auto_apply'] && $requestedCode !== strtoupper((string)$promotion['code'])) continue;
         if ($promotion['min_order_value'] !== null && $subtotal < (float)$promotion['min_order_value']) continue;
         $eligibleBase = $subtotal;
+        $eligibleProductIds = [];
+        $discount = 0.0;
         if ((string)$promotion['scope'] === 'product') {
             $eligibleProductIds = promotionProductIds($db, (string)$promotion['id'], $promotion['product_id'] ? (string)$promotion['product_id'] : null);
             $eligibleBase = 0.0;
             foreach ($resolvedItems as $item) {
-                if (in_array((string)($item['product']['id'] ?? ''), $eligibleProductIds, true)) $eligibleBase += (float)$item['line_total'];
+                if (in_array((string)($item['product']['id'] ?? ''), $eligibleProductIds, true)) {
+                    $lineTotal = (float)$item['line_total'];
+                    $quantity = max(1, (int)($item['quantity'] ?? 1));
+                    $eligibleBase += $lineTotal;
+                    $discount += (string)$promotion['discount_type'] === 'percent'
+                        ? round($lineTotal * min(100.0, (float)$promotion['discount_value']) / 100, 2)
+                        : min($lineTotal, round((float)$promotion['discount_value'] * $quantity, 2));
+                }
             }
+        } else {
+            $discount = (string)$promotion['discount_type'] === 'percent'
+                ? round($subtotal * min(100.0, (float)$promotion['discount_value']) / 100, 2)
+                : min($subtotal, round((float)$promotion['discount_value'], 2));
         }
         if ($eligibleBase <= 0) continue;
-        $discount = (string)$promotion['discount_type'] === 'percent'
-            ? round($eligibleBase * min(100.0, (float)$promotion['discount_value']) / 100, 2)
-            : min($eligibleBase, round((float)$promotion['discount_value'], 2));
         if ($discount > (float)$best['discount_total']) {
             $best = [
                 'id' => (string)$promotion['id'],
                 'code' => (string)$promotion['code'],
                 'title' => (string)$promotion['title'],
+                'scope' => (string)$promotion['scope'],
+                'discount_type' => (string)$promotion['discount_type'],
+                'discount_value' => (float)$promotion['discount_value'],
+                'usage_mode' => (string)($promotion['usage_mode'] ?? 'unlimited'),
+                'min_order_value' => $promotion['min_order_value'] === null ? null : (float)$promotion['min_order_value'],
+                'eligible_product_ids' => $eligibleProductIds,
                 'discount_total' => min($subtotal, $discount),
             ];
         }
     }
     return $best;
+}
+
+function promotionQuoteItems(array $resolvedItems, array $promotion): array {
+    $isProductPromotion = ($promotion['id'] ?? null) !== null && (string)($promotion['scope'] ?? '') === 'product';
+    $eligibleProductIds = is_array($promotion['eligible_product_ids'] ?? null) ? $promotion['eligible_product_ids'] : [];
+    return array_map(static function (array $item) use ($promotion, $isProductPromotion, $eligibleProductIds): array {
+        $productId = (string)($item['product']['id'] ?? '');
+        $quantity = max(1, (int)($item['quantity'] ?? 1));
+        $unitPrice = round((float)($item['unit_price'] ?? 0), 2);
+        $lineTotal = round((float)($item['line_total'] ?? ($unitPrice * $quantity)), 2);
+        $discountTotal = 0.0;
+        if ($isProductPromotion && in_array($productId, $eligibleProductIds, true)) {
+            $discountTotal = (string)($promotion['discount_type'] ?? '') === 'percent'
+                ? round($lineTotal * min(100.0, (float)($promotion['discount_value'] ?? 0)) / 100, 2)
+                : min($lineTotal, round((float)($promotion['discount_value'] ?? 0) * $quantity, 2));
+        }
+        $discountedLineTotal = round(max(0, $lineTotal - $discountTotal), 2);
+        return [
+            'product_id' => $productId,
+            'quantity' => $quantity,
+            'unit_price' => $unitPrice,
+            'line_total' => $lineTotal,
+            'discount_total' => $discountTotal,
+            'discounted_unit_price' => round($discountedLineTotal / $quantity, 2),
+            'discounted_line_total' => $discountedLineTotal,
+            'is_discounted' => $discountTotal > 0,
+        ];
+    }, $resolvedItems);
 }
 
 function orderStatusHistory(PDO $db, string $orderId): array {
@@ -2137,6 +3252,13 @@ function orderRow(PDO $db, array $row, ?array $config = null, bool $withHistory 
         $item['quantity'] = (int)$item['quantity'];
         $item['unit_price'] = (float)$item['unit_price'];
         $item['line_total'] = (float)$item['line_total'];
+        $item['discount_total'] = (float)($item['discount_total'] ?? 0);
+        $item['discounted_unit_price'] = $item['discount_total'] > 0
+            ? (float)($item['discounted_unit_price'] ?? $item['unit_price'])
+            : $item['unit_price'];
+        $item['discounted_line_total'] = $item['discount_total'] > 0
+            ? (float)($item['discounted_line_total'] ?? $item['line_total'])
+            : $item['line_total'];
         $imagePath = trim((string)($item['image_path'] ?? ''));
         $item['image_url'] = $imagePath !== '' && $config
             ? (preg_match('#^https?://#i', $imagePath) ? $imagePath : rtrim((string)$config['public_base_url'], '/') . '/' . ltrim($imagePath, '/'))
@@ -2149,6 +3271,14 @@ function orderRow(PDO $db, array $row, ?array $config = null, bool $withHistory 
     $row['discount_total'] = (float)($row['discount_total'] ?? 0);
     $row['shipping_cost'] = (float)$row['shipping_cost'];
     $row['total'] = (float)$row['total'];
+    $row['vat_payer'] = (bool)($row['vat_payer'] ?? false);
+    $row['vat_rate'] = (float)($row['vat_rate'] ?? 0);
+    // Păstrăm aceeași regulă și pentru comenzile deja existente: cota salvată pe comandă
+    // se aplică direct totalului, fără formula de extragere TVA dintr-un preț brut.
+    $row['vat_total'] = $row['vat_payer'] && $row['vat_rate'] > 0
+        ? round($row['total'] * $row['vat_rate'] / 100, 2)
+        : 0.0;
+    $row['net_total'] = (float)($row['net_total'] ?? max(0, $row['total'] - $row['vat_total']));
     if ($withHistory) $row['status_history'] = orderStatusHistory($db, (string)$row['id']);
     return $row;
 }
@@ -2160,6 +3290,9 @@ function publicTrackingOrder(array $order): array {
         'quantity' => (int)($item['quantity'] ?? 0),
         'unit_price' => (float)($item['unit_price'] ?? 0),
         'line_total' => (float)($item['line_total'] ?? 0),
+        'discount_total' => (float)($item['discount_total'] ?? 0),
+        'discounted_unit_price' => (float)($item['discounted_unit_price'] ?? $item['unit_price'] ?? 0),
+        'discounted_line_total' => (float)($item['discounted_line_total'] ?? $item['line_total'] ?? 0),
         'image_url' => (string)($item['image_url'] ?? ''),
     ], (array)($order['items'] ?? []));
     $history = array_map(fn(array $entry): array => [
@@ -2172,12 +3305,26 @@ function publicTrackingOrder(array $order): array {
         'status_label' => (string)gtOrderStatusMeta((string)$order['status'])['label'],
         'payment_status' => (string)$order['payment_status'],
         'payment_method' => (string)$order['payment_method'],
+        'customer_name' => (string)($order['customer_name'] ?? ''),
+        'customer_email' => (string)($order['customer_email'] ?? ''),
+        'customer_phone' => (string)($order['customer_phone'] ?? ''),
+        'customer_type' => (string)(($order['customer_type'] ?? 'individual') === 'company' ? 'company' : 'individual'),
+        'company_name' => (string)($order['company_name'] ?? ''),
+        'company_cui' => (string)($order['company_cui'] ?? ''),
+        'company_registration_number' => (string)($order['company_registration_number'] ?? ''),
+        'company_address' => (string)($order['company_address'] ?? ''),
+        'address' => (string)($order['address'] ?? ''),
+        'city' => (string)($order['city'] ?? ''),
+        'county' => (string)($order['county'] ?? ''),
+        'postal_code' => (string)($order['postal_code'] ?? ''),
         'shipping_method_name' => (string)$order['shipping_method_name'],
         'subtotal' => (float)$order['subtotal'],
         'discount_total' => (float)($order['discount_total'] ?? 0),
         'promotion_code' => (string)($order['promotion_code'] ?? ''),
+        'promotion_scope' => (string)($order['promotion_scope'] ?? ''),
         'shipping_cost' => (float)$order['shipping_cost'],
         'total' => (float)$order['total'],
+        'vat_payer' => (bool)($order['vat_payer'] ?? false),
         'currency' => (string)$order['currency'],
         'items' => $items,
         'status_history' => $history,
@@ -2193,6 +3340,14 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
     $city = mb_substr(trim((string)($body['city'] ?? '')), 0, 120);
     if ($name === '' || $phone === '' || $address === '' || $city === '') {
         throw new InvalidArgumentException('Completeaza numele, telefonul si adresa de livrare.');
+    }
+    $customerType = trim((string)($body['customer_type'] ?? 'individual')) === 'company' ? 'company' : 'individual';
+    $companyName = mb_substr(trim((string)($body['company_name'] ?? '')), 0, 180);
+    $companyCui = mb_substr(strtoupper(trim((string)($body['company_cui'] ?? ''))), 0, 60);
+    $companyRegistrationNumber = mb_substr(strtoupper(trim((string)($body['company_registration_number'] ?? ''))), 0, 80);
+    $companyAddress = mb_substr(trim((string)($body['company_address'] ?? '')), 0, 255);
+    if ($customerType === 'company' && ($companyName === '' || $companyCui === '' || $companyRegistrationNumber === '' || $companyAddress === '')) {
+        throw new InvalidArgumentException('Completeaza denumirea firmei, CUI/CIF, numarul de la Registrul Comertului si sediul social.');
     }
     $items = is_array($body['items'] ?? null) ? array_values($body['items']) : [];
     if (!$items || count($items) > 50) throw new InvalidArgumentException('Comanda trebuie sa contina intre 1 si 50 de produse.');
@@ -2211,6 +3366,8 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
     $shippingStmt->execute([$shippingId]);
     $shipping = $shippingStmt->fetch();
     if (!$shipping) throw new InvalidArgumentException('Metoda de livrare nu este activa.');
+    $customer = optionalCustomer($db);
+    $deviceHash = promotionDeviceHash($body);
 
     $db->beginTransaction();
     try {
@@ -2233,31 +3390,55 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
             $resolvedItems[] = ['product' => $product, 'quantity' => $quantity, 'unit_price' => $unitPrice, 'line_total' => $lineTotal];
         }
         if (!$resolvedItems) throw new InvalidArgumentException('Comanda nu contine produse valide.');
-        $promotion = bestOrderPromotion($db, $resolvedItems, $subtotal, optionalCustomer($db), (string)($body['coupon_code'] ?? ''));
+        $requestedCouponCode = strtoupper(trim((string)($body['coupon_code'] ?? '')));
+        $promotion = bestOrderPromotion($db, $resolvedItems, $subtotal, $customer, $requestedCouponCode, $deviceHash);
+        if ($requestedCouponCode !== '' && !$promotion['id']) {
+            $usageError = promotionUsageError($db, $requestedCouponCode, $customer, $deviceHash);
+            throw new InvalidArgumentException($usageError ?: 'Codul de reducere nu este valid sau nu se aplică acestei comenzi.');
+        }
         $discountTotal = round((float)$promotion['discount_total'], 2);
+        $quotedItems = promotionQuoteItems($resolvedItems, $promotion);
         $shippingCost = (float)$shipping['cost'];
         if ($shipping['free_above'] !== null && $subtotal >= (float)$shipping['free_above']) $shippingCost = 0.0;
         $total = round(max(0, $subtotal - $discountTotal) + $shippingCost, 2);
+        $companyTax = $db->query('SELECT vat_payer, vat_rate FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
+        $vatPayer = boolValue($companyTax['vat_payer'] ?? false);
+        $vatRate = $vatPayer ? max(0, min(100, (float)($companyTax['vat_rate'] ?? 19))) : 0.0;
+        // Prețurile rămân finale, iar defalcarea TVA este stocată doar intern pentru modulele viitoare.
+        // Exemplu: 824 lei × 21% = 173,04 lei. TVA-ul nu se adaugă încă o dată la total.
+        $vatTotal = $vatPayer && $vatRate > 0 ? round($total * $vatRate / 100, 2) : 0.0;
+        $netTotal = round(max(0, $total - $vatTotal), 2);
         $orderId = uuidV4();
         $orderNumber = 'GT-' . date('Ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(4)), 0, 8));
         // Orice comandă abia primită este nouă; Stripe o confirmă automat numai după plata reușită.
         $initialStatus = 'new';
         $trackingToken = bin2hex(random_bytes(24));
-        $insertOrder = $db->prepare('INSERT INTO shop_orders (id, order_number, status, payment_status, payment_method, customer_name, customer_email, customer_phone, address, city, county, postal_code, customer_notes, shipping_method_id, shipping_method_name, subtotal, discount_total, promotion_id, promotion_code, shipping_cost, total, currency, tracking_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $insertOrder = $db->prepare('INSERT INTO shop_orders (id, order_number, status, payment_status, payment_method, customer_id, customer_name, customer_email, customer_phone, customer_type, company_name, company_cui, company_registration_number, company_address, address, city, county, postal_code, customer_notes, shipping_method_id, shipping_method_name, subtotal, discount_total, promotion_id, promotion_code, promotion_scope, shipping_cost, total, vat_payer, vat_rate, vat_total, net_total, currency, tracking_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $insertOrder->execute([
-            $orderId, $orderNumber, $initialStatus, 'pending', $paymentMethod, $name,
-            $customerEmail ?: null, $phone, $address, $city,
+            $orderId, $orderNumber, $initialStatus, 'pending', $paymentMethod, $customer['id'] ?? null, $name,
+            $customerEmail ?: null, $phone, $customerType, $customerType === 'company' ? $companyName : null,
+            $customerType === 'company' ? $companyCui : null,
+            $customerType === 'company' ? $companyRegistrationNumber : null,
+            $customerType === 'company' ? $companyAddress : null,
+            $address, $city,
             mb_substr(trim((string)($body['county'] ?? '')), 0, 120) ?: null,
             mb_substr(trim((string)($body['postal_code'] ?? '')), 0, 30) ?: null,
             mb_substr(trim((string)($body['customer_notes'] ?? '')), 0, 3000) ?: null,
-            $shippingId, (string)$shipping['name'], $subtotal, $discountTotal, $promotion['id'], $promotion['code'], $shippingCost, $total, 'RON', $trackingToken
+            $shippingId, (string)$shipping['name'], $subtotal, $discountTotal, $promotion['id'], $promotion['code'], $promotion['scope'], $shippingCost, $total, $vatPayer ? 1 : 0, $vatRate, $vatTotal, $netTotal, 'RON', $trackingToken
         ]);
-        $insertItem = $db->prepare('INSERT INTO shop_order_items (id, order_id, product_id, product_name, product_sku, quantity, unit_price, line_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+        reservePromotionUsage($db, $promotion, $customer, $deviceHash, $orderId);
+        $insertItem = $db->prepare('INSERT INTO shop_order_items (id, order_id, product_id, product_name, product_sku, quantity, unit_price, line_total, discount_total, discounted_unit_price, discounted_line_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $updateStock = $db->prepare('UPDATE shop_products SET stock_quantity = stock_quantity - ? WHERE id = ?');
         $insertMovement = $db->prepare('INSERT INTO shop_inventory_movements (id, product_id, order_id, movement_type, quantity_delta, quantity_after, note) VALUES (?, ?, ?, ?, ?, ?, ?)');
-        foreach ($resolvedItems as $item) {
+        foreach ($resolvedItems as $index => $item) {
             $product = $item['product'];
-            $insertItem->execute([uuidV4(), $orderId, $product['id'], $product['name'], $product['sku'], $item['quantity'], $item['unit_price'], $item['line_total']]);
+            $quotedItem = $quotedItems[$index] ?? [];
+            $insertItem->execute([
+                uuidV4(), $orderId, $product['id'], $product['name'], $product['sku'], $item['quantity'], $item['unit_price'], $item['line_total'],
+                (float)($quotedItem['discount_total'] ?? 0),
+                (float)($quotedItem['discounted_unit_price'] ?? $item['unit_price']),
+                (float)($quotedItem['discounted_line_total'] ?? $item['line_total']),
+            ]);
             if ($product['stock_mode'] === 'tracked') {
                 $nextQuantity = (int)$product['stock_quantity'] - $item['quantity'];
                 $updateStock->execute([$item['quantity'], $product['id']]);
@@ -2296,9 +3477,10 @@ try {
     $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     $db = shopDb($config);
 
-    // Only the public catalog needs a periodic full-feed refresh. CRM lists and
-    // lightweight selectors must return immediately; an individual Boomag
-    // product is refreshed separately by the publicProduct action below.
+    // Catalogul public actualizeaza periodic, din acelasi feed Boomag, atat
+    // preturile (pastrand diferenta comerciala), cat si stocurile. Listele CRM
+    // si selectoarele usoare raman rapide, iar pagina unui produs are in plus
+    // propria sincronizare imediata mai jos.
     if ($action === 'publicProducts') {
         gomagMaybeSyncSupplierStock($db, $config);
     }
@@ -2313,34 +3495,26 @@ try {
 
     if ($action === 'publicActivePromotions' && $method === 'GET') {
         $customer = optionalCustomer($db);
-        $audience = $customer ? ['all', 'registered'] : ['all'];
-        $placeholders = implode(',', array_fill(0, count($audience), '?'));
-        $stmt = $db->prepare(
-            "SELECT c.id, c.code, c.title, c.description, c.discount_type, c.discount_value, c.min_order_value,
-                    c.audience, c.scope, c.product_id, c.auto_apply, c.show_banner, c.banner_text, c.valid_from, c.valid_until,
-                    p.name AS product_name, p.slug AS product_slug
-             FROM shop_coupons c
-             LEFT JOIN shop_products p ON p.id = c.product_id
-             WHERE c.is_active = 1 AND c.audience IN ({$placeholders})
-               AND (c.valid_from IS NULL OR c.valid_from <= NOW())
-               AND (c.valid_until IS NULL OR c.valid_until >= NOW())
-             ORDER BY c.show_banner DESC, c.valid_until ASC, c.created_at DESC"
-        );
-        $stmt->execute($audience);
-        $rows = $stmt->fetchAll();
-        foreach ($rows as &$row) {
-            $row['discount_value'] = (float)$row['discount_value'];
-            $row['min_order_value'] = $row['min_order_value'] === null ? null : (float)$row['min_order_value'];
-            $row['auto_apply'] = (bool)$row['auto_apply'];
-            $row['show_banner'] = (bool)$row['show_banner'];
-        }
-        unset($row);
+        $rows = array_map(function (array $row) use ($db): array {
+            $row = promotionRow($db, $row);
+            unset($row['customer_ids'], $row['application_count'], $row['total_discount_given'], $row['average_discount']);
+            return $row;
+        }, activePromotionRowsForCustomer($db, $customer, false, null, promotionDeviceHash($body)));
         jsonResponse($rows);
     }
 
     if ($action === 'publicPromotionQuote' && $method === 'POST') {
         $items = is_array($body['items'] ?? null) ? array_values($body['items']) : [];
-        if (!$items || count($items) > 50) jsonResponse(['subtotal' => 0, 'discount_total' => 0, 'promotion_code' => null, 'promotion_title' => null]);
+        if (!$items || count($items) > 50) jsonResponse([
+            'subtotal' => 0,
+            'discount_total' => 0,
+            'promotion_id' => null,
+            'promotion_code' => null,
+            'promotion_title' => null,
+            'promotion_scope' => null,
+            'promotion_min_order_value' => null,
+            'items' => [],
+        ]);
         $productStmt = $db->prepare('SELECT p.* FROM shop_products p INNER JOIN shop_product_sources s ON s.id = p.source_id AND s.is_active = 1 WHERE p.id = ? AND p.is_active = 1');
         $resolvedItems = [];
         $subtotal = 0.0;
@@ -2356,12 +3530,23 @@ try {
             $subtotal += $lineTotal;
             $resolvedItems[] = ['product' => $product, 'quantity' => $quantity, 'unit_price' => $unitPrice, 'line_total' => $lineTotal];
         }
-        $promotion = bestOrderPromotion($db, $resolvedItems, $subtotal, optionalCustomer($db), (string)($body['coupon_code'] ?? ''));
+        $requestedCouponCode = strtoupper(trim((string)($body['coupon_code'] ?? '')));
+        $customer = optionalCustomer($db);
+        $deviceHash = promotionDeviceHash($body);
+        $promotion = bestOrderPromotion($db, $resolvedItems, $subtotal, $customer, $requestedCouponCode, $deviceHash);
+        if ($requestedCouponCode !== '' && !$promotion['id']) {
+            $usageError = promotionUsageError($db, $requestedCouponCode, $customer, $deviceHash);
+            jsonResponse(['error' => $usageError ?: 'Codul de reducere nu este valid sau nu se aplică produselor din coș.'], 422);
+        }
         jsonResponse([
             'subtotal' => round($subtotal, 2),
             'discount_total' => round((float)$promotion['discount_total'], 2),
+            'promotion_id' => $promotion['id'],
             'promotion_code' => $promotion['code'],
             'promotion_title' => $promotion['title'],
+            'promotion_scope' => $promotion['scope'],
+            'promotion_min_order_value' => $promotion['min_order_value'],
+            'items' => promotionQuoteItems($resolvedItems, $promotion),
         ]);
     }
 
@@ -2369,12 +3554,9 @@ try {
         $email = mb_strtolower(trim((string)($body['email'] ?? '')));
         $fullName = mb_substr(trim((string)($body['full_name'] ?? '')), 0, 180);
         $phone = mb_substr(trim((string)($body['phone'] ?? '')), 0, 50);
-        $password = (string)($body['password'] ?? '');
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) throw new InvalidArgumentException('Introdu o adresă de e-mail validă.');
         if (mb_strlen($fullName) < 2) throw new InvalidArgumentException('Introdu numele complet.');
-        if (strlen($password) < 8 || !preg_match('/[A-Za-zĂÂÎȘȚăâîșț]/u', $password) || !preg_match('/\d/', $password)) {
-            throw new InvalidArgumentException('Parola trebuie să aibă minimum 8 caractere, cel puțin o literă și o cifră.');
-        }
+        $password = validatedCustomerPassword($body['password'] ?? '');
         $exists = $db->prepare('SELECT id FROM shop_customers WHERE email = ? LIMIT 1');
         $exists->execute([$email]);
         if ($exists->fetchColumn()) jsonResponse(['error' => 'Există deja un cont pentru această adresă de e-mail.', 'code' => 'email_exists'], 409);
@@ -2384,6 +3566,116 @@ try {
         $stmt = $db->prepare('SELECT * FROM shop_customers WHERE id = ?');
         $stmt->execute([$customerId]);
         jsonResponse(['token' => issueCustomerSession($db, $customerId), 'customer' => customerPublicRow($stmt->fetch())], 201);
+    }
+
+    if ($action === 'customerForgotPassword' && $method === 'POST') {
+        $email = mb_strtolower(trim((string)($body['email'] ?? '')));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new InvalidArgumentException('Adresa de e-mail este obligatorie și trebuie să fie validă.');
+        }
+        $ipHash = customerRequestIpHash();
+        $db->exec("DELETE FROM shop_customer_password_resets WHERE created_at < DATE_SUB(NOW(), INTERVAL 2 DAY)");
+        $emailRate = $db->prepare('SELECT COUNT(*) FROM shop_customer_password_resets WHERE email = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 30 MINUTE)');
+        $emailRate->execute([$email]);
+        $ipRate = $db->prepare('SELECT COUNT(*) FROM shop_customer_password_resets WHERE request_ip_hash = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 30 MINUTE)');
+        $ipRate->execute([$ipHash]);
+        $limited = (int)$emailRate->fetchColumn() >= 4 || (int)$ipRate->fetchColumn() >= 20;
+        if (!$limited) {
+            $rawToken = bin2hex(random_bytes(32));
+            $customer = null;
+            $db->beginTransaction();
+            try {
+                $customerStmt = $db->prepare('SELECT * FROM shop_customers WHERE email = ? AND is_active = 1 LIMIT 1 FOR UPDATE');
+                $customerStmt->execute([$email]);
+                $customer = $customerStmt->fetch() ?: null;
+                if ($customer) {
+                    $db->prepare('UPDATE shop_customer_password_resets SET used_at = COALESCE(used_at, NOW()) WHERE customer_id = ? AND used_at IS NULL')->execute([$customer['id']]);
+                }
+                $insert = $db->prepare('INSERT INTO shop_customer_password_resets (id, customer_id, email, token_hash, request_ip_hash, expires_at) VALUES (?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 30 MINUTE))');
+                $insert->execute([uuidV4(), $customer['id'] ?? null, $email, hash('sha256', $rawToken), $ipHash]);
+                $db->commit();
+            } catch (Throwable $error) {
+                if ($db->inTransaction()) $db->rollBack();
+                throw $error;
+            }
+            if ($customer) {
+                try {
+                    gtSendPasswordResetEmail($customer, $config, $rawToken);
+                } catch (Throwable $error) {
+                    error_log('[G-Trots password reset email] ' . $error->getMessage());
+                }
+            } else {
+                usleep(220000);
+            }
+        } else {
+            usleep(220000);
+        }
+        jsonResponse([
+            'success' => true,
+            'message' => 'Dacă adresa aparține unui cont activ, vei primi în câteva minute e-mailul securizat pentru resetarea parolei.',
+        ], 202);
+    }
+
+    if ($action === 'customerValidateResetLink' && $method === 'POST') {
+        $email = mb_strtolower(trim((string)($body['email'] ?? '')));
+        $rawToken = strtolower(trim((string)($body['token'] ?? '')));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || !preg_match('/^[a-f0-9]{64}$/', $rawToken)) {
+            jsonResponse(['error' => 'Linkul de resetare nu este valid sau a expirat.', 'code' => 'reset_link_expired'], 410);
+        }
+        $resetStmt = $db->prepare(
+            'SELECT r.id
+             FROM shop_customer_password_resets r
+             INNER JOIN shop_customers c ON c.id = r.customer_id AND c.is_active = 1
+             WHERE r.token_hash = ? AND r.email = ? AND c.email = ?
+               AND r.used_at IS NULL AND r.expires_at >= NOW()
+             LIMIT 1'
+        );
+        $resetStmt->execute([hash('sha256', $rawToken), $email, $email]);
+        if (!$resetStmt->fetchColumn()) {
+            jsonResponse(['error' => 'Linkul de resetare nu este valid sau a expirat.', 'code' => 'reset_link_expired'], 410);
+        }
+        jsonResponse(['valid' => true]);
+    }
+
+    if ($action === 'customerResetPassword' && $method === 'POST') {
+        $email = mb_strtolower(trim((string)($body['email'] ?? '')));
+        $rawToken = strtolower(trim((string)($body['token'] ?? '')));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new InvalidArgumentException('Adresa de e-mail este obligatorie și trebuie să fie validă.');
+        }
+        if (!preg_match('/^[a-f0-9]{64}$/', $rawToken)) {
+            jsonResponse(['error' => 'Linkul de resetare nu este valid sau a expirat. Solicită un e-mail nou.', 'code' => 'reset_link_expired'], 410);
+        }
+        $password = validatedCustomerPassword($body['password'] ?? '');
+        if ($password !== (string)($body['password_confirm'] ?? '')) {
+            throw new InvalidArgumentException('Parolele introduse nu coincid.');
+        }
+        $db->beginTransaction();
+        try {
+            $resetStmt = $db->prepare(
+                'SELECT r.*, c.id AS active_customer_id
+                 FROM shop_customer_password_resets r
+                 INNER JOIN shop_customers c ON c.id = r.customer_id AND c.is_active = 1
+                 WHERE r.token_hash = ? AND r.email = ? AND c.email = ?
+                   AND r.used_at IS NULL AND r.expires_at >= NOW()
+                 LIMIT 1 FOR UPDATE'
+            );
+            $resetStmt->execute([hash('sha256', $rawToken), $email, $email]);
+            $reset = $resetStmt->fetch();
+            if (!$reset) {
+                $db->rollBack();
+                jsonResponse(['error' => 'Linkul de resetare nu este valid sau a expirat. Solicită un e-mail nou.', 'code' => 'reset_link_expired'], 410);
+            }
+            $customerId = (string)$reset['active_customer_id'];
+            $db->prepare('UPDATE shop_customers SET password_hash = ? WHERE id = ?')->execute([password_hash($password, PASSWORD_DEFAULT), $customerId]);
+            $db->prepare('UPDATE shop_customer_password_resets SET used_at = COALESCE(used_at, NOW()) WHERE customer_id = ?')->execute([$customerId]);
+            $db->prepare('DELETE FROM shop_customer_sessions WHERE customer_id = ?')->execute([$customerId]);
+            $db->commit();
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
+        jsonResponse(['success' => true, 'message' => 'Parola a fost resetată. Acum te poți autentifica folosind parola nouă.']);
     }
 
     if ($action === 'customerLogin' && $method === 'POST') {
@@ -2445,8 +3737,28 @@ try {
         $customer = requireCustomer($db);
         $fullName = mb_substr(trim((string)($body['full_name'] ?? $customer['full_name'])), 0, 180);
         $phone = mb_substr(trim((string)($body['phone'] ?? $customer['phone'])), 0, 50);
+        $customerType = trim((string)($body['customer_type'] ?? ($customer['customer_type'] ?? 'individual'))) === 'company' ? 'company' : 'individual';
+        $address = mb_substr(trim((string)($body['address'] ?? ($customer['address'] ?? ''))), 0, 255);
+        $city = mb_substr(trim((string)($body['city'] ?? ($customer['city'] ?? ''))), 0, 120);
+        $county = mb_substr(trim((string)($body['county'] ?? ($customer['county'] ?? ''))), 0, 120);
+        $postalCode = mb_substr(trim((string)($body['postal_code'] ?? ($customer['postal_code'] ?? ''))), 0, 30);
+        $companyName = mb_substr(trim((string)($body['company_name'] ?? ($customer['company_name'] ?? ''))), 0, 180);
+        $companyCui = mb_substr(strtoupper(trim((string)($body['company_cui'] ?? ($customer['company_cui'] ?? '')))), 0, 60);
+        $companyRegistrationNumber = mb_substr(strtoupper(trim((string)($body['company_registration_number'] ?? ($customer['company_registration_number'] ?? '')))), 0, 80);
+        $companyAddress = mb_substr(trim((string)($body['company_address'] ?? ($customer['company_address'] ?? ''))), 0, 255);
         if (mb_strlen($fullName) < 2) throw new InvalidArgumentException('Introdu numele complet.');
-        $db->prepare('UPDATE shop_customers SET full_name = ?, phone = ? WHERE id = ?')->execute([$fullName, $phone, $customer['id']]);
+        if ($phone === '') throw new InvalidArgumentException('Introdu numarul de telefon.');
+        if ($customerType === 'company' && ($companyName === '' || $companyCui === '' || $companyRegistrationNumber === '' || $companyAddress === '')) {
+            throw new InvalidArgumentException('Completeaza denumirea firmei, CUI/CIF, numarul de la Registrul Comertului si sediul social.');
+        }
+        $db->prepare('UPDATE shop_customers SET full_name = ?, phone = ?, customer_type = ?, address = ?, city = ?, county = ?, postal_code = ?, company_name = ?, company_cui = ?, company_registration_number = ?, company_address = ? WHERE id = ?')->execute([
+            $fullName, $phone, $customerType, $address ?: null, $city ?: null, $county ?: null, $postalCode ?: null,
+            $customerType === 'company' ? $companyName : null,
+            $customerType === 'company' ? $companyCui : null,
+            $customerType === 'company' ? $companyRegistrationNumber : null,
+            $customerType === 'company' ? $companyAddress : null,
+            $customer['id'],
+        ]);
         $stmt = $db->prepare('SELECT * FROM shop_customers WHERE id = ?');
         $stmt->execute([$customer['id']]);
         jsonResponse(['customer' => customerPublicRow($stmt->fetch())]);
@@ -2467,6 +3779,8 @@ try {
         $db->beginTransaction();
         try {
             $db->prepare('DELETE FROM shop_customer_coupons WHERE customer_id = ?')->execute([$customer['id']]);
+            $db->prepare('DELETE FROM shop_coupon_customer_usage WHERE customer_id = ?')->execute([$customer['id']]);
+            $db->prepare('DELETE FROM shop_customer_password_resets WHERE customer_id = ?')->execute([$customer['id']]);
             $db->prepare('DELETE FROM shop_customer_addresses WHERE customer_id = ?')->execute([$customer['id']]);
             $db->prepare('DELETE FROM shop_customer_sessions WHERE customer_id = ?')->execute([$customer['id']]);
             $db->prepare('DELETE FROM shop_customers WHERE id = ?')->execute([$customer['id']]);
@@ -2564,21 +3878,11 @@ try {
 
     if ($action === 'customerCoupons' && $method === 'GET') {
         $customer = requireCustomer($db);
-        $stmt = $db->prepare(
-            'SELECT c.*, cc.assigned_at, cc.used_at
-             FROM shop_coupons c
-             LEFT JOIN shop_customer_coupons cc ON cc.coupon_id = c.id AND cc.customer_id = ?
-             WHERE c.is_active = 1 AND (c.valid_from IS NULL OR c.valid_from <= NOW()) AND (c.valid_until IS NULL OR c.valid_until >= NOW())
-             ORDER BY cc.assigned_at IS NULL ASC, c.valid_until ASC, c.created_at DESC'
-        );
-        $stmt->execute([$customer['id']]);
-        $rows = $stmt->fetchAll();
-        foreach ($rows as &$row) {
-            $row['discount_value'] = (float)$row['discount_value'];
-            $row['min_order_value'] = $row['min_order_value'] === null ? null : (float)$row['min_order_value'];
-            $row['is_active'] = (bool)$row['is_active'];
-        }
-        unset($row);
+        $rows = array_map(function (array $row) use ($db): array {
+            $row = promotionRow($db, $row);
+            unset($row['customer_ids'], $row['application_count'], $row['total_discount_given'], $row['average_discount']);
+            return $row;
+        }, activePromotionRowsForCustomer($db, $customer, false, null, promotionDeviceHash($body)));
         jsonResponse($rows);
     }
 
@@ -2624,7 +3928,9 @@ try {
         $sql = productSelectSql() . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.is_featured DESC, COALESCE(p.featured_rank, 2147483647) ASC, p.created_at DESC LIMIT 2500';
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
-        jsonResponse(productRows($db, $stmt->fetchAll(), $config, false, false));
+        $products = productRows($db, deduplicateCatalogProductRows($stmt->fetchAll()), $config, false, false);
+        $products = applyCatalogPromotionPrices($db, $products, optionalCustomer($db), promotionDeviceHash($body));
+        jsonResponse(array_map('publicCatalogProductRow', $products));
     }
 
     if ($action === 'publicProduct' && $method === 'GET') {
@@ -2642,7 +3948,7 @@ try {
             $product = findProduct($db, $idOrSlug, $config, true);
             $db->prepare('UPDATE shop_products SET view_count = view_count + 1 WHERE id = ?')->execute([$product['id']]);
             $product['view_count'] = (int)$product['view_count'] + 1;
-            jsonResponse($product);
+            jsonResponse(applyCatalogPromotionPrices($db, [$product], optionalCustomer($db), promotionDeviceHash($body))[0]);
         } catch (InvalidArgumentException $error) {
             jsonResponse(['error' => $error->getMessage()], 404);
         }
@@ -2685,12 +3991,17 @@ try {
 
     if ($action === 'publicShopConfig' && $method === 'GET') {
         $shipping = $db->query('SELECT * FROM shop_shipping_methods WHERE is_active = 1 ORDER BY sort_order ASC, name ASC')->fetchAll();
+        $companyTax = $db->query('SELECT vat_payer, vat_rate FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
         $publicPayments = paymentSettings($db, $config);
         $publicPayments['card_enabled'] = $publicPayments['card_enabled'] && $publicPayments['stripe_configured'];
         unset($publicPayments['stripe_synced_products'], $publicPayments['stripe_sync_errors']);
         jsonResponse([
             'payments' => $publicPayments,
             'shipping_methods' => array_map('shippingRow', $shipping),
+            'tax' => [
+                'vat_payer' => boolValue($companyTax['vat_payer'] ?? false),
+                'prices_include_vat' => true,
+            ],
         ]);
     }
 
@@ -2727,6 +4038,7 @@ try {
                 throw new InvalidArgumentException('Plata cu cardul nu a putut fi initializata. Incearca din nou.');
             }
         }
+        unset($order['vat_rate'], $order['vat_total'], $order['net_total']);
         jsonResponse($order, 201);
     }
 
@@ -3003,6 +4315,7 @@ try {
                 $alt = $payload['image_alt_texts'][$imageIndex] ?? ($payload['name'] . ' - fotografia ' . ($imageIndex + 1));
                 $updateAlt->execute([$alt, $imageId, (string)$current['id']]);
             }
+            shopNirEnsureBoomagKidotoysReferences($db, (string)$current['id']);
             $db->commit();
         } catch (Throwable $error) {
             if ($db->inTransaction()) $db->rollBack();
@@ -3015,6 +4328,215 @@ try {
     }
 
     $currentUser = validateAuthToken($config, $body);
+
+    if ($action === 'nirPermissions' && $method === 'GET') {
+        jsonResponse(['permissions' => shopNirPermissions($currentUser)]);
+    }
+
+    if ($action === 'listWarehouses' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_VIEW');
+        jsonResponse($db->query('SELECT * FROM shop_warehouses WHERE is_active = 1 ORDER BY is_default DESC, name ASC')->fetchAll());
+    }
+
+    if ($action === 'getNirSettings' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_VIEW');
+        $settings = shopNirSettings($db);
+        if (!shopNirCan($currentUser, 'NIR_VIEW_COSTS')) unset($settings['include_vat_in_inventory_cost'], $settings['price_variance_warning_percent']);
+        jsonResponse($settings);
+    }
+
+    if ($action === 'getBnrExchangeRate' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_VIEW');
+        jsonResponse(shopNirBnrExchangeRate((string)($_GET['currency'] ?? ''), (string)($_GET['date'] ?? '')));
+    }
+
+    if ($action === 'searchSuppliers' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_VIEW');
+        $search = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 120);
+        $limit = max(1, min(50, (int)($_GET['limit'] ?? 20)));
+        $like = '%' . $search . '%';
+        $stmt = $db->prepare("SELECT * FROM shop_suppliers WHERE is_active = 1 AND (? = '' OR name LIKE ? OR cui LIKE ? OR contact_person LIKE ?) ORDER BY name ASC LIMIT {$limit}");
+        $stmt->execute([$search, $like, $like, $like]);
+        jsonResponse(array_map('supplierRow', $stmt->fetchAll()));
+    }
+
+    if ($action === 'checkSupplierCui' && $method === 'GET') {
+        shopNirRequire($currentUser, 'SUPPLIER_CREATE');
+        $cui = strtoupper(preg_replace('/\s+/', '', trim((string)($_GET['cui'] ?? ''))) ?? '');
+        if ($cui === '') throw new InvalidArgumentException('CUI-ul este obligatoriu.');
+        $stmt = $db->prepare('SELECT * FROM shop_suppliers WHERE REPLACE(UPPER(cui), " ", "") = ? LIMIT 1');
+        $stmt->execute([$cui]);
+        $supplier = $stmt->fetch();
+        jsonResponse(['exists' => (bool)$supplier, 'supplier' => $supplier ? supplierRow($supplier) : null]);
+    }
+
+    if ($action === 'getSupplier' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_VIEW');
+        $id = trim((string)($_GET['id'] ?? ''));
+        $stmt = $db->prepare('SELECT * FROM shop_suppliers WHERE id = ?');
+        $stmt->execute([$id]);
+        $supplier = $stmt->fetch();
+        if (!$supplier) jsonResponse(['error' => 'Furnizorul nu există.'], 404);
+        $result = supplierRow($supplier);
+        $result['products'] = shopNirSupplierProducts($db, $id);
+        jsonResponse($result);
+    }
+
+    if ($action === 'resolveSupplierProductReference' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_VIEW');
+        $supplierId = trim((string)($_GET['supplier_id'] ?? ''));
+        $code = trim((string)($_GET['code'] ?? ''));
+        $ean = trim((string)($_GET['ean'] ?? ''));
+        $sku = trim((string)($_GET['sku'] ?? ''));
+        $name = trim((string)($_GET['name'] ?? ''));
+        jsonResponse(shopNirMatchSupplierProduct($db, $supplierId, $code, $ean, $sku, $name));
+    }
+
+    if ($action === 'createSupplierProductReference' && $method === 'POST') {
+        shopNirRequire($currentUser, 'SUPPLIER_PRODUCT_REFERENCE_MANAGE');
+        $db->beginTransaction();
+        try {
+            $reference = shopNirCreateReference($db, $body, $currentUser);
+            $db->commit();
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
+        jsonResponse($reference, 201);
+    }
+
+    if ($action === 'updateSupplierProductReference' && in_array($method, ['PUT', 'PATCH'], true)) {
+        shopNirRequire($currentUser, 'SUPPLIER_PRODUCT_REFERENCE_MANAGE');
+        $id = trim((string)($_GET['id'] ?? $body['id'] ?? ''));
+        $db->beginTransaction();
+        try {
+            $reference = shopNirReferenceUpdate($db, $id, $body, $currentUser);
+            $db->commit();
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
+        jsonResponse($reference);
+    }
+
+    if ($action === 'listProductSupplierReferences' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_VIEW');
+        jsonResponse(shopNirProductReferences($db, trim((string)($_GET['id'] ?? $_GET['product_id'] ?? ''))));
+    }
+
+    if ($action === 'listSupplierProducts' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_VIEW');
+        jsonResponse(shopNirSupplierProducts($db, trim((string)($_GET['id'] ?? $_GET['supplier_id'] ?? ''))));
+    }
+
+    if ($action === 'listNirs' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_VIEW');
+        jsonResponse(shopNirList($db, $_GET, $currentUser));
+    }
+
+    if ($action === 'getNir' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_VIEW');
+        jsonResponse(shopNirFetchDocument($db, trim((string)($_GET['id'] ?? '')), $currentUser));
+    }
+
+    if ($action === 'createNir' && $method === 'POST') {
+        shopNirRequire($currentUser, 'NIR_CREATE');
+        jsonResponse(shopNirCreateDraft($db, $body, $currentUser), 201);
+    }
+
+    if (in_array($action, ['updateNir', 'autosaveNir'], true) && in_array($method, ['PUT', 'PATCH', 'POST'], true)) {
+        shopNirRequire($currentUser, 'NIR_EDIT_DRAFT');
+        jsonResponse(shopNirUpdateDraft($db, trim((string)($_GET['id'] ?? $body['id'] ?? '')), $body, $currentUser));
+    }
+
+    if ($action === 'deleteNirDrafts' && $method === 'DELETE') {
+        jsonResponse(shopNirDeleteDrafts($db, $currentUser, isset($_GET['id']) ? trim((string)$_GET['id']) : null));
+    }
+
+    if ($action === 'validateNir' && $method === 'POST') {
+        shopNirRequire($currentUser, 'NIR_EDIT_DRAFT');
+        jsonResponse(shopNirValidateDocument($db, trim((string)($_GET['id'] ?? $body['id'] ?? ''))));
+    }
+
+    if ($action === 'confirmNir' && $method === 'POST') {
+        shopNirRequire($currentUser, 'NIR_CONFIRM');
+        jsonResponse(shopNirConfirm($db, trim((string)($_GET['id'] ?? $body['id'] ?? '')), $body, $currentUser));
+    }
+
+    if ($action === 'reopenNir' && $method === 'POST') {
+        shopNirRequire($currentUser, 'NIR_EDIT_DRAFT');
+        shopNirRequire($currentUser, 'NIR_CONFIRM');
+        jsonResponse(shopNirReopenConfirmed($db, trim((string)($_GET['id'] ?? $body['id'] ?? '')), $body, $currentUser));
+    }
+
+    if ($action === 'reverseNir' && $method === 'POST') {
+        shopNirRequire($currentUser, 'NIR_REVERSE');
+        jsonResponse(shopNirReverse($db, trim((string)($_GET['id'] ?? $body['id'] ?? '')), $body, $currentUser));
+    }
+
+    if ($action === 'uploadNirAttachment' && $method === 'POST') {
+        shopNirRequire($currentUser, 'NIR_EDIT_DRAFT');
+        jsonResponse(shopNirAttachmentUpload($db, trim((string)($_GET['id'] ?? $body['nir_id'] ?? '')), $body, $currentUser), 201);
+    }
+
+    if ($action === 'extractNirAttachment' && $method === 'POST') {
+        shopNirRequire($currentUser, 'NIR_EDIT_DRAFT');
+        jsonResponse(shopNirExtractAttachment($db, trim((string)($_GET['id'] ?? $body['nir_id'] ?? '')), trim((string)($body['attachment_id'] ?? '')), $currentUser));
+    }
+
+    if ($action === 'downloadNirAttachment' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_VIEW');
+        jsonResponse(shopNirDownloadAttachment($db, trim((string)($_GET['id'] ?? '')), trim((string)($_GET['attachment_id'] ?? ''))));
+    }
+
+    if ($action === 'downloadAllNirAttachments' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_VIEW');
+        jsonResponse(shopNirDownloadAllAttachments($db, trim((string)($_GET['id'] ?? ''))));
+    }
+
+    if ($action === 'getNirMovements' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_VIEW');
+        jsonResponse(shopNirDocumentMovements($db, trim((string)($_GET['id'] ?? ''))));
+    }
+
+    if ($action === 'getNirFifoLayers' && $method === 'GET') {
+        shopNirRequire($currentUser, 'FIFO_VIEW');
+        jsonResponse(shopNirDocumentLayers($db, trim((string)($_GET['id'] ?? ''))));
+    }
+
+    if ($action === 'exportNir' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_EXPORT');
+        jsonResponse(shopNirExport($db, trim((string)($_GET['id'] ?? '')), strtolower(trim((string)($_GET['format'] ?? 'pdf'))), $currentUser));
+    }
+
+    if ($action === 'getProductPurchaseHistory' && $method === 'GET') {
+        jsonResponse(shopNirPurchaseHistory($db, trim((string)($_GET['id'] ?? $_GET['product_id'] ?? '')), $currentUser));
+    }
+
+    if ($action === 'getProductFifoLayers' && $method === 'GET') {
+        jsonResponse(shopNirFifoLayers($db, trim((string)($_GET['id'] ?? $_GET['product_id'] ?? '')), $_GET, $currentUser));
+    }
+
+    if ($action === 'previewProductFifo' && $method === 'POST') {
+        jsonResponse(shopNirFifoPreviewForProduct($db, trim((string)($_GET['id'] ?? $body['product_id'] ?? '')), $body, $currentUser));
+    }
+
+    if ($action === 'getFifoReconciliation' && $method === 'GET') {
+        jsonResponse(shopNirOpeningBalanceReport($db, $currentUser));
+    }
+
+    if ($action === 'createFifoOpeningBalance' && $method === 'POST') {
+        shopNirRequire($currentUser, 'FIFO_OPENING_BALANCE_MANAGE');
+        jsonResponse(shopNirCreateOpeningBalance($db, $body, $currentUser), 201);
+    }
+
+    if ($action === 'getNirAudit' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_VIEW');
+        $id = trim((string)($_GET['id'] ?? ''));
+        $stmt = $db->prepare('SELECT * FROM shop_domain_audit WHERE entity_id = ? OR (entity_type = "InventoryCostLayer" AND JSON_UNQUOTE(JSON_EXTRACT(new_values_json, "$.nir_document_id")) = ?) ORDER BY created_at DESC LIMIT 500');
+        $stmt->execute([$id, $id]);
+        jsonResponse($stmt->fetchAll());
+    }
 
     if ($action === 'listCustomers' && $method === 'GET') {
         $rows = $db->query(
@@ -3071,6 +4593,34 @@ try {
         jsonResponse(array_map(fn(array $row): array => promotionRow($db, $row), $rows));
     }
 
+    if ($action === 'getPromotionStats' && $method === 'GET') {
+        $id = trim((string)($_GET['id'] ?? ''));
+        $stmt = $db->prepare('SELECT c.*, p.name AS product_name, p.slug AS product_slug FROM shop_coupons c LEFT JOIN shop_products p ON p.id = c.product_id WHERE c.id = ? LIMIT 1');
+        $stmt->execute([$id]);
+        $promotion = $stmt->fetch();
+        if (!$promotion) jsonResponse(['error' => 'Reducerea nu există.'], 404);
+        $orders = $db->prepare(
+            "SELECT id, order_number, status, customer_name, customer_email, subtotal, discount_total, total, created_at
+             FROM shop_orders
+             WHERE promotion_id = ? AND discount_total > 0
+             ORDER BY created_at DESC
+             LIMIT 100"
+        );
+        $orders->execute([$id]);
+        $applications = array_map(static function (array $order): array {
+            $order['subtotal'] = (float)$order['subtotal'];
+            $order['discount_total'] = (float)$order['discount_total'];
+            $order['total'] = (float)$order['total'];
+            $order['is_counted'] = !in_array((string)$order['status'], ['cancelled', 'refunded'], true);
+            return $order;
+        }, $orders->fetchAll());
+        jsonResponse([
+            'promotion' => promotionRow($db, $promotion),
+            'summary' => promotionStatsSummary($db, $id),
+            'applications' => $applications,
+        ]);
+    }
+
     if ($action === 'createPromotion' && $method === 'POST') {
         $payload = promotionPayload($db, $body);
         $duplicate = $db->prepare('SELECT id FROM shop_coupons WHERE code = ? LIMIT 1');
@@ -3080,6 +4630,7 @@ try {
         $stmt = $db->prepare('INSERT INTO shop_coupons (id, code, title, description, discount_type, discount_value, min_order_value, audience, scope, product_id, usage_mode, auto_apply, show_banner, banner_text, valid_from, valid_until, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $stmt->execute([$id, $payload['code'], $payload['title'], $payload['description'], $payload['discount_type'], $payload['discount_value'], $payload['min_order_value'], $payload['audience'], $payload['scope'], $payload['product_id'], $payload['usage_mode'], $payload['auto_apply'] ? 1 : 0, $payload['show_banner'] ? 1 : 0, $payload['banner_text'], $payload['valid_from'], $payload['valid_until'], $payload['is_active'] ? 1 : 0]);
         syncPromotionProducts($db, $id, $payload['product_ids']);
+        syncPromotionCustomers($db, $id, $payload['customer_ids']);
         $stmt = $db->prepare('SELECT c.*, p.name AS product_name, p.slug AS product_slug FROM shop_coupons c LEFT JOIN shop_products p ON p.id = c.product_id WHERE c.id = ?');
         $stmt->execute([$id]);
         jsonResponse(promotionRow($db, $stmt->fetch()), 201);
@@ -3095,6 +4646,20 @@ try {
         $stmt->execute([$payload['code'], $payload['title'], $payload['description'], $payload['discount_type'], $payload['discount_value'], $payload['min_order_value'], $payload['audience'], $payload['scope'], $payload['product_id'], $payload['usage_mode'], $payload['auto_apply'] ? 1 : 0, $payload['show_banner'] ? 1 : 0, $payload['banner_text'], $payload['valid_from'], $payload['valid_until'], $payload['is_active'] ? 1 : 0, $id]);
         if ($stmt->rowCount() === 0) { $exists = $db->prepare('SELECT id FROM shop_coupons WHERE id = ?'); $exists->execute([$id]); if (!$exists->fetchColumn()) jsonResponse(['error' => 'Reducerea nu există.'], 404); }
         syncPromotionProducts($db, $id, $payload['product_ids']);
+        syncPromotionCustomers($db, $id, $payload['customer_ids']);
+        if ($payload['usage_mode'] === 'once_per_customer') {
+            $backfillUsage = $db->prepare(
+                "INSERT IGNORE INTO shop_coupon_customer_usage (coupon_id, customer_id, order_id, used_at)
+                 SELECT promotion_id, customer_id, id, created_at
+                 FROM shop_orders
+                 WHERE promotion_id = ?
+                   AND customer_id IS NOT NULL
+                   AND discount_total > 0
+                   AND status NOT IN ('cancelled', 'refunded')
+                 ORDER BY created_at ASC"
+            );
+            $backfillUsage->execute([$id]);
+        }
         $stmt = $db->prepare('SELECT c.*, p.name AS product_name, p.slug AS product_slug FROM shop_coupons c LEFT JOIN shop_products p ON p.id = c.product_id WHERE c.id = ?'); $stmt->execute([$id]);
         jsonResponse(promotionRow($db, $stmt->fetch()));
     }
@@ -3102,6 +4667,7 @@ try {
     if ($action === 'deletePromotion' && $method === 'DELETE') {
         $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
         $db->prepare('DELETE FROM shop_customer_coupons WHERE coupon_id = ?')->execute([$id]);
+        $db->prepare('DELETE FROM shop_coupon_customer_usage WHERE coupon_id = ?')->execute([$id]);
         $db->prepare('DELETE FROM shop_coupon_device_usage WHERE coupon_id = ?')->execute([$id]);
         $db->prepare('DELETE FROM shop_coupon_products WHERE coupon_id = ?')->execute([$id]);
         $stmt = $db->prepare('DELETE FROM shop_coupons WHERE id = ?'); $stmt->execute([$id]);
@@ -3237,27 +4803,38 @@ try {
         $page = max(1, (int)($body['page'] ?? ($_GET['page'] ?? 1)));
         $pageSize = max(5, min(100, (int)($body['page_size'] ?? ($_GET['page_size'] ?? 10))));
         $query = mb_substr(trim((string)($body['q'] ?? ($_GET['q'] ?? ''))), 0, 160);
+        $supplierId = trim((string)($body['supplier_id'] ?? ($_GET['supplier_id'] ?? '')));
         $includeMetadata = filter_var($body['include_metadata'] ?? ($_GET['include_metadata'] ?? true), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
         if ($includeMetadata === null) $includeMetadata = true;
-        $where = '';
-        $params = [];
         if ($query !== '') {
-            $where = ' WHERE (p.name LIKE ? OR p.sku LIKE ? OR p.supplier_product_code LIKE ? OR p.ean LIKE ? OR c.name LIKE ? OR m.name LIKE ?)';
-            $needle = '%' . $query . '%';
-            $params = array_fill(0, 6, $needle);
+            // Pentru căutare încărcăm doar câmpurile compacte ale catalogului și
+            // calculăm relevanța tolerant la diacritice, sinonime și greșeli de tastare.
+            // Catalogul curent are o dimensiune sigură pentru această evaluare, iar
+            // pagina trimisă clientului rămâne limitată la dimensiunea cerută.
+            $candidateRows = $db->query(productListSql() . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.updated_at DESC, p.name ASC')->fetchAll();
+            $scored = [];
+            foreach ($candidateRows as $row) {
+                $score = productSemanticSearchScore($row, $query);
+                if ($score <= 0) continue;
+                $row['_search_score'] = $score;
+                $scored[] = $row;
+            }
+            usort($scored, static function (array $left, array $right): int {
+                $scoreOrder = ((float)$right['_search_score']) <=> ((float)$left['_search_score']);
+                return $scoreOrder !== 0 ? $scoreOrder : strcasecmp((string)$left['name'], (string)$right['name']);
+            });
+            $total = count($scored);
+            $lastPage = max(1, (int)ceil($total / $pageSize));
+            $page = min($page, $lastPage);
+            $products = array_slice($scored, ($page - 1) * $pageSize, $pageSize);
+        } else {
+            $total = (int)$db->query('SELECT COUNT(*) FROM shop_products')->fetchColumn();
+            $lastPage = max(1, (int)ceil($total / $pageSize));
+            $page = min($page, $lastPage);
+            $offset = ($page - 1) * $pageSize;
+            $productStmt = $db->query(productListSql() . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.updated_at DESC, p.name ASC LIMIT ' . $pageSize . ' OFFSET ' . $offset);
+            $products = $productStmt->fetchAll();
         }
-        $countSql = 'SELECT COUNT(*) FROM shop_products p
-                     LEFT JOIN shop_categories c ON c.id = p.category_id
-                     LEFT JOIN shop_manufacturers m ON m.id = p.manufacturer_id' . $where;
-        $countStmt = $db->prepare($countSql);
-        $countStmt->execute($params);
-        $total = (int)$countStmt->fetchColumn();
-        $lastPage = max(1, (int)ceil($total / $pageSize));
-        $page = min($page, $lastPage);
-        $offset = ($page - 1) * $pageSize;
-        $productStmt = $db->prepare(productListSql() . $where . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.updated_at DESC, p.name ASC LIMIT ' . $pageSize . ' OFFSET ' . $offset);
-        $productStmt->execute($params);
-        $products = $productStmt->fetchAll();
         $categories = $includeMetadata ? $db->query('SELECT c.*, p.name AS parent_name FROM shop_categories c LEFT JOIN shop_categories p ON p.id = c.parent_id ORDER BY COALESCE(p.name, c.name) ASC, c.parent_id IS NOT NULL ASC, c.name ASC')->fetchAll() : [];
         $brands = $includeMetadata ? $db->query('SELECT * FROM shop_brands ORDER BY name ASC')->fetchAll() : [];
         $manufacturers = $includeMetadata ? $db->query('SELECT * FROM shop_manufacturers ORDER BY name ASC')->fetchAll() : [];
@@ -3388,8 +4965,13 @@ try {
         $params = [];
         if ($query !== '') {
             $needle = '%' . $query . '%';
-            $conditions[] = '(p.name LIKE ? OR p.sku LIKE ? OR p.supplier_product_code LIKE ? OR p.ean LIKE ?)';
+            $referenceMatch = $supplierId !== ''
+                ? 'EXISTS (SELECT 1 FROM shop_supplier_product_references ref WHERE ref.product_id = p.id AND ref.is_active = 1 AND ref.supplier_id = ? AND (ref.supplier_product_code_original LIKE ? OR ref.supplier_product_code_normalized LIKE ?))'
+                : 'EXISTS (SELECT 1 FROM shop_supplier_product_references ref WHERE ref.product_id = p.id AND ref.is_active = 1 AND (ref.supplier_product_code_original LIKE ? OR ref.supplier_product_code_normalized LIKE ?))';
+            $conditions[] = '(p.name LIKE ? OR p.sku LIKE ? OR p.supplier_product_code LIKE ? OR p.ean LIKE ? OR ' . $referenceMatch . ')';
             array_push($params, $needle, $needle, $needle, $needle);
+            if ($supplierId !== '') $params[] = $supplierId;
+            array_push($params, $needle, '%' . shopNirNormalizeSupplierCode($query) . '%');
         }
         if ($ids) {
             $conditions[] = 'p.id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')';
@@ -3464,6 +5046,7 @@ try {
             ]);
             syncProductBrands($db, $id, $payload['brand_ids']);
             syncProductImages($db, $id, $payload['images'], $payload['name']);
+            shopNirEnsureBoomagKidotoysReferences($db, $id);
             if ($payload['stock_mode'] === 'tracked' && $payload['stock_quantity'] !== 0) {
                 $movement = $db->prepare('INSERT INTO shop_inventory_movements (id, product_id, movement_type, quantity_delta, quantity_after, note, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)');
                 $movement->execute([uuidV4(), $id, 'initial', $payload['stock_quantity'], $payload['stock_quantity'], 'Stoc initial', (string)($currentUser['display_name'] ?? $currentUser['username'] ?? '')]);
@@ -3526,6 +5109,7 @@ try {
             }
             syncProductBrands($db, $id, $payload['brand_ids']);
             syncProductImages($db, $id, $payload['images'], $payload['name']);
+            shopNirEnsureBoomagKidotoysReferences($db, $id);
             $oldQuantity = $current['stock_mode'] === 'tracked' ? (int)$current['stock_quantity'] : 0;
             $newQuantity = $payload['stock_mode'] === 'tracked' ? (int)$payload['stock_quantity'] : 0;
             if ($oldQuantity !== $newQuantity || $current['stock_mode'] !== $payload['stock_mode']) {
@@ -3587,7 +5171,39 @@ try {
 
     if ($action === 'listInventory' && $method === 'GET') {
         $rows = $db->query(productListSql() . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.name ASC')->fetchAll();
-        jsonResponse(productListRows($rows, $config));
+        $products = productListRows($rows, $config);
+        $searchTerms = [];
+        $appendInventorySearchTerms = static function (array $row) use (&$searchTerms): void {
+            $productId = trim((string)($row['product_id'] ?? ''));
+            if ($productId === '') return;
+            if (!isset($searchTerms[$productId])) $searchTerms[$productId] = [];
+            foreach (['supplier_name', 'supplier_cui', 'supplier_code', 'supplier_product_name', 'supplier_ean'] as $field) {
+                $value = trim((string)($row[$field] ?? ''));
+                if ($value !== '') $searchTerms[$productId][mb_strtolower($value, 'UTF-8')] = $value;
+            }
+        };
+        $referenceSearch = $db->query(
+            'SELECT r.product_id, s.name AS supplier_name, s.cui AS supplier_cui,
+                    r.supplier_product_code_original AS supplier_code, r.supplier_product_name, r.supplier_ean
+             FROM shop_supplier_product_references r
+             INNER JOIN shop_suppliers s ON s.id = r.supplier_id
+             WHERE r.is_active = 1'
+        )->fetchAll();
+        foreach ($referenceSearch as $row) $appendInventorySearchTerms($row);
+        $purchaseSearch = $db->query(
+            'SELECT l.product_id, s.name AS supplier_name, s.cui AS supplier_cui,
+                    l.supplier_product_code AS supplier_code, l.supplier_product_name, l.supplier_ean
+             FROM shop_nir_lines l
+             INNER JOIN shop_nir_documents n ON n.id = l.nir_document_id AND n.status = "confirmed"
+             INNER JOIN shop_suppliers s ON s.id = n.supplier_id
+             WHERE l.product_id IS NOT NULL AND l.accepted_quantity > 0 AND l.resolution_status <> "reversal"'
+        )->fetchAll();
+        foreach ($purchaseSearch as $row) $appendInventorySearchTerms($row);
+        foreach ($products as &$product) {
+            $product['inventory_search_terms'] = implode(' ', array_values($searchTerms[(string)$product['id']] ?? []));
+        }
+        unset($product);
+        jsonResponse($products);
     }
 
     if ($action === 'listInventoryMovements' && $method === 'GET') {
@@ -3694,6 +5310,7 @@ try {
                     $movementNote = $status === 'refunded' ? 'Stoc returnat prin rambursarea comenzii' : 'Stoc returnat prin anularea comenzii';
                     $movement->execute([uuidV4(), $product['id'], $id, 'return', (int)$item['quantity'], $next, $movementNote, (string)($currentUser['display_name'] ?? $currentUser['username'] ?? '')]);
                 }
+                releasePromotionUsage($db, $id);
             }
             $update = $db->prepare('UPDATE shop_orders SET status = ?, payment_status = ?, admin_notes = ?, address = ?, city = ?, county = ?, postal_code = ? WHERE id = ?');
             $update->execute([$status, $paymentStatus, mb_substr(trim((string)($body['admin_notes'] ?? '')), 0, 5000), $address, $city, $county, $postalCode, $id]);
@@ -3742,11 +5359,14 @@ try {
     }
 
     if ($action === 'createCompanySettings' && $method === 'POST') {
+        if ((int)$db->query('SELECT COUNT(*) FROM shop_company_settings')->fetchColumn() >= 1) {
+            throw new InvalidArgumentException('Momentan poate fi configurata o singura firma. Editeaza firma existenta.');
+        }
         $company = companySettingsPayload($body);
         $stampPath = !empty($body['stamp_base64']) ? saveShopImage((string)$body['stamp_base64'], 'company') : null;
         if ($company['is_default']) $db->exec('UPDATE shop_company_settings SET is_default = 0');
-        $stmt = $db->prepare('INSERT INTO shop_company_settings (legal_name, trade_name, cui, registration_number, address, city, county, postal_code, country, email, phone, website, bank_name, iban, share_capital, stamp_path, is_default, vat_payer) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([$company['legal_name'], $company['trade_name'], $company['cui'], $company['registration_number'], $company['address'], $company['city'], $company['county'], $company['postal_code'], $company['country'], $company['email'], $company['phone'], $company['website'], $company['bank_name'], $company['iban'], $company['share_capital'], $stampPath, $company['is_default'] ? 1 : 0, $company['vat_payer'] ? 1 : 0]);
+        $stmt = $db->prepare('INSERT INTO shop_company_settings (legal_name, trade_name, cui, registration_number, address, city, county, postal_code, country, email, phone, website, bank_name, iban, share_capital, stamp_path, is_default, vat_payer, vat_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt->execute([$company['legal_name'], $company['trade_name'], $company['cui'], $company['registration_number'], $company['address'], $company['city'], $company['county'], $company['postal_code'], $company['country'], $company['email'], $company['phone'], $company['website'], $company['bank_name'], $company['iban'], $company['share_capital'], $stampPath, $company['is_default'] ? 1 : 0, $company['vat_payer'] ? 1 : 0, $company['vat_rate']]);
         $id = (int)$db->lastInsertId();
         if (!$company['is_default'] && (int)$db->query('SELECT COUNT(*) FROM shop_company_settings WHERE is_default = 1')->fetchColumn() === 0) $db->prepare('UPDATE shop_company_settings SET is_default = 1 WHERE id = ?')->execute([$id]);
         $stmt = $db->prepare('SELECT * FROM shop_company_settings WHERE id = ?'); $stmt->execute([$id]);
@@ -3764,8 +5384,8 @@ try {
         if (boolValue($body['remove_stamp'] ?? false)) { $oldStampPath = $stampPath; $stampPath = ''; }
         if (!empty($body['stamp_base64'])) { $newPath = saveShopImage((string)$body['stamp_base64'], 'company'); $oldStampPath = $stampPath; $stampPath = (string)$newPath; }
         if ($company['is_default']) $db->exec('UPDATE shop_company_settings SET is_default = 0');
-        $stmt = $db->prepare('UPDATE shop_company_settings SET legal_name = ?, trade_name = ?, cui = ?, registration_number = ?, address = ?, city = ?, county = ?, postal_code = ?, country = ?, email = ?, phone = ?, website = ?, bank_name = ?, iban = ?, share_capital = ?, stamp_path = ?, is_default = ?, vat_payer = ? WHERE id = ?');
-        $stmt->execute([$company['legal_name'], $company['trade_name'], $company['cui'], $company['registration_number'], $company['address'], $company['city'], $company['county'], $company['postal_code'], $company['country'], $company['email'], $company['phone'], $company['website'], $company['bank_name'], $company['iban'], $company['share_capital'], $stampPath ?: null, $company['is_default'] ? 1 : 0, $company['vat_payer'] ? 1 : 0, $id]);
+        $stmt = $db->prepare('UPDATE shop_company_settings SET legal_name = ?, trade_name = ?, cui = ?, registration_number = ?, address = ?, city = ?, county = ?, postal_code = ?, country = ?, email = ?, phone = ?, website = ?, bank_name = ?, iban = ?, share_capital = ?, stamp_path = ?, is_default = ?, vat_payer = ?, vat_rate = ? WHERE id = ?');
+        $stmt->execute([$company['legal_name'], $company['trade_name'], $company['cui'], $company['registration_number'], $company['address'], $company['city'], $company['county'], $company['postal_code'], $company['country'], $company['email'], $company['phone'], $company['website'], $company['bank_name'], $company['iban'], $company['share_capital'], $stampPath ?: null, $company['is_default'] ? 1 : 0, $company['vat_payer'] ? 1 : 0, $company['vat_rate'], $id]);
         if (!$company['is_default'] && (int)$db->query('SELECT COUNT(*) FROM shop_company_settings WHERE is_default = 1')->fetchColumn() === 0) $db->prepare('UPDATE shop_company_settings SET is_default = 1 WHERE id = ?')->execute([$id]);
         if ($oldStampPath && $oldStampPath !== $stampPath) removeShopImage($oldStampPath);
         $stmt = $db->prepare('SELECT * FROM shop_company_settings WHERE id = ?'); $stmt->execute([$id]);
@@ -3844,6 +5464,51 @@ try {
         $stmt = $db->prepare('DELETE FROM shop_shipping_methods WHERE id = ?');
         $stmt->execute([$id]);
         if ($stmt->rowCount() === 0) jsonResponse(['error' => 'Metoda de livrare nu exista.'], 404);
+        jsonResponse(['success' => true]);
+    }
+
+    if ($action === 'listSuppliers' && $method === 'GET') {
+        jsonResponse(array_map('supplierRow', $db->query('SELECT * FROM shop_suppliers ORDER BY is_active DESC, name ASC')->fetchAll()));
+    }
+
+    if ($action === 'createSupplier' && $method === 'POST') {
+        shopNirRequire($currentUser, 'SUPPLIER_CREATE');
+        $payload = supplierPayload($body);
+        $id = uuidV4();
+        $stmt = $db->prepare('INSERT INTO shop_suppliers (id, name, contact_person, email, phone, website, cui, registration_number, vat_number, is_vat_payer, default_vat_rate, address, address_line2, city, county, postal_code, country, default_currency, payment_terms, notes, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt->execute([$id, $payload['name'], $payload['contact_person'] ?: null, $payload['email'] ?: null, $payload['phone'] ?: null, $payload['website'] ?: null, $payload['cui'] ?: null, $payload['registration_number'] ?: null, $payload['vat_number'] ?: null, $payload['is_vat_payer'] ? 1 : 0, $payload['default_vat_rate'], $payload['address'] ?: null, $payload['address_line2'] ?: null, $payload['city'] ?: null, $payload['county'] ?: null, $payload['postal_code'] ?: null, $payload['country'] ?: 'România', $payload['default_currency'], $payload['payment_terms'] ?: null, $payload['notes'] ?: null, $payload['is_active'] ? 1 : 0]);
+        $stmt = $db->prepare('SELECT * FROM shop_suppliers WHERE id = ?');
+        $stmt->execute([$id]);
+        jsonResponse(supplierRow($stmt->fetch()), 201);
+    }
+
+    if ($action === 'updateSupplier' && in_array($method, ['PUT', 'PATCH'], true)) {
+        shopNirRequire($currentUser, 'SUPPLIER_CREATE');
+        $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
+        $payload = supplierPayload($body);
+        $stmt = $db->prepare('UPDATE shop_suppliers SET name = ?, contact_person = ?, email = ?, phone = ?, website = ?, cui = ?, registration_number = ?, vat_number = ?, is_vat_payer = ?, default_vat_rate = ?, address = ?, address_line2 = ?, city = ?, county = ?, postal_code = ?, country = ?, default_currency = ?, payment_terms = ?, notes = ?, is_active = ?, row_version = row_version + 1 WHERE id = ?');
+        $stmt->execute([$payload['name'], $payload['contact_person'] ?: null, $payload['email'] ?: null, $payload['phone'] ?: null, $payload['website'] ?: null, $payload['cui'] ?: null, $payload['registration_number'] ?: null, $payload['vat_number'] ?: null, $payload['is_vat_payer'] ? 1 : 0, $payload['default_vat_rate'], $payload['address'] ?: null, $payload['address_line2'] ?: null, $payload['city'] ?: null, $payload['county'] ?: null, $payload['postal_code'] ?: null, $payload['country'] ?: 'România', $payload['default_currency'], $payload['payment_terms'] ?: null, $payload['notes'] ?: null, $payload['is_active'] ? 1 : 0, $id]);
+        if ($stmt->rowCount() === 0) {
+            $exists = $db->prepare('SELECT id FROM shop_suppliers WHERE id = ?');
+            $exists->execute([$id]);
+            if (!$exists->fetchColumn()) jsonResponse(['error' => 'Furnizorul nu exista.'], 404);
+        }
+        $stmt = $db->prepare('SELECT * FROM shop_suppliers WHERE id = ?');
+        $stmt->execute([$id]);
+        jsonResponse(supplierRow($stmt->fetch()));
+    }
+
+    if ($action === 'deleteSupplier' && $method === 'DELETE') {
+        shopNirRequire($currentUser, 'SUPPLIER_CREATE');
+        $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
+        $used = $db->prepare('SELECT (SELECT COUNT(*) FROM shop_nir_documents WHERE supplier_id = ?) + (SELECT COUNT(*) FROM shop_supplier_product_references WHERE supplier_id = ?)');
+        $used->execute([$id, $id]);
+        if ((int)$used->fetchColumn() > 0) {
+            throw new ShopNirHttpException('Furnizorul are NIR-uri sau produse asociate și nu poate fi șters. Dezactivează-l pentru a păstra istoricul.', 409);
+        }
+        $stmt = $db->prepare('DELETE FROM shop_suppliers WHERE id = ?');
+        $stmt->execute([$id]);
+        if ($stmt->rowCount() === 0) jsonResponse(['error' => 'Furnizorul nu exista.'], 404);
         jsonResponse(['success' => true]);
     }
 
@@ -3997,6 +5662,8 @@ try {
     }
 
     jsonResponse(['error' => 'Actiune SHOP necunoscuta.'], 404);
+} catch (ShopNirHttpException $error) {
+    jsonResponse($error->payload, $error->status);
 } catch (InvalidArgumentException $error) {
     jsonResponse(['error' => $error->getMessage()], 422);
 } catch (Throwable $error) {

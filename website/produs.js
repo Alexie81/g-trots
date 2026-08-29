@@ -710,10 +710,12 @@ function relatedLiveProductCard(product) {
   const label = brands[0] || String(product.manufacturer_name || "").trim() || String(product.category_name || "Produs G-Trots");
   const brandBadges = brands.slice(0, 4).map(brand => `<span>${escapeRelatedHtml(brand)}</span>`).join("");
   const description = escapeRelatedHtml(product.short_description || "Produs disponibil în magazinul G-Trots.");
-  const standardPrice = Number(product.price || 0);
-  const currentPrice = product.sale_price == null ? standardPrice : Number(product.sale_price || 0);
-  const oldPrice = product.sale_price == null ? "" : `<del>${relatedMoney(standardPrice)} lei</del>`;
-  const discount = product.sale_price == null || standardPrice <= 0 ? 0 : Math.max(0, Math.round((1 - currentPrice / standardPrice) * 100));
+  const basePrice = product.sale_price == null ? Number(product.price || 0) : Number(product.sale_price || 0);
+  const currentPrice = product.promotion_price == null ? basePrice : Number(product.promotion_price || 0);
+  const standardPrice = product.promotion_price == null ? Number(product.price || 0) : Number(product.price_before_promotion ?? basePrice);
+  const hasDiscount = product.promotion_price != null || product.sale_price != null;
+  const oldPrice = hasDiscount ? `<del>${relatedMoney(standardPrice)} lei</del>` : "";
+  const discount = !hasDiscount || standardPrice <= 0 ? 0 : Math.max(0, Math.round((1 - currentPrice / standardPrice) * 100));
   const discountBadge = discount ? `<em class="product-discount">-${discount}%</em>` : "";
   const stockQuantity = Number(product.stock_quantity || 0);
   const stockLabel = product.stock_mode === "unlimited" ? "În stoc" : stockQuantity <= 0 ? "Stoc epuizat" : stockQuantity <= Number(product.low_stock_threshold || 3) ? "Stoc limitat" : "În stoc";
@@ -739,7 +741,7 @@ function relatedLiveProductCard(product) {
       ${brandBadges ? `<div class="product-fit" aria-label="Mărci compatibile">${brandBadges}</div>` : ""}
     </div>
     <div class="product-bottom">
-      <div class="product-price"><small>${product.sale_price == null ? "Preț" : "Preț promoțional"}</small><strong>${relatedMoney(currentPrice)} <span>lei</span></strong>${oldPrice}</div>
+      <div class="product-price"><small>${hasDiscount ? "Preț promoțional" : "Preț"}</small><strong>${relatedMoney(currentPrice)} <span>lei</span></strong>${oldPrice}</div>
       <div class="product-bottom-action">${discountBadge}<span class="product-open-hint" aria-hidden="true">›</span></div>
     </div>
     <a class="product-card-link" href="${productRoute(encodeURIComponent(id))}" aria-label="Deschide pagina produsului ${escapeRelatedHtml(product.name)}"></a>

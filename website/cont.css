@@ -35,6 +35,7 @@
 
 /* Contul foloseste acelasi loader ca magazinul, iar navbarul ramane vizibil la scroll. */
 .customer-account-page .site-header{position:fixed;z-index:50}
+.gt-has-promotion-bar.customer-account-page .site-header{top:var(--gt-promotion-height)}
 .customer-account-page .account-shell{margin-top:7.25rem}
 .account-page-loading{min-height:34rem;border-radius:2rem}
 .account-page-loading>.empty-account-state{grid-column:1/-1;width:100%}
@@ -134,3 +135,106 @@
 .auth-typewriter-live.is-typing:after{content:"";width:.07em;height:.82em;margin-left:.08em;display:inline-block;border-radius:999px;background:currentColor;box-shadow:0 0 .8rem rgba(255,133,0,.7);vertical-align:-.02em;animation:auth-cursor 900ms steps(1,end) infinite}
 @keyframes auth-cursor{50%{opacity:0}}
 @media(prefers-reduced-motion:reduce){.auth-typewriter-live.is-typing:after{display:none}}
+
+/* Promoțiile clientului: detalii clare și același procent animat ca bara site-ului. */
+.customer-coupons{gap:1rem}
+.customer-coupons .customer-promotion-card{min-height:0;padding:1rem;grid-template-columns:4rem minmax(0,1fr);align-items:stretch;gap:.9rem;position:relative;overflow:hidden;border-color:rgba(255,133,0,.2);border-radius:1.35rem;background:radial-gradient(circle at 0 0,rgba(255,133,0,.14),transparent 15rem),linear-gradient(145deg,#1d1916,#161412);box-shadow:inset 0 1px 0 rgba(255,255,255,.025);transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
+.customer-coupons .customer-promotion-card:hover{transform:translateY(-2px);border-color:rgba(255,133,0,.4);box-shadow:0 1rem 2.6rem rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.035)}
+.coupon-card-accent{width:11rem;height:11rem;position:absolute;right:-5rem;top:-7rem;border:1px solid rgba(255,133,0,.13);border-radius:50%;box-shadow:0 0 0 2rem rgba(255,133,0,.025),0 0 0 4rem rgba(255,133,0,.018);pointer-events:none}
+.coupon-percent-mark{width:4rem;height:4rem;display:grid;place-items:center;align-self:start;position:relative;border:1px solid rgba(255,144,25,.42);border-radius:1.2rem;background:linear-gradient(145deg,rgba(255,133,0,.2),rgba(255,133,0,.055));color:#ff9b38;box-shadow:inset 0 0 1.2rem rgba(255,133,0,.08),0 .8rem 1.8rem rgba(0,0,0,.2)}
+.coupon-percent-mark:before,.coupon-percent-mark:after{content:"";position:absolute;border-radius:1.7rem;border:1px solid rgba(255,133,0,.16);animation:customer-coupon-orbit 3.2s ease-in-out infinite}
+.coupon-percent-mark:before{inset:.35rem;transform:rotate(-8deg)}
+.coupon-percent-mark:after{inset:.75rem;border-color:rgba(255,178,94,.11);animation-delay:-1.25s}
+.coupon-percent-mark b{position:relative;z-index:2;font-size:1.65rem;font-weight:900;line-height:1;text-shadow:0 0 1.2rem rgba(255,133,0,.65);animation:customer-coupon-percent 2.35s ease-in-out infinite}
+.coupon-percent-mark i{width:.35rem;height:.35rem;position:absolute;z-index:3;right:.45rem;top:.48rem;border-radius:50%;background:#ffd092;box-shadow:0 0 .8rem #ff8500;animation:customer-coupon-dot 2.35s ease-in-out infinite}
+.coupon-card-content{min-width:0;display:grid;gap:.62rem;position:relative;z-index:1}
+.coupon-card-content>header{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+.coupon-card-kicker{display:flex;align-items:center;gap:.45rem;color:#ff9a31;font-size:.58rem;font-weight:900;letter-spacing:.14em}
+.coupon-card-kicker i{width:.38rem;height:.38rem;border-radius:50%;background:#ff8500;box-shadow:0 0 0 .25rem rgba(255,133,0,.1)}
+.coupon-card-mode{padding:.35rem .58rem;border:1px solid rgba(52,211,153,.16);border-radius:999px;background:rgba(52,211,153,.08);color:#73e6b9;font-size:.55rem;font-weight:900;text-transform:uppercase}
+.coupon-card-main{display:flex;align-items:flex-start;justify-content:space-between;gap:1.5rem}
+.coupon-card-main h3{margin:0 0 .25rem!important;color:#fff;font-size:1.08rem!important;letter-spacing:-.025em}
+.coupon-card-main p{max-width:45rem;margin:0!important;color:#aaa19a!important;font-size:.74rem!important;line-height:1.55}
+.coupon-card-main>strong{flex:0 0 auto;color:#ff9931;font-size:clamp(1.45rem,2.6vw,2rem);line-height:1;letter-spacing:-.055em}
+.coupon-card-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.55rem}
+.coupon-card-facts>span{min-width:0;padding:.55rem .68rem;display:grid;gap:.16rem;border:1px solid rgba(255,255,255,.065);border-radius:.78rem;background:rgba(255,255,255,.025)}
+.coupon-card-facts small{color:#716a64;font-size:.5rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase}
+.coupon-card-facts b{overflow:hidden;color:#c7bfb8;font-size:.64rem;font-weight:750;line-height:1.35;text-overflow:ellipsis}
+.coupon-card-content>footer{padding:.62rem 0 0;display:flex;align-items:center;gap:.5rem;border-top:1px dashed rgba(255,255,255,.09)}
+.coupon-code{min-width:10rem;display:grid;gap:.1rem}
+.coupon-code small{color:#6f6862;font-size:.48rem;font-weight:900;letter-spacing:.11em}
+.coupon-code code{color:#fff3e3;font:900 .84rem/1.3 Manrope;letter-spacing:.08em}
+.coupon-card-content>footer button,.coupon-card-content>footer a{min-height:2.35rem;padding:.48rem .7rem;display:inline-flex;align-items:center;justify-content:center;gap:.52rem;border:1px solid rgba(255,133,0,.2);border-radius:.75rem;background:rgba(255,133,0,.075);color:#ffb567;font:850 .62rem Manrope;cursor:pointer;transition:transform .18s,border-color .18s,background .18s}
+.coupon-copy-icon{width:1.45rem;height:1.45rem;display:grid;place-items:center;border-radius:.48rem;background:rgba(255,133,0,.13);color:#ffc17f}
+.coupon-copy-icon svg{width:.9rem;height:.9rem;display:block;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.coupon-card-content>footer button:hover,.coupon-card-content>footer a:hover{transform:translateY(-1px);border-color:rgba(255,133,0,.4);background:rgba(255,133,0,.13)}
+.coupon-card-content>footer button.is-copied{border-color:rgba(52,211,153,.28);background:rgba(52,211,153,.1);color:#73e6b9}
+.coupon-card-content>footer a{margin-left:auto;background:#f57c00;color:#fff}
+.coupon-empty-state{min-height:14rem;padding:1.4rem;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:1.2rem;border:1px dashed rgba(255,133,0,.24);border-radius:1.4rem;background:radial-gradient(circle at 0 50%,rgba(255,133,0,.1),transparent 16rem),#171513}
+.coupon-empty-state>div strong{display:block;color:#ddd5ce;font-size:1rem}.coupon-empty-state>div p{max-width:34rem;margin:.35rem 0 0;color:#817a74;font-size:.72rem;line-height:1.55}.coupon-empty-state>a{padding:.75rem .9rem;border-radius:.85rem;background:#f57c00;color:#fff;font-size:.68rem;font-weight:900}
+@keyframes customer-coupon-percent{0%,62%,100%{transform:rotate(0) scale(1)}70%{transform:rotate(-12deg) scale(1.13)}80%{transform:rotate(10deg) scale(1.16)}90%{transform:rotate(-4deg) scale(1.05)}}
+@keyframes customer-coupon-orbit{0%,100%{transform:rotate(-8deg) scale(1)}50%{transform:rotate(8deg) scale(1.035)}}
+@keyframes customer-coupon-dot{0%,100%{opacity:.5;transform:scale(.8)}50%{opacity:1;transform:scale(1.35)}}
+@media(max-width:900px){.coupon-card-facts{grid-template-columns:1fr 1fr}}
+@media(max-width:620px){.customer-coupons .customer-promotion-card{min-height:0;padding:.78rem;grid-template-columns:3.15rem minmax(0,1fr);gap:.65rem;border-radius:1.15rem}.coupon-percent-mark{width:3.15rem;height:3.15rem;border-radius:.95rem}.coupon-percent-mark b{font-size:1.15rem}.coupon-percent-mark:before,.coupon-percent-mark:after{border-radius:1.05rem}.coupon-card-content{gap:.52rem}.coupon-card-content>header{align-items:center;flex-direction:row;gap:.4rem}.coupon-card-kicker{font-size:.5rem}.coupon-card-mode{margin-left:auto;padding:.28rem .42rem;font-size:.46rem}.coupon-card-main{display:grid;gap:.42rem}.coupon-card-main>strong{grid-row:1;font-size:1.55rem}.coupon-card-main>div{grid-row:2}.coupon-card-main h3{font-size:1rem!important}.coupon-card-main p{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;font-size:.66rem!important;line-height:1.4}.coupon-card-facts{grid-template-columns:1fr 1fr;gap:.35rem}.coupon-card-facts>span{padding:.48rem .52rem}.coupon-card-facts small{font-size:.43rem}.coupon-card-facts b{font-size:.56rem}.coupon-card-content>footer{display:grid;grid-template-columns:1fr 1fr;padding-top:.5rem}.coupon-code{grid-column:1/-1;min-width:0}.coupon-card-content>footer button,.coupon-card-content>footer a{min-height:2.25rem;padding:.42rem .5rem;font-size:.57rem}.coupon-card-content>footer a{margin-left:0}.coupon-empty-state{grid-template-columns:3.15rem minmax(0,1fr);padding:.85rem}.coupon-empty-state>a{grid-column:2;justify-self:start}}
+@media(prefers-reduced-motion:reduce){.coupon-percent-mark:before,.coupon-percent-mark:after,.coupon-percent-mark b,.coupon-percent-mark i{animation:none}}
+
+.order-product .is-discounted{display:flex;align-items:baseline;flex-wrap:wrap;gap:.3rem}
+.order-product .is-discounted del{color:#756e68;font-weight:650;text-decoration-color:#ff8500;text-decoration-thickness:1.5px}
+.order-product .is-discounted em{color:#6ee7b7;font-style:normal;font-weight:850}
+
+/* Recuperare parolă și setările contului. */
+.auth-password-help{margin-top:-.35rem;display:flex;align-items:center;justify-content:space-between;gap:1rem}
+.auth-password-help>span{color:#716a64;font-size:.65rem;line-height:1.4}
+.auth-password-help>button{padding:.35rem 0;border:0;background:transparent;color:#ffad55;font:850 .7rem Manrope;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(255,173,85,.35);text-underline-offset:.22rem}
+.auth-password-help>button:hover{color:#ffd19d}
+.customer-auth-page[data-customer-page="reset-password"] .auth-brand-panel:after{content:"RESET";right:-.6rem;bottom:-2rem;font-size:clamp(8rem,15vw,14rem);letter-spacing:-.09em}
+.reset-password-form{margin-top:1.8rem}
+.account-settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.account-setting-card{min-height:20rem;padding:1.35rem;display:grid;grid-template-columns:auto minmax(0,1fr);align-content:start;gap:1rem;border:1px solid rgba(88,199,255,.2);border-radius:1.35rem;background:radial-gradient(circle at 100% 0,rgba(88,199,255,.11),transparent 17rem),linear-gradient(145deg,#191817,#141312);box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}
+.setting-card-icon{width:3.5rem;height:3.5rem;display:grid;place-items:center;border-radius:1.05rem;background:rgba(88,199,255,.11);color:#58c7ff}
+.setting-card-icon svg{width:1.45rem;height:1.45rem;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.account-setting-card>div{min-width:0;padding-top:.15rem}
+.account-setting-card>div>span{display:block;color:#58c7ff;font-size:.55rem;font-weight:900;letter-spacing:.13em}
+.account-setting-card h3{margin:.35rem 0 .55rem;color:#fff;font-size:1.25rem;letter-spacing:-.035em}
+.account-setting-card p{margin:0;color:#8d857f;font-size:.73rem;line-height:1.65}
+.account-setting-card p strong{color:#d9d2cb;overflow-wrap:anywhere}
+.account-setting-action{grid-column:1/-1;min-height:3.25rem;margin-top:auto;padding:.45rem .45rem .45rem 1rem;display:flex;align-items:center;justify-content:space-between;border:1px solid rgba(88,199,255,.25);border-radius:.95rem;background:rgba(88,199,255,.09);color:#8edbff;font:850 .72rem Manrope;cursor:pointer;transition:transform .18s,border-color .18s,background .18s}
+.account-setting-action b{width:2.35rem;height:2.35rem;display:grid;place-items:center;border-radius:.72rem;background:rgba(88,199,255,.13);font-size:1.1rem}
+.account-setting-action:hover{transform:translateY(-1px);border-color:rgba(88,199,255,.48);background:rgba(88,199,255,.14)}
+.account-setting-action:disabled{opacity:.55;cursor:wait;transform:none}
+.account-setting-danger{border-color:rgba(251,113,133,.2);background:radial-gradient(circle at 100% 0,rgba(251,113,133,.1),transparent 17rem),linear-gradient(145deg,#1b1718,#141212)}
+.account-setting-danger .setting-card-icon{background:rgba(251,113,133,.1);color:#fb7185}
+.account-setting-danger>div>span{color:#fb7185}
+.account-setting-danger .account-setting-action{border-color:rgba(251,113,133,.24);background:rgba(251,113,133,.08);color:#ff9cad}
+.account-setting-danger .account-setting-action b{background:rgba(251,113,133,.13)}
+.account-setting-danger .account-setting-action:hover{border-color:rgba(251,113,133,.48);background:rgba(251,113,133,.13)}
+.settings-feedback{margin:1rem 0 0;padding:.85rem 1rem;border:1px solid rgba(251,113,133,.3);border-radius:.9rem;background:rgba(251,113,133,.08);color:#ff9cac;font-size:.72rem;line-height:1.55}
+.settings-feedback.success{border-color:rgba(52,211,153,.28);background:rgba(52,211,153,.08);color:#75e9ba}
+@media(max-width:900px){.account-settings-grid{grid-template-columns:1fr}.account-setting-card{min-height:0}}
+@media(max-width:620px){.auth-password-help{align-items:flex-start;flex-direction:column;gap:.15rem}.account-setting-card{padding:1rem;grid-template-columns:3rem minmax(0,1fr);gap:.8rem}.setting-card-icon{width:3rem;height:3rem}.account-setting-card h3{font-size:1.08rem}.account-setting-action{min-height:3rem}}
+
+/* Resetare parola: navbar global fix si stare dedicata pentru link expirat. */
+.customer-auth-page[data-customer-page="reset-password"] .site-header{position:fixed;right:0;left:0;z-index:50;background:transparent;border:0;backdrop-filter:none;-webkit-backdrop-filter:none}
+.customer-auth-page[data-customer-page="reset-password"] .auth-shell,
+.customer-auth-page[data-customer-page="reset-password"] .reset-link-shell{margin-top:7.25rem}
+.customer-auth-page[data-customer-page="reset-password"] .auth-shell[hidden],
+.customer-auth-page[data-customer-page="reset-password"] .reset-link-shell[hidden]{display:none!important}
+.reset-link-shell{width:min(1480px,calc(100% - 2rem));min-height:calc(100svh - 10rem);margin-inline:auto;margin-bottom:3rem;display:grid;place-items:center}
+.reset-link-state{width:100%;min-height:min(36rem,calc(100svh - 10rem))}
+.reset-link-state h1{margin:.65rem 0 0;color:#f8f4ef;font-size:clamp(2.25rem,5vw,4.25rem);line-height:1;letter-spacing:-.06em}
+.reset-link-state p{max-width:42rem;line-height:1.65}
+.reset-link-state.is-expired{background:radial-gradient(circle at 50% 8%,rgba(255,116,52,.16),transparent 19rem),linear-gradient(145deg,#1b1715,#0e0d0c)}
+.reset-link-state.is-expired .cart-loading-orbit{border-color:rgba(255,119,69,.32);box-shadow:0 0 0 .65rem rgba(255,112,54,.035)}
+.reset-link-state.is-expired .cart-loading-orbit:before{border-top-color:#ff7b3d;border-right-color:rgba(255,123,61,.28);animation-duration:2.1s}
+.reset-link-state.is-expired>span{color:#ff9a69}
+.reset-home-button{min-width:min(100%,18rem);min-height:4rem;margin-top:1.8rem;padding:.4rem .45rem .4rem 1.4rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;border:1px solid rgba(255,181,92,.55);border-radius:1.2rem;background:linear-gradient(135deg,#e96500,#ff8500 55%,#ff9d28);color:#fff;font-size:.86rem;font-weight:900;box-shadow:0 1rem 2.4rem rgba(255,104,0,.2);transition:transform .18s ease,box-shadow .18s ease}
+.reset-home-button[hidden]{display:none!important}
+.reset-home-button:hover,.reset-home-button:focus-visible{outline:0;transform:translateY(-2px);box-shadow:0 1.2rem 2.8rem rgba(255,104,0,.3)}
+.reset-home-button i{width:3rem;height:3rem;display:grid;place-items:center;border-radius:1rem;background:#fff4e8;color:#df6500;font-size:1.25rem;font-style:normal}
+@media(max-width:900px){.customer-auth-page[data-customer-page="reset-password"] .auth-shell,.customer-auth-page[data-customer-page="reset-password"] .reset-link-shell{margin-top:5.15rem}.reset-link-shell{width:calc(100% - 1.3rem);min-height:calc(100svh - 7rem);margin-bottom:1rem}.reset-link-state{min-height:calc(100svh - 7rem)}}
+@media(max-width:620px){.customer-auth-page[data-customer-page="reset-password"] .site-header{position:fixed;background:transparent;border-bottom:0;backdrop-filter:none;-webkit-backdrop-filter:none}.customer-auth-page[data-customer-page="reset-password"] .auth-shell{width:100%;min-height:calc(100svh - 5.15rem);margin-bottom:0}.customer-auth-page[data-customer-page="reset-password"] .reset-link-shell{width:100%;margin-bottom:0}.reset-link-state{min-height:calc(100svh - 5.15rem);padding:2rem 1.1rem;border-inline:0;border-radius:0}.reset-link-state h1{font-size:clamp(2.15rem,11vw,3.15rem)}.reset-link-state p{max-width:22rem}.reset-home-button{width:min(100%,19rem)}}
+@media(prefers-reduced-motion:reduce){.reset-link-state.is-expired .cart-loading-orbit:before{animation:none!important}}
+/* Date personale PF/PJ */
+.account-personal-icon{background:linear-gradient(145deg,rgba(56,189,248,.2),rgba(34,211,238,.08))!important;color:#67e8f9!important}.account-personal-icon svg{filter:drop-shadow(0 0 8px rgba(34,211,238,.28))}.account-profile-form{position:relative;overflow:hidden;border:1px solid rgba(88,83,92,.7);border-radius:28px;padding:22px;background:linear-gradient(145deg,rgba(28,27,31,.98),rgba(18,17,20,.98));box-shadow:0 20px 60px rgba(0,0,0,.18)}.account-profile-form:before{content:"";position:absolute;inset:-100px auto auto -80px;width:230px;height:230px;border-radius:50%;background:rgba(14,165,233,.08);filter:blur(30px);pointer-events:none}.account-type-switch{position:relative;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:20px}.account-type-switch>button{min-height:76px;display:flex;align-items:center;gap:12px;text-align:left;border:1px solid #3a363e;border-radius:20px;padding:12px 14px;color:#a69da6;background:#242228;transition:.24s ease}.account-type-switch>button:hover{transform:translateY(-2px);border-color:#55505a}.account-type-switch>button.active{border-color:rgba(34,211,238,.62);color:#fff;background:linear-gradient(135deg,rgba(8,145,178,.2),rgba(22,78,99,.2));box-shadow:0 12px 32px rgba(6,182,212,.08)}.account-type-switch>button>i{width:42px;height:42px;display:grid;place-items:center;flex:0 0 auto;border-radius:14px;font-style:normal;font-size:11px;font-weight:900;letter-spacing:.6px;color:#a8a0a8;background:#312e35}.account-type-switch>button.active>i{color:#67e8f9;background:rgba(8,145,178,.2);box-shadow:inset 0 0 0 1px rgba(103,232,249,.14)}.account-type-switch span{display:grid;gap:3px}.account-type-switch strong{font-size:12px}.account-type-switch small{color:#756f78;font-size:9px}.account-profile-fields{position:relative;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.account-profile-fields label{display:grid;gap:7px}.account-profile-fields label.wide{grid-column:1/-1}.account-profile-fields label>span{color:#8f8790;font-size:8px;font-weight:800;letter-spacing:.55px;text-transform:uppercase}.account-profile-fields input{width:100%;height:50px;border:1px solid #39363d;border-radius:15px;padding:0 14px;outline:0;color:#f5f2ef;background:#201e23;transition:.2s ease}.account-profile-fields input:focus{border-color:#22d3ee;box-shadow:0 0 0 3px rgba(34,211,238,.08)}.account-company-fields{position:relative;margin-top:16px;border:1px solid rgba(34,211,238,.18);border-radius:22px;padding:16px;background:rgba(8,47,73,.12);animation:accountCompanyReveal .3s ease both}.account-company-fields[hidden]{display:none}.account-company-heading{display:flex;align-items:center;gap:11px;margin-bottom:15px}.account-company-heading>i{width:38px;height:38px;display:grid;place-items:center;border-radius:13px;color:#67e8f9;background:rgba(8,145,178,.19);font-style:normal;font-size:10px;font-weight:900}.account-company-heading span{display:grid;gap:2px}.account-company-heading strong{color:#f8fafc;font-size:11px}.account-company-heading small{color:#7d8790;font-size:9px}.account-profile-save{min-height:48px;display:flex;align-items:center;justify-content:center;gap:10px;border:0;border-radius:15px;padding:0 18px;margin-top:18px;color:#071014;background:linear-gradient(135deg,#67e8f9,#22d3ee);font-weight:900;box-shadow:0 14px 34px rgba(6,182,212,.16);transition:.2s ease}.account-profile-save:hover{transform:translateY(-2px);box-shadow:0 18px 40px rgba(6,182,212,.22)}.account-profile-save svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2}.account-security-inline{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.account-security-inline>button{min-height:64px;display:flex;align-items:center;gap:11px;border:1px solid #322f35;border-radius:18px;padding:10px 12px;text-align:left;color:#d5d0d5;background:rgba(28,26,31,.72);transition:.2s ease}.account-security-inline>button:hover{transform:translateY(-2px);border-color:#4a4650;background:#211f24}.account-security-inline>button>i{width:36px;height:36px;display:grid;place-items:center;flex:0 0 auto;border-radius:12px;color:#93c5fd;background:rgba(30,64,175,.15)}.account-security-inline svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8}.account-security-inline span{min-width:0;display:grid;gap:3px}.account-security-inline strong{font-size:10px}.account-security-inline small{overflow:hidden;text-overflow:ellipsis;color:#716b74;font-size:8px;white-space:nowrap}.account-security-inline small em{color:#98909a;font-style:normal}.account-security-inline>button>b{margin-left:auto;color:#716b74}.account-security-inline>button.danger>i{color:#fb7185;background:rgba(159,18,57,.14)}.account-security-inline>button.danger:hover{border-color:rgba(251,113,133,.35)}.customer-type-badge{display:inline-grid;place-items:center;min-width:27px;height:19px;border:1px solid rgba(96,165,250,.24);border-radius:999px;padding:0 7px;margin-left:5px;vertical-align:middle;color:#93c5fd!important;background:rgba(30,64,175,.15);font-size:7px!important;font-style:normal!important;font-weight:900!important;letter-spacing:.5px}.customer-type-badge.is-company{border-color:rgba(52,211,153,.26);color:#6ee7b7!important;background:rgba(6,95,70,.18)}.order-company{margin-top:12px;border:1px solid rgba(52,211,153,.22);border-radius:17px;padding:13px 15px;background:rgba(6,78,59,.09)}.order-company.is-individual{border-color:rgba(96,165,250,.18);background:rgba(30,64,175,.07)}.order-company h3{display:flex;align-items:center;margin:0 0 8px;color:#918991;font-size:8px;letter-spacing:.7px}.order-company p{margin:4px 0;color:#aaa2aa;font-size:10px}.order-company p strong{color:#fff}@keyframes accountCompanyReveal{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@media(max-width:720px){.account-profile-form{padding:14px;border-radius:22px}.account-type-switch,.account-profile-fields,.account-security-inline{grid-template-columns:1fr}.account-type-switch>button{min-height:66px}.account-profile-fields label.wide{grid-column:auto}.account-company-fields{padding:13px}.account-profile-save{width:100%}.account-security-inline small{white-space:normal}}

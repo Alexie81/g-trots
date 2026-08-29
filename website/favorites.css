@@ -726,6 +726,27 @@
   font-weight: 650;
 }
 
+.cart-line-price.is-discounted small,
+.cart-line-price.is-discounted strong {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.32rem;
+}
+
+.cart-line-price.is-discounted del {
+  color: #77716b;
+  font-weight: 650;
+  text-decoration-color: #ff8a00;
+  text-decoration-thickness: 1.5px;
+}
+
+.cart-line-price.is-discounted strong span,
+.cart-line-price.is-discounted small span {
+  color: #6ee7b7;
+  font-weight: 850;
+}
+
 .cart-line-price strong {
   font-size: 1.08rem;
   letter-spacing: -0.04em;

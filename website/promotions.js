@@ -1,15 +1,41 @@
 (() => {
   if (window.GTrotsPromotionsLoaded) return;
   window.GTrotsPromotionsLoaded = true;
+  if (!document.querySelector('link[href*="performance.css"]')) {
+    const performanceStyles = document.createElement("link");
+    performanceStyles.rel = "stylesheet";
+    performanceStyles.href = "/performance.css?v=20260828-catalog-v2";
+    document.head.append(performanceStyles);
+  }
   const API_URL = "https://g-trots.ro/shop-api/api-v2.php";
   const TOKEN_KEY = "g-trots-customer-session-v1";
+  const SHOP_DEVICE_KEY = "g-trots-shop-device-v1";
 
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+
+  function shopDeviceToken() {
+    try {
+      let token = String(localStorage.getItem(SHOP_DEVICE_KEY) || "").trim();
+      if (/^[A-Za-z0-9_-]{20,128}$/.test(token)) return token;
+      if (window.crypto?.getRandomValues) {
+        const bytes = new Uint8Array(24);
+        window.crypto.getRandomValues(bytes);
+        token = Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+      } else {
+        token = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+      }
+      localStorage.setItem(SHOP_DEVICE_KEY, token);
+      return token;
+    } catch {
+      return "";
+    }
+  }
 
   async function loadPromotions() {
     try {
       const token = localStorage.getItem(TOKEN_KEY) || "";
-      const response = await fetch(`${API_URL}?action=publicActivePromotions&_=${Date.now()}`, { cache: "no-store", headers: { Accept: "application/json", ...(token ? { "X-Customer-Token": token } : {}) } });
+      const deviceToken = shopDeviceToken();
+      const response = await fetch(`${API_URL}?action=publicActivePromotions&_=${Date.now()}`, { cache: "no-store", headers: { Accept: "application/json", ...(token ? { "X-Customer-Token": token } : {}), ...(deviceToken ? { "X-Shop-Device": deviceToken } : {}) } });
       const payload = await response.json();
       if (!response.ok || !Array.isArray(payload)) return;
       render(payload.filter(item => item.show_banner));
@@ -43,12 +69,17 @@
     else document.body.prepend(bar);
     document.body.classList.add("gt-has-promotion-bar");
 
-    const syncHeight = () => {
-      const height = Math.max(1, Math.round(bar.getBoundingClientRect().height));
-      document.documentElement.style.setProperty("--gt-promotion-height", `${height}px`);
+    const syncTrack = () => {
+      const viewport = bar.querySelector(".gt-promotion-viewport");
+      const sample = bar.querySelector(".gt-promotion-track span");
+      const viewportWidth = Math.max(1, Math.round(viewport?.getBoundingClientRect().width || 1));
+      const textWidth = Math.max(1, Math.ceil(sample?.scrollWidth || 1));
+      const cycleWidth = Math.max(viewportWidth, textWidth + 32);
+      bar.style.setProperty("--gt-promotion-cycle", `${cycleWidth}px`);
+      bar.style.setProperty("--gt-promotion-duration", `${Math.max(10, cycleWidth / 65).toFixed(2)}s`);
     };
-    requestAnimationFrame(syncHeight);
-    if ("ResizeObserver" in window) new ResizeObserver(syncHeight).observe(bar);
+    requestAnimationFrame(syncTrack);
+    if ("ResizeObserver" in window) new ResizeObserver(syncTrack).observe(bar);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadPromotions, { once: true });

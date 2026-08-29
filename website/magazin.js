@@ -263,6 +263,58 @@ function productStockLabel(product) {
   return "În stoc";
 }
 
+function liveProductRecord(product, index) {
+  const slug = String(product.slug || product.id || "");
+  const imageUrl = product.images?.[0]?.sprite_index ? "" : safePublicImageUrl(product.images?.[0]?.url);
+  const categorySlug = String(product.category_slug || "produse");
+  const categoryName = String(product.category_name || "Produs");
+  const manufacturerSlug = String(product.manufacturer_slug || "");
+  const manufacturerName = String(product.manufacturer_name || "").trim();
+  const brands = Array.isArray(product.brands) ? product.brands : [];
+  const brandSlugs = brands.map(brand => String(brand.slug || "")).filter(Boolean);
+  const brandNames = brands.map(brand => String(brand.name || "")).filter(Boolean);
+  const basePrice = product.sale_price == null ? Number(product.price || 0) : Number(product.sale_price || 0);
+  const currentPrice = product.promotion_price == null ? basePrice : Number(product.promotion_price || 0);
+  const stockLabel = productStockLabel(product);
+  const stockRank = stockLabel === "Stoc epuizat" ? 2 : stockLabel === "Stoc limitat" ? 1 : 0;
+  const stockKey = product.stock_mode === "unlimited" || Number(product.stock_quantity || 0) > 0 ? "in-stock" : "out-of-stock";
+  const shortDescription = String(product.short_description || "Produs disponibil în magazinul G-Trots.");
+  const specificationText = (() => {
+    try {
+      return JSON.stringify(product.specifications || product.specifications_json || "").replace(/[{}\[\]":,]/g, " ");
+    } catch {
+      return "";
+    }
+  })();
+
+  return {
+    product,
+    dataset: {
+      productId: slug,
+      apiProductId: String(product.id || ""),
+      category: categorySlug,
+      taxonomy: `produse ${categorySlug}`,
+      brand: brandSlugs.join(" "),
+      stock: stockKey,
+      stockRank: String(stockRank),
+      featuredRank: product.is_featured && Number.isFinite(Number(product.featured_rank)) ? String(product.featured_rank) : "",
+      manufacturer: manufacturerSlug,
+      price: String(currentPrice),
+      name: String(product.name || "Produs G-Trots"),
+      identifiers: `${product.sku || ""} ${product.ean || ""} ${product.id || ""}`,
+      search: `${product.name || ""} ${categoryName} ${manufacturerName} ${shortDescription} ${brandNames.join(" ")} ${product.sku || ""} ${product.ean || ""} ${specificationText}`,
+      route: `/magazin/produs/${encodeURIComponent(slug)}/`,
+      image: imageUrl || "assets/logo.png",
+      categoryName,
+      manufacturerName,
+      brandNames: brandNames.join(", "),
+      stockLabel,
+      shortDescription,
+      index: String(index)
+    }
+  };
+}
+
 function liveProductCard(product, index) {
   const slug = String(product.slug || product.id || "");
   const legacyImage = Number(product.images?.[0]?.sprite_index || legacyProductImages[slug] || 0);
@@ -277,8 +329,10 @@ function liveProductCard(product, index) {
   const brandNames = brands.map(brand => String(brand.name || "")).filter(Boolean);
   const manufacturerName = String(product.manufacturer_name || "").trim();
   const cardLabel = brandNames[0] || manufacturerName || categoryName;
-  const currentPrice = product.sale_price == null ? Number(product.price || 0) : Number(product.sale_price || 0);
-  const standardPrice = Number(product.price || 0);
+  const basePrice = product.sale_price == null ? Number(product.price || 0) : Number(product.sale_price || 0);
+  const currentPrice = product.promotion_price == null ? basePrice : Number(product.promotion_price || 0);
+  const standardPrice = product.promotion_price == null ? Number(product.price || 0) : Number(product.price_before_promotion ?? basePrice);
+  const hasDiscount = product.promotion_price != null || product.sale_price != null;
   const stockLabel = productStockLabel(product);
   const stockRank = stockLabel === "Stoc epuizat" ? 2 : stockLabel === "Stoc limitat" ? 1 : 0;
   const stockKey = product.stock_mode === "unlimited" || Number(product.stock_quantity || 0) > 0 ? "in-stock" : "out-of-stock";
@@ -299,10 +353,10 @@ function liveProductCard(product, index) {
   const brandSection = brandBadges
     ? `<div class="product-fit" aria-label="Mărci compatibile">${brandBadges}</div>`
     : "";
-  const oldPrice = product.sale_price == null
+  const oldPrice = !hasDiscount
     ? ""
     : `<del>${new Intl.NumberFormat("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(standardPrice)} lei</del>`;
-  const discountPercent = product.sale_price == null || standardPrice <= 0
+  const discountPercent = !hasDiscount || standardPrice <= 0
     ? 0
     : Math.max(0, Math.round((1 - currentPrice / standardPrice) * 100));
   const discountBadge = discountPercent > 0 ? `<em class="product-discount">-${discountPercent}%</em>` : "";
@@ -325,6 +379,7 @@ function liveProductCard(product, index) {
   article.dataset.manufacturer = manufacturerSlug;
   article.dataset.price = String(currentPrice);
   article.dataset.name = String(product.name || "Produs G-Trots");
+  article.dataset.identifiers = `${product.sku || ""} ${product.ean || ""} ${product.id || ""}`;
   article.dataset.search = `${product.name || ""} ${categoryName} ${manufacturerName} ${shortDescription} ${brandNames.join(" ")} ${product.sku || ""} ${product.ean || ""} ${specificationText}`;
   article.dataset.route = route;
   article.dataset.image = imageUrl || "assets/logo.png";
@@ -355,7 +410,7 @@ function liveProductCard(product, index) {
       ${brandSection}
     </div>
     <div class="product-bottom">
-      <div class="product-price"><small>${product.sale_price == null ? "Preț" : "Preț promoțional"}</small><strong>${new Intl.NumberFormat("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(currentPrice)} <span>lei</span></strong>${oldPrice}</div>
+      <div class="product-price"><small>${hasDiscount ? "Preț promoțional" : "Preț"}</small><strong>${new Intl.NumberFormat("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(currentPrice)} <span>lei</span></strong>${oldPrice}</div>
       <div class="product-bottom-action">${discountBadge}<span class="product-open-hint" aria-hidden="true">›</span></div>
     </div>
     <a class="product-card-link" href="${route}" aria-label="Deschide pagina produsului ${escapeCatalogHtml(product.name)}"></a>`;
@@ -365,14 +420,57 @@ function liveProductCard(product, index) {
 function renderLiveProducts(products) {
   if (!productGrid || !Array.isArray(products)) return false;
   isCatalogLoading = false;
-  const cards = products.map(liveProductCard);
-  productGrid.replaceChildren(...cards);
+  const normalizeIdentity = value => String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  const productFamily = product => {
+    const tokens = normalizeIdentity(product.slug).split(" ").filter(Boolean);
+    if (tokens.length > 2 && /^(?:varianta|variant)$/.test(tokens.at(-2)) && /^\d+$/.test(tokens.at(-1))) tokens.splice(-2);
+    while (tokens.length > 3 && !/^\d+$/.test(tokens.at(-1)) && tokens.slice(0, -1).includes(tokens.at(-1))) tokens.pop();
+    return tokens.join("-");
+  };
+  const keyIndexes = new Map();
+  const uniqueProducts = [];
+  products.forEach(product => {
+    const normalizedName = String(product.name || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+    const keys = [
+      ["id", product.id],
+      ["slug", product.slug],
+      ["sku", product.sku],
+      ["ean", product.ean],
+      ["name", normalizedName],
+      ["family", productFamily(product)]
+    ]
+      .filter(([, value]) => String(value ?? "").trim() !== "")
+      .map(([type, value]) => `${type}:${String(value).trim().toLowerCase()}`);
+    const duplicateIndex = keys.map(key => keyIndexes.get(key)).find(index => index !== undefined);
+    if (duplicateIndex !== undefined) {
+      const currentSlugLength = String(uniqueProducts[duplicateIndex]?.slug || "").length || Number.MAX_SAFE_INTEGER;
+      const nextSlugLength = String(product.slug || "").length || Number.MAX_SAFE_INTEGER;
+      if (nextSlugLength < currentSlugLength) uniqueProducts[duplicateIndex] = product;
+      keys.forEach(key => keyIndexes.set(key, duplicateIndex));
+      return;
+    }
+    const index = uniqueProducts.length;
+    uniqueProducts.push(product);
+    keys.forEach(key => keyIndexes.set(key, index));
+  });
+  const records = uniqueProducts.map(liveProductRecord);
+  productGrid.replaceChildren();
   productGrid.classList.remove("is-catalog-loading", "has-catalog-error");
   productGrid.setAttribute("aria-busy", "false");
-  productCards = cards;
-  if (products.length) {
+  productCards = records;
+  if (uniqueProducts.length) {
     const oldMaximum = Number(priceRange?.max || 0);
-    const maximumPrice = Math.max(...products.map(product => Number(product.sale_price ?? product.price ?? 0)), oldMaximum, 1);
+    const maximumPrice = Math.max(...uniqueProducts.map(product => Number(product.promotion_price ?? product.sale_price ?? product.price ?? 0)), oldMaximum, 1);
     if (priceRange && maximumPrice > oldMaximum) {
       const wasAtMaximum = Number(priceRange.value) >= oldMaximum;
       priceRange.max = String(Math.ceil(maximumPrice / 100) * 100);
@@ -730,11 +828,31 @@ const smartSearchStopWords = new Set(["vreau", "caut", "cauta", "pentru", "troti
 
 function semanticTermsForToken(token) {
   const matchingGroup = smartSearchSynonymGroups.find(group => group.some(term => term === token));
-  return matchingGroup || [token];
+  if (matchingGroup) return matchingGroup;
+  if (token.length < 4) return [token];
+
+  // Corectam mai intai termenul fata de vocabularul magazinului. Astfel
+  // „cxontroller” devine „controller” si primeste aceleasi sinonime, in loc
+  // sa potriveasca orice descriere care mentioneaza vag un controller.
+  const distanceLimit = token.length >= 8 ? 2 : 1;
+  let closestGroup = null;
+  let closestDistance = distanceLimit + 1;
+  smartSearchSynonymGroups.forEach(group => {
+    group.forEach(term => {
+      if (term.includes(" ")) return;
+      const distance = smartSearchWordDistance(token, term, distanceLimit);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestGroup = group;
+      }
+    });
+  });
+  return closestGroup && closestDistance <= distanceLimit ? closestGroup : [token];
 }
 
 function smartSearchWordDistance(first, second, limit = 1) {
   if (Math.abs(first.length - second.length) > limit) return limit + 1;
+  let previousPrevious = null;
   let previous = Array.from({ length: second.length + 1 }, (_, index) => index);
   for (let firstIndex = 1; firstIndex <= first.length; firstIndex += 1) {
     const current = [firstIndex];
@@ -746,9 +864,19 @@ function smartSearchWordDistance(first, second, limit = 1) {
         previous[secondIndex] + 1,
         previous[secondIndex - 1] + cost
       );
+      if (
+        previousPrevious
+        && firstIndex > 1
+        && secondIndex > 1
+        && first[firstIndex - 1] === second[secondIndex - 2]
+        && first[firstIndex - 2] === second[secondIndex - 1]
+      ) {
+        current[secondIndex] = Math.min(current[secondIndex], previousPrevious[secondIndex - 2] + 1);
+      }
       rowMinimum = Math.min(rowMinimum, current[secondIndex]);
     }
     if (rowMinimum > limit) return limit + 1;
+    previousPrevious = previous;
     previous = current;
   }
   return previous[second.length];
@@ -758,9 +886,13 @@ function semanticCardData(card) {
   if (semanticSearchCache.has(card)) return semanticSearchCache.get(card);
   const title = normalizeText(card.dataset.name || "");
   const search = normalizeText(`${card.dataset.name || ""} ${card.dataset.search || ""}`);
+  const taxonomy = normalizeText(`${card.dataset.categoryName || ""} ${card.dataset.manufacturerName || ""} ${card.dataset.brandNames || ""} ${card.dataset.category || ""} ${card.dataset.manufacturer || ""} ${card.dataset.brand || ""}`);
+  const identifiers = normalizeText(card.dataset.identifiers || "");
   const titleWords = [...new Set(title.split(" ").filter(Boolean))];
+  const taxonomyWords = [...new Set(taxonomy.split(" ").filter(Boolean))];
+  const identifierWords = [...new Set(identifiers.split(" ").filter(Boolean))];
   const words = [...new Set(search.split(" ").filter(Boolean))].slice(0, 260);
-  const data = { title, search, titleWords, words };
+  const data = { title, search, titleWords, taxonomyWords, identifierWords, words };
   semanticSearchCache.set(card, data);
   return data;
 }
@@ -768,10 +900,11 @@ function semanticCardData(card) {
 function semanticSearchScore(card, rawQuery) {
   const query = normalizeText(rawQuery);
   if (!query) return 0;
-  const { title, search, titleWords, words } = semanticCardData(card);
+  const { title, search, titleWords, taxonomyWords, identifierWords, words } = semanticCardData(card);
   const queryTokens = [...new Set(query.split(" ").filter(token => token.length > 1 && !smartSearchStopWords.has(token)))];
   let score = 0;
   let matchedTokens = 0;
+  let strongMatchedTokens = 0;
 
   if (title === query) score += 240;
   else if (title.startsWith(query)) score += 130;
@@ -783,26 +916,39 @@ function semanticSearchScore(card, rawQuery) {
     let tokenScore = 0;
     terms.forEach((term, termIndex) => {
       const directWeight = termIndex === 0 ? 1 : 0.78;
-      if (titleWords.includes(term)) tokenScore = Math.max(tokenScore, 34 * directWeight);
-      else if (titleWords.some(word => word.startsWith(term) || term.startsWith(word))) tokenScore = Math.max(tokenScore, 25 * directWeight);
-      else if (title.includes(term)) tokenScore = Math.max(tokenScore, 22 * directWeight);
-      else if (words.includes(term)) tokenScore = Math.max(tokenScore, 16 * directWeight);
-      else if (search.includes(term)) tokenScore = Math.max(tokenScore, 11 * directWeight);
+      if (titleWords.includes(term)) tokenScore = Math.max(tokenScore, 40 * directWeight);
+      else if (titleWords.some(word => word.startsWith(term) || term.startsWith(word))) tokenScore = Math.max(tokenScore, 32 * directWeight);
+      else if (title.includes(term)) tokenScore = Math.max(tokenScore, 28 * directWeight);
+      else if (identifierWords.includes(term)) tokenScore = Math.max(tokenScore, 38 * directWeight);
+      else if (taxonomyWords.includes(term)) tokenScore = Math.max(tokenScore, 30 * directWeight);
+      else if (taxonomyWords.some(word => word.startsWith(term) || term.startsWith(word))) tokenScore = Math.max(tokenScore, 24 * directWeight);
+      else if (words.includes(term)) tokenScore = Math.max(tokenScore, 14 * directWeight);
+      else if (search.includes(term)) tokenScore = Math.max(tokenScore, 9 * directWeight);
     });
 
     if (tokenScore === 0 && token.length >= 4) {
-      const fuzzyTitle = titleWords.some(word => word.length >= 4 && smartSearchWordDistance(token, word, 1) <= 1);
-      const fuzzyBody = !fuzzyTitle && words.some(word => word.length >= 4 && smartSearchWordDistance(token, word, 1) <= 1);
-      if (fuzzyTitle) tokenScore = 13;
+      const distanceLimit = token.length >= 8 ? 2 : 1;
+      const fuzzyTitle = titleWords.some(word => word.length >= 4 && smartSearchWordDistance(token, word, distanceLimit) <= distanceLimit);
+      const fuzzyTaxonomy = !fuzzyTitle && taxonomyWords.some(word => word.length >= 4 && smartSearchWordDistance(token, word, distanceLimit) <= distanceLimit);
+      const fuzzyIdentifier = !fuzzyTitle && !fuzzyTaxonomy && identifierWords.some(word => word.length >= 4 && smartSearchWordDistance(token, word, 1) <= 1);
+      const fuzzyBody = !fuzzyTitle && !fuzzyTaxonomy && !fuzzyIdentifier && words.some(word => word.length >= 4 && smartSearchWordDistance(token, word, 1) <= 1);
+      if (fuzzyTitle) tokenScore = 26;
+      else if (fuzzyTaxonomy) tokenScore = 22;
+      else if (fuzzyIdentifier) tokenScore = 20;
       else if (fuzzyBody) tokenScore = 7;
     }
 
     if (tokenScore > 0) {
       matchedTokens += 1;
+      if (tokenScore >= 20) strongMatchedTokens += 1;
       score += tokenScore;
     }
   });
 
+  // Pentru o cautare dintr-un singur cuvant cerem o potrivire clara in titlu,
+  // categorie, marca, producator sau cod. O mentiune izolata in descriere nu
+  // mai umple panoul cu produse fara legatura directa.
+  if (queryTokens.length === 1 && strongMatchedTokens === 0) return 0;
   if (queryTokens.length && matchedTokens === queryTokens.length) score += 55 + queryTokens.length * 5;
   else if (queryTokens.length <= 3) return 0;
   else if (matchedTokens / queryTokens.length >= 0.7) score += 18;
@@ -853,56 +999,82 @@ function smartSearchResultMarkup(card) {
 }
 
 function renderSmartSearch(rawQuery = searchInput?.value || "") {
-  if (!smartSearchContent) return;
+  if (!smartSearchContent) return null;
   const query = normalizeText(rawQuery);
   smartSearchActiveIndex = -1;
 
   if (!query) {
+    if (searchCount) searchCount.textContent = `${productCards.length} ${productCards.length === 1 ? "produs" : "produse"}`;
     smartSearchContent.innerHTML = `
       <div class="smart-search-section-head"><span><strong>Căutări populare în G-Trots</strong><small>Alege rapid piesa de care ai nevoie</small></span><b class="smart-search-count">Sugestii</b></div>
       <div class="smart-search-popular">
         ${smartSearchPopularTerms.map(([term, label], index) => `<button type="button" data-popular-search="${escapeCatalogHtml(term)}" data-search-choice><i aria-hidden="true">${String(index + 1).padStart(2, "0")}</i><span><strong>${escapeCatalogHtml(label)}</strong><small>Caută în catalog</small></span><b aria-hidden="true">›</b></button>`).join("")}
       </div>`;
-    return;
+    return null;
   }
 
   const results = smartSearchCards(query);
+  if (searchCount) searchCount.textContent = `${results.length} ${results.length === 1 ? "produs" : "produse"}`;
   if (!results.length) {
     smartSearchContent.innerHTML = `<div class="smart-search-empty"><i aria-hidden="true">⌕</i><strong>Nu am găsit încă piesa.</strong><p>Încearcă denumirea componentei, modelul trotinetei sau marca. Poți scrie și aproximativ — căutarea corectează greșelile mici.</p></div>`;
-    return;
+    return 0;
   }
 
   smartSearchContent.innerHTML = `
     <div class="smart-search-section-head"><span><strong>Rezultate potrivite</strong><small>Ordonate după relevanță și disponibilitate</small></span><b class="smart-search-count">${results.length} ${results.length === 1 ? "produs" : "produse"}</b></div>
     <div class="smart-search-results">${results.slice(0, 6).map(result => smartSearchResultMarkup(result.card)).join("")}</div>
     <button class="smart-search-all" type="button" data-smart-search-all data-search-choice>Vezi toate cele ${results.length} rezultate în catalog <span aria-hidden="true">↓</span></button>`;
+  return results.length;
+}
+
+function updateSmartSearchCollapseTarget() {
+  if (!searchDeck || !smartSearchMobileBack) return;
+  const deckRect = searchDeck.getBoundingClientRect();
+  const targetRect = smartSearchMobileBack.getBoundingClientRect();
+  searchDeck.style.setProperty("--smart-search-collapse-x", `${targetRect.left + targetRect.width / 2 - deckRect.left}px`);
+  searchDeck.style.setProperty("--smart-search-collapse-y", `${targetRect.top + targetRect.height / 2 - deckRect.top}px`);
 }
 
 function openSmartSearch() {
   if (!smartSearchPanel || !searchDeck) return;
+  // Focus, click si input se pot declansa unul dupa altul pentru aceeasi
+  // interactiune. Dupa deschidere nu mai recalculam pozitia si nu mai
+  // redesenam panoul inca o data, astfel pagina ramane stabila.
+  const wasOpen = searchDeck.classList.contains("is-search-open");
+  const wasClosing = searchDeck.classList.contains("is-search-closing");
   window.clearTimeout(smartSearchClosingTimer);
+  smartSearchClosingTimer = 0;
+  if (wasOpen && !wasClosing) return;
   searchDeck.classList.remove("is-search-closing");
-  const collapseTarget = smartSearchMobileBack?.getBoundingClientRect();
-  if (collapseTarget) {
-    searchDeck.style.setProperty("--smart-search-collapse-x", `${collapseTarget.left + collapseTarget.width / 2}px`);
-    searchDeck.style.setProperty("--smart-search-collapse-y", `${collapseTarget.top + collapseTarget.height / 2}px`);
+  document.body.classList.remove("smart-search-closing");
+  const isMobileSearch = window.matchMedia("(max-width: 700px)").matches;
+  const promotionHeight = document.querySelector(".gt-promotion-bar")?.getBoundingClientRect().height || 0;
+  if (!isMobileSearch && !wasOpen) {
+    const deckRect = searchDeck.getBoundingClientRect();
+    const targetTop = promotionHeight + 10;
+    searchDeck.style.setProperty("--smart-search-open-left", `${deckRect.left}px`);
+    searchDeck.style.setProperty("--smart-search-open-width", `${deckRect.width}px`);
+    searchDeck.style.setProperty("--smart-search-open-top", `${targetTop}px`);
   }
-  const searchTop = searchDeck.getBoundingClientRect().top + window.scrollY - 10;
-  if (Math.abs(window.scrollY - searchTop) > 18) {
-    window.scrollTo({
-      top: Math.max(0, searchTop),
-      behavior: prefersReducedMotion ? "auto" : "smooth"
-    });
-  }
+
   searchDeck.classList.add("is-search-open");
   document.body.classList.add("smart-search-open");
   smartSearchPanel.hidden = false;
   if (smartSearchOverlay) smartSearchOverlay.hidden = false;
   renderSmartSearch();
+  window.requestAnimationFrame(updateSmartSearchCollapseTarget);
 }
 
-function closeSmartSearch({ restoreFocus = false } = {}) {
+function clearSmartSearchQuery() {
+  if (searchInput) searchInput.value = "";
+  if (searchClear) searchClear.hidden = true;
+  smartSearchActiveIndex = -1;
+  applyFilters({ resetPage: false });
+}
+
+function closeSmartSearch({ restoreFocus = false, clearQuery = false } = {}) {
   if (!smartSearchPanel || !searchDeck) return;
+  if (clearQuery) clearSmartSearchQuery();
   const finishClose = () => {
     window.clearTimeout(smartSearchClosingTimer);
     searchDeck.classList.remove("is-search-open", "is-search-closing");
@@ -912,10 +1084,11 @@ function closeSmartSearch({ restoreFocus = false } = {}) {
     smartSearchActiveIndex = -1;
     if (restoreFocus) searchInput?.focus();
   };
-  if (window.matchMedia("(max-width: 700px)").matches && !prefersReducedMotion && searchDeck.classList.contains("is-search-open")) {
+  if (!prefersReducedMotion && searchDeck.classList.contains("is-search-open")) {
+    updateSmartSearchCollapseTarget();
     searchDeck.classList.add("is-search-closing");
     document.body.classList.add("smart-search-closing");
-    smartSearchClosingTimer = window.setTimeout(finishClose, 330);
+    smartSearchClosingTimer = window.setTimeout(finishClose, 230);
     return;
   }
   finishClose();
@@ -1100,7 +1273,6 @@ function applyFilters({ resetPage = true } = {}) {
   const selectedManufacturers = getSelectedManufacturers();
   const maxPrice = Number(priceRange?.value || Infinity);
   const visibleCards = [];
-  const hiddenCards = [];
 
   productCards.forEach(card => {
     const cardBrands = (card.dataset.brand || "").split(" ");
@@ -1116,7 +1288,7 @@ function applyFilters({ resetPage = true } = {}) {
     const matchesPrice = Number(card.dataset.price) <= maxPrice;
     const isVisible = matchesSearch && matchesCategory && matchesBrand && matchesStock && matchesManufacturer && matchesPrice;
 
-    (isVisible ? visibleCards : hiddenCards).push(card);
+    if (isVisible) visibleCards.push(card);
   });
 
   const sortedVisibleCards = sortCards(visibleCards);
@@ -1126,13 +1298,16 @@ function applyFilters({ resetPage = true } = {}) {
   const pageStart = (currentPage - 1) * pageSize;
   const pageEnd = pageStart + pageSize;
 
-  productCards.forEach(card => { card.hidden = true; });
-  sortedVisibleCards.forEach((card, index) => {
-    card.hidden = index < pageStart || index >= pageEnd;
-  });
-
   if (productGrid) {
-    [...sortedVisibleCards, ...hiddenCards].forEach(card => productGrid.append(card));
+    const pageCards = sortedVisibleCards.slice(pageStart, pageEnd).map(card => {
+      if (card instanceof Element) {
+        card.hidden = false;
+        return card;
+      }
+      return liveProductCard(card.product, Number(card.dataset.index || 0));
+    });
+    productGrid.replaceChildren(...pageCards);
+    document.dispatchEvent(new CustomEvent("g-trots:live-products"));
   }
 
   const count = visibleCards.length;
@@ -1232,11 +1407,9 @@ productCards.forEach((card, index) => {
 if (searchInput) {
   searchInput.addEventListener("input", () => {
     if (searchClear) searchClear.hidden = searchInput.value.length === 0;
-    applyFilters();
     openSmartSearch();
     renderSmartSearch();
   });
-  searchInput.addEventListener("focus", openSmartSearch);
   searchInput.addEventListener("click", openSmartSearch);
   searchInput.addEventListener("keydown", event => {
     if (event.key === "ArrowDown") {
@@ -1254,10 +1427,6 @@ if (searchInput) {
         event.preventDefault();
         showSmartSearchCatalogResults();
       }
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      closeSmartSearch();
-      searchInput.blur();
     }
   });
 }
@@ -1265,17 +1434,8 @@ if (searchInput) {
 searchClear?.addEventListener("click", event => {
   event.preventDefault();
   event.stopPropagation();
-  if (!searchInput) return;
-  searchInput.value = "";
-  searchClear.hidden = true;
-  applyFilters();
-  renderSmartSearch();
-  if (window.matchMedia("(max-width: 760px)").matches) {
-    closeSmartSearch();
-    searchInput.blur();
-  } else {
-    searchInput.focus();
-  }
+  searchInput?.blur();
+  closeSmartSearch({ clearQuery: true });
 });
 
 smartSearchContent?.addEventListener("click", event => {
@@ -1283,7 +1443,6 @@ smartSearchContent?.addEventListener("click", event => {
   if (popularButton && searchInput) {
     searchInput.value = popularButton.dataset.popularSearch || "";
     if (searchClear) searchClear.hidden = false;
-    applyFilters();
     renderSmartSearch();
     searchInput.focus();
     return;
@@ -1295,8 +1454,18 @@ smartSearchContent?.addEventListener("click", event => {
   }
 });
 
-smartSearchClose?.addEventListener("click", () => closeSmartSearch());
-smartSearchBack?.addEventListener("click", () => closeSmartSearch());
+smartSearchClose?.addEventListener("click", event => {
+  event.preventDefault();
+  event.stopPropagation();
+  searchInput?.blur();
+  closeSmartSearch({ clearQuery: true });
+});
+smartSearchBack?.addEventListener("click", event => {
+  event.preventDefault();
+  event.stopPropagation();
+  searchInput?.blur();
+  closeSmartSearch();
+});
 smartSearchMobileBack?.addEventListener("click", event => {
   event.preventDefault();
   event.stopPropagation();
@@ -1313,9 +1482,19 @@ smartSearchSubmit?.addEventListener("click", event => {
   event.stopPropagation();
   showSmartSearchCatalogResults();
 });
-smartSearchOverlay?.addEventListener("click", () => closeSmartSearch());
+smartSearchOverlay?.addEventListener("click", event => {
+  event.preventDefault();
+  searchInput?.blur();
+  closeSmartSearch();
+});
 
 document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && searchDeck?.classList.contains("is-search-open")) {
+    event.preventDefault();
+    searchInput?.blur();
+    closeSmartSearch({ clearQuery: true });
+    return;
+  }
   if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase("ro-RO") === "k") {
     event.preventDefault();
     openSmartSearch();

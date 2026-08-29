@@ -2,6 +2,7 @@
   const API_URL = "https://g-trots.ro/shop-api/api-v2.php";
   const TOKEN_KEY = "g-trots-customer-session-v1";
   const PROFILE_KEY = "g-trots-customer-profile-v1";
+  const SHOP_DEVICE_KEY = "g-trots-shop-device-v1";
   const page = document.body.dataset.customerPage || "";
   const state = { customer: null, orders: [], addresses: [], coupons: [] };
   const statusMeta = {
@@ -18,16 +19,36 @@
   const money = value => `${new Intl.NumberFormat("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value) || 0)} lei`;
   const date = value => value ? new Intl.DateTimeFormat("ro-RO", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(String(value).replace(" ", "T"))) : "—";
   const token = () => localStorage.getItem(TOKEN_KEY) || "";
+  const formField = (form, name) => form?.elements?.namedItem(name) || null;
   const safeImage = value => { try { const url = new URL(String(value || ""), location.origin); return ["http:", "https:"].includes(url.protocol) ? url.href : ""; } catch { return ""; } };
   const firstName = name => String(name || "client").trim().split(/\s+/)[0] || "client";
+
+  function shopDeviceToken() {
+    try {
+      let value = String(localStorage.getItem(SHOP_DEVICE_KEY) || "").trim();
+      if (/^[A-Za-z0-9_-]{20,128}$/.test(value)) return value;
+      if (window.crypto?.getRandomValues) {
+        const bytes = new Uint8Array(24);
+        window.crypto.getRandomValues(bytes);
+        value = Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+      } else {
+        value = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+      }
+      localStorage.setItem(SHOP_DEVICE_KEY, value);
+      return value;
+    } catch {
+      return "";
+    }
+  }
 
   async function api(action, { method = "GET", body, query = "", auth = true } = {}) {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 12000);
+    const deviceToken = shopDeviceToken();
     try {
       const response = await fetch(`${API_URL}?action=${encodeURIComponent(action)}${query}`, {
         method,
-        headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}), ...(auth && token() ? { "X-Customer-Token": token() } : {}) },
+        headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}), ...(auth && token() ? { "X-Customer-Token": token() } : {}), ...(deviceToken ? { "X-Shop-Device": deviceToken } : {}) },
         body: body ? JSON.stringify(body) : undefined,
         cache: "no-store",
         signal: controller.signal
@@ -52,6 +73,23 @@
     }
   }
 
+  async function validateResetLink(email, resetToken) {
+    const response = await fetch("https://g-trots.ro/shop-api/reset-link-status.php", {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ email, token: resetToken }),
+      cache: "no-store"
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(payload.error || "Linkul de resetare nu a putut fi verificat.");
+      error.code = payload.code || "";
+      error.status = response.status;
+      throw error;
+    }
+    return payload;
+  }
+
   function saveSession(payload) {
     localStorage.setItem(TOKEN_KEY, payload.token);
     localStorage.setItem(PROFILE_KEY, JSON.stringify(payload.customer));
@@ -65,7 +103,7 @@
   }
 
   function setMessage(scope, message, success = false) {
-    const node = scope?.querySelector?.("[data-auth-message], [data-address-message]") || document.querySelector("[data-auth-message]");
+    const node = scope?.querySelector?.("[data-auth-message], [data-address-message], [data-settings-message], [data-profile-message]") || document.querySelector("[data-auth-message]");
     if (!node) return;
     node.textContent = message;
     node.hidden = !message;
@@ -145,7 +183,122 @@
       }
       finally { setBusy(form, false); }
     });
+    form?.querySelector("[data-forgot-password]")?.addEventListener("click", async () => {
+      setMessage(form, "");
+      const emailField = formField(form, "email");
+      const email = String(emailField?.value || "").trim();
+      if (!email || !emailField?.checkValidity()) {
+        emailField?.focus();
+        setMessage(form, "Completează mai întâi adresa de e-mail validă a contului tău.");
+        return;
+      }
+      setBusy(form, true);
+      try {
+        const result = await api("customerForgotPassword", { method: "POST", body: { email }, auth: false });
+        setMessage(form, result.message || "Dacă adresa aparține unui cont activ, vei primi e-mailul pentru resetare.", true);
+      } catch (error) {
+        setMessage(form, error.message);
+      } finally {
+        setBusy(form, false);
+      }
+    });
     initializeGoogle();
+  }
+
+  function renderResetLinkState({ title, message, label = "Link securizat G-Trots", expired = false } = {}) {
+    const statePanel = document.querySelector("[data-reset-link-state]");
+    const content = document.querySelector("[data-reset-content]");
+    if (!statePanel || !content) return;
+    statePanel.hidden = false;
+    content.hidden = true;
+    statePanel.classList.toggle("is-expired", expired);
+    const labelNode = statePanel.querySelector("[data-reset-state-label]");
+    const titleNode = statePanel.querySelector("[data-reset-state-title]");
+    const messageNode = statePanel.querySelector("[data-reset-state-message]");
+    if (labelNode) labelNode.textContent = label;
+    if (titleNode) titleNode.textContent = title || "Verificăm linkul primit";
+    if (messageNode) messageNode.textContent = message || "Confirmăm că linkul este valid și poate fi folosit în siguranță.";
+    const progress = statePanel.querySelector("[data-reset-state-progress]");
+    const home = statePanel.querySelector("[data-reset-home]");
+    if (progress) progress.hidden = expired;
+    if (home) home.hidden = !expired;
+  }
+
+  function showResetForm() {
+    const statePanel = document.querySelector("[data-reset-link-state]");
+    const content = document.querySelector("[data-reset-content]");
+    if (statePanel) statePanel.hidden = true;
+    if (content) content.hidden = false;
+  }
+
+  function showExpiredResetLink() {
+    renderResetLinkState({
+      label: "Link expirat",
+      title: "Linkul de resetare a expirat",
+      message: "Din motive de siguranță, linkul poate fi folosit o singură dată și este valabil 30 de minute. Solicită un link nou din pagina de autentificare.",
+      expired: true
+    });
+  }
+
+  async function initializeResetPassword() {
+    const form = document.querySelector("[data-reset-password-form]");
+    if (!form) return;
+    const params = new URLSearchParams(location.search);
+    const resetToken = String(params.get("token") || "").trim();
+    const emailField = formField(form, "email");
+    if (emailField) emailField.value = String(params.get("email") || "").trim();
+    if (resetToken) history.replaceState({}, "", "/resetare-parola.html");
+    const password = formField(form, "password");
+    password?.addEventListener("input", () => {
+      const value = password.value;
+      const score = [value.length >= 8, /[a-zăâîșț]/i.test(value), /\d/.test(value), /[^a-zăâîșț\d]/i.test(value)].filter(Boolean).length;
+      document.querySelectorAll("[data-password-meter] i").forEach((bar, index) => bar.classList.toggle("active", index < score));
+    });
+    if (!/^[a-f0-9]{64}$/i.test(resetToken) || !emailField?.checkValidity()) {
+      showExpiredResetLink();
+      return;
+    }
+    try {
+      await validateResetLink(emailField.value, resetToken);
+      showResetForm();
+    } catch (error) {
+      if (error.status === 404 || error.status === 410 || error.code === "reset_link_expired") {
+        showExpiredResetLink();
+        return;
+      }
+      renderResetLinkState({
+        label: "Verificare indisponibilă",
+        title: "Linkul nu poate fi verificat acum",
+        message: "Conexiunea cu serverul nu a putut fi realizată. Reîncarcă pagina peste câteva momente.",
+        expired: true
+      });
+      return;
+    }
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      setMessage(form, "");
+      const data = new FormData(form);
+      const email = String(data.get("email") || "").trim();
+      if (!email || !emailField?.checkValidity()) {
+        emailField?.focus();
+        return setMessage(form, "Adresa de e-mail este obligatorie și trebuie să fie validă.");
+      }
+      if (data.get("password") !== data.get("password_confirm")) return setMessage(form, "Parolele introduse nu coincid.");
+      setBusy(form, true);
+      let completed = false;
+      try {
+        const result = await api("customerResetPassword", { method: "POST", body: { email, token: resetToken, password: data.get("password"), password_confirm: data.get("password_confirm") }, auth: false });
+        completed = true;
+        setMessage(form, result.message || "Parola a fost resetată. Acum te poți autentifica.", true);
+        form.querySelectorAll("input,button").forEach(control => { control.disabled = true; });
+        history.replaceState({}, "", "/resetare-parola.html?resetata=1");
+      } catch (error) {
+        if (error.status === 410 || error.code === "reset_link_expired" || /expirat|nu este valid/i.test(error.message || "")) showExpiredResetLink();
+        else setMessage(form, error.message);
+      } finally {
+        if (!completed) setBusy(form, false);
+      }
+    });
   }
 
   function initializeRegister() {
@@ -172,7 +325,8 @@
   function isActiveOrder(order) { return !["completed", "cancelled", "refunded"].includes(order.status); }
   function orderCard(order) {
     const meta = orderStatus(order);
-    return `<button class="customer-order-card" type="button" data-order-id="${escapeHtml(order.id)}"><i class="order-card-icon">▤</i><span><strong>${escapeHtml(order.order_number)}</strong><small>${escapeHtml(date(order.created_at))} · ${order.items.length} ${order.items.length === 1 ? "produs" : "produse"}</small></span><div><em>${escapeHtml(meta[0])}</em><b>${escapeHtml(money(order.total))}</b></div></button>`;
+    const customerType = order.customer_type === "company" ? "PJ" : "PF";
+    return `<button class="customer-order-card" type="button" data-order-id="${escapeHtml(order.id)}"><i class="order-card-icon">▤</i><span><strong>${escapeHtml(order.order_number)} <em class="customer-type-badge ${customerType === "PJ" ? "is-company" : ""}">${customerType}</em></strong><small>${escapeHtml(date(order.created_at))} · ${order.items.length} ${order.items.length === 1 ? "produs" : "produse"}</small></span><div><em>${escapeHtml(meta[0])}</em><b>${escapeHtml(money(order.total))}</b></div></button>`;
   }
   function emptyState(icon, title, text) { return `<div class="empty-account-state"><i>${icon}</i><strong>${escapeHtml(title)}</strong><span>${escapeHtml(text)}</span></div>`; }
 
@@ -190,16 +344,36 @@
   function renderOrderDetail(order) {
     const stages = ["new", "confirmed", "processing", "shipped", "completed"];
     const currentIndex = stages.indexOf(order.status);
-    const productRows = order.items.map(item => { const image = safeImage(item.image_url); return `<article class="order-product">${image ? `<img src="${escapeHtml(image)}" alt="">` : '<img src="assets/logo.png" alt="">'}<span><strong>${escapeHtml(item.product_name)}</strong><small>${item.quantity} × ${escapeHtml(money(item.unit_price))}</small></span><b>${escapeHtml(money(item.line_total))}</b></article>`; }).join("");
+    const isProductPromotion = order.promotion_scope === "product";
+    const productRows = order.items.map(item => {
+      const image = safeImage(item.image_url);
+      const hasDiscount = isProductPromotion && Number(item.discount_total || 0) > 0;
+      const unitPrice = hasDiscount
+        ? `<del>${escapeHtml(money(item.unit_price))}</del><em>${escapeHtml(money(item.discounted_unit_price))}</em>`
+        : escapeHtml(money(item.unit_price));
+      const lineTotal = hasDiscount
+        ? `<del>${escapeHtml(money(item.line_total))}</del><em>${escapeHtml(money(item.discounted_line_total))}</em>`
+        : escapeHtml(money(item.line_total));
+      return `<article class="order-product">${image ? `<img src="${escapeHtml(image)}" alt="">` : '<img src="assets/logo.png" alt="">'}<span><strong>${escapeHtml(item.product_name)}</strong><small class="${hasDiscount ? "is-discounted" : ""}">${item.quantity} × ${unitPrice}</small></span><b class="${hasDiscount ? "is-discounted" : ""}">${lineTotal}</b></article>`;
+    }).join("");
     const timeline = stages.map((stage, index) => `<span class="${index <= currentIndex ? "done" : ""}"><i>${index < currentIndex ? "✓" : index + 1}</i><b>${escapeHtml(statusMeta[stage][0])}</b></span>`).join("");
-    const discountRow = Number(order.discount_total) > 0 ? `<p><span>Reducere${order.promotion_code ? ` · ${escapeHtml(order.promotion_code)}` : ""}</span><b style="color:#6ee7b7">−${escapeHtml(money(order.discount_total))}</b></p>` : "";
-    return `<div class="order-detail"><header class="order-detail-head"><img class="order-detail-logo" src="assets/logo.png" alt=""><span><small>REZUMAT COMANDĂ</small><strong>${escapeHtml(order.order_number)}</strong></span><em class="order-status-pill">${escapeHtml(orderStatus(order)[0])}</em></header><div class="order-products">${productRows}</div><div class="order-totals"><p><span>Produse</span><b>${escapeHtml(money(order.subtotal))}</b></p>${discountRow}<p><span>Livrare · ${escapeHtml(order.shipping_method_name)}</span><b>${escapeHtml(money(order.shipping_cost))}</b></p><p><span>Plată · ${order.payment_method === "card" ? "Card online" : "Ramburs la curier"}</span><b>${escapeHtml(order.payment_status === "paid" ? "Plătită" : "În așteptare")}</b></p><p class="total"><span>Total</span><b>${escapeHtml(money(order.total))}</b></p></div><section class="order-delivery"><h3>LIVRARE</h3><p><strong>${escapeHtml(order.customer_name)}</strong> · ${escapeHtml(order.customer_phone)}</p><p>${escapeHtml(order.address)}, ${escapeHtml(order.city)}, ${escapeHtml(order.county || "")}${order.postal_code ? ` · ${escapeHtml(order.postal_code)}` : ""}</p></section><div class="order-timeline">${timeline}</div>${order.tracking_token ? `<a class="track-order-button" href="/urmarire-comanda?token=${encodeURIComponent(order.tracking_token)}"><span>Urmărește comanda</span><b>›</b></a>` : ""}</div>`;
+    const discount = Number(order.discount_total || 0);
+    const discountRow = discount > 0 && !isProductPromotion ? `<p><span>Reducere${order.promotion_code ? ` · ${escapeHtml(order.promotion_code)}` : ""}</span><b style="color:#6ee7b7">−${escapeHtml(money(discount))}</b></p>` : "";
+    const hasVat = Boolean(order.vat_payer);
+    const subtotalLabel = `${isProductPromotion && discount > 0 ? "Subtotal după reduceri" : "Subtotal"}${hasVat ? " (TVA inclus)" : ""}`;
+    const subtotal = Number(order.subtotal || 0) - (isProductPromotion ? discount : 0);
+    const companyBlock = order.customer_type === "company" ? `<section class="order-company"><h3><span class="customer-type-badge is-company">PJ</span> PERSOANĂ JURIDICĂ</h3><p><strong>${escapeHtml(order.company_name)}</strong></p><p>CUI/CIF: ${escapeHtml(order.company_cui)} · RC: ${escapeHtml(order.company_registration_number)}</p><p>${escapeHtml(order.company_address)}</p></section>` : `<section class="order-company is-individual"><h3><span class="customer-type-badge">PF</span> PERSOANĂ FIZICĂ</h3><p>Comandă plasată pe numele <strong>${escapeHtml(order.customer_name)}</strong>.</p></section>`;
+    return `<div class="order-detail"><header class="order-detail-head"><img class="order-detail-logo" src="assets/logo.png" alt=""><span><small>REZUMAT COMANDĂ</small><strong>${escapeHtml(order.order_number)}</strong></span><em class="order-status-pill">${escapeHtml(orderStatus(order)[0])}</em></header><div class="order-products">${productRows}</div><div class="order-totals"><p><span>${subtotalLabel}</span><b>${escapeHtml(money(subtotal))}</b></p>${discountRow}<p><span>Livrare · ${escapeHtml(order.shipping_method_name)}</span><b>${escapeHtml(money(order.shipping_cost))}</b></p><p><span>Plată · ${order.payment_method === "card" ? "Card online" : "Ramburs la curier"}</span><b>${escapeHtml(order.payment_status === "paid" ? "Plătită" : "În așteptare")}</b></p><p class="total"><span>Total de plată${hasVat ? " (TVA inclus)" : ""}</span><b>${escapeHtml(money(order.total))}</b></p></div>${companyBlock}<section class="order-delivery"><h3>LIVRARE</h3><p><strong>${escapeHtml(order.customer_name)}</strong> · ${escapeHtml(order.customer_phone)}</p><p>${escapeHtml(order.address)}, ${escapeHtml(order.city)}, ${escapeHtml(order.county || "")}${order.postal_code ? ` · ${escapeHtml(order.postal_code)}` : ""}</p></section><div class="order-timeline">${timeline}</div>${order.tracking_token ? `<a class="track-order-button" href="/urmarire-comanda?token=${encodeURIComponent(order.tracking_token)}"><span>Urmărește comanda</span><b>›</b></a>` : ""}</div>`;
   }
 
   function openOrder(id) {
     const order = state.orders.find(item => item.id === id); if (!order) return;
+    const dialog = document.querySelector("[data-order-dialog]");
     document.querySelector("[data-order-detail]").innerHTML = renderOrderDetail(order);
-    document.querySelector("[data-order-dialog]").showModal();
+    dialog.classList.remove("is-closing");
+    if (!dialog.open) dialog.showModal();
+    dialog.scrollTop = 0;
+    requestAnimationFrame(() => dialog.classList.add("is-visible"));
   }
 
   function renderAddresses() {
@@ -210,12 +384,85 @@
 
   function renderCoupons() {
     const host = document.querySelector("[data-customer-coupons]"); if (!host) return;
-    host.innerHTML = state.coupons.length ? state.coupons.map(coupon => `<article class="coupon-card"><i>✦</i><div><h3>${escapeHtml(coupon.title)}</h3><p>${escapeHtml(coupon.description || "Reducere disponibilă în contul tău.")}</p><p><strong>${escapeHtml(coupon.code)}</strong> · ${coupon.discount_type === "percent" ? `${Number(coupon.discount_value)}%` : money(coupon.discount_value)}</p></div></article>`).join("") : emptyState("✦", "Nu ai cupoane active acum", "Când apare o ofertă pentru tine, o vei găsi aici.");
+    document.querySelectorAll("[data-coupon-count]").forEach(node => node.textContent = state.coupons.length);
+    if (!state.coupons.length) {
+      host.innerHTML = `<div class="coupon-empty-state"><span class="coupon-percent-mark" aria-hidden="true"><b>%</b><i></i></span><div><strong>Nu ai reduceri active acum</strong><p>Când apare o ofertă pentru contul tău, o vei găsi aici cu toate condițiile explicate.</p></div><a href="/magazin.html#catalog">Vezi magazinul <b aria-hidden="true">›</b></a></div>`;
+      return;
+    }
+
+    host.innerHTML = state.coupons.map(coupon => {
+      const value = coupon.discount_type === "percent" ? `${Number(coupon.discount_value)}%` : money(coupon.discount_value);
+      const productCount = Array.isArray(coupon.product_ids) ? coupon.product_ids.length : 0;
+      const scope = coupon.scope === "product"
+        ? (productCount === 1 ? "1 produs selectat" : `${productCount} produse selectate`)
+        : "Toată comanda";
+      const audience = coupon.audience === "selected"
+        ? "Ofertă aleasă pentru contul tău"
+        : coupon.audience === "registered" ? "Pentru clienții autentificați" : "Disponibilă tuturor clienților";
+      const threshold = Number(coupon.min_order_value || 0) > 0 ? `Comandă minimă ${money(coupon.min_order_value)}` : "Fără valoare minimă";
+      const period = coupon.valid_until
+        ? `Valabilă până la ${date(coupon.valid_until)}`
+        : coupon.valid_from ? `Disponibilă din ${date(coupon.valid_from)}` : "Fără termen limită";
+      const mode = coupon.auto_apply ? "Se aplică automat" : "Se aplică prin cod";
+      const description = coupon.description || coupon.banner_text || "Reducere disponibilă în contul tău G-Trots.";
+      return `<article class="coupon-card customer-promotion-card">
+        <div class="coupon-card-accent" aria-hidden="true"></div>
+        <span class="coupon-percent-mark" aria-hidden="true"><b>%</b><i></i></span>
+        <div class="coupon-card-content">
+          <header><span class="coupon-card-kicker"><i></i> OFERTĂ ACTIVĂ</span><span class="coupon-card-mode">${escapeHtml(mode)}</span></header>
+          <div class="coupon-card-main"><div><h3>${escapeHtml(coupon.title)}</h3><p>${escapeHtml(description)}</p></div><strong>${escapeHtml(value)}</strong></div>
+          <div class="coupon-card-facts">
+            <span><small>Se aplică pentru</small><b>${escapeHtml(scope)}</b></span>
+            <span><small>Disponibilitate</small><b>${escapeHtml(audience)}</b></span>
+            <span><small>Condiție</small><b>${escapeHtml(threshold)}</b></span>
+            <span><small>Perioadă</small><b>${escapeHtml(period)}</b></span>
+          </div>
+          <footer><span class="coupon-code"><small>COD PROMOȚIONAL</small><code>${escapeHtml(coupon.code)}</code></span><button type="button" data-copy-coupon="${escapeHtml(coupon.code)}"><span>Copiază codul</span><b class="coupon-copy-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg></b></button><a href="/magazin.html#catalog">Vezi produsele <b aria-hidden="true">›</b></a></footer>
+        </div>
+      </article>`;
+    }).join("");
+  }
+
+  function setCustomerType(type) {
+    const form = document.querySelector("[data-customer-profile-form]");
+    if (!form) return;
+    const normalized = type === "company" ? "company" : "individual";
+    const customerTypeField = form.elements.namedItem("customer_type");
+    if (customerTypeField) customerTypeField.value = normalized;
+    form.querySelectorAll("[data-customer-type]").forEach(button => {
+      const active = button.dataset.customerType === normalized;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    const companyFields = form.querySelector("[data-company-fields]");
+    if (companyFields) companyFields.hidden = normalized !== "company";
+    ["company_name", "company_cui", "company_registration_number", "company_address"].forEach(name => {
+      const field = form.elements.namedItem(name);
+      if (field) field.required = normalized === "company";
+    });
+  }
+
+  function renderCustomerProfile() {
+    const form = document.querySelector("[data-customer-profile-form]");
+    if (!form || !state.customer) return;
+    ["full_name", "phone", "address", "city", "county", "postal_code", "company_name", "company_cui", "company_registration_number", "company_address"].forEach(name => {
+      const field = form.elements.namedItem(name);
+      if (field) field.value = state.customer[name] || "";
+    });
+    setCustomerType(state.customer.customer_type);
   }
 
   function openAddress(address = null) {
     const dialog = document.querySelector("[data-address-dialog]"); const form = dialog.querySelector("form"); form.reset();
-    form.elements.id.value = address?.id || ""; ["label", "recipient_name", "phone", "address", "city", "county", "postal_code"].forEach(key => form.elements[key].value = address?.[key] || (key === "recipient_name" ? state.customer.full_name : key === "phone" ? state.customer.phone : "")); form.elements.is_default.checked = Boolean(address?.is_default); document.querySelector("[data-address-form-title]").textContent = address ? "Editează adresa" : "Adaugă o adresă"; dialog.showModal(); requestAnimationFrame(() => dialog.classList.add("is-visible"));
+    const idField = formField(form, "id");
+    if (idField) idField.value = address?.id || "";
+    ["label", "recipient_name", "phone", "address", "city", "county", "postal_code"].forEach(key => {
+      const field = formField(form, key);
+      if (field) field.value = address?.[key] || (key === "recipient_name" ? state.customer.full_name : key === "phone" ? state.customer.phone : "");
+    });
+    const defaultField = formField(form, "is_default");
+    if (defaultField) defaultField.checked = Boolean(address?.is_default);
+    document.querySelector("[data-address-form-title]").textContent = address ? "Editează adresa" : "Adaugă o adresă"; dialog.showModal(); requestAnimationFrame(() => dialog.classList.add("is-visible"));
   }
 
   function closeAccountDialog(dialog) {
@@ -234,13 +481,17 @@
       state.customer = me.customer; state.orders = valueOrEmpty(ordersResult); state.addresses = valueOrEmpty(addressesResult); state.coupons = valueOrEmpty(couponsResult);
       localStorage.setItem(PROFILE_KEY, JSON.stringify(state.customer)); document.dispatchEvent(new CustomEvent("g-trots:customer-changed", { detail: state.customer }));
       document.querySelector("[data-customer-first-name]").textContent = firstName(state.customer.full_name); document.querySelector("[data-customer-email]").textContent = state.customer.email;
-      renderOrders(); renderAddresses(); renderCoupons(); document.querySelector("[data-account-loading]").hidden = true; document.querySelector("[data-account-app]").hidden = false;
+      document.querySelectorAll("[data-settings-email]").forEach(node => { node.textContent = state.customer.email; });
+      renderOrders(); renderAddresses(); renderCoupons(); renderCustomerProfile(); document.querySelector("[data-account-loading]").hidden = true; document.querySelector("[data-account-app]").hidden = false;
     } catch (error) { if (error.status === 401 || error.status === 403) { clearSession(); location.replace(`/login.html?redirect=${encodeURIComponent(location.pathname)}&reason=${encodeURIComponent(error.code || "expired")}`); } else document.querySelector("[data-account-loading]").innerHTML = emptyState("!", "Contul nu s-a putut încărca", error.message); }
   }
 
   function bindAccountEvents() {
     document.addEventListener("click", async event => {
       const tab = event.target.closest("[data-account-tab]"); if (tab) { document.querySelectorAll("[data-account-tab]").forEach(node => node.classList.toggle("active", node === tab)); document.querySelectorAll("[data-account-panel]").forEach(node => node.classList.toggle("active", node.dataset.accountPanel === tab.dataset.accountTab)); return; }
+      const customerTypeButton = event.target.closest("[data-customer-type]"); if (customerTypeButton) { setCustomerType(customerTypeButton.dataset.customerType); return; }
+      const copyCoupon = event.target.closest("[data-copy-coupon]"); if (copyCoupon) { const code = copyCoupon.dataset.copyCoupon || ""; try { await navigator.clipboard.writeText(code); copyCoupon.classList.add("is-copied"); copyCoupon.querySelector("span").textContent = "Cod copiat"; window.setTimeout(() => { copyCoupon.classList.remove("is-copied"); const label = copyCoupon.querySelector("span"); if (label) label.textContent = "Copiază codul"; }, 1800); } catch { window.prompt("Copiază codul promoțional:", code); } return; }
+      const resetPassword = event.target.closest("[data-send-password-reset]"); if (resetPassword) { const feedback = document.querySelector("[data-profile-message]"); feedback.hidden = true; feedback.classList.remove("success"); resetPassword.disabled = true; try { const result = await api("customerForgotPassword", { method: "POST", body: { email: state.customer.email }, auth: false }); feedback.textContent = result.message || "Verifică adresa de e-mail pentru linkul de resetare."; feedback.hidden = false; feedback.classList.add("success"); } catch (error) { feedback.textContent = error.message; feedback.hidden = false; } finally { resetPassword.disabled = false; } return; }
       const orderButton = event.target.closest("[data-order-id]"); if (orderButton) return openOrder(orderButton.dataset.orderId);
       if (event.target.closest("[data-dialog-close]")) return closeAccountDialog(event.target.closest("dialog"));
       if (event.target.closest("[data-add-address]")) return openAddress();
@@ -249,7 +500,22 @@
       if (event.target.closest("[data-customer-logout]")) { try { await api("customerLogout", { method: "POST" }); } catch {} clearSession(); location.href = "/login.html"; return; }
       if (event.target.closest("[data-delete-account]")) { const confirmation = prompt('Pentru confirmare, scrie STERGE. Comenzile comerciale rămân păstrate în evidența G-Trots.'); if (confirmation !== "STERGE") return; try { await api("customerDeleteAccount", { method: "DELETE", body: { confirmation } }); clearSession(); location.href = "/magazin.html?cont=sters"; } catch (error) { alert(error.message); } }
     });
-    const form = document.querySelector("[data-address-form]"); form?.addEventListener("submit", async event => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); data.is_default = form.elements.is_default.checked; const id = data.id; delete data.id; setBusy(form, true); setMessage(form, ""); try { await api(id ? "customerAddress" : "customerAddresses", { method: id ? "PATCH" : "POST", query: id ? `&id=${encodeURIComponent(id)}` : "", body: data }); state.addresses = await api("customerAddresses"); renderAddresses(); closeAccountDialog(form.closest("dialog")); } catch (error) { setMessage(form, error.message); } finally { setBusy(form, false); } });
+    const form = document.querySelector("[data-address-form]"); form?.addEventListener("submit", async event => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); data.is_default = Boolean(formField(form, "is_default")?.checked); const id = data.id; delete data.id; setBusy(form, true); setMessage(form, ""); try { await api(id ? "customerAddress" : "customerAddresses", { method: id ? "PATCH" : "POST", query: id ? `&id=${encodeURIComponent(id)}` : "", body: data }); state.addresses = await api("customerAddresses"); renderAddresses(); closeAccountDialog(form.closest("dialog")); } catch (error) { setMessage(form, error.message); } finally { setBusy(form, false); } });
+    const profileForm = document.querySelector("[data-customer-profile-form]"); profileForm?.addEventListener("submit", async event => {
+      event.preventDefault();
+      setMessage(profileForm, "");
+      setBusy(profileForm, true);
+      try {
+        const result = await api("customerProfile", { method: "PATCH", body: Object.fromEntries(new FormData(profileForm)) });
+        state.customer = result.customer;
+        localStorage.setItem(PROFILE_KEY, JSON.stringify(state.customer));
+        document.dispatchEvent(new CustomEvent("g-trots:customer-changed", { detail: state.customer }));
+        renderCustomerProfile();
+        document.querySelector("[data-customer-first-name]").textContent = firstName(state.customer.full_name);
+        setMessage(profileForm, "Datele personale au fost salvate.", true);
+      } catch (error) { setMessage(profileForm, error.message); }
+      finally { setBusy(profileForm, false); }
+    });
     document.querySelectorAll(".account-dialog").forEach(dialog => {
       dialog.addEventListener("click", event => { if (event.target === dialog) closeAccountDialog(dialog); });
       dialog.addEventListener("cancel", event => { event.preventDefault(); closeAccountDialog(dialog); });
@@ -313,5 +579,6 @@
   bindPasswordToggles();
   if (page === "login") initializeLogin();
   else if (page === "register") initializeRegister();
+  else if (page === "reset-password") initializeResetPassword();
   else if (page === "account") { bindAccountEvents(); loadAccount(); }
 })();

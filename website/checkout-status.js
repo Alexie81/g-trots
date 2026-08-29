@@ -1,16 +1,37 @@
 (() => {
   const API_URL = "https://g-trots.ro/shop-api/api-v2.php";
   const ORDER_STATE_KEY = "g-trots-last-checkout-v1";
+  const SHOP_DEVICE_KEY = "g-trots-shop-device-v1";
+
+  function shopDeviceToken() {
+    try {
+      let token = String(localStorage.getItem(SHOP_DEVICE_KEY) || "").trim();
+      if (/^[A-Za-z0-9_-]{20,128}$/.test(token)) return token;
+      if (window.crypto?.getRandomValues) {
+        const bytes = new Uint8Array(24);
+        window.crypto.getRandomValues(bytes);
+        token = Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+      } else {
+        token = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+      }
+      localStorage.setItem(SHOP_DEVICE_KEY, token);
+      return token;
+    } catch {
+      return "";
+    }
+  }
 
   async function api(action, options = {}) {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 16000);
+    const deviceToken = shopDeviceToken();
     try {
       const response = await fetch(`${API_URL}?action=${encodeURIComponent(action)}`, {
         method: options.method || "GET",
         headers: {
           Accept: "application/json",
-          ...(options.body ? { "Content-Type": "application/json" } : {})
+          ...(options.body ? { "Content-Type": "application/json" } : {}),
+          ...(deviceToken ? { "X-Shop-Device": deviceToken } : {})
         },
         body: options.body ? JSON.stringify(options.body) : undefined,
         cache: "no-store",
@@ -179,12 +200,17 @@
     return source.map(item => {
       const quantity = Math.max(1, Number(item.quantity || 1));
       const unitPrice = Number(item.unitPrice ?? item.unit_price ?? 0);
+      const lineTotal = Number(item.lineTotal ?? item.line_total ?? unitPrice * quantity);
+      const discountTotal = Math.max(0, Number(item.discountTotal ?? item.discount_total ?? 0));
       return {
         id: String(item.id || ""),
         name: String(item.name || item.product_name || "Produs G-Trots"),
         quantity,
         unitPrice,
-        lineTotal: Number(item.lineTotal ?? item.line_total ?? unitPrice * quantity),
+        lineTotal,
+        discountTotal,
+        discountedUnitPrice: discountTotal > 0 ? Number(item.discountedUnitPrice ?? item.discounted_unit_price ?? unitPrice) : unitPrice,
+        discountedLineTotal: discountTotal > 0 ? Number(item.discountedLineTotal ?? item.discounted_line_total ?? lineTotal) : lineTotal,
         image: Number(item.image || item.sprite_index || 0),
         imageUrl: safeUrl(item.imageUrl || item.image_url),
         url: String(item.url || "/magazin.html")
@@ -234,6 +260,7 @@
     const subtotalFromItems = items.reduce((sum, item) => sum + item.lineTotal, 0);
     const subtotal = Number.isFinite(Number(state.subtotal)) ? Number(state.subtotal) : subtotalFromItems;
     const discount = Math.max(0, Number(state.discountTotal || 0));
+    const isProductPromotion = String(state.promotionScope || state.promotion_scope || "") === "product";
     const hasShipping = state.shippingCost !== undefined && state.shippingCost !== null;
     const shipping = hasShipping ? Number(state.shippingCost || 0) : null;
     const total = Number.isFinite(Number(state.total)) && Number(state.total) > 0
@@ -247,10 +274,17 @@
         : legacyImage
           ? ""
           : '<span class="order-receipt-product-fallback">GT</span>';
+      const hasDiscount = isProductPromotion && item.discountTotal > 0;
+      const unitPrice = hasDiscount
+        ? `<del>${formatMoney(item.unitPrice)}</del><span>${formatMoney(item.discountedUnitPrice)}</span>`
+        : formatMoney(item.unitPrice);
+      const lineTotal = hasDiscount
+        ? `<del>${formatMoney(item.lineTotal)}</del><span>${formatMoney(item.discountedLineTotal)}</span>`
+        : formatMoney(item.lineTotal);
       return `<article class="order-receipt-product">
         <a href="${escapeHtml(item.url)}" class="order-receipt-product-image${legacyImage}" aria-label="Deschide ${escapeHtml(item.name)}">${imageMarkup}</a>
-        <span><strong>${escapeHtml(item.name)}</strong><small>${item.quantity} × ${formatMoney(item.unitPrice)}</small></span>
-        <b>${formatMoney(item.lineTotal)}</b>
+        <span><strong>${escapeHtml(item.name)}</strong><small class="${hasDiscount ? "is-discounted" : ""}">${item.quantity} × ${unitPrice}</small></span>
+        <b class="${hasDiscount ? "is-discounted" : ""}">${lineTotal}</b>
       </article>`;
     }).join("");
     host.querySelectorAll(".order-receipt-product-image img").forEach(image => {
@@ -261,12 +295,27 @@
     host.hidden = items.length === 0;
     if (empty) empty.hidden = items.length > 0;
 
-    setTextAll("[data-order-subtotal]", formatMoney(subtotal));
+    document.querySelectorAll("[data-order-customer-data]").forEach(node => node.remove());
+    if (state.customerName || state.customer_name || state.companyName || state.company_name) {
+      const isCompany = String(state.customerType || state.customer_type || "individual") === "company";
+      const details = document.createElement("div");
+      details.className = "order-receipt-customer";
+      details.dataset.orderCustomerData = "";
+      details.innerHTML = `<header><span class="${isCompany ? "is-company" : ""}">${isCompany ? "PJ" : "PF"}</span><strong>${isCompany ? "Persoană juridică" : "Persoană fizică"}</strong></header><p><span>Nume</span><b>${escapeHtml(state.customerName || state.customer_name || "")}</b></p><p><span>Telefon</span><b>${escapeHtml(state.customerPhone || state.customer_phone || "")}</b></p>${isCompany ? `<p><span>Denumire firmă</span><b>${escapeHtml(state.companyName || state.company_name || "")}</b></p><p><span>CUI / CIF</span><b>${escapeHtml(state.companyCui || state.company_cui || "")}</b></p><p><span>Registrul Comerțului</span><b>${escapeHtml(state.companyRegistrationNumber || state.company_registration_number || "")}</b></p><p><span>Sediu social</span><b>${escapeHtml(state.companyAddress || state.company_address || "")}</b></p>` : ""}<p><span>Livrare</span><b>${escapeHtml(state.deliveryAddress || [state.address, state.city, state.county, state.postal_code].filter(Boolean).join(", ") || "")}</b></p>`;
+      host.before(details);
+    }
+
+    setTextAll("[data-order-subtotal]", formatMoney(subtotal - (isProductPromotion ? discount : 0)));
+    setTextAll("[data-order-subtotal-label]", isProductPromotion && discount > 0 ? "Subtotal după reducerile pe produse" : "Subtotal");
     const discountRow = document.querySelector("[data-order-discount-row]");
-    if (discountRow) discountRow.hidden = discount <= 0;
+    if (discountRow) discountRow.hidden = discount <= 0 || isProductPromotion;
     setTextAll("[data-order-discount]", `−${formatMoney(discount)}`);
     setTextAll("[data-order-promotion-code]", state.promotionCode ? `· ${state.promotionCode}` : "");
     setTextAll("[data-order-shipping]", shipping === null ? "Se confirmă" : shipping === 0 ? "Gratuit" : formatMoney(shipping));
+    const vatPayer = Boolean(state.vatPayer ?? state.vat_payer ?? false);
+    const subtotalLabel = isProductPromotion && discount > 0 ? "Subtotal după reducerile pe produse" : "Subtotal";
+    setTextAll("[data-order-subtotal-label]", vatPayer ? `${subtotalLabel} (TVA inclus)` : subtotalLabel);
+    setTextAll("[data-order-total-label]", vatPayer ? "Total de plată (TVA inclus)" : "Total de plată");
     setTextAll("[data-order-total]", formatMoney(total));
     setTextAll("[data-order-shipping-label]", state.shippingLabel || "Livrare");
     const paymentLabel = state.paymentLabel || (method === "card" ? "Card online" : "Ramburs la curier");
@@ -427,3 +476,5 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialize, { once: true });
   else initialize();
 })();
+if (!document.querySelector('link[href*="promotions.css"]')) { const link = document.createElement("link"); link.rel = "stylesheet"; link.href = "/promotions.css?v=20260828-marquee-v5"; document.head.append(link); }
+if (!document.querySelector('script[src*="promotions.js"]')) { const script = document.createElement("script"); script.src = "/promotions.js?v=20260828-global-v1"; document.head.append(script); }

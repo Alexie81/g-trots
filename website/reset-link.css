@@ -1,0 +1,22 @@
+/* Pagina de resetare foloseste acelasi navbar fix ca restul website-ului. */
+.customer-auth-page[data-customer-page="reset-password"] .site-header{position:fixed;right:0;left:0;z-index:50;background:transparent;border:0;backdrop-filter:none;-webkit-backdrop-filter:none}
+.customer-auth-page[data-customer-page="reset-password"] .auth-shell,
+.customer-auth-page[data-customer-page="reset-password"] .reset-link-shell{margin-top:7.25rem}
+.customer-auth-page[data-customer-page="reset-password"] .auth-shell[hidden],
+.customer-auth-page[data-customer-page="reset-password"] .reset-link-shell[hidden]{display:none!important}
+.reset-link-shell{width:min(1480px,calc(100% - 2rem));min-height:calc(100svh - 10rem);margin-inline:auto;margin-bottom:3rem;display:grid;place-items:center}
+.reset-link-state{width:100%;min-height:min(36rem,calc(100svh - 10rem))}
+.reset-link-state h1{margin:.65rem 0 0;color:#f8f4ef;font-size:clamp(2.25rem,5vw,4.25rem);line-height:1;letter-spacing:-.06em}
+.reset-link-state p{max-width:42rem;line-height:1.65}
+.reset-link-state.is-expired{background:radial-gradient(circle at 50% 8%,rgba(255,116,52,.16),transparent 19rem),linear-gradient(145deg,#1b1715,#0e0d0c)}
+.reset-link-state.is-expired .cart-loading-orbit{border-color:rgba(255,119,69,.32);box-shadow:0 0 0 .65rem rgba(255,112,54,.035)}
+.reset-link-state.is-expired .cart-loading-orbit:before{border-top-color:#ff7b3d;border-right-color:rgba(255,123,61,.28);animation-duration:2.1s}
+.reset-link-state.is-expired>span{color:#ff9a69}
+.reset-home-button{min-width:min(100%,18rem);min-height:4rem;margin-top:1.8rem;padding:.4rem .45rem .4rem 1.4rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;border:1px solid rgba(255,181,92,.55);border-radius:1.2rem;background:linear-gradient(135deg,#e96500,#ff8500 55%,#ff9d28);color:#fff;font-size:.86rem;font-weight:900;box-shadow:0 1rem 2.4rem rgba(255,104,0,.2);transition:transform .18s ease,box-shadow .18s ease}
+.reset-home-button[hidden]{display:none!important}
+.reset-home-button:hover,.reset-home-button:focus-visible{outline:0;transform:translateY(-2px);box-shadow:0 1.2rem 2.8rem rgba(255,104,0,.3)}
+.reset-home-button i{width:3rem;height:3rem;display:grid;place-items:center;border-radius:1rem;background:#fff4e8;color:#df6500;font-size:1.25rem;font-style:normal}
+@media(max-width:900px){.customer-auth-page[data-customer-page="reset-password"] .auth-shell,.customer-auth-page[data-customer-page="reset-password"] .reset-link-shell{margin-top:5.15rem}.reset-link-shell{width:calc(100% - 1.3rem);min-height:calc(100svh - 7rem);margin-bottom:1rem}.reset-link-state{min-height:calc(100svh - 7rem)}}
+@media(max-width:620px){.customer-auth-page[data-customer-page="reset-password"] .site-header{position:fixed;background:transparent;border-bottom:0;backdrop-filter:none;-webkit-backdrop-filter:none}.customer-auth-page[data-customer-page="reset-password"] .auth-shell{width:100%;min-height:calc(100svh - 5.15rem);margin-bottom:0}.customer-auth-page[data-customer-page="reset-password"] .reset-link-shell{width:100%;margin-bottom:0}.reset-link-state{min-height:calc(100svh - 5.15rem);padding:2rem 1.1rem;border-inline:0;border-radius:0}.reset-link-state h1{font-size:clamp(2.15rem,11vw,3.15rem)}.reset-link-state p{max-width:22rem}.reset-home-button{width:min(100%,19rem)}}
+@media(max-width:760px){body.gt-has-promotion-bar.customer-auth-page[data-customer-page="reset-password"] .site-header .main-nav{top:3.9rem}}
+@media(prefers-reduced-motion:reduce){.reset-link-state.is-expired .cart-loading-orbit:before{animation:none!important}}

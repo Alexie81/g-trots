@@ -12,8 +12,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css?v=20260827-shop-call">
-    <link rel="stylesheet" href="favorites.css?v=20260827-account-v2">
-    <link rel="stylesheet" href="checkout.css?v=20260828-address-cards-m3">
+    <link rel="stylesheet" href="favorites.css?v=20260828-line-promotions-v1">
+    <link rel="stylesheet" href="promotions.css?v=20260828-marquee-v5">
+    <link rel="stylesheet" href="checkout.css?v=20260828-checkpoint-v2">
   </head>
   <body class="shop-page favorites-page checkout-page">
     <a class="skip-link" href="#checkout-content">Sari la finalizarea comenzii</a>
@@ -65,6 +66,20 @@
                 <label><span>Telefon <b>*</b></span><input name="customer_phone" autocomplete="tel" inputmode="tel" required placeholder="07xx xxx xxx"><small data-field-error="customer_phone"></small></label>
                 <label><span>Email <em>*</em></span><input name="customer_email" type="email" autocomplete="email" placeholder="nume@email.ro" required><small data-field-error="customer_email"></small></label>
               </div>
+              <div class="checkout-customer-type" role="group" aria-label="Tip client">
+                <button class="is-active" type="button" data-checkout-customer-type="individual" aria-pressed="true"><i>PF</i><span><strong>Persoană fizică</strong><small>Comandă pe numele tău</small></span></button>
+                <button type="button" data-checkout-customer-type="company" aria-pressed="false"><i>PJ</i><span><strong>Persoană juridică</strong><small>Adaugă datele firmei</small></span></button>
+                <input type="hidden" name="customer_type" value="individual">
+              </div>
+              <div class="checkout-company-fields" data-checkout-company-fields hidden>
+                <header><span>PJ</span><div><strong>Date de facturare persoană juridică</strong><small>Câmpurile apar numai când alegi persoană juridică.</small></div></header>
+                <div class="checkout-fields">
+                  <label class="is-wide"><span>Denumire firmă <b>*</b></span><input name="company_name" autocomplete="organization"><small data-field-error="company_name"></small></label>
+                  <label><span>CUI / CIF <b>*</b></span><input name="company_cui" autocomplete="off" placeholder="RO12345678"><small data-field-error="company_cui"></small></label>
+                  <label><span>Nr. Registrul Comerțului (J) <b>*</b></span><input name="company_registration_number" autocomplete="off" placeholder="J40/1234/2026"><small data-field-error="company_registration_number"></small></label>
+                  <label class="is-wide"><span>Sediu social <b>*</b></span><input name="company_address" autocomplete="street-address" placeholder="Adresa completă a firmei"><small data-field-error="company_address"></small></label>
+                </div>
+              </div>
             </section>
 
             <section class="checkout-panel" aria-labelledby="address-title">
@@ -111,12 +126,17 @@
           <aside class="checkout-summary" aria-labelledby="summary-title">
             <header><span>Rezumat comandă</span><h2 id="summary-title">Produsele tale</h2><strong data-checkout-item-count>0 produse</strong></header>
             <div class="checkout-summary-items" data-checkout-items></div>
+            <section class="checkout-promo-code" data-checkout-promo>
+              <header><span class="checkout-promo-percent" aria-hidden="true">%</span><span><strong>Ai un cod de reducere?</strong><small>Introdu-l aici și îl verificăm imediat.</small></span></header>
+              <div class="checkout-promo-controls"><input type="text" data-checkout-promo-input maxlength="80" autocomplete="off" spellcheck="false" placeholder="EX: GTROTS10"><button type="button" data-checkout-promo-apply>Aplică</button></div>
+              <p data-checkout-promo-message aria-live="polite"></p>
+            </section>
             <div class="checkout-summary-lines">
-              <div><span>Subtotal</span><strong data-checkout-subtotal>0,00 lei</strong></div>
+              <div><span data-checkout-subtotal-label>Subtotal</span><strong data-checkout-subtotal>0,00 lei</strong></div>
               <div class="checkout-discount-line" data-checkout-discount-line hidden><span>Reducere <small data-checkout-promotion-code></small></span><strong data-checkout-discount>−0,00 lei</strong></div>
               <div><span>Livrare</span><strong data-checkout-shipping-cost>—</strong></div>
             </div>
-            <div class="checkout-summary-total"><span><strong>Total de plată</strong><small>TVA inclus, acolo unde se aplică</small></span><b data-checkout-total>0,00 lei</b></div>
+            <div class="checkout-summary-total"><span><strong data-checkout-total-label>Total de plată</strong></span><b data-checkout-total>0,00 lei</b></div>
             <button class="checkout-submit" type="submit" data-checkout-submit>
               <span class="checkout-submit-lock" aria-hidden="true"></span>
               <strong>Trimite comanda</strong>
@@ -124,7 +144,7 @@
             </button>
             <label class="checkout-confirmation">
               <input type="checkbox" name="confirm_order" required>
-              <span><i aria-hidden="true">✓</i></span>
+              <span class="checkout-checkpoint" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="m7.2 12.4 3.15 3.15 6.7-7.05"></path></svg></span>
               <p><strong>Confirm că datele comenzii sunt corecte.</strong><small>Produsele și compatibilitatea pot fi reverificate de echipa G-Trots înainte de expediere.</small></p>
             </label>
             <p class="checkout-submit-message" data-checkout-message aria-live="polite"></p>
@@ -135,7 +155,8 @@
     </main>
 
     <footer class="shell shop-footer"><div class="footer-inner"><a class="logo" href="index.html"><img src="assets/logo.png" width="1024" height="1024" alt=""><b><span>G</span>-Trots</b></a><p>Service și magazin pentru mobilitate electrică.</p><nav><a href="index.html">Acasă</a><a href="magazin.html">Magazin</a><a href="ghiduri-service-trotinete-electrice.html">Ghiduri</a><a href="index.html#contact">Contact</a></nav><a class="footer-phone" href="tel:+40762093915">+40 0762 093 915</a><small>© 2026 G-Trots</small></div></footer>
-<script src="favorites.js?v=20260827-cart-loading" defer></script>
-    <script src="checkout.js?v=20260828-address-cards-m3" defer></script>
+    <script src="promotions.js?v=20260828-usage-limits-v1" defer></script>
+<script src="favorites.js?v=20260829-vat-v1" defer></script>
+<script src="checkout.js?v=20260829-vat-v1" defer></script>
   </body>
 </html>

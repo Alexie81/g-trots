@@ -510,6 +510,7 @@ function stripeRestoreOrderStock(PDO $db, string $orderId, string $reason): void
             $movement->execute([uuidV4(), $product['id'], $orderId, 'return', (int)$item['quantity'], $next, mb_substr($reason, 0, 500)]);
         }
         $db->prepare('UPDATE shop_orders SET status = "cancelled", payment_status = "failed", admin_notes = CONCAT_WS("\n", NULLIF(admin_notes, ""), ?) WHERE id = ?')->execute([mb_substr($reason, 0, 500), $orderId]);
+        releasePromotionUsage($db, $orderId);
         recordOrderStatusHistory($db, $orderId, (string)$order['status'], 'cancelled', 'Stripe', 'not_requested');
         $db->commit();
     } catch (Throwable $error) {
@@ -580,6 +581,9 @@ function stripePublicOrderReceipt(PDO $db, array $config, array $order): array {
             'quantity' => (int)$item['quantity'],
             'unitPrice' => (float)$item['unit_price'],
             'lineTotal' => (float)$item['line_total'],
+            'discountTotal' => (float)($item['discount_total'] ?? 0),
+            'discountedUnitPrice' => (float)(($item['discount_total'] ?? 0) > 0 ? ($item['discounted_unit_price'] ?? $item['unit_price']) : $item['unit_price']),
+            'discountedLineTotal' => (float)(($item['discount_total'] ?? 0) > 0 ? ($item['discounted_line_total'] ?? $item['line_total']) : $item['line_total']),
             'imageUrl' => $imageUrl,
             'url' => $url,
         ];
@@ -593,8 +597,10 @@ function stripePublicOrderReceipt(PDO $db, array $config, array $order): array {
         'subtotal' => (float)$order['subtotal'],
         'discountTotal' => (float)($order['discount_total'] ?? 0),
         'promotionCode' => (string)($order['promotion_code'] ?? ''),
+        'promotionScope' => (string)($order['promotion_scope'] ?? ''),
         'shippingCost' => (float)$order['shipping_cost'],
         'total' => (float)$order['total'],
+        'vatPayer' => (bool)($order['vat_payer'] ?? false),
         'items' => $receiptItems,
         'createdAt' => str_replace(' ', 'T', (string)$order['created_at']),
     ];

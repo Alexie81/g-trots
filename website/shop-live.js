@@ -2,6 +2,8 @@
   if (window.GTrotsLiveShop) return;
 
   const API_URL = "https://g-trots.ro/shop-api/api-v2.php";
+  const CUSTOMER_TOKEN_KEY = "g-trots-customer-session-v1";
+  const SHOP_DEVICE_KEY = "g-trots-shop-device-v1";
   const legacyImages = {
     "anvelopa-g10-all-terrain": 1,
     "display-smart-ride-s3": 2,
@@ -10,6 +12,24 @@
     "baterie-powercore-52v-23ah": 5,
     "kit-frana-hydrostop-pro": 6
   };
+
+  function shopDeviceToken() {
+    try {
+      let token = String(localStorage.getItem(SHOP_DEVICE_KEY) || "").trim();
+      if (/^[A-Za-z0-9_-]{20,128}$/.test(token)) return token;
+      if (window.crypto?.getRandomValues) {
+        const bytes = new Uint8Array(24);
+        window.crypto.getRandomValues(bytes);
+        token = Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+      } else {
+        token = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+      }
+      localStorage.setItem(SHOP_DEVICE_KEY, token);
+      return token;
+    } catch {
+      return "";
+    }
+  }
 
   function ensureStyles() {
     if (document.querySelector('link[href*="shop-live.css"]')) return;
@@ -50,7 +70,9 @@
 
   function normalizeProduct(product) {
     const slug = String(product.slug || product.id || "");
-    const currentPrice = product.sale_price == null ? Number(product.price || 0) : Number(product.sale_price || 0);
+    const basePrice = product.sale_price == null ? Number(product.price || 0) : Number(product.sale_price || 0);
+    const currentPrice = product.promotion_price == null ? basePrice : Number(product.promotion_price || 0);
+    const priceBeforePromotion = product.promotion_price == null ? Number(product.price || 0) : Number(product.price_before_promotion ?? basePrice);
     return {
       id: slug,
       slug,
@@ -60,7 +82,9 @@
       description: String(product.short_description || "Produs disponibil în magazinul G-Trots."),
       price: formatMoney(currentPrice),
       priceValue: currentPrice,
-      regularPriceValue: Number(product.price || 0),
+      basePriceValue: basePrice,
+      regularPriceValue: priceBeforePromotion,
+      hasPromotion: product.promotion_price != null,
       stock: stockLabel(product),
       image: Number(product.images?.[0]?.sprite_index || legacyImages[slug] || 0),
       imageUrl: product.images?.[0]?.sprite_index ? "" : safeUrl(product.images?.[0]?.url),
@@ -69,15 +93,67 @@
     };
   }
 
+  function normalizeProductIdentity(value) {
+    return String(value ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
+  function productSlugFamily(product) {
+    const tokens = normalizeProductIdentity(product.slug).split(" ").filter(Boolean);
+    if (tokens.length > 2 && /^(?:varianta|variant)$/.test(tokens.at(-2)) && /^\d+$/.test(tokens.at(-1))) {
+      tokens.splice(-2);
+    }
+    while (tokens.length > 3 && !/^\d+$/.test(tokens.at(-1)) && tokens.slice(0, -1).includes(tokens.at(-1))) {
+      tokens.pop();
+    }
+    return tokens.join("-");
+  }
+
+  function deduplicateProducts(products) {
+    const keyIndexes = new Map();
+    const uniqueProducts = [];
+    products.forEach(product => {
+      const keys = [
+        ["id", product.id],
+        ["slug", product.slug],
+        ["sku", product.sku],
+        ["ean", product.ean],
+        ["name", normalizeProductIdentity(product.name)],
+        ["family", productSlugFamily(product)]
+      ]
+        .filter(([, value]) => String(value ?? "").trim() !== "")
+        .map(([type, value]) => `${type}:${String(value).trim().toLowerCase()}`);
+      const duplicateIndex = keys.map(key => keyIndexes.get(key)).find(index => index !== undefined);
+      if (duplicateIndex !== undefined) {
+        const currentSlugLength = String(uniqueProducts[duplicateIndex]?.slug || "").length || Number.MAX_SAFE_INTEGER;
+        const nextSlugLength = String(product.slug || "").length || Number.MAX_SAFE_INTEGER;
+        if (nextSlugLength < currentSlugLength) uniqueProducts[duplicateIndex] = product;
+        keys.forEach(key => keyIndexes.set(key, duplicateIndex));
+        return;
+      }
+      const index = uniqueProducts.length;
+      uniqueProducts.push(product);
+      keys.forEach(key => keyIndexes.set(key, index));
+    });
+    return uniqueProducts;
+  }
+
   async function api(action, options = {}) {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 12000);
+    const deviceToken = shopDeviceToken();
     try {
       const response = await fetch(`${API_URL}?action=${encodeURIComponent(action)}${options.query || ""}`, {
         method: options.method || "GET",
         headers: {
           Accept: "application/json",
-          ...(options.body ? { "Content-Type": "application/json" } : {})
+          ...(options.body ? { "Content-Type": "application/json" } : {}),
+          ...(localStorage.getItem(CUSTOMER_TOKEN_KEY) ? { "X-Customer-Token": localStorage.getItem(CUSTOMER_TOKEN_KEY) } : {}),
+          ...(deviceToken ? { "X-Shop-Device": deviceToken } : {})
         },
         body: options.body ? JSON.stringify(options.body) : undefined,
         cache: "no-store",
@@ -92,9 +168,10 @@
   }
 
   function registerProducts(products) {
-    const normalized = products.map(normalizeProduct);
+    const uniqueProducts = deduplicateProducts(products);
+    const normalized = uniqueProducts.map(normalizeProduct);
     window.GTrotsFavorites?.registerProducts?.(normalized, { authoritative: true });
-    window.GTrotsShopCatalog?.renderLiveProducts?.(products);
+    window.GTrotsShopCatalog?.renderLiveProducts?.(uniqueProducts);
     document.dispatchEvent(new CustomEvent("g-trots:live-products", { detail: normalized }));
     return normalized;
   }
@@ -569,9 +646,9 @@
 
     const priceRow = document.querySelector(".product-detail-price-row > div");
     priceRow?.querySelector("del")?.remove();
-    if (priceRow && product.sale_price != null) {
+    if (priceRow && (product.promotion_price != null || product.sale_price != null)) {
       const oldPrice = document.createElement("del");
-      oldPrice.textContent = formatMoney(product.price);
+      oldPrice.textContent = formatMoney(product.price_before_promotion ?? product.price);
       priceRow.append(oldPrice);
     }
     const stock = document.querySelector(".product-detail-stock");
@@ -625,7 +702,7 @@
     setMeta('meta[name="twitter:title"]', document.title);
     setMeta('meta[name="twitter:description"]', metaDescription);
     if (normalized.imageUrl) setMeta('meta[name="twitter:image"]', normalized.imageUrl);
-    setMeta('meta[property="product:price:amount"]', String(product.sale_price ?? product.price ?? 0));
+    setMeta('meta[property="product:price:amount"]', String(product.promotion_price ?? product.sale_price ?? product.price ?? 0));
     setMeta('meta[property="product:price:currency"]', product.currency || "RON");
     setMeta('meta[property="product:availability"]', normalized.stock === "Stoc epuizat" ? "out of stock" : "in stock");
     document.querySelectorAll('script[type="application/ld+json"]').forEach(script => script.remove());
@@ -646,7 +723,7 @@
       offers: {
         "@type": "Offer",
         priceCurrency: product.currency || "RON",
-        price: Number(product.sale_price ?? product.price ?? 0).toFixed(2),
+        price: Number(product.promotion_price ?? product.sale_price ?? product.price ?? 0).toFixed(2),
         availability: normalized.stock === "Stoc epuizat" ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
         url: canonicalUrl,
         seller: { "@type": "Organization", name: "G-Trots" }
@@ -796,7 +873,7 @@
       }
       const fields = Object.fromEntries(new FormData(form).entries());
       try {
-        const order = await api("createPublicOrder", { method: "POST", body: { ...fields, items } });
+        const order = await api("createPublicOrder", { method: "POST", body: { ...fields, items, device_token: shopDeviceToken() } });
         cart.forEach(item => window.GTrotsCart?.remove?.(item.id));
         form.hidden = true;
         const success = document.createElement("div");
@@ -824,7 +901,15 @@
       if (identifier) {
         let productLoaded = false;
         try {
-          const product = await api("publicProduct", { query: `&slug=${encodeURIComponent(identifier)}` });
+          let product;
+          try {
+            product = await api("publicProduct", { query: `&slug=${encodeURIComponent(identifier)}` });
+          } catch (initialError) {
+            const correctedIdentifier = String(identifier).replace(/(^|-)fvr(?=-|$)/i, "$1frv");
+            if (correctedIdentifier === identifier) throw initialError;
+            product = await api("publicProduct", { query: `&slug=${encodeURIComponent(correctedIdentifier)}` });
+            if (pathMatch && product?.slug) history.replaceState(null, "", `/magazin/produs/${encodeURIComponent(product.slug)}/${window.location.search}${window.location.hash}`);
+          }
           applyLiveProduct(product);
           productLoaded = true;
         } catch {
@@ -863,7 +948,23 @@
     // iar pagina checkout.html citește aceleași produse și setări publice.
   }
 
-  window.GTrotsLiveShop = { api, normalizeProduct, registerProducts };
+  async function refreshPersonalizedPrices() {
+    try {
+      if (document.body.classList.contains("product-page")) {
+        const pathMatch = window.location.pathname.match(/\/magazin\/produs\/([^/]+)\/?$/i);
+        const identifier = pathMatch ? decodeURIComponent(pathMatch[1]) : (new URLSearchParams(window.location.search).get("slug") || document.body.dataset.productId);
+        if (identifier) applyLiveProduct(await api("publicProduct", { query: `&slug=${encodeURIComponent(identifier)}` }));
+      }
+      const products = await api("publicProducts");
+      if (Array.isArray(products)) registerProducts(products);
+    } catch {
+      // Păstrăm ultima versiune validă a catalogului dacă reîmprospătarea eșuează.
+    }
+  }
+
+  window.GTrotsLiveShop = { api, normalizeProduct, deduplicateProducts, registerProducts };
+  document.addEventListener("g-trots:customer-changed", () => void refreshPersonalizedPrices());
+  window.addEventListener("storage", event => { if (event.key === CUSTOMER_TOKEN_KEY) void refreshPersonalizedPrices(); });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialize, { once: true });
   else initialize();
 })();

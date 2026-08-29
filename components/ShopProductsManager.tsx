@@ -17,7 +17,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker';
 import {
   Check,
+  Building2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Eye,
   GripVertical,
@@ -52,6 +54,7 @@ import {
   ShopProductSource,
   ShopProductSpecification,
   ShopProductStats,
+  ShopSupplierProductReference,
 } from '@/services/shopApi';
 
 type EditorImage = ShopProductImage & { key: string; preview_uri: string };
@@ -59,6 +62,17 @@ type EditorSpecification = ShopProductSpecification & { key: string };
 type EditorQuestion = ShopProductQuestion & { key: string };
 
 const MOBILE_GALLERY_STEP = 182;
+const DETAIL_REVIEWS_PAGE_SIZE = 5;
+const DETAIL_PURCHASES_PAGE_SIZE = 5;
+
+function detailPaginationItems(totalPages: number, currentPage: number): Array<number | 'ellipsis'> {
+  if (totalPages <= 5) return Array.from({ length: totalPages }, (_, index) => index + 1);
+  const pages = new Set([1, totalPages, currentPage - 1, currentPage, currentPage + 1]);
+  if (currentPage <= 2) [2, 3].forEach((page) => pages.add(page));
+  if (currentPage >= totalPages - 1) [totalPages - 2, totalPages - 1].forEach((page) => pages.add(page));
+  const ordered = [...pages].filter((page) => page > 0 && page <= totalPages).sort((a, b) => a - b);
+  return ordered.flatMap((page, index) => index && page - ordered[index - 1] > 1 ? ['ellipsis', page] : [page]);
+}
 
 function DraggableGalleryImage({ image, index, total, isMain, onRemove, onMakeMain, onDrop, onDragStateChange }: {
   image: EditorImage;
@@ -198,7 +212,7 @@ function money(value: number) {
   return new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value) + ' lei';
 }
 
-const PRODUCT_SALES_PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25, 50, 75, 100] as const;
+const DETAIL_SALES_PAGE_SIZE = 5;
 let productManagerCache: ShopProductManagerBootstrap | null = null;
 
 export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (orderId: string) => void }) {
@@ -222,8 +236,11 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState<ShopProductStats | null>(null);
+  const [supplierReferences, setSupplierReferences] = useState<ShopSupplierProductReference[]>([]);
+  const [purchaseHistory, setPurchaseHistory] = useState<Record<string, string>[]>([]);
   const [detailSalesPage, setDetailSalesPage] = useState(1);
-  const [detailSalesPageSize, setDetailSalesPageSize] = useState(5);
+  const [detailReviewPage, setDetailReviewPage] = useState(1);
+  const [detailPurchasesPage, setDetailPurchasesPage] = useState(1);
   const [reviewReplies, setReviewReplies] = useState<Record<string, string>>({});
   const [galleryDragging, setGalleryDragging] = useState(false);
   const [slugTouched, setSlugTouched] = useState(false);
@@ -284,8 +301,23 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
   const safePage = Math.min(page, Math.max(1, Math.ceil(productTotal / pageSize)));
   const pagedProducts = products;
   const detailSalesTotal = detail?.orders.length || 0;
-  const detailSalesSafePage = Math.min(detailSalesPage, Math.max(1, Math.ceil(detailSalesTotal / detailSalesPageSize)));
-  const pagedDetailSales = detail?.orders.slice((detailSalesSafePage - 1) * detailSalesPageSize, detailSalesSafePage * detailSalesPageSize) || [];
+  const detailSalesSafePage = Math.min(detailSalesPage, Math.max(1, Math.ceil(detailSalesTotal / DETAIL_SALES_PAGE_SIZE)));
+  const pagedDetailSales = detail?.orders.slice((detailSalesSafePage - 1) * DETAIL_SALES_PAGE_SIZE, detailSalesSafePage * DETAIL_SALES_PAGE_SIZE) || [];
+  const detailReviewTotal = detail?.reviews.length || 0;
+  const detailReviewSafePage = Math.min(detailReviewPage, Math.max(1, Math.ceil(detailReviewTotal / DETAIL_REVIEWS_PAGE_SIZE)));
+  const pagedDetailReviews = detail?.reviews.slice((detailReviewSafePage - 1) * DETAIL_REVIEWS_PAGE_SIZE, detailReviewSafePage * DETAIL_REVIEWS_PAGE_SIZE) || [];
+  const detailPurchasesTotal = purchaseHistory.length;
+  const detailPurchasesSafePage = Math.min(detailPurchasesPage, Math.max(1, Math.ceil(detailPurchasesTotal / DETAIL_PURCHASES_PAGE_SIZE)));
+  const pagedPurchaseHistory = purchaseHistory.slice((detailPurchasesSafePage - 1) * DETAIL_PURCHASES_PAGE_SIZE, detailPurchasesSafePage * DETAIL_PURCHASES_PAGE_SIZE);
+  const productSuppliers = useMemo(() => {
+    const bySupplier = new Map<string, ShopSupplierProductReference>();
+    supplierReferences.forEach((reference) => {
+      const key = reference.supplier_id || reference.supplier_name || reference.id;
+      const current = bySupplier.get(key);
+      if (!current || reference.is_primary_for_supplier || (!current.last_confirmed_at && reference.last_confirmed_at)) bySupplier.set(key, reference);
+    });
+    return [...bySupplier.values()];
+  }, [supplierReferences]);
   const normalizedFormName = form.name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ro-RO');
   const duplicateProductName = normalizedFormName
     ? products.find((product) => product.id !== form.id && product.name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ro-RO') === normalizedFormName)
@@ -297,11 +329,6 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
 
   const openNew = () => {
     const next = emptyForm();
-    const defaultSource = sources.find((source) => source.is_default && source.is_active) || sources.find((source) => source.is_active);
-    if (defaultSource) {
-      next.source_id = defaultSource.id;
-      next.source_domain = defaultSource.domain;
-    }
     setForm(next);
     setSlugTouched(false);
     setEditorLoading(false);
@@ -366,10 +393,17 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
     setDetailLoading(true);
     setDetail(null);
     setDetailSalesPage(1);
-    setDetailSalesPageSize(5);
+    setDetailReviewPage(1);
+    setDetailPurchasesPage(1);
     try {
-      const next = await shopApi.getProductStats(token, product.id);
+      const [next, references, history] = await Promise.all([
+        shopApi.getProductStats(token, product.id),
+        shopApi.listProductSupplierReferences(token, product.id),
+        shopApi.getProductPurchaseHistory(token, product.id).catch(() => ({ items: [], statistics: {} })),
+      ]);
       setDetail(next);
+      setSupplierReferences(references);
+      setPurchaseHistory(history.items);
       setReviewReplies(Object.fromEntries(next.reviews.map((review) => [review.id, review.admin_reply || ''])));
     } catch (detailError) {
       Alert.alert('Fisa indisponibila', detailError instanceof Error ? detailError.message : 'Nu s-a putut deschide fisa produsului.');
@@ -400,6 +434,16 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
     const next = await shopApi.getProductStats(token, detail.product.id);
     setDetail(next);
     setReviewReplies(Object.fromEntries(next.reviews.map((review) => [review.id, review.admin_reply || ''])));
+  };
+
+  const updateSupplierReference = async (reference: ShopSupplierProductReference, patch: Partial<ShopSupplierProductReference>) => {
+    if (!token || !detail) return;
+    try {
+      await shopApi.updateSupplierProductReference(token, reference.id, { ...patch, row_version: reference.row_version });
+      setSupplierReferences(await shopApi.listProductSupplierReferences(token, detail.product.id));
+    } catch (referenceError) {
+      Alert.alert('Asocierea nu s-a actualizat', referenceError instanceof Error ? referenceError.message : 'Reîncarcă fișa produsului.');
+    }
   };
 
   const saveReviewReply = async (review: ShopProductReview) => {
@@ -579,7 +623,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
   return (
     <View style={styles.wrap}>
       <View style={styles.actions}>
-        <View style={styles.search}><Search size={17} color={Colors.textMuted} /><TextInput value={query} onChangeText={(value) => { setQuery(value); setPage(1); }} placeholder="Cauta produs sau SKU" placeholderTextColor={Colors.textMuted} style={styles.searchInput} /></View>
+        <View style={styles.search}><Search size={17} color={Colors.orange} /><TextInput value={query} onChangeText={(value) => { setQuery(value); setPage(1); }} placeholder="Caută semantic: nume, cod, model, compatibilitate" placeholderTextColor={Colors.textMuted} style={styles.searchInput} /></View>
         <TouchableOpacity style={styles.refresh} onPress={() => void load(true, { page, pageSize, query, includeMetadata: false })}>{listRefreshing ? <ActivityIndicator size="small" color={Colors.orange} /> : <RefreshCw size={18} color={Colors.textSecondary} />}</TouchableOpacity>
         <TouchableOpacity style={styles.add} onPress={openNew}><Plus size={19} color={Colors.white} /><Text style={styles.addText}>Produs</Text></TouchableOpacity>
       </View>
@@ -638,9 +682,15 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
                 </View>
               </TouchableOpacity>;
             }) : <Text style={styles.detailEmpty}>Produsul nu apare in nicio comanda.</Text>}
-            <ShopPagination page={detailSalesSafePage} pageSize={detailSalesPageSize} total={detailSalesTotal} pageSizeOptions={PRODUCT_SALES_PAGE_SIZE_OPTIONS} onPageChange={setDetailSalesPage} onPageSizeChange={setDetailSalesPageSize} />
+            <DetailGooglePagination label="comenzi" page={detailSalesSafePage} pageSize={DETAIL_SALES_PAGE_SIZE} total={detailSalesTotal} onPageChange={setDetailSalesPage} />
             <SectionTitle number="02" title="Recenzii" text="Raspunde clientilor sau sterge recenziile direct de aici." />
-            {detail.reviews.length ? detail.reviews.map((review) => <View key={review.id} style={styles.reviewCard}><View style={styles.reviewHead}><View><Text style={styles.reviewName}>{review.customer_name}</Text><Text style={styles.reviewMeta}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)} · {review.created_at}</Text></View><TouchableOpacity style={styles.reviewDelete} onPress={() => removeReview(review)}><Trash2 size={16} color={Colors.error} /></TouchableOpacity></View><Text style={styles.reviewMessage}>{review.message}</Text><TextInput value={reviewReplies[review.id] || ''} onChangeText={(value) => setReviewReplies((current) => ({ ...current, [review.id]: value }))} placeholder="Scrie raspunsul magazinului..." placeholderTextColor={Colors.textMuted} multiline style={styles.reviewReply} /><TouchableOpacity style={styles.reviewSave} onPress={() => void saveReviewReply(review)}><MessageSquare size={15} color={Colors.white} /><Text style={styles.reviewSaveText}>Salveaza raspunsul</Text></TouchableOpacity></View>) : <Text style={styles.detailEmpty}>Produsul nu are inca recenzii.</Text>}
+            {detail.reviews.length ? pagedDetailReviews.map((review) => <View key={review.id} style={styles.reviewCard}><View style={styles.reviewHead}><View><Text style={styles.reviewName}>{review.customer_name}</Text><Text style={styles.reviewMeta}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)} · {review.created_at}</Text></View><TouchableOpacity style={styles.reviewDelete} onPress={() => removeReview(review)}><Trash2 size={16} color={Colors.error} /></TouchableOpacity></View><Text style={styles.reviewMessage}>{review.message}</Text><TextInput value={reviewReplies[review.id] || ''} onChangeText={(value) => setReviewReplies((current) => ({ ...current, [review.id]: value }))} placeholder="Scrie raspunsul magazinului..." placeholderTextColor={Colors.textMuted} multiline style={styles.reviewReply} /><TouchableOpacity style={styles.reviewSave} onPress={() => void saveReviewReply(review)}><MessageSquare size={15} color={Colors.white} /><Text style={styles.reviewSaveText}>Salveaza raspunsul</Text></TouchableOpacity></View>) : <Text style={styles.detailEmpty}>Produsul nu are inca recenzii.</Text>}
+            <DetailGooglePagination label="recenzii" page={detailReviewSafePage} pageSize={DETAIL_REVIEWS_PAGE_SIZE} total={detailReviewTotal} onPageChange={setDetailReviewPage} />
+            <SectionTitle number="03" title="Furnizori" text="Firmele de la care a fost sau poate fi cumpărat acest produs." />
+            {productSuppliers.length ? productSuppliers.map((reference) => <View key={reference.supplier_id || reference.id} style={[styles.referenceCard, !reference.is_active && styles.referenceInactive]}><View style={styles.referenceIcon}><Building2 size={18} color="#2DD4BF" /></View><View style={styles.referenceCopy}><View style={styles.referenceHeading}><Text numberOfLines={1} style={styles.referenceSupplier}>{reference.supplier_name || 'Furnizor'}</Text><View style={styles.referencePrimary}><Text style={styles.referencePrimaryText}>FURNIZOR ASOCIAT</Text></View></View><Text style={styles.referenceMeta}>Produs cumpărat de la acest furnizor</Text><Text numberOfLines={1} style={styles.referenceCost}>{reference.last_confirmed_price_ron ? `Ultimul cost ${money(Number(reference.last_confirmed_price_ron))}` : 'Prima achiziție nu este încă confirmată'}</Text></View></View>) : <Text style={styles.detailEmpty}>Produsul nu are furnizori asociați.</Text>}
+            <SectionTitle number="04" title="Istoric preturi de achizitie" text="Fiecare NIR confirmat ramane un snapshot separat." />
+            {purchaseHistory.length ? pagedPurchaseHistory.map((item) => <View key={item.nir_line_id} style={styles.purchaseCard}><View><Text style={styles.purchaseNir}>{item.nir_number}</Text><Text style={styles.purchaseMeta}>{item.reception_date} · {item.supplier_name || 'Furnizor'} · cod {item.supplier_code || '—'}</Text></View><View style={styles.purchaseRight}><Text style={styles.purchaseCost}>{money(Number(item.inventory_unit_cost_ron || 0))}/u</Text><Text style={styles.purchaseMeta}>{item.stock_quantity} buc. · {item.unit_price} {item.currency}</Text></View></View>) : <Text style={styles.detailEmpty}>Nu exista achizitii confirmate.</Text>}
+            <DetailGooglePagination label="achizitii" page={detailPurchasesSafePage} pageSize={DETAIL_PURCHASES_PAGE_SIZE} total={detailPurchasesTotal} onPageChange={setDetailPurchasesPage} />
           </ScrollView>}
         </SafeAreaView>
       </Modal> : null}
@@ -740,6 +790,18 @@ function SectionTitle({ number, title, text }: { number: string; title: string; 
   return <View style={styles.sectionTitle}><Text style={styles.sectionNumber}>{number}</Text><View><Text style={styles.sectionName}>{title}</Text><Text style={styles.sectionText}>{text}</Text></View></View>;
 }
 
+function DetailGooglePagination({ label, page, pageSize, total, onPageChange }: { label: string; page: number; pageSize: number; total: number; onPageChange: (page: number) => void }) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const pages = detailPaginationItems(totalPages, safePage);
+  return <View style={styles.detailPagination}>
+    <TouchableOpacity accessibilityLabel="Pagina anterioară" disabled={safePage === 1} style={[styles.detailPageDirection, safePage === 1 && styles.detailPageDisabled]} onPress={() => onPageChange(safePage - 1)}><ChevronLeft size={18} color="#7DD3FC" /></TouchableOpacity>
+    {pages.map((item, index) => item === 'ellipsis' ? <Text key={`ellipsis-${label}-${index}`} style={styles.detailPageEllipsis}>…</Text> : <TouchableOpacity key={`${label}-${item}`} style={[styles.detailPageButton, item === safePage && styles.detailPageButtonActive]} onPress={() => onPageChange(item)}><Text style={[styles.detailPageText, item === safePage && styles.detailPageTextActive]}>{item}</Text></TouchableOpacity>)}
+    <TouchableOpacity accessibilityLabel="Pagina următoare" disabled={safePage === totalPages} style={[styles.detailPageDirection, safePage === totalPages && styles.detailPageDisabled]} onPress={() => onPageChange(safePage + 1)}><ChevronRight size={18} color="#7DD3FC" /></TouchableOpacity>
+    <Text style={styles.detailPageTotal}>{total} {label}</Text>
+  </View>;
+}
+
 function Choice({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   return <TouchableOpacity style={[styles.choice, selected && styles.choiceActive]} onPress={onPress}>{selected ? <Check size={13} color={Colors.orange} /> : null}<Text style={[styles.choiceText, selected && styles.choiceTextActive]}>{label}</Text></TouchableOpacity>;
 }
@@ -792,6 +854,7 @@ const styles = StyleSheet.create({
   metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }, metricCard: { width: '48%', minHeight: 72, justifyContent: 'space-between', borderWidth: 1, borderColor: '#343137', borderRadius: 16, padding: 11, backgroundColor: '#1B1B1F' }, metricCardAccent: { borderColor: 'rgba(34,197,94,0.35)', backgroundColor: 'rgba(34,197,94,0.07)' }, metricLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5 }, metricLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.55 }, metricValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 14, marginTop: 6 }, metricValueAccent: { color: '#9CD9AE' },
   saleCard: { marginTop: 10, padding: 14, borderRadius: 16, backgroundColor: '#201E23', borderWidth: 1, borderColor: '#343137' }, saleHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, saleLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.6 }, saleNumber: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 12, marginTop: 3 }, saleMeta: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 6 }, saleStatus: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5, backgroundColor: '#33251C' }, saleStatusText: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, textTransform: 'uppercase' }, saleStats: { flexDirection: 'row', gap: 7, marginTop: 12 }, saleStat: { flex: 1, minWidth: 0, padding: 9, borderRadius: 11, backgroundColor: '#17161A' }, saleValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10, marginTop: 5 }, saleProfit: { color: '#28D16F', fontFamily: 'Inter-Bold', fontSize: 10, marginTop: 5 }, detailEmpty: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 10, paddingVertical: 18 },
   reviewCard: { borderWidth: 1, borderColor: '#37343B', borderRadius: 18, padding: 14, backgroundColor: '#1B1B1F', marginBottom: 10 }, reviewHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, reviewName: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 11 }, reviewMeta: { color: '#F59E0B', fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 3 }, reviewDelete: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: 'rgba(239,68,68,0.1)' }, reviewMessage: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 16, marginVertical: 12 }, reviewReply: { minHeight: 74, borderWidth: 1, borderColor: '#49454F', borderRadius: 13, padding: 11, color: Colors.textPrimary, backgroundColor: '#161519', fontFamily: 'Inter-Regular', fontSize: 10, textAlignVertical: 'top' }, reviewSave: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 13, backgroundColor: Colors.orange, marginTop: 8 }, reviewSaveText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 },
+  detailPagination: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 10, marginBottom: 4 }, detailPageDirection: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: '#162B35' }, detailPageDisabled: { opacity: 0.28 }, detailPageButton: { minWidth: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'transparent', borderRadius: 11, backgroundColor: '#242228' }, detailPageButtonActive: { borderColor: '#FF9A4050', backgroundColor: '#FE8C19' }, detailPageText: { color: '#A39BA5', fontFamily: 'Inter-Bold', fontSize: 10 }, detailPageTextActive: { color: '#1D0C01' }, detailPageEllipsis: { width: 20, color: '#716A73', textAlign: 'center', fontFamily: 'Inter-Bold', fontSize: 14 }, detailPageTotal: { position: 'absolute', right: 2, color: Colors.textMuted, fontFamily: 'Inter-SemiBold', fontSize: 8 },
   sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: 11, borderTopWidth: 1, borderTopColor: '#2D2A30', paddingTop: 20, marginTop: 12, marginBottom: 16 }, sectionNumber: { width: 38, height: 38, textAlign: 'center', textAlignVertical: 'center', borderRadius: 12, color: Colors.orange, backgroundColor: Colors.orangeDim, fontFamily: 'Inter-Bold', fontSize: 10 }, sectionName: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 15 }, sectionText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 9, marginTop: 2, maxWidth: 650 },
   inlineAdd: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderWidth: 1, borderColor: 'rgba(255,107,0,0.28)', borderRadius: 14, backgroundColor: Colors.orangeDim, marginBottom: 10 }, inlineAddText: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 10 }, subEditorCard: { borderWidth: 1, borderColor: '#37343B', borderRadius: 17, padding: 13, backgroundColor: '#1B1B1F', marginBottom: 10 }, subEditorHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }, subEditorTitle: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.8 },
   label: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.8, marginBottom: 7 }, sourceRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 14 }, choices: { gap: 7, paddingBottom: 15 }, choiceWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 15 }, choice: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: '#413D45', borderRadius: 999, paddingHorizontal: 13, backgroundColor: '#1B1B1F' }, choiceActive: { borderColor: Colors.orange, backgroundColor: Colors.orangeDim }, choiceText: { color: Colors.textSecondary, fontFamily: 'Inter-SemiBold', fontSize: 9 }, choiceTextActive: { color: Colors.orange },
@@ -800,6 +863,8 @@ const styles = StyleSheet.create({
   twoColumns: { flexDirection: 'row', gap: 9 }, column: { flex: 1 }, pricePreview: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 16, padding: 14, backgroundColor: '#1B1B1F', marginBottom: 10 }, oldPrice: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 11, textDecorationLine: 'line-through' }, newPrice: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 16 }, discountBadge: { color: '#9CD9AE', fontFamily: 'Inter-Bold', fontSize: 9 },
   nirNote: { marginBottom: 10, borderWidth: 1, borderColor: 'rgba(56,189,248,0.18)', borderRadius: 15, padding: 13, backgroundColor: 'rgba(56,189,248,0.055)' }, nirNoteTitle: { color: '#7DD3FC', fontFamily: 'Inter-Bold', fontSize: 10 }, nirNoteText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 14, marginTop: 4 },
   supplierPricingCard: { marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,138,39,0.28)', borderRadius: 20, padding: 13, backgroundColor: 'rgba(255,138,39,0.055)' }, supplierPricingHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14 }, supplierPricingKicker: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8 }, supplierPricingTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 12, marginTop: 3 }, supplierPricingLive: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 6, backgroundColor: 'rgba(34,197,94,0.1)' }, supplierPricingLiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#2DD881' }, supplierPricingLiveText: { color: '#8FE3B2', fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.5 },
+  referenceCard: { minHeight: 86, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: 'rgba(94,234,212,0.22)', borderRadius: 17, paddingHorizontal: 11, paddingVertical: 10, backgroundColor: '#17211F', marginBottom: 8 }, referenceInactive: { opacity: 0.5 }, referenceIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: 'rgba(94,234,212,0.11)', borderWidth: 1, borderColor: 'rgba(94,234,212,0.18)' }, referenceCopy: { flex: 1, minWidth: 0 }, referenceHeading: { flexDirection: 'row', alignItems: 'center', gap: 7 }, referenceSupplier: { flex: 1, color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 11 }, referenceDataRow: { marginTop: 5, flexDirection: 'row', alignItems: 'center', gap: 7 }, referenceCodeChip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(45,212,191,0.11)' }, referenceCode: { color: '#5EEAD4', fontFamily: 'Inter-Bold', fontSize: 8 }, referenceMeta: { color: '#AAA4AC', fontFamily: 'Inter-Regular', fontSize: 8 }, referenceCost: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 7.5, marginTop: 4 }, referenceAction: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: '#242228', borderWidth: 1, borderColor: '#FFFFFF0D' }, referencePrimary: { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 4, backgroundColor: 'rgba(34,197,94,0.12)' }, referencePrimaryText: { color: '#8FE3B2', fontFamily: 'Inter-Bold', fontSize: 6, letterSpacing: 0.5 },
+  purchaseCard: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#37343B', borderRadius: 16, padding: 12, backgroundColor: '#1B1B1F', marginBottom: 8 }, purchaseNir: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 }, purchaseMeta: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 4 }, purchaseRight: { alignItems: 'flex-end' }, purchaseCost: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 11 },
   multiSelect: { marginBottom: 16 }, multiSelectButton: { minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderWidth: 1, borderColor: '#49454F', borderRadius: 13, paddingHorizontal: 14, backgroundColor: '#161519' }, multiSelectButtonOpen: { borderColor: Colors.orange }, multiSelectValue: { flex: 1, color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 10 }, multiSelectPlaceholder: { color: Colors.textMuted, fontFamily: 'Inter-Regular' }, multiSelectOptions: { marginTop: 6, overflow: 'hidden', borderWidth: 1, borderColor: '#49454F', borderRadius: 14, padding: 6, backgroundColor: '#211F24' }, multiSelectOption: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 10, paddingHorizontal: 10 }, multiSelectCheck: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#57515B', borderRadius: 7, backgroundColor: '#171519' }, multiSelectCheckActive: { borderColor: Colors.orange, backgroundColor: Colors.orange }, multiSelectOptionText: { color: Colors.textSecondary, fontFamily: 'Inter-SemiBold', fontSize: 10 }, multiSelectOptionTextActive: { color: Colors.orange },
   googlePreview: { flexDirection: 'row', gap: 12, borderWidth: 1, borderColor: '#343137', borderRadius: 19, padding: 14, backgroundColor: '#FFF', marginBottom: 18 }, googleImage: { width: 78, height: 78, borderRadius: 10, backgroundColor: '#EEE' }, googleCopy: { flex: 1, minWidth: 0 }, googleSite: { color: '#202124', fontFamily: 'Inter-Regular', fontSize: 9 }, googleTitle: { color: '#1A0DAB', fontFamily: 'Inter-Regular', fontSize: 15, lineHeight: 19, marginTop: 3 }, googleDescription: { color: '#4D5156', fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 14, marginTop: 3 }, googleUrl: { color: '#188038', fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 4 },
   toggleCard: { minHeight: 65, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderRadius: 17, padding: 13, backgroundColor: '#1B1B1F', marginBottom: 9 }, toggleTitle: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 11 }, toggleText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 3 },

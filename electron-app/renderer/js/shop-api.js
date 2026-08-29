@@ -1,7 +1,7 @@
 (function () {
   const baseUrl = String(window.SHOP_API_URL || 'https://g-trots.ro/shop-api').replace(/\/$/, '');
 
-  async function call(action, options = {}, id = '', attempt = 0) {
+  async function call(action, options = {}, id = '', attempt = 0, query = {}) {
     let token = window.AUTH?.getToken?.() || '';
     if (!token && window.AUTH?.whenReady) {
       await window.AUTH.whenReady();
@@ -15,7 +15,8 @@
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const isGet = !options.method || options.method === 'GET';
     const cacheBuster = isGet ? `&_=${Date.now()}` : '';
-    const url = `${baseUrl}/api-v2.php?action=${encodeURIComponent(action)}${id ? `&id=${encodeURIComponent(id)}` : ''}${cacheBuster}`;
+    const queryString = Object.entries(query).filter(([, value]) => value !== undefined && String(value) !== '').map(([key, value]) => `&${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`).join('');
+    const url = `${baseUrl}/api-v2.php?action=${encodeURIComponent(action)}${id ? `&id=${encodeURIComponent(id)}` : ''}${queryString}${cacheBuster}`;
     try {
       const response = await fetch(url, {
         ...options,
@@ -33,9 +34,14 @@
       const retryable = !options.method || options.method === 'GET';
       if (retryable && attempt === 0 && [502, 503, 504].includes(response.status)) {
         await new Promise(resolve => setTimeout(resolve, 450));
-        return call(action, options, id, attempt + 1);
+        return call(action, options, id, attempt + 1, query);
       }
-      if (!response.ok) throw new Error(result?.error || `Eroare SHOP (${response.status})`);
+      if (!response.ok) {
+        const error = new Error(result?.error || `Eroare SHOP (${response.status})`);
+        error.status = response.status;
+        error.payload = result;
+        throw error;
+      }
       if (result === null || result === undefined) {
         throw new Error('Serverul SHOP a trimis un raspuns incomplet. Reincearca actualizarea.');
       }
@@ -44,7 +50,7 @@
       const retryable = !options.method || options.method === 'GET';
       if (retryable && attempt === 0 && (error?.name === 'AbortError' || error?.name === 'TypeError')) {
         await new Promise(resolve => setTimeout(resolve, 450));
-        return call(action, options, id, attempt + 1);
+        return call(action, options, id, attempt + 1, query);
       }
       if (error?.name === 'AbortError') throw new Error('Serverul SHOP nu a raspuns la timp.');
       throw error;
@@ -100,7 +106,7 @@
   }
   window.SHOP_API = {
     getDashboardStats: () => call('getDashboardStats'),
-    loadProductManager: () => call('productManagerBootstrap'),
+    loadProductManager: (options = {}) => call('productManagerBootstrap', json('POST', options)),
     listCategories: () => call('listCategories'),
     createCategory: (payload) => call('createCategory', json('POST', payload)),
     updateCategory: (id, payload) => call('updateCategory', json('PUT', payload), id),
@@ -117,6 +123,43 @@
     createProductSource: (payload) => call('createProductSource', json('POST', payload)),
     updateProductSource: (id, payload) => call('updateProductSource', json('PUT', payload), id),
     deleteProductSource: (id) => call('deleteProductSource', { method: 'DELETE' }, id),
+    listSuppliers: () => call('listSuppliers'),
+    createSupplier: (payload) => call('createSupplier', json('POST', payload)),
+    updateSupplier: (id, payload) => call('updateSupplier', json('PUT', payload), id),
+    deleteSupplier: (id) => call('deleteSupplier', { method: 'DELETE' }, id),
+    searchSuppliers: (q = '') => call('searchSuppliers', {}, '', 0, { q, limit: 50 }),
+    getSupplier: (id) => call('getSupplier', {}, id),
+    checkSupplierCui: (cui) => call('checkSupplierCui', {}, '', 0, { cui }),
+    listWarehouses: () => call('listWarehouses'),
+    getNirPermissions: () => call('nirPermissions'),
+    getBnrExchangeRate: (currency, date = '') => call('getBnrExchangeRate', {}, '', 0, { currency, date }),
+    listNirs: (filters = {}) => call('listNirs', {}, '', 0, filters),
+    getNir: (id) => call('getNir', {}, id),
+    createNir: (payload) => call('createNir', json('POST', payload)),
+    updateNir: (id, payload) => call('updateNir', json('PUT', payload), id),
+    deleteNir: (id) => call('deleteNirDrafts', { method: 'DELETE' }, id),
+    autosaveNir: (id, payload) => call('autosaveNir', json('POST', payload), id),
+    validateNir: (id) => call('validateNir', json('POST', {}), id),
+    confirmNir: (id, rowVersion, idempotencyKey) => call('confirmNir', { ...json('POST', { row_version: rowVersion, idempotency_key: idempotencyKey }), headers: { 'Idempotency-Key': idempotencyKey } }, id),
+    reopenNir: (id, rowVersion) => call('reopenNir', json('POST', { row_version: rowVersion }), id),
+    reverseNir: (id, rowVersion, reason) => call('reverseNir', json('POST', { row_version: rowVersion, reason }), id),
+    uploadNirAttachment: (id, payload) => call('uploadNirAttachment', json('POST', payload), id),
+    extractNirAttachment: (id, attachmentId) => call('extractNirAttachment', json('POST', { attachment_id: attachmentId }), id),
+    downloadNirAttachment: (id, attachmentId) => call('downloadNirAttachment', {}, id, 0, { attachment_id: attachmentId }),
+    downloadAllNirAttachments: id => call('downloadAllNirAttachments', {}, id),
+    getNirMovements: (id) => call('getNirMovements', {}, id),
+    getNirFifoLayers: (id) => call('getNirFifoLayers', {}, id),
+    exportNir: (id, format) => call('exportNir', {}, id, 0, { format }),
+    resolveSupplierProductReference: (supplierId, code, ean = '', name = '') => call('resolveSupplierProductReference', {}, '', 0, { supplier_id: supplierId, code, ean, name }),
+    createSupplierProductReference: (payload) => call('createSupplierProductReference', json('POST', payload)),
+    updateSupplierProductReference: (id, payload) => call('updateSupplierProductReference', json('PATCH', payload), id),
+    listProductSupplierReferences: (productId) => call('listProductSupplierReferences', {}, productId),
+    listSupplierProducts: (supplierId) => call('listSupplierProducts', {}, supplierId),
+    getProductPurchaseHistory: (productId) => call('getProductPurchaseHistory', {}, productId),
+    getProductFifoLayers: (productId, warehouseId = '') => call('getProductFifoLayers', {}, productId, 0, { warehouse_id: warehouseId }),
+    previewProductFifo: (productId, quantity, warehouseId = '') => call('previewProductFifo', json('POST', { quantity, warehouse_id: warehouseId }), productId),
+    getFifoReconciliation: () => call('getFifoReconciliation'),
+    createFifoOpeningBalance: (payload) => call('createFifoOpeningBalance', json('POST', payload)),
     syncBoomagTaxonomy: () => call('syncBoomagTaxonomy', json('POST', {})),
     syncBoomagStock: () => call('syncBoomagStock', json('POST', {})),
     listProducts: () => call('listProducts'),
@@ -153,6 +196,7 @@
     getCustomer: (id) => call('getCustomer', {}, id),
     updateCustomerStatus: (id, isActive) => call('updateCustomerStatus', json('PATCH', { is_active: isActive }), id),
     listPromotions: () => call('listPromotions'),
+    getPromotionStats: (id) => call('getPromotionStats', {}, id),
     createPromotion: (payload) => call('createPromotion', json('POST', payload)),
     updatePromotion: (id, payload) => call('updatePromotion', json('PATCH', payload), id),
     deletePromotion: (id) => call('deletePromotion', { method: 'DELETE' }, id),

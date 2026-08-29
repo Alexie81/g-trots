@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Alert,
   Modal,
   ScrollView,
@@ -41,6 +42,16 @@ const dateTime = (value?: string | null) => value
 const orderStatus: Record<string, string> = {
   new: 'În procesare', confirmed: 'Confirmată', processing: 'În pregătire', shipped: 'Predată curierului', completed: 'Livrată', refunded: 'Rambursată', cancelled: 'Anulată',
 };
+const CUSTOMER_PAGE_SIZE = 8;
+
+function paginationItems(totalPages: number, currentPage: number): Array<number | 'ellipsis'> {
+  if (totalPages <= 5) return Array.from({ length: totalPages }, (_, index) => index + 1);
+  const pages = new Set([1, totalPages, currentPage - 1, currentPage, currentPage + 1]);
+  if (currentPage <= 2) [2, 3].forEach((page) => pages.add(page));
+  if (currentPage >= totalPages - 1) [totalPages - 2, totalPages - 1].forEach((page) => pages.add(page));
+  const ordered = [...pages].filter((page) => page > 0 && page <= totalPages).sort((a, b) => a - b);
+  return ordered.flatMap((page, index) => index && page - ordered[index - 1] > 1 ? ['ellipsis', page] : [page]);
+}
 
 function initials(name: string) {
   return String(name || 'Client').trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'C';
@@ -54,9 +65,12 @@ export default function ShopCustomersManager({ onSearchFocus }: { onSearchFocus?
   const [items, setItems] = useState<ShopCustomerSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [detailPage, setDetailPage] = useState(1);
   const [selected, setSelected] = useState<ShopCustomerDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [statusSaving, setStatusSaving] = useState<string | null>(null);
+  const listAnimation = useRef(new Animated.Value(1)).current;
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -79,6 +93,21 @@ export default function ShopCustomersManager({ onSearchFocus }: { onSearchFocus?
     return items.filter((item) => [item.full_name, item.email, item.phone].some((value) => String(value || '').toLocaleLowerCase('ro-RO').includes(needle)));
   }, [items, query]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / CUSTOMER_PAGE_SIZE));
+  const visibleItems = useMemo(() => filtered.slice((page - 1) * CUSTOMER_PAGE_SIZE, page * CUSTOMER_PAGE_SIZE), [filtered, page]);
+  const pages = useMemo(() => paginationItems(totalPages, page), [totalPages, page]);
+  const detailOrders = selected?.orders || [];
+  const detailTotalPages = Math.max(1, Math.ceil(detailOrders.length / CUSTOMER_PAGE_SIZE));
+  const visibleDetailOrders = detailOrders.slice((detailPage - 1) * CUSTOMER_PAGE_SIZE, detailPage * CUSTOMER_PAGE_SIZE);
+  const detailPages = paginationItems(detailTotalPages, detailPage);
+
+  useEffect(() => { setPage((current) => Math.min(current, totalPages)); }, [totalPages]);
+  useEffect(() => { setDetailPage((current) => Math.min(current, detailTotalPages)); }, [detailTotalPages]);
+  useEffect(() => {
+    listAnimation.setValue(0);
+    Animated.timing(listAnimation, { toValue: 1, duration: 190, useNativeDriver: true }).start();
+  }, [listAnimation, page, query]);
+
   const totals = useMemo(() => ({
     active: items.filter((item) => item.is_active).length,
     orders: items.reduce((sum, item) => sum + item.orders_count, 0),
@@ -88,7 +117,7 @@ export default function ShopCustomersManager({ onSearchFocus }: { onSearchFocus?
   const openCustomer = async (id: string) => {
     if (!token) return;
     setDetailLoading(true);
-    try { setSelected(await shopApi.getCustomer(token, id)); }
+    try { setDetailPage(1); setSelected(await shopApi.getCustomer(token, id)); }
     catch (error) { Alert.alert('Fișa nu s-a putut deschide', error instanceof Error ? error.message : 'Încearcă din nou.'); }
     finally { setDetailLoading(false); }
   };
@@ -129,18 +158,23 @@ export default function ShopCustomersManager({ onSearchFocus }: { onSearchFocus?
       <Metric Icon={WalletCards} color="#34D399" label="VALOARE" value={money(totals.value)} note="comenzi valide" />
     </View>
 
-    <View style={styles.searchBox}><Search size={19} color="#FE8C19" /><View style={styles.searchCopy}><Text style={styles.searchLabel}>CAUTĂ UN CLIENT</Text><TextInput value={query} onFocus={onSearchFocus} onChangeText={setQuery} placeholder="Nume, e-mail sau telefon" placeholderTextColor="#69636D" style={styles.searchInput} /></View>{query ? <TouchableOpacity style={styles.clear} onPress={() => setQuery('')}><X size={17} color="#CFC8D1" /></TouchableOpacity> : null}</View>
+    <View style={styles.searchBox}><Search size={19} color="#FE8C19" /><View style={styles.searchCopy}><Text style={styles.searchLabel}>CAUTĂ UN CLIENT</Text><TextInput value={query} onFocus={onSearchFocus} onChangeText={(value) => { setQuery(value); setPage(1); }} placeholder="Nume, adresă de e-mail sau telefon" placeholderTextColor="#69636D" style={styles.searchInput} /></View>{query ? <TouchableOpacity style={styles.clear} onPress={() => { setQuery(''); setPage(1); }}><X size={17} color="#CFC8D1" /></TouchableOpacity> : null}</View>
 
-    <View style={styles.listHead}><Text style={styles.listTitle}>{filtered.length} {filtered.length === 1 ? 'client' : 'clienți'}</Text><Text style={styles.listHint}>Apasă pentru fișa completă</Text></View>
-    <View style={styles.list}>
-      {filtered.map((item) => <TouchableOpacity key={item.id} style={[styles.card, !item.is_active && styles.cardDisabled]} onPress={() => void openCustomer(item.id)} activeOpacity={0.72}>
+    <View style={styles.listHead}><Text style={styles.listTitle}>{filtered.length} {filtered.length === 1 ? 'client' : 'clienți'}</Text><Text style={styles.listHint}>{filtered.length ? `Pagina ${page} din ${totalPages}` : 'Caută după datele clientului'}</Text></View>
+    <Animated.View style={[styles.list, { opacity: listAnimation, transform: [{ translateY: listAnimation.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}>
+      {visibleItems.map((item) => <TouchableOpacity key={item.id} style={[styles.card, !item.is_active && styles.cardDisabled]} onPress={() => void openCustomer(item.id)} activeOpacity={0.72}>
         <View style={styles.avatar}><Text style={styles.avatarText}>{initials(item.full_name)}</Text><View style={[styles.statusDot, !item.is_active && styles.statusDotOff]} /></View>
         <View style={styles.cardCopy}><View style={styles.nameLine}><Text numberOfLines={1} style={styles.customerName}>{item.full_name}</Text><View style={[styles.statusBadge, !item.is_active && styles.statusBadgeOff]}><Text style={[styles.statusBadgeText, !item.is_active && styles.statusBadgeTextOff]}>{item.is_active ? 'ACTIV' : 'DEZACTIVAT'}</Text></View></View><Text numberOfLines={1} style={styles.customerEmail}>{item.email}</Text><Text numberOfLines={1} style={styles.customerMeta}>{item.orders_count} comenzi · {money(item.orders_total)} · ultima: {dateTime(item.last_order_at)}</Text></View>
         {!compact ? <View style={styles.inlineSwitch}><Text style={styles.inlineSwitchLabel}>{item.is_active ? 'Acces permis' : 'Acces blocat'}</Text><Switch value={item.is_active} disabled={statusSaving === item.id} onValueChange={(value) => void changeStatus(item, value)} trackColor={{ false: '#41242D', true: '#5B3218' }} thumbColor={item.is_active ? Colors.orange : '#FB7185'} /></View> : null}
         <View style={styles.openIcon}><ChevronRight size={19} color="#EDE7EE" /></View>
       </TouchableOpacity>)}
       {!filtered.length ? <View style={styles.empty}><Search size={26} color="#FE8C19" /><Text style={styles.emptyTitle}>Niciun client găsit</Text><Text style={styles.emptyText}>Încearcă alt nume, e-mail sau număr de telefon.</Text></View> : null}
-    </View>
+    </Animated.View>
+    {filtered.length ? <View style={styles.pagination}>
+      <TouchableOpacity accessibilityLabel="Pagina anterioară" disabled={page === 1} style={[styles.pageDirection, page === 1 && styles.pageDisabled]} onPress={() => setPage((current) => Math.max(1, current - 1))}><Text style={styles.pageDirectionText}>‹</Text></TouchableOpacity>
+      {pages.map((item, index) => item === 'ellipsis' ? <Text key={`ellipsis-${index}`} style={styles.pageEllipsis}>…</Text> : <TouchableOpacity key={item} style={[styles.pageButton, page === item && styles.pageButtonActive]} onPress={() => setPage(item)}><Text style={[styles.pageButtonText, page === item && styles.pageButtonTextActive]}>{item}</Text></TouchableOpacity>)}
+      <TouchableOpacity accessibilityLabel="Pagina următoare" disabled={page === totalPages} style={[styles.pageDirection, page === totalPages && styles.pageDisabled]} onPress={() => setPage((current) => Math.min(totalPages, current + 1))}><Text style={styles.pageDirectionText}>›</Text></TouchableOpacity>
+    </View> : null}
 
     <Modal visible={Boolean(selected) || detailLoading} transparent animationType="fade" onRequestClose={() => !detailLoading && setSelected(null)}>
       <View style={styles.backdrop}>
@@ -154,7 +188,8 @@ export default function ShopCustomersManager({ onSearchFocus }: { onSearchFocus?
               <View style={styles.contactGrid}><InfoCard Icon={Mail} label="E-MAIL" value={selected.email} color="#38BDF8" /><InfoCard Icon={Phone} label="TELEFON" value={selected.phone || 'Necompletat'} color="#34D399" /><InfoCard Icon={CalendarDays} label="CLIENT DIN" value={dateTime(selected.created_at)} color="#A78BFA" /><InfoCard Icon={PackageCheck} label="ULTIMA COMANDĂ" value={dateTime(selected.last_order_at)} color="#FEA13B" /></View>
               <View style={styles.detailMetrics}><View style={styles.detailMetric}><Text style={styles.detailMetricLabel}>TOTAL COMENZI</Text><Text style={styles.detailMetricValue}>{selected.orders_count}</Text></View><View style={styles.detailMetric}><Text style={styles.detailMetricLabel}>VALOARE TOTALĂ</Text><Text style={styles.detailMetricValue}>{money(selected.orders_total)}</Text></View></View>
               <View style={styles.ordersHead}><View><Text style={styles.ordersKicker}>ISTORIC COMERCIAL</Text><Text style={styles.ordersTitle}>Comenzile clientului</Text></View><View style={styles.ordersCount}><Text style={styles.ordersCountText}>{selected.orders.length}</Text></View></View>
-              <View style={styles.ordersList}>{selected.orders.map((order) => <OrderCard key={order.id} order={order} />)}{!selected.orders.length ? <View style={styles.emptyOrders}><ShoppingBag size={22} color="#FE8C19" /><Text style={styles.emptyOrdersText}>Clientul nu are încă nicio comandă.</Text></View> : null}</View>
+              <View style={styles.ordersList}>{visibleDetailOrders.map((order) => <OrderCard key={order.id} order={order} />)}{!selected.orders.length ? <View style={styles.emptyOrders}><ShoppingBag size={22} color="#FE8C19" /><Text style={styles.emptyOrdersText}>Clientul nu are încă nicio comandă.</Text></View> : null}</View>
+              {detailOrders.length ? <View style={styles.pagination}><TouchableOpacity accessibilityLabel="Pagina anterioară a comenzilor" disabled={detailPage === 1} style={[styles.pageDirection, detailPage === 1 && styles.pageDisabled]} onPress={() => setDetailPage((current) => Math.max(1, current - 1))}><Text style={styles.pageDirectionText}>‹</Text></TouchableOpacity>{detailPages.map((item, index) => item === 'ellipsis' ? <Text key={`detail-ellipsis-${index}`} style={styles.pageEllipsis}>…</Text> : <TouchableOpacity key={`detail-page-${item}`} style={[styles.pageButton, detailPage === item && styles.pageButtonActive]} onPress={() => setDetailPage(item)}><Text style={[styles.pageButtonText, detailPage === item && styles.pageButtonTextActive]}>{item}</Text></TouchableOpacity>)}<TouchableOpacity accessibilityLabel="Pagina următoare a comenzilor" disabled={detailPage === detailTotalPages} style={[styles.pageDirection, detailPage === detailTotalPages && styles.pageDisabled]} onPress={() => setDetailPage((current) => Math.min(detailTotalPages, current + 1))}><Text style={styles.pageDirectionText}>›</Text></TouchableOpacity></View> : null}
             </ScrollView>
           </> : null}
         </View>
@@ -181,8 +216,9 @@ const styles = StyleSheet.create({
   metrics: { flexDirection: 'row', gap: 10 }, metricsCompact: { flexDirection: 'column' }, metric: { minWidth: 0, minHeight: 92, padding: 14, flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#2D292F', borderRadius: 20, backgroundColor: '#1B191E' }, metricIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 15 }, metricLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 1 }, metricValue: { maxWidth: 200, marginTop: 2, color: '#FFF', fontSize: 19, fontWeight: '900' }, metricNote: { marginTop: 2, color: '#777079', fontSize: 10 },
   searchBox: { minHeight: 70, padding: 10, paddingLeft: 16, flexDirection: 'row', alignItems: 'center', gap: 13, borderWidth: 1, borderColor: '#3A3331', borderRadius: 20, backgroundColor: '#161416' }, searchCopy: { minWidth: 0, flex: 1 }, searchLabel: { color: '#B6865B', fontSize: 9, fontWeight: '900', letterSpacing: 1 }, searchInput: { height: 30, padding: 0, color: '#FFF', fontSize: 14, fontWeight: '700' }, clear: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: '#2A272B' },
   listHead: { paddingHorizontal: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, listTitle: { color: '#FFF', fontSize: 15, fontWeight: '900' }, listHint: { color: '#706A72', fontSize: 10 }, list: { gap: 8 }, card: { minHeight: 92, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#302D32', borderRadius: 20, backgroundColor: '#1B191E' }, cardDisabled: { borderColor: '#422B32', backgroundColor: '#1C171A' }, avatar: { width: 54, height: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: '#2C211A' }, avatarText: { color: '#FEA13B', fontSize: 16, fontWeight: '900' }, statusDot: { width: 10, height: 10, position: 'absolute', right: -2, bottom: -2, borderWidth: 2, borderColor: '#1B191E', borderRadius: 5, backgroundColor: '#34D399' }, statusDotOff: { backgroundColor: '#FB7185' }, cardCopy: { minWidth: 0, flex: 1, gap: 3 }, nameLine: { flexDirection: 'row', alignItems: 'center', gap: 7 }, customerName: { minWidth: 0, flexShrink: 1, color: '#FFF', fontSize: 14, fontWeight: '900' }, statusBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 99, backgroundColor: '#15362A' }, statusBadgeOff: { backgroundColor: '#40242C' }, statusBadgeText: { color: '#4ADE80', fontSize: 8, fontWeight: '900' }, statusBadgeTextOff: { color: '#FB7185' }, customerEmail: { color: '#A69DA6', fontSize: 11 }, customerMeta: { color: '#6F6871', fontSize: 9 }, inlineSwitch: { alignItems: 'flex-end', gap: 4 }, inlineSwitchLabel: { color: '#7D757F', fontSize: 9, fontWeight: '700' }, openIcon: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: '#29262B' }, empty: { minHeight: 220, alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderStyle: 'dashed', borderColor: '#3B353D', borderRadius: 22 }, emptyTitle: { color: '#FFF', fontSize: 15, fontWeight: '900' }, emptyText: { color: '#766F78', fontSize: 11 },
+  pagination: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingTop: 4 }, pageButton: { minWidth: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'transparent', borderRadius: 11, backgroundColor: '#232027' }, pageButtonActive: { borderColor: '#FF9A403D', backgroundColor: '#FE8C19' }, pageButtonText: { color: '#A39BA5', fontSize: 11, fontWeight: '900' }, pageButtonTextActive: { color: '#1D0C01' }, pageDirection: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: '#162B35' }, pageDirectionText: { color: '#7DD3FC', fontSize: 21, fontWeight: '800', lineHeight: 22 }, pageDisabled: { opacity: 0.28 }, pageEllipsis: { width: 22, color: '#716A73', textAlign: 'center', fontSize: 15, fontWeight: '900' },
   backdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 12, backgroundColor: '#050405D9' }, sheet: { width: '100%', maxWidth: 980, maxHeight: '94%', overflow: 'hidden', borderWidth: 1, borderColor: '#3A343B', borderRadius: 28, backgroundColor: '#18161B' }, sheetCompact: { maxHeight: '97%', alignSelf: 'stretch', borderRadius: 24 }, detailLoading: { minHeight: 360, alignItems: 'center', justifyContent: 'center', gap: 10 }, sheetHeader: { minHeight: 98, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderBottomColor: '#302C32', backgroundColor: '#1E1B20' }, sheetAvatar: { width: 54, height: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: '#FE8C19' }, sheetAvatarText: { color: '#1F0E02', fontSize: 17, fontWeight: '900' }, sheetHeadCopy: { minWidth: 0, flex: 1 }, sheetKicker: { color: '#FE8C19', fontSize: 9, fontWeight: '900', letterSpacing: 1.2 }, sheetTitle: { marginTop: 2, color: '#FFF', fontSize: 19, fontWeight: '900' }, sheetEmail: { marginTop: 2, color: '#8D858E', fontSize: 10 }, close: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: '#2B282E' }, sheetScroll: { padding: 16, gap: 12 },
   accessCard: { padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#215340', borderRadius: 20, backgroundColor: '#12241D' }, accessCardOff: { borderColor: '#63303C', backgroundColor: '#27171C' }, accessIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: '#15402F' }, accessIconOff: { backgroundColor: '#47232C' }, accessCopy: { minWidth: 0, flex: 1 }, accessTitle: { color: '#FFF', fontSize: 13, fontWeight: '900' }, accessText: { marginTop: 3, color: '#8C858D', fontSize: 10, lineHeight: 15 }, disabledPreview: { padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#5B392D', borderRadius: 18, backgroundColor: '#261A16' }, disabledPreviewMark: { width: 38, height: 38, textAlign: 'center', textAlignVertical: 'center', borderRadius: 12, overflow: 'hidden', backgroundColor: '#FE8C19', color: '#1D0C01', fontSize: 18, fontWeight: '900' }, disabledPreviewLabel: { color: '#FEA13B', fontSize: 8, fontWeight: '900', letterSpacing: 1 }, disabledPreviewText: { maxWidth: 720, marginTop: 3, color: '#E8D4C3', fontSize: 10, lineHeight: 15 },
   contactGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, infoCard: { minWidth: 210, padding: 12, flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#302D33', borderRadius: 17, backgroundColor: '#1D1A20' }, infoIcon: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 12 }, infoCopy: { minWidth: 0, flex: 1 }, infoLabel: { color: '#716A73', fontSize: 8, fontWeight: '900', letterSpacing: .7 }, infoValue: { marginTop: 3, color: '#ECE6ED', fontSize: 10, fontWeight: '800' }, detailMetrics: { flexDirection: 'row', gap: 8 }, detailMetric: { minWidth: 0, flex: 1, padding: 13, borderWidth: 1, borderColor: '#302D33', borderRadius: 17, backgroundColor: '#1D1A20' }, detailMetricLabel: { color: '#777079', fontSize: 8, fontWeight: '900', letterSpacing: .8 }, detailMetricValue: { marginTop: 5, color: '#FFF', fontSize: 18, fontWeight: '900' },
-  ordersHead: { marginTop: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, ordersKicker: { color: '#FE8C19', fontSize: 8, fontWeight: '900', letterSpacing: 1.1 }, ordersTitle: { marginTop: 3, color: '#FFF', fontSize: 18, fontWeight: '900' }, ordersCount: { minWidth: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: '#2A252C' }, ordersCountText: { color: '#FFF', fontSize: 12, fontWeight: '900' }, ordersList: { gap: 8 }, orderCard: { padding: 13, gap: 10, borderWidth: 1, borderColor: '#332F35', borderRadius: 19, backgroundColor: '#1D1A20' }, orderTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }, orderNumber: { color: '#FFF', fontSize: 12, fontWeight: '900' }, orderDate: { marginTop: 3, color: '#777079', fontSize: 9 }, orderAmount: { alignItems: 'flex-end', gap: 3 }, orderAmountValue: { color: '#FEA13B', fontSize: 12, fontWeight: '900' }, orderStatus: { color: '#8F8791', fontSize: 8, fontWeight: '800' }, orderProducts: { gap: 5 }, orderProduct: { padding: 7, flexDirection: 'row', alignItems: 'center', gap: 9, borderRadius: 12, backgroundColor: '#242126' }, productThumb: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: '#F8F4EF' }, productThumbText: { color: '#2A211A', fontSize: 12, fontWeight: '900' }, productCopy: { minWidth: 0, flex: 1 }, productName: { color: '#EDE7EE', fontSize: 10, fontWeight: '800' }, productMeta: { marginTop: 2, color: '#777079', fontSize: 8 }, moreProducts: { color: '#A27B56', fontSize: 9, fontWeight: '800' }, emptyOrders: { minHeight: 100, alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderStyle: 'dashed', borderColor: '#38333A', borderRadius: 18 }, emptyOrdersText: { color: '#8E8790', fontSize: 10 },
+  ordersHead: { marginTop: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, ordersKicker: { color: '#FE8C19', fontSize: 8, fontWeight: '900', letterSpacing: 1.1 }, ordersTitle: { marginTop: 3, color: '#FFF', fontSize: 18, fontWeight: '900' }, ordersCount: { minWidth: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: '#2A252C' }, ordersCountText: { color: '#FFF', fontSize: 12, fontWeight: '900' }, ordersList: { gap: 8 }, orderCard: { padding: 13, gap: 10, borderWidth: 1, borderColor: '#332F35', borderRadius: 19, backgroundColor: '#1D1A20' }, orderTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }, orderNumber: { color: '#FFF', fontSize: 12, fontWeight: '900' }, orderDate: { marginTop: 3, color: '#777079', fontSize: 9 }, orderAmount: { alignItems: 'flex-end', gap: 3 }, orderAmountValue: { color: '#FEA13B', fontSize: 12, fontWeight: '900' }, orderStatus: { color: '#8F8791', fontSize: 8, fontWeight: '800' }, orderVat: { color: '#7DD3FC', fontSize: 7, fontWeight: '900' }, orderProducts: { gap: 5 }, orderProduct: { padding: 7, flexDirection: 'row', alignItems: 'center', gap: 9, borderRadius: 12, backgroundColor: '#242126' }, productThumb: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: '#F8F4EF' }, productThumbText: { color: '#2A211A', fontSize: 12, fontWeight: '900' }, productCopy: { minWidth: 0, flex: 1 }, productName: { color: '#EDE7EE', fontSize: 10, fontWeight: '800' }, productMeta: { marginTop: 2, color: '#777079', fontSize: 8 }, moreProducts: { color: '#A27B56', fontSize: 9, fontWeight: '800' }, emptyOrders: { minHeight: 100, alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderStyle: 'dashed', borderColor: '#38333A', borderRadius: 18 }, emptyOrdersText: { color: '#8E8790', fontSize: 10 },
 });

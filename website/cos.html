@@ -13,7 +13,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css?v=20260827-shop-call">
     <link rel="stylesheet" href="magazin.css?v=20260825-2">
-    <link rel="stylesheet" href="favorites.css?v=20260828-cart-promotions">
+    <link rel="stylesheet" href="favorites.css?v=20260828-line-promotions-v1">
   </head>
   <body class="shop-page favorites-page cart-page">
     <a class="skip-link" href="#cart-content">Sari la coș</a>
@@ -42,12 +42,12 @@
             <span class="cart-summary-eyebrow">Rezumat comandă</span>
             <h2 id="cart-summary-title">Totalul tău</h2>
             <div class="cart-summary-lines">
-              <div><span>Produse</span><strong data-cart-subtotal>0,00 lei</strong></div>
+              <div><span data-cart-subtotal-label>Subtotal</span><strong data-cart-subtotal>0,00 lei</strong></div>
               <div class="cart-summary-discount" data-cart-discount-line hidden><span>Reducere aplicată<small data-cart-promotion-title>Promoție activă</small></span><strong data-cart-discount>−0,00 lei</strong></div>
               <div><span>Livrare</span><strong data-cart-shipping>Se confirmă ulterior</strong></div>
             </div>
             <div class="cart-summary-total">
-              <div><span>Total produse</span><small>Fără costul livrării</small></div>
+              <div><span data-cart-total-label>Total de plată</span><small data-cart-tax-note>Fără costul livrării</small></div>
               <strong data-cart-order-total>0,00 lei</strong>
             </div>
             <a class="cart-checkout-button" data-cart-checkout href="checkout.html">
@@ -67,7 +67,7 @@
       </section>
     </main>
     <footer class="shell shop-footer"><div class="footer-inner"><a class="logo" href="index.html"><img src="assets/logo.png" width="1024" height="1024" alt=""><b><span>G</span>-Trots</b></a><p>Service și magazin pentru mobilitate electrică.</p><nav><a href="index.html">Acasă</a><a href="magazin.html">Magazin</a><a href="ghiduri-service-trotinete-electrice.html">Ghiduri</a><a href="index.html#contact">Contact</a></nav><a class="footer-phone" href="tel:+40762093915">+40 0762 093 915</a><small>© 2026 G-Trots</small></div></footer>
-<script src="favorites.js?v=20260828-global-cart-count" defer></script>
-    <script src="shop-live.js?v=20260825-2" defer></script>
+<script src="favorites.js?v=20260829-vat-v1" defer></script>
+    <script src="shop-live.js?v=20260828-usage-limits-v1" defer></script>
   </body>
 </html>

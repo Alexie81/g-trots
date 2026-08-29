@@ -561,6 +561,7 @@ function gomagSyncProductFromFeed(PDO $db, array $config, string $idOrSlug): arr
         $available ? 1 : 0,
         (string)$product['id'],
     ]);
+    shopNirEnsureBoomagKidotoysReferences($db, (string)$product['id']);
 
     return [
         'synced' => true,
@@ -935,7 +936,7 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
     foreach ($db->query('SELECT id, name FROM shop_categories')->fetchAll() as $category) {
         $categoryNames[(string)$category['id']] = (string)$category['name'];
     }
-    $stats = ['created' => 0, 'updated' => 0, 'images_saved' => 0, 'images_missing' => 0, 'without_compatibility' => 0, 'errors' => []];
+    $stats = ['created' => 0, 'updated' => 0, 'duplicates_skipped' => 0, 'images_saved' => 0, 'images_missing' => 0, 'without_compatibility' => 0, 'errors' => []];
 
     foreach ($batch as $batchIndex => $row) {
         $externalId = trim((string)($row['id'] ?? ''));
@@ -965,6 +966,19 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
             $find = $db->prepare('SELECT * FROM shop_products WHERE (source_id = ? AND supplier_external_id = ?) OR supplier_product_code = ? LIMIT 1');
             $find->execute([(string)$source['id'], $externalId, $supplierSku]);
             $existing = $find->fetch();
+            if (!$existing) {
+                $findDuplicateName = $db->prepare(
+                    'SELECT id FROM shop_products
+                     WHERE (source_id = ? OR LOWER(source_domain) = "boomag.ro")
+                       AND LOWER(TRIM(name)) = LOWER(TRIM(?))
+                     LIMIT 1'
+                );
+                $findDuplicateName->execute([(string)$source['id'], $content['name']]);
+                if ($findDuplicateName->fetchColumn()) {
+                    $stats['duplicates_skipped']++;
+                    continue;
+                }
+            }
             $productId = $existing ? (string)$existing['id'] : gomagStableUuid('product', $externalId);
             $contentStatus = $existing ? (string)($existing['content_status'] ?? 'manual') : 'baseline';
             $refreshEditorialContent = !$existing || $contentStatus === 'baseline';
@@ -1021,6 +1035,7 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
                 $brandInsert = $db->prepare('INSERT IGNORE INTO shop_product_brands (product_id, brand_id) VALUES (?, ?)');
                 foreach (array_values(array_unique($brandIds)) as $brandId) $brandInsert->execute([$productId, $brandId]);
             }
+            shopNirEnsureBoomagKidotoysReferences($db, $productId);
             $db->commit();
 
             $imageResult = $refreshEditorialContent
@@ -1133,23 +1148,32 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
     if (!$source) throw new RuntimeException('Sursa boomag.ro nu exista in catalog.');
 
     $products = $db->prepare(
-        'SELECT p.id, p.sku, p.supplier_product_code, p.supplier_external_id
+        'SELECT p.id, p.sku, p.supplier_product_code, p.supplier_external_id,
+                p.price, p.sale_price, p.discount_type, p.discount_value,
+                p.supplier_base_price, p.supplier_price_difference,
+                p.stock_quantity, p.supplier_stock_quantity, p.supplier_stock_status
          FROM shop_products p
          WHERE p.source_id = ? OR LOWER(p.source_domain) = "boomag.ro"'
     );
     $products->execute([(string)$source]);
+    $productsById = [];
     $byCode = [];
     $byExternalId = [];
     foreach ($products->fetchAll() as $product) {
+        $productId = (string)$product['id'];
+        $productsById[$productId] = $product;
         $externalKey = trim((string)($product['supplier_external_id'] ?? ''));
-        if ($externalKey !== '') $byExternalId[$externalKey] = (string)$product['id'];
+        if ($externalKey !== '') $byExternalId[$externalKey] = $productId;
         foreach ([$product['sku'] ?? '', $product['supplier_product_code'] ?? ''] as $code) {
             $key = mb_strtolower(trim((string)$code));
-            if ($key !== '') $byCode[$key] = (string)$product['id'];
+            if ($key !== '') $byCode[$key] = $productId;
         }
     }
 
     $matched = [];
+    $pricesSynced = [];
+    $pricesChanged = [];
+    $stocksChanged = [];
     $db->beginTransaction();
     try {
         $reset = $db->prepare(
@@ -1162,7 +1186,9 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
         $reset->execute([(string)$source]);
         $update = $db->prepare(
             'UPDATE shop_products
-             SET sku = ?, supplier_product_code = ?, supplier_stock_quantity = ?, supplier_stock_status = ?,
+             SET sku = ?, supplier_product_code = ?,
+                 supplier_base_price = ?, supplier_price_difference = ?, supplier_price_updated_at = NOW(),
+                 price = ?, sale_price = ?, supplier_stock_quantity = ?, supplier_stock_status = ?,
                  supplier_stock_updated_at = NOW(), stock_mode = "tracked", stock_quantity = ?,
                  updated_at = updated_at
              WHERE id = ?'
@@ -1175,10 +1201,53 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
                 ? $byExternalId[$externalKey]
                 : ($key !== '' && isset($byCode[$key]) ? $byCode[$key] : null);
             if ($productId === null || $feedSku === '') continue;
+            $product = $productsById[$productId] ?? null;
+            if (!is_array($product)) continue;
+
             $available = boomagStockAvailable($row['stock_status'] ?? '0');
             $quantity = max(0, (int)floor((float)str_replace(',', '.', trim((string)($row['stock'] ?? '0')))));
             if (!$available) $quantity = 0;
-            $update->execute([$feedSku, $feedSku, $quantity, $available ? 1 : 0, $quantity, $productId]);
+
+            $supplierBase = boomagFeedPrice($row);
+            $difference = $product['supplier_price_difference'] === null
+                ? null
+                : round((float)$product['supplier_price_difference'], 2);
+            $currentPrice = round((float)$product['price'], 2);
+            $nextPrice = $currentPrice;
+            if ($supplierBase !== null) {
+                // Prima sincronizare memoreaza adaosul deja stabilit in G-Trots.
+                // Sincronizarile urmatoare modifica doar baza furnizorului.
+                if ($difference === null) $difference = round($currentPrice - $supplierBase, 2);
+                $nextPrice = max(0.01, round($supplierBase + $difference, 2));
+                $pricesSynced[$productId] = true;
+            }
+            $nextSalePrice = boomagSalePriceForBase(
+                $nextPrice,
+                isset($product['discount_type']) ? (string)$product['discount_type'] : null,
+                $product['discount_value'] ?? null
+            );
+            $priceChanged = abs($nextPrice - $currentPrice) >= 0.005
+                || (($product['sale_price'] === null) !== ($nextSalePrice === null))
+                || ($nextSalePrice !== null && abs((float)$product['sale_price'] - $nextSalePrice) >= 0.005);
+            if ($priceChanged) $pricesChanged[$productId] = true;
+
+            $stockChanged = (int)$product['stock_quantity'] !== $quantity
+                || (int)$product['supplier_stock_quantity'] !== $quantity
+                || (bool)$product['supplier_stock_status'] !== $available;
+            if ($stockChanged) $stocksChanged[$productId] = true;
+
+            $update->execute([
+                $feedSku,
+                $feedSku,
+                $supplierBase,
+                $difference,
+                $nextPrice,
+                $nextSalePrice,
+                $quantity,
+                $available ? 1 : 0,
+                $quantity,
+                $productId,
+            ]);
             $matched[$productId] = true;
         }
         $state = $db->prepare(
@@ -1193,11 +1262,16 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
         throw $error;
     }
 
+    shopNirEnsureBoomagKidotoysReferences($db);
+
     return [
         'success' => true,
         'source' => 'boomag.ro',
         'feed_products' => count($rows),
         'matched_products' => count($matched),
+        'prices_synced' => count($pricesSynced),
+        'prices_changed' => count($pricesChanged),
+        'stocks_changed' => count($stocksChanged),
         'synced_at' => date(DATE_ATOM),
     ];
 }
@@ -1208,7 +1282,7 @@ function gomagMaybeSyncSupplierStock(PDO $db, array $config, int $maxAgeMinutes 
     $lastSyncedAt = trim((string)($state['last_synced_at'] ?? ''));
     if ($lastSyncedAt !== '' && strtotime($lastSyncedAt) >= time() - $maxAgeSeconds) return null;
 
-    $lockName = 'g-trots-boomag-stock-sync';
+    $lockName = 'g-trots-boomag-catalog-sync';
     $lock = $db->prepare('SELECT GET_LOCK(?, 0)');
     $lock->execute([$lockName]);
     if ((int)$lock->fetchColumn() !== 1) return null;
@@ -1218,7 +1292,7 @@ function gomagMaybeSyncSupplierStock(PDO $db, array $config, int $maxAgeMinutes 
         if ($lastSyncedAt !== '' && strtotime($lastSyncedAt) >= time() - $maxAgeSeconds) return null;
         return gomagSyncSupplierStock($db, $config);
     } catch (Throwable $error) {
-        error_log('[G-Trots Boomag stock] ' . $error->getMessage());
+        error_log('[G-Trots Boomag prices and stock] ' . $error->getMessage());
         $failure = $db->prepare(
             'INSERT INTO shop_supplier_sync_state (source_domain, last_attempt_at, last_error)
              VALUES ("boomag.ro", NOW(), ?)

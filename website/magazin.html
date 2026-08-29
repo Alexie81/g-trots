@@ -21,11 +21,12 @@
     <meta property="og:image" content="https://g-trots.ro/assets/vehicle-performance-scooter.png">
     <link rel="preload" href="assets/magazin-produse-v1.png" as="image" type="image/png">
     <link rel="stylesheet" href="styles.css?v=20260827-shop-call">
-    <link rel="stylesheet" href="magazin.css?v=20260828-mobile-search-back">
-    <link rel="stylesheet" href="favorites.css?v=20260828-favorite-fix">
+    <link rel="stylesheet" href="magazin.css?v=20260828-search-click-v14">
+    <link rel="stylesheet" href="favorites.css?v=20260828-line-promotions-v1">
+    <link rel="stylesheet" href="performance.css?v=20260828-catalog-v2">
   </head>
   <body class="shop-page">
-    <a class="skip-link" href="#catalog">Sari la produse</a>
+    <a class="skip-link" href="/magazin.html#catalog">Sari la produse</a>
 
     <header class="site-header">
       <div class="header-inner">
@@ -73,7 +74,7 @@
             <h1>Piese bune.<br><em class="shop-title-typewriter" data-reserve="Potrivite din prima." aria-label="Potrivite din prima."><span class="shop-title-typewriter-line" aria-hidden="true"><span class="shop-title-typewriter-text" data-text="Potrivite din prima.">Potrivite din prima.</span><i class="shop-title-cursor"></i></span></em></h1>
             <p>Componente pentru trotinete electrice alese cu ochiul unui service, nu doar dintr-un catalog.</p>
             <div class="shop-hero-actions">
-              <a class="button shop-products-cta" href="#catalog"><span class="shop-products-symbol" aria-hidden="true"><i></i></span><strong>Descoperă produsele</strong><b aria-hidden="true"></b></a>
+              <a class="button shop-products-cta" href="/magazin.html#catalog"><span class="shop-products-symbol" aria-hidden="true"><i></i></span><strong>Descoperă produsele</strong><b aria-hidden="true"></b></a>
               <a class="shop-help-link" href="tel:+40762093915" data-direct-call aria-label="Sună un tehnician G-Trots la 0762 093 915"><b aria-hidden="true"><span>?</span><i></i></b><span><small>Nu știi ce se potrivește?</small>Vorbește cu un tehnician</span><em aria-hidden="true">›</em></a>
             </div>
             <ul class="shop-proof" aria-label="Avantajele magazinului">
@@ -96,21 +97,21 @@
         </div>
 
         <div class="smart-search-overlay" data-smart-search-overlay hidden></div>
-        <form class="shop-search-deck reveal" role="search" onsubmit="return false;">
-          <label class="shop-search-field" for="product-search">
+        <form class="shop-search-deck" role="search" onsubmit="return false;">
+          <div class="shop-search-field">
             <button class="shop-search-icon-wrap" type="button" data-smart-search-mobile-back aria-label="Închide căutarea">
               <i class="shop-search-icon" aria-hidden="true"></i><i class="shop-search-back-icon" aria-hidden="true"></i>
             </button>
             <span class="shop-search-copy">
               <small>Caută în magazin</small>
-              <input id="product-search" type="search" autocomplete="off" placeholder="Anvelopă, baterie, display..." aria-describedby="search-hint">
+              <input id="product-search" type="search" autocomplete="off" placeholder="Anvelopă, baterie, display..." aria-label="Caută în magazin" aria-describedby="search-hint">
             </span>
             <span class="shop-search-actions">
               <button class="shop-search-clear" type="button" aria-label="Șterge căutarea" hidden><span aria-hidden="true">×</span></button>
               <button class="shop-search-submit" type="button" data-smart-search-submit aria-label="Arată toate rezultatele"><span aria-hidden="true">›</span></button>
             </span>
             <kbd aria-hidden="true"><span>Ctrl</span><span>K</span></kbd>
-          </label>
+          </div>
           <p id="search-hint"><i aria-hidden="true"></i><span><strong>6 produse</strong><small>pentru trotineta ta</small></span></p>
           <a href="tel:+40762093915"><i aria-hidden="true">?</i><span><small>Ajutor la alegere</small><strong>0762 093 915</strong></span><b aria-hidden="true"></b></a>
           <section class="smart-search-panel" id="smart-search-panel" aria-label="Căutare inteligentă produse" hidden>
@@ -424,8 +425,8 @@
       <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3a12.8 12.8 0 0 0-11 19.3L3.4 29l6.9-1.6A12.9 12.9 0 1 0 16 3Zm0 23.3c-2 0-3.8-.5-5.4-1.5l-.4-.2-4 .9.9-3.9-.3-.4A10.3 10.3 0 1 1 16 26.3Zm5.7-7.7c-.3-.2-1.9-.9-2.2-1s-.5-.2-.7.2-.8 1-1 1.2-.4.2-.7.1a8.5 8.5 0 0 1-2.5-1.6 9.3 9.3 0 0 1-1.7-2.1c-.2-.3 0-.5.1-.7l.5-.6.3-.6c.1-.2 0-.4 0-.6l-1-2.3c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.6.1-.9.4-.3.4-1.2 1.2-1.2 2.9s1.3 3.4 1.5 3.6c.2.2 2.5 3.8 6 5.3 3.6 1.6 3.6 1 4.3.9.6 0 1.9-.8 2.2-1.6.3-.8.3-1.5.2-1.6-.1-.2-.3-.3-.6-.4Z"/></svg>
       <span>WhatsApp</span>
     </a>
-    <script src="favorites.js?v=20260828-favorite-fix" defer></script>
-    <script src="magazin.js?v=20260828-mobile-search-back" defer></script>
-    <script src="shop-live.js?v=20260827-2" defer></script>
+    <script src="favorites.js?v=20260828-usage-limits-v1" defer></script>
+    <script src="magazin.js?v=20260829-catalog-dedupe-v1" defer></script>
+    <script src="shop-live.js?v=20260829-catalog-dedupe-v1" defer></script>
   </body>
 </html>

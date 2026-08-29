@@ -29,6 +29,7 @@ import {
   Factory,
   FolderTree,
   Globe2,
+  Handshake,
   House,
   ImageIcon,
   Package,
@@ -54,6 +55,8 @@ import ShopProductsManager from '@/components/ShopProductsManager';
 import ShopCustomersManager from '@/components/ShopCustomersManager';
 import ShopDiscountsManager from '@/components/ShopDiscountsManager';
 import ShopCompanySettingsManager from '@/components/ShopCompanySettingsManager';
+import ShopSuppliersManager from '@/components/ShopSuppliersManager';
+import ShopNirManager from '@/components/ShopNirManager';
 import { ShopPaymentMethodsManager, ShopProductSourcesManager, ShopShippingManager } from '@/components/ShopMoreManagers';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -69,7 +72,7 @@ import {
 } from '@/services/shopApi';
 
 type CatalogView = 'categories' | 'brands' | 'manufacturers';
-type SettingsView = 'sources' | 'payments' | 'shipping' | 'customers' | 'discounts' | 'company';
+type SettingsView = 'sources' | 'suppliers' | 'nirs' | 'payments' | 'shipping' | 'customers' | 'discounts' | 'company';
 type PrimaryTab = 'home' | 'orders' | 'products' | 'inventory' | 'more';
 type ShopView = PrimaryTab | CatalogView | SettingsView;
 type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; item: ShopBrand } | { type: 'manufacturer'; item: ShopManufacturer };
@@ -78,7 +81,7 @@ type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; 
 // SHOP activa, astfel incat utilizatorul sa nu fie trimis inapoi pe Acasa.
 let persistedShopView: ShopView = 'home';
 const SHOP_VIEW_STORAGE_KEY = 'gtrots.shopView.v2';
-const shopViews = new Set<ShopView>(['home', 'orders', 'products', 'inventory', 'more', 'categories', 'brands', 'manufacturers', 'sources', 'payments', 'shipping', 'customers', 'discounts', 'company']);
+const shopViews = new Set<ShopView>(['home', 'orders', 'products', 'inventory', 'more', 'categories', 'brands', 'manufacturers', 'sources', 'suppliers', 'nirs', 'payments', 'shipping', 'customers', 'discounts', 'company']);
 
 const orderStatusLabels: Record<string, string> = {
   new: 'NOUĂ',
@@ -152,6 +155,8 @@ const moreAreas = [
   { key: 'customers', title: 'Clienți', description: 'Conturi, comenzi, valoare totală și controlul accesului.', Icon: UsersRound, color: '#38BDF8' },
   { key: 'discounts', title: 'Reduceri', description: 'Campanii globale sau per produs și anunțuri pe site.', Icon: BadgePercent, color: '#F59E0B' },
   { key: 'sources', title: 'Surse produse', description: 'Magazinele si furnizorii din care provin produsele.', Icon: Globe2, color: '#38BDF8' },
+  { key: 'suppliers', title: 'Furnizori', description: 'Firme partenere, contacte și date comerciale pentru achiziții.', Icon: Handshake, color: '#5EEAD4' },
+  { key: 'nirs', title: 'NIR-uri', description: 'Recepții, facturi de achiziție și costuri istorice.', Icon: FileText, color: '#14B8A6' },
   { key: 'categories', title: 'Categorii', description: 'Categorii, subcategorii si imagini.', Icon: FolderTree, color: '#FB7185' },
   { key: 'brands', title: 'Compatibilitati branduri', description: 'Marcile cu care sunt compatibile produsele.', Icon: Tags, color: '#2DD4BF' },
   { key: 'manufacturers', title: 'Producatori', description: 'Companiile care fabrica produsele.', Icon: Factory, color: '#818CF8' },
@@ -174,6 +179,7 @@ export default function ShopModuleScreen() {
   }, []);
   const [ordersInitialFilter, setOrdersInitialFilter] = useState<'all' | 'new'>('all');
   const [initialOrderId, setInitialOrderId] = useState<string | null>(null);
+  const [initialNirId, setInitialNirId] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<ShopDashboardStats | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [categories, setCategories] = useState<ShopCategory[]>([]);
@@ -258,6 +264,11 @@ export default function ShopModuleScreen() {
     setOrdersInitialFilter(filter);
     setInitialOrderId(orderId);
     setView('orders');
+  };
+
+  const openNirFromInventory = (nirId: string) => {
+    setInitialNirId(nirId);
+    setView('nirs');
   };
 
   const openCategoryForm = (category?: ShopCategory) => {
@@ -469,7 +480,7 @@ export default function ShopModuleScreen() {
           ) : view === 'products' ? (
             <ShopProductsManager onOpenOrder={(orderId) => openOrders('all', orderId)} />
           ) : view === 'inventory' ? (
-            <ShopInventoryManager />
+            <ShopInventoryManager onOpenNir={openNirFromInventory} />
           ) : isMore ? (
             <>
               <View style={styles.sectionHeader}>
@@ -530,8 +541,17 @@ export default function ShopModuleScreen() {
     );
   }
 
-  if (view === 'sources' || view === 'payments' || view === 'shipping' || view === 'customers' || view === 'discounts' || view === 'company') {
-    const title = view === 'sources' ? 'Surse produse' : view === 'payments' ? 'Metode de plată' : view === 'shipping' ? 'Livrări' : view === 'customers' ? 'Clienți' : view === 'company' ? 'Datele firmei' : 'Reduceri';
+  if (view === 'nirs') {
+    return (
+      <View style={styles.container}>
+        <Header title="NIR-uri" showBack onBack={() => setView('more')} />
+        <ShopNirManager initialNirId={initialNirId} onInitialNirHandled={() => setInitialNirId(null)} />
+      </View>
+    );
+  }
+
+  if (view === 'sources' || view === 'suppliers' || view === 'payments' || view === 'shipping' || view === 'customers' || view === 'discounts' || view === 'company') {
+    const title = view === 'sources' ? 'Surse produse' : view === 'suppliers' ? 'Furnizori' : view === 'payments' ? 'Metode de plată' : view === 'shipping' ? 'Livrări' : view === 'customers' ? 'Clienți' : view === 'company' ? 'Datele firmei' : 'Reduceri';
     return (
       <View style={styles.container}>
         <Header title={title} showBack onBack={() => setView('more')} />
@@ -543,7 +563,7 @@ export default function ShopModuleScreen() {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             automaticallyAdjustKeyboardInsets>
-            {view === 'sources' ? <ShopProductSourcesManager /> : view === 'payments' ? <ShopPaymentMethodsManager /> : view === 'shipping' ? <ShopShippingManager /> : view === 'customers' ? <ShopCustomersManager onSearchFocus={() => setTimeout(() => settingsScrollRef.current?.scrollTo({ y: 390, animated: true }), 120)} /> : view === 'company' ? <ShopCompanySettingsManager onFieldFocus={revealSettingsField} /> : <ShopDiscountsManager />}
+            {view === 'sources' ? <ShopProductSourcesManager /> : view === 'suppliers' ? <ShopSuppliersManager /> : view === 'payments' ? <ShopPaymentMethodsManager /> : view === 'shipping' ? <ShopShippingManager /> : view === 'customers' ? <ShopCustomersManager onSearchFocus={() => setTimeout(() => settingsScrollRef.current?.scrollTo({ y: 390, animated: true }), 120)} /> : view === 'company' ? <ShopCompanySettingsManager onFieldFocus={revealSettingsField} /> : <ShopDiscountsManager />}
           </ScrollView>
         </KeyboardAvoidingView>
         <ShopBottomNavigation activeTab="more" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />

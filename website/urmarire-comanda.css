@@ -104,8 +104,12 @@ main { width:min(1280px,calc(100% - 40px)); margin:40px auto 90px; position:rela
 .tracking-item strong { overflow-wrap:anywhere; font-size:11px; }
 .tracking-item small { color:#77716b; font-size:9px; }
 .tracking-item>b { font-size:11px; white-space:nowrap; }
+.tracking-item .is-discounted { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px; }
+.tracking-item .is-discounted del { color:#746e68; font-weight:650; text-decoration-color:#ff8a00; text-decoration-thickness:1.5px; }
+.tracking-item .is-discounted em { color:#6ee7b7; font-style:normal; font-weight:850; }
 .tracking-totals { margin-top:15px; padding-top:13px; border-top:1px dashed #3a3631; position:relative; z-index:1; }
 .tracking-totals p { margin:0; min-height:32px; display:flex; align-items:center; justify-content:space-between; gap:10px; color:#89827b; font-size:10px; }
+.tracking-totals p.discount,.tracking-totals p.discount b { color:#6ee7b7; }
 .tracking-totals p.total { min-height:58px; margin-top:8px; border-top:1px solid #302d29; color:#f4efe8; font-size:14px; font-weight:900; }
 .tracking-totals p.total strong { color:#fff; font-size:24px; }
 .tracking-help { margin-top:17px; border:1px solid #4a351e; border-radius:18px; padding:14px; color:#8c847c; background:#201a13; font-size:9px; line-height:1.55; }
@@ -182,5 +186,6 @@ main { width:min(1280px,calc(100% - 40px)); margin:40px auto 90px; position:rela
 .tracking-help>span svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
 .tracking-help p { margin:0; }
 .tracking-help strong { margin-bottom:2px; }
+.tracking-customer-data{margin:14px 0;border:1px solid rgba(255,255,255,.09);border-radius:18px;padding:13px;background:rgba(255,255,255,.025)}.tracking-customer-data header{display:flex;align-items:center;gap:8px;margin-bottom:7px}.tracking-customer-data header strong{color:#f4eee8;font-size:10px}.tracking-customer-badge{min-width:29px;height:20px;display:grid;place-items:center;border:1px solid rgba(125,211,252,.26);border-radius:99px;padding:0 7px;color:#7dd3fc;background:rgba(30,64,175,.15);font-size:7px;font-weight:900}.tracking-customer-badge.is-company{border-color:rgba(110,231,183,.28);color:#6ee7b7;background:rgba(6,95,70,.18)}.tracking-customer-data p{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin:0;padding:5px 0;border-top:1px solid rgba(255,255,255,.04);font-size:9px}.tracking-customer-data p span{flex:0 0 auto;color:#736c74}.tracking-customer-data p b{color:#bcb4bc;text-align:right;overflow-wrap:anywhere}
 @media(max-width:1100px){.tracking-timeline-flow{grid-template-columns:repeat(3,minmax(0,1fr))}.tracking-timeline-flow::before{display:none}.tracking-result{grid-template-columns:1fr}}
 @media(max-width:620px){.tracking-token-mode main{margin-top:6px}.tracking-result-head{grid-template-columns:52px minmax(0,1fr);gap:11px}.tracking-current-icon{width:50px;height:50px;border-radius:18px}.tracking-status-pill{grid-column:1/-1;width:fit-content;margin-top:4px}.tracking-timeline{padding:13px}.tracking-timeline-flow{grid-template-columns:1fr;gap:8px}.tracking-step{display:grid;grid-template-columns:43px minmax(0,1fr);gap:9px}.tracking-step-rail span{width:42px;height:42px;border-radius:15px}.tracking-step-copy{min-height:0;padding:12px}.tracking-cancel-state{margin-top:8px}.tracking-receipt-brand>b{display:none}.tracking-receipt-code{display:grid}.tracking-receipt-code span:last-child{text-align:left}.tracking-totals p.total strong{font-size:21px}}

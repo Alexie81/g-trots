@@ -3,10 +3,30 @@
   const ORDER_STATE_KEY = "g-trots-last-checkout-v1";
   const CUSTOMER_TOKEN_KEY = "g-trots-customer-session-v1";
   const CUSTOMER_PROFILE_KEY = "g-trots-customer-profile-v1";
+  const SHOP_DEVICE_KEY = "g-trots-shop-device-v1";
   const $ = selector => document.querySelector(selector);
-  let activePromotionQuote = { subtotal: 0, discount_total: 0, promotion_code: "", promotion_title: "" };
+  let activePromotionQuote = { subtotal: 0, discount_total: 0, promotion_code: "", promotion_title: "", promotion_scope: "", promotion_min_order_value: null, items: [] };
   let promotionQuoteSequence = 0;
+  let manualPromotionCode = "";
   const customerCheckout = { customer: null, addresses: [], selectedAddressId: "new" };
+
+  function shopDeviceToken() {
+    try {
+      let token = String(localStorage.getItem(SHOP_DEVICE_KEY) || "").trim();
+      if (/^[A-Za-z0-9_-]{20,128}$/.test(token)) return token;
+      if (window.crypto?.getRandomValues) {
+        const bytes = new Uint8Array(24);
+        window.crypto.getRandomValues(bytes);
+        token = Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+      } else {
+        token = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+      }
+      localStorage.setItem(SHOP_DEVICE_KEY, token);
+      return token;
+    } catch {
+      return "";
+    }
+  }
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, character => ({
@@ -41,13 +61,15 @@
   async function api(action, options = {}) {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 14000);
+    const deviceToken = shopDeviceToken();
     try {
       const response = await fetch(`${API_URL}?action=${encodeURIComponent(action)}`, {
         method: options.method || "GET",
         headers: {
           Accept: "application/json",
           ...(options.body ? { "Content-Type": "application/json" } : {}),
-          ...(localStorage.getItem(CUSTOMER_TOKEN_KEY) ? { "X-Customer-Token": localStorage.getItem(CUSTOMER_TOKEN_KEY) } : {})
+          ...(localStorage.getItem(CUSTOMER_TOKEN_KEY) ? { "X-Customer-Token": localStorage.getItem(CUSTOMER_TOKEN_KEY) } : {}),
+          ...(deviceToken ? { "X-Shop-Device": deviceToken } : {})
         },
         body: options.body ? JSON.stringify(options.body) : undefined,
         cache: "no-store",
@@ -74,8 +96,12 @@
     catch { return null; }
   }
 
+  function formField(form, name) {
+    return form?.elements?.namedItem(name) || null;
+  }
+
   function setCheckoutField(form, name, value, overwrite = false) {
-    const field = form.elements[name];
+    const field = formField(form, name);
     if (!field || value == null || String(value).trim() === "") return;
     if (overwrite || !String(field.value || "").trim()) field.value = String(value);
   }
@@ -85,11 +111,33 @@
     setCheckoutField(form, "customer_name", customer.full_name, overwrite);
     setCheckoutField(form, "customer_phone", customer.phone, overwrite);
     setCheckoutField(form, "customer_email", customer.email, overwrite);
+    ["address", "city", "county", "postal_code", "company_name", "company_cui", "company_registration_number", "company_address"].forEach(name => setCheckoutField(form, name, customer[name], overwrite));
+    setCheckoutCustomerType(form, customer.customer_type);
+  }
+
+  function setCheckoutCustomerType(form, type) {
+    const normalized = type === "company" ? "company" : "individual";
+    const customerTypeField = formField(form, "customer_type");
+    if (customerTypeField) customerTypeField.value = normalized;
+    form.querySelectorAll("[data-checkout-customer-type]").forEach(button => {
+      const active = button.dataset.checkoutCustomerType === normalized;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    const companyFields = form.querySelector("[data-checkout-company-fields]");
+    if (companyFields) companyFields.hidden = normalized !== "company";
+    ["company_name", "company_cui", "company_registration_number", "company_address"].forEach(name => {
+      const field = formField(form, name);
+      if (field) field.required = normalized === "company";
+    });
   }
 
   function fillAddressFields(form, address) {
     if (!address) {
-      ["address", "city", "county", "postal_code"].forEach(name => { if (form.elements[name]) form.elements[name].value = ""; });
+      ["address", "city", "county", "postal_code"].forEach(name => {
+        const field = formField(form, name);
+        if (field) field.value = "";
+      });
       fillCustomerFields(form, customerCheckout.customer, true);
       return;
     }
@@ -179,7 +227,8 @@
 
   function normalizeProduct(product) {
     const slug = String(product.slug || product.id || "");
-    const priceValue = product.sale_price == null ? Number(product.price || 0) : Number(product.sale_price || 0);
+    const basePriceValue = product.sale_price == null ? Number(product.price || 0) : Number(product.sale_price || 0);
+    const priceValue = product.promotion_price == null ? basePriceValue : Number(product.promotion_price || 0);
     const image = Array.isArray(product.images) ? product.images[0] : null;
     return {
       id: slug,
@@ -190,6 +239,7 @@
       description: String(product.short_description || ""),
       price: formatMoney(priceValue),
       priceValue,
+      basePriceValue,
       stock: stockLabel(product),
       image: Number(image?.sprite_index || 0),
       imageUrl: image?.sprite_index ? "" : safeUrl(image?.url),
@@ -206,7 +256,7 @@
   }
 
   function productPrice(product) {
-    return Number(product?.priceValue ?? parsePrice(product?.price)) || 0;
+    return Number(product?.basePriceValue ?? product?.priceValue ?? parsePrice(product?.price)) || 0;
   }
 
   function cartSubtotal(cart) {
@@ -280,42 +330,97 @@
     return url ? ` style="background-image:url('${escapeHtml(url)}')"` : "";
   }
 
-  function renderSummary(cart, config) {
+  function checkoutLinePricing(product, quantity) {
+    const baseUnitPrice = productPrice(product);
+    const quoteItem = activePromotionQuote.promotion_scope === "product"
+      ? activePromotionQuote.items.find(row => String(row.product_id || "") === String(product?.apiId || ""))
+      : null;
+    const hasDiscount = Boolean(quoteItem?.is_discounted) && Number(quoteItem?.discount_total || 0) > 0;
+    return {
+      hasDiscount,
+      baseUnitPrice,
+      currentUnitPrice: hasDiscount ? Number(quoteItem.discounted_unit_price || 0) : baseUnitPrice,
+      baseLineTotal: hasDiscount ? Number(quoteItem.line_total || baseUnitPrice * quantity) : baseUnitPrice * quantity,
+      currentLineTotal: hasDiscount ? Number(quoteItem.discounted_line_total || 0) : baseUnitPrice * quantity
+    };
+  }
+
+  function renderCheckoutItems(cart) {
     const products = checkoutProducts();
-    const itemCount = cart.reduce((total, item) => total + Number(item.quantity || 0), 0);
     const itemsHost = $("[data-checkout-items]");
+    if (!itemsHost) return;
     itemsHost.innerHTML = cart.map(item => {
       const product = products[item.id];
       const quantity = Number(item.quantity || 0);
+      const pricing = checkoutLinePricing(product, quantity);
+      const unitPrice = pricing.hasDiscount
+        ? `<del>${formatMoney(pricing.baseUnitPrice)}</del><span>${formatMoney(pricing.currentUnitPrice)}</span>`
+        : formatMoney(pricing.baseUnitPrice);
+      const lineTotal = pricing.hasDiscount
+        ? `<del>${formatMoney(pricing.baseLineTotal)}</del><span>${formatMoney(pricing.currentLineTotal)}</span>`
+        : formatMoney(pricing.currentLineTotal);
       return `<article class="checkout-summary-item">
         <a class="checkout-summary-item-image" href="${escapeHtml(product?.url || "/magazin.html")}"${imageStyle(product)} aria-label="Deschide ${escapeHtml(product?.name || "produsul")}"></a>
-        <span class="checkout-summary-item-copy"><strong>${escapeHtml(product?.name || "Produs G-Trots")}</strong><small>${quantity} × ${formatMoney(productPrice(product))}</small></span>
-        <b>${formatMoney(productPrice(product) * quantity)}</b>
+        <span class="checkout-summary-item-copy"><strong>${escapeHtml(product?.name || "Produs G-Trots")}</strong><small class="${pricing.hasDiscount ? "is-discounted" : ""}">${quantity} × ${unitPrice}</small></span>
+        <b class="${pricing.hasDiscount ? "is-discounted" : ""}">${lineTotal}</b>
       </article>`;
     }).join("");
+  }
+
+  function renderSummary(cart, config) {
+    const itemCount = cart.reduce((total, item) => total + Number(item.quantity || 0), 0);
+    renderCheckoutItems(cart);
     $("[data-checkout-item-count]").textContent = `${itemCount} ${itemCount === 1 ? "produs" : "produse"}`;
     updateTotals(cart, config);
     void refreshPromotionQuote(cart, config);
   }
 
-  async function refreshPromotionQuote(cart, config) {
+  async function refreshPromotionQuote(cart, config, couponCode = manualPromotionCode, showFeedback = false) {
     const products = checkoutProducts();
     const items = cart.map(item => ({ product_id: String(products[item.id]?.apiId || ""), quantity: Number(item.quantity || 1) })).filter(item => item.product_id);
     const sequence = ++promotionQuoteSequence;
+    const cleanCode = String(couponCode || "").trim().toUpperCase();
+    const promoMessage = $("[data-checkout-promo-message]");
+    const promoWrap = $("[data-checkout-promo]");
+    const promoButton = $("[data-checkout-promo-apply]");
+    if (showFeedback && promoButton) promoButton.disabled = true;
     try {
-      const quote = await api("publicPromotionQuote", { method: "POST", body: { items } });
+      const quote = await api("publicPromotionQuote", { method: "POST", body: { items, coupon_code: cleanCode, device_token: shopDeviceToken() } });
       if (sequence !== promotionQuoteSequence) return;
       activePromotionQuote = {
         subtotal: Number(quote.subtotal || 0),
         discount_total: Math.max(0, Number(quote.discount_total || 0)),
         promotion_code: String(quote.promotion_code || ""),
-        promotion_title: String(quote.promotion_title || "")
+        promotion_title: String(quote.promotion_title || ""),
+        promotion_scope: String(quote.promotion_scope || ""),
+        promotion_min_order_value: quote.promotion_min_order_value == null ? null : Number(quote.promotion_min_order_value),
+        items: Array.isArray(quote.items) ? quote.items : []
       };
+      manualPromotionCode = cleanCode;
+      promoWrap?.classList.toggle("is-applied", Boolean(cleanCode));
+      if (showFeedback && promoMessage) {
+        promoMessage.className = "is-success";
+        promoMessage.textContent = cleanCode ? `Codul ${cleanCode} a fost aplicat. Ai economisit ${formatMoney(activePromotionQuote.discount_total)}.` : "Se aplică automat cea mai bună ofertă disponibilă.";
+      }
+      renderCheckoutItems(cart);
       updateTotals(cart, config);
-    } catch {
+      return true;
+    } catch (error) {
       if (sequence !== promotionQuoteSequence) return;
-      activePromotionQuote = { subtotal: 0, discount_total: 0, promotion_code: "", promotion_title: "" };
+      const message = error instanceof Error ? error.message : "Codul nu a putut fi verificat.";
+      if (cleanCode) {
+        manualPromotionCode = "";
+        promoWrap?.classList.remove("is-applied");
+        if (promoMessage) { promoMessage.className = "is-error"; promoMessage.textContent = message; }
+        void refreshPromotionQuote(cart, config, "", false);
+        return false;
+      }
+      activePromotionQuote = { subtotal: 0, discount_total: 0, promotion_code: "", promotion_title: "", promotion_scope: "", promotion_min_order_value: null, items: [] };
+      renderCheckoutItems(cart);
       updateTotals(cart, config);
+      return false;
+    } finally {
+      if (showFeedback && promoButton) promoButton.disabled = false;
     }
   }
 
@@ -336,16 +441,28 @@
     const subtotal = cartSubtotal(cart);
     const shippingId = document.querySelector('input[name="shipping_method_id"]:checked')?.value || "";
     const cost = shippingCost(config, subtotal, shippingId);
-    $("[data-checkout-subtotal]").textContent = formatMoney(subtotal);
     const discount = Math.abs(activePromotionQuote.subtotal - subtotal) < .02 ? Math.min(subtotal, activePromotionQuote.discount_total) : 0;
+    const productDiscount = activePromotionQuote.promotion_scope === "product" ? discount : 0;
+    const orderDiscount = activePromotionQuote.promotion_scope === "product" ? 0 : discount;
+    $("[data-checkout-subtotal]").textContent = formatMoney(subtotal - productDiscount);
     const discountLine = $("[data-checkout-discount-line]");
-    if (discountLine) discountLine.hidden = discount <= 0;
-    if ($("[data-checkout-discount]")) $("[data-checkout-discount]").textContent = `−${formatMoney(discount)}`;
-    if ($("[data-checkout-promotion-code]")) $("[data-checkout-promotion-code]").textContent = activePromotionQuote.promotion_code ? `· ${activePromotionQuote.promotion_code}` : "";
+    if (discountLine) discountLine.hidden = orderDiscount <= 0;
+    if ($("[data-checkout-discount]")) $("[data-checkout-discount]").textContent = `−${formatMoney(orderDiscount)}`;
+    if ($("[data-checkout-promotion-code]")) {
+      const details = [];
+      if (activePromotionQuote.promotion_code) details.push(activePromotionQuote.promotion_code);
+      const minimum = Number(activePromotionQuote.promotion_min_order_value || 0);
+      if (minimum > 0) details.push(`Prag minim: ${formatMoney(minimum)}`);
+      $("[data-checkout-promotion-code]").textContent = details.length ? `· ${details.join(" · ")}` : "";
+    }
+    const total = subtotal - productDiscount - orderDiscount + cost;
+    const hasVat = Boolean(config?.tax?.vat_payer);
     $("[data-checkout-shipping-cost]").textContent = cost === 0 ? "Gratuit" : formatMoney(cost);
-    $("[data-checkout-total]").textContent = formatMoney(subtotal - discount + cost);
+    $("[data-checkout-total]").textContent = formatMoney(total);
+    if ($("[data-checkout-subtotal-label]")) $("[data-checkout-subtotal-label]").textContent = hasVat ? "Subtotal (TVA inclus)" : "Subtotal";
+    if ($("[data-checkout-total-label]")) $("[data-checkout-total-label]").textContent = hasVat ? "Total de plată (TVA inclus)" : "Total de plată";
     updateOptionStates();
-    return { subtotal, discountTotal: discount, shippingCost: cost, total: subtotal - discount + cost };
+    return { subtotal, discountTotal: discount, shippingCost: cost, total, vatPayer: hasVat };
   }
 
   function clearValidation(form) {
@@ -365,33 +482,44 @@
     clearValidation(form);
     const errors = [];
     const requiredFields = [
-      [form.elements.customer_name, "Completează numele și prenumele."],
-      [form.elements.customer_phone, "Completează numărul de telefon."],
-      [form.elements.address, "Completează adresa de livrare."],
-      [form.elements.city, "Completează localitatea."]
+      [formField(form, "customer_name"), "Completează numele și prenumele."],
+      [formField(form, "customer_phone"), "Completează numărul de telefon."],
+      [formField(form, "address"), "Completează adresa de livrare."],
+      [formField(form, "city"), "Completează localitatea."]
     ];
+    if (formField(form, "customer_type")?.value === "company") {
+      requiredFields.push(
+        [formField(form, "company_name"), "Completează denumirea firmei."],
+        [formField(form, "company_cui"), "Completează CUI/CIF-ul firmei."],
+        [formField(form, "company_registration_number"), "Completează numărul de la Registrul Comerțului."],
+        [formField(form, "company_address"), "Completează sediul social."]
+      );
+    }
     requiredFields.forEach(([field, message]) => {
       if (!String(field?.value || "").trim()) {
         invalidate(field, message);
         errors.push(field);
       }
     });
-    const phone = String(form.elements.customer_phone?.value || "").replace(/\D/g, "");
+    const phoneField = formField(form, "customer_phone");
+    const phone = String(phoneField?.value || "").replace(/\D/g, "");
     if (phone && phone.length < 7) {
-      invalidate(form.elements.customer_phone, "Introdu un număr de telefon valid.");
-      errors.push(form.elements.customer_phone);
+      invalidate(phoneField, "Introdu un număr de telefon valid.");
+      errors.push(phoneField);
     }
-    const email = String(form.elements.customer_email?.value || "").trim();
+    const emailField = formField(form, "customer_email");
+    const email = String(emailField?.value || "").trim();
     if (!email) {
-      invalidate(form.elements.customer_email, "Completează adresa de e-mail.");
-      errors.push(form.elements.customer_email);
-    } else if (email && !form.elements.customer_email.checkValidity()) {
-      invalidate(form.elements.customer_email, "Introdu o adresă de e-mail validă.");
-      errors.push(form.elements.customer_email);
+      invalidate(emailField, "Completează adresa de e-mail.");
+      errors.push(emailField);
+    } else if (email && !emailField.checkValidity()) {
+      invalidate(emailField, "Introdu o adresă de e-mail validă.");
+      errors.push(emailField);
     }
-    if (!form.elements.confirm_order?.checked) {
-      form.elements.confirm_order?.closest("label")?.classList.add("is-invalid");
-      errors.push(form.elements.confirm_order);
+    const confirmationField = formField(form, "confirm_order");
+    if (!confirmationField?.checked) {
+      confirmationField?.closest("label")?.classList.add("is-invalid");
+      errors.push(confirmationField);
     }
     errors[0]?.focus?.({ preventScroll: true });
     errors[0]?.closest?.("label")?.scrollIntoView?.({ behavior: "smooth", block: "center" });
@@ -428,9 +556,30 @@
       renderShipping(config);
       renderPayments(config);
       renderSummary(cart, config);
+      form.querySelectorAll("[data-checkout-customer-type]").forEach(button => button.addEventListener("click", () => setCheckoutCustomerType(form, button.dataset.checkoutCustomerType)));
+      setCheckoutCustomerType(form, formField(form, "customer_type")?.value || "individual");
       await hydrateCheckoutCustomer(form);
       form.hidden = false;
       updateSubmitLabel(form, submit);
+
+      const promoInput = $("[data-checkout-promo-input]");
+      const promoApply = $("[data-checkout-promo-apply]");
+      promoInput?.addEventListener("input", () => {
+        promoInput.value = promoInput.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+        $("[data-checkout-promo-message]")?.removeAttribute("class");
+      });
+      const applyManualPromotion = async () => {
+        const code = String(promoInput?.value || "").trim().toUpperCase();
+        if (!code) {
+          manualPromotionCode = "";
+          await refreshPromotionQuote(cartRows(), config, "", true);
+          return;
+        }
+        const applied = await refreshPromotionQuote(cartRows(), config, code, true);
+        if (!applied && promoInput) promoInput.focus();
+      };
+      promoApply?.addEventListener("click", () => void applyManualPromotion());
+      promoInput?.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); void applyManualPromotion(); } });
 
       form.addEventListener("change", event => {
         event.target.closest("label")?.classList.remove("is-invalid");
@@ -491,7 +640,7 @@
           }
           const order = await api("createPublicOrder", {
             method: "POST",
-            body: { ...fields, items, return_base_url: window.location.origin }
+            body: { ...fields, items, coupon_code: manualPromotionCode, device_token: shopDeviceToken(), return_base_url: window.location.origin }
           });
           const shipping = config.shipping_methods.find(row => String(row.id) === String(fields.shipping_method_id));
           const payment = payments.find(row => row.id === fields.payment_method);
@@ -508,6 +657,9 @@
               quantity,
               unitPrice,
               lineTotal: Number(apiItem.line_total ?? unitPrice * quantity),
+              discountTotal: Number(apiItem.discount_total ?? 0),
+              discountedUnitPrice: Number(apiItem.discounted_unit_price ?? unitPrice),
+              discountedLineTotal: Number(apiItem.discounted_line_total ?? apiItem.line_total ?? unitPrice * quantity),
               image: Number(product.image || 0),
               imageUrl: safeUrl(apiItem.image_url || product.imageUrl),
               url: String(product.url || "/magazin.html")
@@ -524,8 +676,19 @@
               subtotal: Number(order.subtotal ?? totals.subtotal),
               discountTotal: Number(order.discount_total ?? totals.discountTotal ?? 0),
               promotionCode: String(order.promotion_code || activePromotionQuote.promotion_code || ""),
+              promotionScope: String(order.promotion_scope || activePromotionQuote.promotion_scope || ""),
               shippingCost: Number(order.shipping_cost ?? totals.shippingCost),
               total: Number(order.total ?? totals.total),
+              vatPayer: Boolean(order.vat_payer ?? totals.vatPayer),
+              customerName: String(order.customer_name || fields.customer_name || ""),
+              customerPhone: String(order.customer_phone || fields.customer_phone || ""),
+              customerEmail: String(order.customer_email || fields.customer_email || ""),
+              customerType: String(order.customer_type || fields.customer_type || "individual"),
+              companyName: String(order.company_name || fields.company_name || ""),
+              companyCui: String(order.company_cui || fields.company_cui || ""),
+              companyRegistrationNumber: String(order.company_registration_number || fields.company_registration_number || ""),
+              companyAddress: String(order.company_address || fields.company_address || ""),
+              deliveryAddress: [fields.address, fields.city, fields.county, fields.postal_code].filter(Boolean).join(", "),
               items: receiptItems,
               cartIds: currentCart.map(item => String(item.id || "")).filter(Boolean),
               createdAt: new Date().toISOString()

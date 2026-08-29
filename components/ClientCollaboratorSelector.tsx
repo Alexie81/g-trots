@@ -219,7 +219,7 @@ export default function ClientCollaboratorSelector({
         ) : (
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>
-              Apasa "Adauga colaborator" si selecteaza doar persoanele implicate in lucrare.
+              Apasă „Adaugă colaborator” și selectează doar persoanele implicate în lucrare.
             </Text>
           </View>
         )}

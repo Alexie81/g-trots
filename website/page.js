@@ -788,7 +788,7 @@ document.querySelectorAll(".vehicle-carousel").forEach(carousel => {
 
 if (!window.GTrotsFavorites && !document.querySelector('script[src*="favorites.js"]')) {
   const favoritesScript = document.createElement("script");
-  favoritesScript.src = "/favorites.js?v=20260828-global-cart-count";
+  favoritesScript.src = "/favorites.js?v=20260830-commerce-preview-v1";
   favoritesScript.defer = true;
   document.head.append(favoritesScript);
 }

@@ -4891,3 +4891,27 @@ footer nav {
     height: 2.35rem;
   }
 }
+/* Magazinul este inca in lucru: elementele comerciale sunt vizibile doar pe
+   localhost. Regula se aplica din primul frame, inainte sa ruleze JavaScript. */
+html:not(.commerce-preview) .nav-shop-link,
+html:not(.commerce-preview) .hero-shop-button,
+html:not(.commerce-preview) .shop-bridge,
+html:not(.commerce-preview) .global-shop-actions,
+html:not(.commerce-preview) .mobile-nav-account,
+html:not(.commerce-preview) .shop-header-cta,
+html:not(.commerce-preview) .product-detail-favorite,
+html:not(.commerce-preview) .product-add-cart,
+html:not(.commerce-preview) .favorite-button,
+html:not(.commerce-preview) .cart-button,
+html:not(.commerce-preview) a[href="magazin.html"],
+html:not(.commerce-preview) a[href="/magazin.html"],
+html:not(.commerce-preview) a[href="favorite.html"],
+html:not(.commerce-preview) a[href="/favorite.html"],
+html:not(.commerce-preview) a[href="cos.html"],
+html:not(.commerce-preview) a[href="/cos.html"],
+html:not(.commerce-preview) a[href="cont.html"],
+html:not(.commerce-preview) a[href="/cont.html"],
+html:not(.commerce-preview) a[href="login.html"],
+html:not(.commerce-preview) a[href="/login.html"] {
+  display: none !important;
+}

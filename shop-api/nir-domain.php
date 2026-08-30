@@ -18,6 +18,28 @@ function shopNirNormalizeSupplierCode($value): string {
     return mb_strtoupper(trim($code), 'UTF-8');
 }
 
+/**
+ * Canonical form used only for supplier-specific product names. It deliberately
+ * does not involve the internal SKU: a supplier alias belongs to the pair
+ * supplier + internal product, regardless of how the catalog SKU was chosen.
+ */
+function shopNirNormalizeSupplierProductName($value): string {
+    $text = trim((string)$value);
+    if ($text === '') return '';
+    if (function_exists('iconv')) {
+        $converted = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text);
+        if ($converted !== false) $text = $converted;
+    }
+    $text = mb_strtolower($text, 'UTF-8');
+    $text = preg_replace('/[^a-z0-9]+/u', ' ', $text) ?? '';
+    return trim(preg_replace('/\s+/u', ' ', $text) ?? '');
+}
+
+function shopNirSupplierProductNameKey($value): string {
+    $normalized = shopNirNormalizeSupplierProductName($value);
+    return $normalized === '' ? '' : '__NAME__' . strtoupper(substr(hash('sha256', $normalized), 0, 40));
+}
+
 function shopNirDecimalToScaled($value, int $scale, string $field = 'Valoarea'): int {
     $raw = trim((string)$value);
     if ($raw === '') $raw = '0';

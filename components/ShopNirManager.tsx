@@ -53,7 +53,10 @@ import {
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import {
+  isUnknownShopAction,
+  legacyNirAttachmentUrl,
   shopApi,
+  ShopNirAttachment,
   ShopNirDocument,
   ShopNirLine,
   ShopNirPage,
@@ -65,6 +68,7 @@ import {
 const today = () => new Date().toISOString().slice(0, 10);
 const currentTime = () => new Date().toTimeString().slice(0, 5);
 const isLocalNir = (document: ShopNirDocument) => document.id.startsWith('local-nir-');
+const cloneNir = (document: ShopNirDocument) => JSON.parse(JSON.stringify(document)) as ShopNirDocument;
 type PendingNirAttachment = { key: string; name: string; mimeType: string; uri: string; size?: number; base64?: string | null };
 const makeLine = (): ShopNirLine => ({
   product_id: null,
@@ -149,6 +153,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
   const [page, setPage] = useState(1);
   const [registryEpoch, setRegistryEpoch] = useState(0);
   const [editor, setEditor] = useState<ShopNirDocument | null>(null);
+  const [correctionOriginal, setCorrectionOriginal] = useState<ShopNirDocument | null>(null);
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [suppliers, setSuppliers] = useState<ShopSupplier[]>([]);
@@ -236,6 +241,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     try {
       const document = await shopApi.getNir(token, id);
       setPendingAttachments([]);
+      setCorrectionOriginal(null);
       syncedDraftSignature.current = document.status === 'draft' ? nirDraftSignature(document) : '';
       setEditor({ ...document, lines: document.lines || [] });
       setDetailsTab('lines');
@@ -274,6 +280,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     };
     syncedDraftSignature.current = '';
     setPendingAttachments([]);
+    setCorrectionOriginal(null);
     setEditor(document);
     setTimeout(() => { createDraftInFlight.current = false; }, 350);
   };
@@ -327,6 +334,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
   const leaveEditor = () => {
     Keyboard.dismiss();
     setEditor(null);
+    setCorrectionOriginal(null);
     setPendingAttachments([]);
     syncedDraftSignature.current = '';
     setRegistryEpoch((value) => value + 1);
@@ -335,6 +343,17 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
   };
 
   const requestLeaveEditor = () => {
+    if (correctionOriginal) {
+      Alert.alert(
+        'Sigur vrei să ieși?',
+        'Modificările nu se salvează, iar NIR-ul rămâne confirmat exact cum era înainte.',
+        [
+          { text: 'Rămân în NIR', style: 'cancel' },
+          { text: 'Da, ies fără salvare', style: 'destructive', onPress: leaveEditor },
+        ],
+      );
+      return;
+    }
     if (!editor || editor.status !== 'draft') return leaveEditor();
     const dirty = isLocalNir(editor) || pendingAttachments.length > 0 || nirDraftSignature(editor) !== syncedDraftSignature.current;
     if (!dirty) return leaveEditor();
@@ -504,7 +523,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
   };
 
   const importDocuments = async () => {
-    if (!token || !editor || editor.status !== 'draft') return;
+    if (!token || !editor || (editor.status !== 'draft' && !correctionOriginal)) return;
     const result = await DocumentPicker.getDocumentAsync({
       type: ['application/pdf', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/xml', 'text/xml', 'image/jpeg', 'image/png', 'image/webp'],
       multiple: true,
@@ -520,7 +539,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
   };
 
   const importPhotos = async (source: 'camera' | 'gallery') => {
-    if (!token || !editor || editor.status !== 'draft') return;
+    if (!token || !editor || (editor.status !== 'draft' && !correctionOriginal)) return;
     const permission = source === 'camera' ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) return;
     const result = source === 'camera'
@@ -540,13 +559,14 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
 
   const finalizeConfirmation = async (saved: ShopNirDocument) => {
     if (!token) return;
+    const correcting = Boolean(saved.nir_number);
     setSaving(true);
     try {
       const key = `${saved.id}-${saved.row_version}-${Date.now()}`;
       const confirmed = await shopApi.confirmNir(token, saved.id, saved.row_version, key);
       setEditor(confirmed);
       await loadRegistry(page);
-      Alert.alert('NIR confirmat', `${confirmed.nir_number} a actualizat stocul contabil.`);
+      Alert.alert(correcting ? 'NIR corectat' : 'NIR confirmat', correcting ? `${confirmed.nir_number} a fost corectat, iar stocul contabil a fost recalculat.` : `${confirmed.nir_number} a actualizat stocul contabil.`);
     } catch (error) {
       Alert.alert('Confirmarea a eșuat', error instanceof Error ? error.message : 'Nicio modificare parțială nu a fost păstrată.');
     } finally {
@@ -554,7 +574,96 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     }
   };
 
+  const restoreConfirmedNir = async (original: ShopNirDocument) => {
+    if (!token) throw new Error('Sesiunea nu mai este activă.');
+    let current = await shopApi.getNir(token, original.id);
+    if (current.status === 'confirmed') return current;
+    if (current.status !== 'draft') throw new Error('NIR-ul nu mai poate fi readus automat la versiunea confirmată.');
+    current = await shopApi.updateNir(token, original.id, nirDraftPayload({ ...original, row_version: current.row_version }));
+    const restoreKey = `${original.id}-restore-${current.row_version}-${Date.now()}`;
+    return shopApi.confirmNir(token, original.id, current.row_version, restoreKey);
+  };
+
+  const keepLocalCorrectionAfterRestore = (modified: ShopNirDocument, restored: ShopNirDocument) => {
+    setCorrectionOriginal(cloneNir(restored));
+    setEditor({
+      ...modified,
+      status: 'confirmed',
+      row_version: restored.row_version,
+      confirmed_at: restored.confirmed_at,
+      confirmed_by: restored.confirmed_by,
+      subtotal_ron: restored.subtotal_ron,
+      vat_total_ron: restored.vat_total_ron,
+      grand_total_ron: restored.grand_total_ron,
+      attachments: restored.attachments || modified.attachments || [],
+    });
+  };
+
+  const confirmWarnings = (warnings: string[]) => new Promise<boolean>((resolve) => {
+    Alert.alert('Verificarea NIR-ului', warnings.join('\n'), [
+      { text: 'Revizuiește', style: 'cancel', onPress: () => resolve(false) },
+      { text: 'Aplică totuși', onPress: () => resolve(true) },
+    ], { cancelable: false });
+  });
+
+  const commitCorrection = async () => {
+    if (!token || !editor || !correctionOriginal || saving) return;
+    const original = cloneNir(correctionOriginal);
+    const modified = cloneNir(editor);
+    let serverReopened = false;
+    setSaving(true);
+    try {
+      const reopened = await shopApi.reopenNir(token, original.id, original.row_version);
+      serverReopened = true;
+      let saved = await shopApi.updateNir(token, original.id, nirDraftPayload({
+        ...modified,
+        status: 'draft',
+        row_version: reopened.row_version,
+        confirmed_at: null,
+        confirmed_by: null,
+      }));
+      const validation = await shopApi.validateNir(token, saved.id);
+      if (!validation.valid) {
+        const restored = await restoreConfirmedNir(original);
+        keepLocalCorrectionAfterRestore(modified, restored);
+        Alert.alert('NIR-ul nu poate fi corectat', validation.errors.join('\n'));
+        return;
+      }
+      if (validation.warnings?.length && !(await confirmWarnings(validation.warnings))) {
+        const restored = await restoreConfirmedNir(original);
+        keepLocalCorrectionAfterRestore(modified, restored);
+        return;
+      }
+      saved = await uploadPendingAttachments(saved);
+      const key = `${saved.id}-correction-${saved.row_version}-${Date.now()}`;
+      const confirmed = await shopApi.confirmNir(token, saved.id, saved.row_version, key);
+      setCorrectionOriginal(null);
+      setPendingAttachments([]);
+      setEditor(confirmed);
+      syncedDraftSignature.current = '';
+      await loadRegistry(page);
+      Alert.alert('NIR corectat', `${confirmed.nir_number} a fost corectat, iar stocul contabil a fost recalculat.`);
+    } catch (error) {
+      if (serverReopened) {
+        try {
+          const restored = await restoreConfirmedNir(original);
+          keepLocalCorrectionAfterRestore(modified, restored);
+        } catch (restoreError) {
+          Alert.alert('Corectarea necesită verificare', `Corectarea a eșuat, iar versiunea confirmată nu a putut fi restaurată automat. ${restoreError instanceof Error ? restoreError.message : ''}`.trim());
+          return;
+        }
+      }
+      Alert.alert('Corectarea a eșuat', error instanceof Error ? error.message : 'NIR-ul a rămas în versiunea confirmată inițială.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const confirm = async () => {
+    if (correctionOriginal) {
+      await commitCorrection();
+      return;
+    }
     if (!token || !editor || editor.status !== 'draft' || saving) return;
     setSaving(true);
     try {
@@ -587,24 +696,17 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
   const reopenForCorrection = () => {
     if (!token || !editor || editor.status !== 'confirmed' || saving) return;
     Alert.alert(
-      'Corectezi acest NIR?',
-      'Efectele actuale vor fi retrase controlat din stoc. Apoi poți modifica orice câmp, inclusiv furnizorul și produsele, și reconfirmi același număr NIR.',
+      'Editezi acest NIR?',
+      'Poți modifica orice câmp. NIR-ul rămâne confirmat și stocul nu se schimbă până când apeși „Corectează NIR”.',
       [
         { text: 'Renunță', style: 'cancel' },
-        { text: 'Da, deschide editarea', onPress: async () => {
-          setSaving(true);
-          try {
-            const reopened = await shopApi.reopenNir(token, editor.id, editor.row_version);
-            syncedDraftSignature.current = nirDraftSignature(reopened);
-            setPendingAttachments([]);
-            setEditor(reopened);
-            setDetailsTab('lines');
-            setDetailRows([]);
-            await loadRegistry(page);
-            Alert.alert('NIR editabil', 'Poți modifica orice informație. Salvează și reconfirmă documentul după corectare.');
-          } catch (error) {
-            Alert.alert('NIR-ul nu s-a redeschis', error instanceof Error ? error.message : 'Încearcă din nou.');
-          } finally { setSaving(false); }
+        { text: 'Da, editează NIR-ul', onPress: () => {
+          setCorrectionOriginal(cloneNir(editor));
+          setPendingAttachments([]);
+          setEditor(cloneNir(editor));
+          setDetailsTab('lines');
+          setDetailRows([]);
+          Alert.alert('Editarea este activă', 'Poți modifica orice informație. NIR-ul rămâne confirmat până apeși „Corectează NIR”.');
         } },
       ],
     );
@@ -640,6 +742,16 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     await Sharing.shareAsync(uri, { mimeType: file.mime_type, dialogTitle: title });
   };
 
+  const shareLegacyAttachment = async (attachment: ShopNirAttachment) => {
+    const remoteUrl = legacyNirAttachmentUrl(attachment);
+    if (!remoteUrl) throw new Error('Adresa documentului salvat nu poate fi reconstruită.');
+    const safeName = attachment.original_name.replace(/[\\/:*?"<>|]/g, '-');
+    const localUri = `${FileSystem.cacheDirectory}${safeName}`;
+    const downloaded = await FileSystem.downloadAsync(remoteUrl, localUri);
+    if (downloaded.status < 200 || downloaded.status >= 300) throw new Error('Documentul salvat nu mai este disponibil pe server.');
+    await Sharing.shareAsync(downloaded.uri, { mimeType: attachment.mime_type, dialogTitle: `Descarcă ${attachment.original_name}` });
+  };
+
   const downloadAttachment = async (attachmentId: string) => {
     if (!token || !editor || attachmentDownload) return;
     setAttachmentDownload(attachmentId);
@@ -647,7 +759,11 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
       const file = await shopApi.downloadNirAttachment(token, editor.id, attachmentId);
       await shareDownloadedFile(file, `Descarcă ${file.file_name}`);
     } catch (error) {
-      Alert.alert('Documentul nu s-a descărcat', error instanceof Error ? error.message : 'Încearcă din nou.');
+      const attachment = editor.attachments?.find((item) => item.id === attachmentId);
+      if (attachment && isUnknownShopAction(error)) {
+        try { await shareLegacyAttachment(attachment); }
+        catch (legacyError) { Alert.alert('Documentul nu s-a descărcat', legacyError instanceof Error ? legacyError.message : 'Încearcă din nou.'); }
+      } else Alert.alert('Documentul nu s-a descărcat', error instanceof Error ? error.message : 'Încearcă din nou.');
     } finally { setAttachmentDownload(null); }
   };
 
@@ -658,21 +774,26 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
       const file = await shopApi.downloadAllNirAttachments(token, editor.id);
       await shareDownloadedFile(file, `Descarcă toate documentele ${editor.nir_number || editor.temporary_number}`);
     } catch (error) {
-      Alert.alert('Documentele nu s-au descărcat', error instanceof Error ? error.message : 'Încearcă din nou.');
+      if (isUnknownShopAction(error)) {
+        try {
+          for (const attachment of editor.attachments) await shareLegacyAttachment(attachment);
+        } catch (legacyError) { Alert.alert('Documentele nu s-au descărcat', legacyError instanceof Error ? legacyError.message : 'Încearcă din nou.'); }
+      } else Alert.alert('Documentele nu s-au descărcat', error instanceof Error ? error.message : 'Încearcă din nou.');
     } finally { setAttachmentDownload(null); }
   };
 
   const filteredSuppliers = useMemo(() => suppliers.filter((supplier) => `${supplier.name} ${supplier.cui || ''}`.toLowerCase().includes(supplierSearch.toLowerCase())), [supplierSearch, suppliers]);
   const filteredCurrencies = useMemo(() => { const query = currencySearch.trim().toLowerCase(); return orderedCurrencies.filter((currency) => !query || `${currency} ${currencyName(currency)}`.toLowerCase().includes(query)); }, [currencySearch]);
+  const correctionEditing = Boolean(correctionOriginal);
   const quantitySummary = (editor?.lines || []).reduce((summary, line) => ({
     invoiced: summary.invoiced + Number(line.invoiced_quantity || 0), received: summary.received + Number(line.received_quantity || 0),
     accepted: summary.accepted + Number(line.accepted_quantity || 0), rejected: summary.rejected + Number(line.rejected_quantity || 0),
-    stock: summary.stock + (editor?.status === 'draft' ? localLineTotals(line, editor.exchange_rate || '1').stockQuantity : Number(line.stock_quantity || 0)),
+    stock: summary.stock + (editor?.status === 'draft' || correctionEditing ? localLineTotals(line, editor?.exchange_rate || '1').stockQuantity : Number(line.stock_quantity || 0)),
   }), { invoiced: 0, received: 0, accepted: 0, rejected: 0, stock: 0 });
   const liveTotals = (editor?.lines || []).map((line) => localLineTotals(line, editor?.exchange_rate || '1')).reduce((summary, line) => ({ netRon: summary.netRon + line.netRon, vatRon: summary.vatRon + line.vatRon, totalRon: summary.totalRon + line.totalRon }), { netRon: 0, vatRon: 0, totalRon: 0 });
 
   if (editor) {
-    const editable = editor.status === 'draft';
+    const editable = editor.status === 'draft' || correctionEditing;
     const currentStatus = statusInfo[editor.status];
     return (
       <View style={styles.screen}>
@@ -736,8 +857,8 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
             <Field label="OBSERVAȚII" value={editor.notes || ''} editable={editable} onChangeText={(value) => patchEditor({ notes: value })} placeholder="Detalii interne, diferențe sau documente justificative" multiline />
           </View></Reveal>
         </ScrollView>
-        {editable && <View style={[styles.stickyActions, { paddingBottom: Math.max(insets.bottom, 10) }]}>{can('NIR_EDIT_DRAFT') && <TouchableOpacity accessibilityRole="button" accessibilityLabel="Șterge NIR-ul" style={styles.deleteNirAction} disabled={saving || deleting} onPress={() => setDeleteDialog(true)}><Trash2 size={16} color="#FDA4AF" /><Text style={styles.deleteNirActionText}>Șterge NIR-ul</Text><Text style={styles.deleteNirActionHint}>ciorna și toate datele ei</Text></TouchableOpacity>}<View style={styles.stickyPrimaryRow}><TouchableOpacity style={styles.secondaryAction} disabled={saving || deleting} onPress={() => void saveDraft()}>{saving ? <ActivityIndicator color={Colors.textPrimary} /> : <><Save size={18} color={Colors.textPrimary} /><Text style={styles.secondaryActionText}>Salvează</Text></>}</TouchableOpacity><TouchableOpacity style={styles.confirmAction} disabled={saving || deleting || !can('NIR_CONFIRM')} onPress={() => void confirm()}><ShieldCheck size={19} color={Colors.white} /><Text style={styles.confirmActionText}>Verifică și confirmă</Text></TouchableOpacity></View></View>}
-        {!editable && editor.status === 'confirmed' && can('NIR_EDIT_DRAFT') && can('NIR_CONFIRM') && <View style={[styles.stickyActions, { paddingBottom: Math.max(insets.bottom, 10) }]}><TouchableOpacity style={styles.correctNirAction} disabled={saving} onPress={reopenForCorrection}>{saving ? <ActivityIndicator color="#FBBF24" /> : <PencilLine size={19} color="#FBBF24" />}<View style={{ flex: 1 }}><Text style={styles.correctNirActionText}>Corectează NIR-ul</Text><Text style={styles.correctNirActionHint}>Modifică orice câmp și reconfirmă același document</Text></View><ChevronRight size={18} color="#FBBF24" /></TouchableOpacity></View>}
+        {editable && <View style={[styles.stickyActions, { paddingBottom: Math.max(insets.bottom, 10) }]}>{!correctionEditing && can('NIR_EDIT_DRAFT') && <TouchableOpacity accessibilityRole="button" accessibilityLabel="Șterge NIR-ul" style={styles.deleteNirAction} disabled={saving || deleting} onPress={() => setDeleteDialog(true)}><Trash2 size={16} color="#FDA4AF" /><Text style={styles.deleteNirActionText}>Șterge NIR-ul</Text><Text style={styles.deleteNirActionHint}>ciorna și toate datele ei</Text></TouchableOpacity>}{correctionEditing ? <TouchableOpacity style={styles.correctNirAction} disabled={saving || deleting || !can('NIR_CONFIRM')} onPress={() => void confirm()}>{saving ? <ActivityIndicator color="#FBBF24" /> : <ShieldCheck size={19} color="#FBBF24" />}<View style={{ flex: 1 }}><Text style={styles.correctNirActionText}>Corectează NIR</Text><Text style={styles.correctNirActionHint}>Salvează modificările și recalculează stocul</Text></View><ChevronRight size={18} color="#FBBF24" /></TouchableOpacity> : <View style={styles.stickyPrimaryRow}><TouchableOpacity style={styles.secondaryAction} disabled={saving || deleting} onPress={() => void saveDraft()}>{saving ? <ActivityIndicator color={Colors.textPrimary} /> : <><Save size={18} color={Colors.textPrimary} /><Text style={styles.secondaryActionText}>Salvează</Text></>}</TouchableOpacity><TouchableOpacity style={styles.confirmAction} disabled={saving || deleting || !can('NIR_CONFIRM')} onPress={() => void confirm()}><ShieldCheck size={19} color={Colors.white} /><Text style={styles.confirmActionText}>Verifică și confirmă</Text></TouchableOpacity></View>}</View>}
+        {!editable && editor.status === 'confirmed' && can('NIR_EDIT_DRAFT') && can('NIR_CONFIRM') && <View style={[styles.stickyActions, { paddingBottom: Math.max(insets.bottom, 10) }]}><TouchableOpacity style={styles.correctNirAction} disabled={saving} onPress={reopenForCorrection}>{saving ? <ActivityIndicator color="#FBBF24" /> : <PencilLine size={19} color="#FBBF24" />}<View style={{ flex: 1 }}><Text style={styles.correctNirActionText}>Editează NIR</Text><Text style={styles.correctNirActionHint}>Deblochează toate câmpurile pentru corectare</Text></View><ChevronRight size={18} color="#FBBF24" /></TouchableOpacity></View>}
         {dateTimePicker && <DateTimePicker value={dateTimePicker.value} mode={Platform.OS === 'ios' ? 'datetime' : dateTimePicker.mode} display={Platform.OS === 'ios' ? 'compact' : 'default'} minuteInterval={1} is24Hour onChange={changeDateTimePicker} />}
 
         <Modal visible={deleteDialog} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !deleting && setDeleteDialog(false)}><Pressable style={styles.deleteBackdrop} onPress={() => !deleting && setDeleteDialog(false)}><Pressable style={styles.deleteDialog} onPress={(event) => event.stopPropagation()}><View style={styles.deleteDialogAccent} /><View style={styles.deleteDialogIcon}><Trash2 size={27} color="#FDA4AF" /></View><Text style={styles.deleteDialogEyebrow}>ȘTERGERE DEFINITIVĂ</Text><Text style={styles.deleteDialogTitle}>Ștergi această notă de intrare-recepție?</Text><Text style={styles.deleteDialogMessage}>Ești sigur că vrei să ștergi această notă de intrare-recepție marfă?</Text><View style={styles.deleteDialogDocument}><View style={{ flex: 1 }}><Text style={styles.deleteDialogMetaLabel}>DOCUMENT</Text><Text numberOfLines={1} style={styles.deleteDialogMetaValue}>{editor.nir_number || editor.temporary_number || 'NIR nesalvat'}</Text></View><View style={styles.deleteDialogDivider} /><View style={{ flex: 1 }}><Text style={styles.deleteDialogMetaLabel}>FURNIZOR</Text><Text numberOfLines={1} style={styles.deleteDialogMetaValue}>{editor.supplier_name || 'Necompletat'}</Text></View></View><View style={styles.deleteDialogWarning}><AlertTriangle size={18} color="#FBBF24" /><View style={{ flex: 1 }}><Text style={styles.deleteDialogWarningTitle}>Acțiunea nu poate fi anulată</Text><Text style={styles.deleteDialogWarningText}>Pozițiile, documentele atașate și toate datele acestei ciorne vor fi eliminate definitiv.</Text></View></View><TouchableOpacity disabled={deleting} style={styles.deleteDialogCancel} onPress={() => setDeleteDialog(false)}><Text style={styles.deleteDialogCancelText}>Nu, păstrează NIR-ul</Text></TouchableOpacity><TouchableOpacity disabled={deleting} style={styles.deleteDialogConfirm} onPress={() => void deleteNir()}>{deleting ? <ActivityIndicator color="#FFFFFF" /> : <><Trash2 size={17} color="#FFFFFF" /><Text style={styles.deleteDialogConfirmText}>Da, șterge definitiv</Text></>}</TouchableOpacity></Pressable></Pressable></Modal>
@@ -815,7 +936,7 @@ function AnimatedFlowConnector({ index, progress }: { index: number; progress: A
 function NirFlowGuide() {
   const progress = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    const loop = Animated.loop(Animated.timing(progress, { toValue: 1, duration: 8000, easing: Easing.linear, useNativeDriver: false }), { resetBeforeIteration: true });
+    const loop = Animated.loop(Animated.timing(progress, { toValue: 1, duration: 5200, easing: Easing.linear, useNativeDriver: false }), { resetBeforeIteration: true });
     loop.start();
     return () => loop.stop();
   }, [progress]);
@@ -825,7 +946,7 @@ function NirFlowGuide() {
 function SectionTitle({ icon, index, title, subtitle }: { icon: React.ReactNode; index: string; title: string; subtitle: string }) { return <View style={styles.sectionTitle}><View style={styles.sectionIndex}>{icon}<Text style={styles.sectionIndexText}>{index}</Text></View><View style={{ flex: 1 }}><Text style={styles.sectionHeading}>{title}</Text><Text style={styles.sectionSubtitle}>{subtitle}</Text></View></View>; }
 function ReviewMetric({ icon, label, value, hint, tone, wide = false }: { icon: React.ReactNode; label: string; value: number; hint: string; tone: 'purple' | 'blue' | 'green' | 'red' | 'teal'; wide?: boolean }) { const toneStyle = { purple: styles.reviewTonePurple, blue: styles.reviewToneBlue, green: styles.reviewToneGreen, red: styles.reviewToneRed, teal: styles.reviewToneTeal }[tone]; return <View style={[styles.reviewMetric, toneStyle, wide && styles.reviewMetricWide]}><View style={styles.reviewMetricIcon}>{icon}</View><View style={{ flex: 1 }}><Text style={styles.reviewMetricLabel}>{label}</Text><Text style={styles.reviewMetricValue}>{value.toLocaleString('ro-RO')}</Text><Text style={styles.reviewMetricHint}>{hint}</Text></View></View>; }
 function DateTimeSelector({ label, date, time, color, disabled, onPress }: { label: string; date: string; time: string | null; color: string; disabled: boolean; onPress: () => void }) { const parsed = date ? new Date(`${date}T${String(time || '00:00').slice(0, 5)}:00`) : null; const dateLabel = parsed && !Number.isNaN(parsed.getTime()) ? parsed.toLocaleDateString('ro-RO', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Alege data'; const timeLabel = String(time || '').slice(0, 5) || '--:--'; return <TouchableOpacity disabled={disabled} activeOpacity={0.78} style={[styles.dateTimeSelector, disabled && styles.dateTimeSelectorDisabled]} onPress={onPress}><View style={[styles.dateTimeSelectorIcon, { borderColor: `${color}40`, backgroundColor: `${color}12` }]}><CalendarDays size={20} color={color} /><Clock3 size={10} color={color} style={styles.dateTimeClock} /></View><View style={{ flex: 1 }}><Text style={styles.dateTimeSelectorLabel}>{label}</Text><View style={styles.dateTimeSelectorValue}><Text style={styles.dateTimeSelectorDate}>{dateLabel}</Text><View style={[styles.dateTimeTimeChip, { backgroundColor: `${color}12` }]}><Text style={[styles.dateTimeTimeText, { color }]}>{timeLabel}</Text></View></View><Text style={styles.dateTimeSelectorHint}>Atinge pentru calendar și oră</Text></View><ChevronRight size={18} color={Colors.textMuted} /></TouchableOpacity>; }
-function Field({ label, value, onChangeText, placeholder, editable = true, keyboardType, multiline, icon }: { label: string; value: string; onChangeText?: (value: string) => void; placeholder: string; editable?: boolean; keyboardType?: 'default' | 'decimal-pad'; multiline?: boolean; icon?: React.ReactNode }) { return <View style={[styles.field, multiline && styles.fieldWide]}><Text style={styles.label}>{label}</Text><View style={styles.inputWrap}>{icon}<TextInput style={[styles.input, multiline && styles.textarea]} value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={Colors.textMuted} editable={editable} keyboardType={keyboardType} multiline={multiline} /></View></View>; }
+function Field({ label, value, onChangeText, placeholder, editable = true, keyboardType, multiline, icon }: { label: string; value: string; onChangeText?: (value: string) => void; placeholder: string; editable?: boolean; keyboardType?: 'default' | 'decimal-pad'; multiline?: boolean; icon?: React.ReactNode }) { return <View style={[styles.field, multiline && styles.fieldWide]}><Text style={styles.label}>{label}</Text><View style={styles.inputWrap}>{icon}<TextInput style={[styles.input, multiline && styles.textarea]} value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={Colors.textMuted} selectionColor="#5EEAD4" cursorColor="#5EEAD4" autoCorrect={false} editable={editable} keyboardType={keyboardType} multiline={multiline} /></View></View>; }
 function SearchBox({ value, onChangeText, placeholder, onSubmitEditing }: { value: string; onChangeText: (value: string) => void; placeholder: string; onSubmitEditing?: () => void }) { return <View style={styles.searchBox}><Search size={18} color={Colors.textMuted} /><TextInput style={styles.searchInput} value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={Colors.textMuted} returnKeyType="search" onSubmitEditing={onSubmitEditing} /></View>; }
 function SheetHeader({ title, onClose }: { title: string; onClose: () => void }) { return <View style={styles.sheetHeader}><Text style={styles.sheetTitle}>{title}</Text><TouchableOpacity style={styles.iconButton} onPress={onClose}><X size={20} color={Colors.textSecondary} /></TouchableOpacity></View>; }
 function Tab({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) { return <TouchableOpacity style={[styles.detailTab, active && styles.detailTabActive]} onPress={onPress}><Text style={[styles.detailTabText, active && styles.detailTabTextActive]}>{label}</Text></TouchableOpacity>; }
@@ -846,6 +967,27 @@ function RegistryDocumentIcon({ color }: { color: string }) {
 
 function LineStage({ number, title, subtitle, icon, children }: { number: string; title: string; subtitle: string; icon: React.ReactNode; children: React.ReactNode }) { return <View style={styles.lineStage}><View style={styles.lineStageHeader}><View style={styles.lineStageIcon}>{icon}<Text style={styles.lineStageNumber}>{number}</Text></View><View style={{ flex: 1 }}><Text style={styles.lineStageTitle}>{title}</Text><Text style={styles.lineStageSubtitle}>{subtitle}</Text></View></View>{children}</View>; }
 
+const AnimatedSvgPath = Animated.createAnimatedComponent(Path);
+function NirLineProductVisual({ uri, matched }: { uri?: string | null; matched: boolean }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const drawing = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    setImageFailed(false);
+  }, [uri]);
+  useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(drawing, { toValue: 1, duration: 1750, easing: Easing.inOut(Easing.cubic), useNativeDriver: false }),
+      Animated.delay(70),
+      Animated.timing(drawing, { toValue: 0, duration: 0, useNativeDriver: false }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [drawing]);
+  if (uri && !imageFailed) return <Image source={{ uri }} style={styles.lineProductImage} resizeMode="cover" onError={() => setImageFailed(true)} />;
+  const color = matched ? '#5EEAD4' : '#A78BFA';
+  return <View style={[styles.lineProductPlaceholder, matched && styles.lineProductPlaceholderMatched]}><Svg width={26} height={26} viewBox="0 0 24 24"><AnimatedSvgPath d="m4 7 8-4 8 4-8 4-8-4Zm0 0v10l8 4 8-4V7m-8 4v10" fill="none" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="90" strokeDashoffset={drawing.interpolate({ inputRange: [0, 0.24, 0.76, 1], outputRange: [90, 0, 0, -90] })} opacity={drawing.interpolate({ inputRange: [0, 0.12, 0.84, 1], outputRange: [0.24, 1, 1, 0.16] })} /></Svg></View>;
+}
+
 function NirLineCard({ line, index, editable, supplierName, currency, exchangeRate, onPatch, onSupplierCodeChange, onSupplierNameChange, onPickProduct, onRemove }: { line: ShopNirLine; index: number; editable: boolean; supplierName: string; currency: string; exchangeRate: string; onPatch: (patch: Partial<ShopNirLine>) => void; onSupplierCodeChange: (value: string) => void; onSupplierNameChange: (value: string) => void; onPickProduct: () => void; onRemove: () => void }) {
   const matched = Boolean(line.product_id);
   const isStockItem = line.is_stock_item !== false;
@@ -854,14 +996,14 @@ function NirLineCard({ line, index, editable, supplierName, currency, exchangeRa
   const differenceReason = line.difference_reason || (line.mismatch_reason ? 'other' : null);
   const calculated = localLineTotals(line, exchangeRate);
   return <Reveal delay={Math.min(index * 45, 220)}><View style={[styles.lineCard, matched && styles.lineCardMatched]}>
-    <View style={styles.lineHeader}>{line.product_image_url ? <Image source={{ uri: line.product_image_url }} style={styles.lineProductImage} /> : <View style={styles.lineNumber}><Text style={styles.lineNumberText}>{String(index + 1).padStart(2, '0')}</Text></View>}<View style={{ flex: 1 }}><Text style={styles.lineProduct}>{line.product_name || line.supplier_product_name || 'Produs neasociat'}</Text><Text style={[styles.matchText, { color: ['matching_code', 'matching_name'].includes(line.resolution_status || '') ? '#38BDF8' : matched ? Colors.success : Colors.warning }]}>{['matching_code', 'matching_name'].includes(line.resolution_status || '') ? '● Se caută automat…' : matched ? (line.resolution_status === 'matched_code' ? '● Recunoscut după cod' : line.resolution_status === 'matched_name' ? '● Recunoscut după denumirea identică' : '● Asociat manual · se memorează la Salvare') : '● Necesită asociere'}</Text></View>{editable && <TouchableOpacity style={styles.deleteLine} onPress={onRemove}><Trash2 size={16} color={Colors.error} /></TouchableOpacity>}</View>
-    <LineStage number="1" title="Identifică produsul" subtitle="Căutare automată după cod sau denumire identică" icon={<PackageSearch size={17} color="#A78BFA" />}>
+    <View style={styles.lineHeader}><NirLineProductVisual uri={line.product_image_url} matched={matched} /><View style={{ flex: 1 }}><Text style={styles.lineProduct}>{line.product_name || line.supplier_product_name || 'Produs neasociat'}</Text><Text style={[styles.matchText, { color: ['matching_code', 'matching_name'].includes(line.resolution_status || '') ? '#38BDF8' : matched ? Colors.success : Colors.warning }]}>{['matching_code', 'matching_name'].includes(line.resolution_status || '') ? '● Se caută automat…' : matched ? (line.resolution_status === 'matched_code' ? '● Recunoscut după cod' : line.resolution_status === 'matched_name' ? '● Recunoscut după denumirea furnizorului' : '● Asociat manual · se memorează la Salvare') : '● Necesită asociere'}</Text></View>{editable && <TouchableOpacity style={styles.deleteLine} onPress={onRemove}><Trash2 size={16} color={Colors.error} /></TouchableOpacity>}</View>
+    <LineStage number="1" title="Identifică produsul" subtitle="Căutare după cod, EAN sau denumirea memorată la furnizor" icon={<PackageSearch size={17} color="#A78BFA" />}>
       <View style={styles.supplierContext}><Text style={styles.supplierContextLabel}>FURNIZOR</Text><Text style={styles.supplierContextValue}>{supplierName}</Text></View>
       <Field label="COD FURNIZOR" value={line.supplier_product_code} onChangeText={onSupplierCodeChange} placeholder="Ex: CAU-1025-A" editable={editable} />
       <Field label="DENUMIRE PE FACTURĂ" value={line.supplier_product_name} onChangeText={onSupplierNameChange} placeholder="Denumirea folosită de furnizor" editable={editable} />
-      <View style={[styles.autoCodeStatus, matched && styles.autoCodeStatusMatched]}><Search size={15} color={matched ? Colors.success : '#38BDF8'} /><View style={{ flex: 1 }}><Text style={[styles.autoCodeTitle, matched && { color: Colors.success }]}>{['matching_code', 'matching_name'].includes(line.resolution_status || '') ? 'Se caută automat…' : matched ? 'Produs recunoscut' : 'Căutare după cod sau nume'}</Text><Text style={styles.autoCodeText}>{matched ? line.product_name : 'Fără cod, denumirea de pe factură trebuie să fie identică produsului intern.'}</Text></View></View>
+      <View style={[styles.autoCodeStatus, matched && styles.autoCodeStatusMatched]}><Search size={15} color={matched ? Colors.success : '#38BDF8'} /><View style={{ flex: 1 }}><Text style={[styles.autoCodeTitle, matched && { color: Colors.success }]}>{['matching_code', 'matching_name'].includes(line.resolution_status || '') ? 'Se caută automat…' : matched ? 'Produs recunoscut' : 'Căutare după cod sau nume'}</Text><Text style={styles.autoCodeText}>{matched ? line.product_name : 'La prima achiziție alegi produsul intern; apoi această denumire este recunoscută automat la furnizor.'}</Text></View></View>
       {editable && isStockItem && <View style={styles.associationActions}><TouchableOpacity style={[styles.productAssociation, matched && styles.productAssociationMatched]} onPress={onPickProduct}><Link2 size={16} color={matched ? Colors.success : Colors.orange} /><Text style={[styles.productAssociationText, matched && { color: Colors.success }]}>{matched ? 'Schimbă produsul' : 'Alege produsul intern'}</Text></TouchableOpacity></View>}
-      <Text style={styles.stageExplanation}>Același produs poate fi cumpărat de la mai mulți furnizori, cu sau fără cod propriu.</Text>
+      <Text style={styles.stageExplanation}>SKU-ul intern este independent. Același produs poate avea coduri și denumiri diferite la fiecare furnizor.</Text>
     </LineStage>
     <LineStage number="2" title="Verifică marfa" subtitle="Compară factura cu ce ai primit și acceptat" icon={<Boxes size={17} color="#38BDF8" />}>
       <View style={styles.grid2}><Field label="FACTURAT" value={line.invoiced_quantity} onChangeText={(invoiced_quantity) => onPatch({ invoiced_quantity, received_quantity: invoiced_quantity, accepted_quantity: invoiced_quantity })} placeholder="0" editable={editable} keyboardType="decimal-pad" /><Field label="RECEPȚIONAT" value={received} onChangeText={(received_quantity) => onPatch({ received_quantity })} placeholder="0" editable={editable} keyboardType="decimal-pad" /></View>
@@ -891,7 +1033,7 @@ const styles = StyleSheet.create({
   sectionTitle: { marginBottom: 3, flexDirection: 'row', alignItems: 'center', gap: 12 }, sectionIndex: { width: 48, height: 48, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF08', borderWidth: 1, borderColor: Colors.cardBorder }, sectionIndexText: { position: 'absolute', right: 4, bottom: 3, color: Colors.textMuted, fontSize: 7, fontWeight: '900' }, sectionHeading: { color: Colors.textPrimary, fontSize: 17, fontWeight: '900' }, sectionSubtitle: { marginTop: 3, color: Colors.textMuted, fontSize: 11, lineHeight: 16 },
   selector: { minHeight: 70, padding: 14, borderRadius: 18, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }, selectorValue: { marginTop: 7, color: Colors.textPrimary, fontSize: 14, fontWeight: '800' }, placeholder: { marginTop: 7, color: Colors.textMuted, fontSize: 13 }, grid2: { flexDirection: 'row', gap: 10 }, dateTimeCard: { padding: 10, gap: 9, borderRadius: 19, backgroundColor: '#38BDF807', borderWidth: 1, borderColor: '#38BDF826' }, dateTimeSelector: { minHeight: 82, flexDirection: 'row', alignItems: 'center', gap: 11, padding: 11, borderRadius: 17, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder }, dateTimeSelectorDisabled: { opacity: 0.62 }, dateTimeSelectorIcon: { position: 'relative', width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, borderWidth: 1 }, dateTimeClock: { position: 'absolute', right: 5, bottom: 5 }, dateTimeSelectorLabel: { color: Colors.textMuted, fontSize: 8, fontWeight: '900', letterSpacing: 0.7 }, dateTimeSelectorValue: { marginTop: 5, flexDirection: 'row', alignItems: 'center', gap: 7 }, dateTimeSelectorDate: { color: Colors.textPrimary, fontSize: 13, fontWeight: '900' }, dateTimeTimeChip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 }, dateTimeTimeText: { fontSize: 10, fontWeight: '900' }, dateTimeSelectorHint: { marginTop: 4, color: Colors.textMuted, fontSize: 8 }, quantityGrid: { flexDirection: 'row', gap: 7 }, field: { flex: 1, minWidth: 0 }, fieldWide: { flex: 0, width: '100%' }, label: { marginLeft: 3, marginBottom: 6, color: Colors.textMuted, fontSize: 9, fontWeight: '900', letterSpacing: 0.7 }, inputWrap: { minHeight: 52, paddingHorizontal: 13, borderRadius: 15, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder, flexDirection: 'row', alignItems: 'center', gap: 8 }, input: { flex: 1, color: Colors.textPrimary, fontSize: 13, paddingVertical: 11 }, textarea: { minHeight: 88, textAlignVertical: 'top' },
   currencyRow: { flexDirection: 'row', gap: 8 }, currencyChip: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 14, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder }, currencyChipActive: { backgroundColor: Colors.orangeDim, borderColor: Colors.orange }, currencyText: { color: Colors.textSecondary, fontWeight: '900' }, currencyTextActive: { color: Colors.orange }, currencySelector: { minHeight: 72, padding: 11, borderRadius: 18, backgroundColor: '#F59E0B08', borderWidth: 1, borderColor: '#F59E0B30', flexDirection: 'row', alignItems: 'center', gap: 11 }, currencySelectorIcon: { width: 45, height: 45, borderRadius: 14, backgroundColor: '#F59E0B12', alignItems: 'center', justifyContent: 'center' }, currencySelectorLabel: { color: Colors.textMuted, fontSize: 7, fontWeight: '900', letterSpacing: 0.7 }, currencySelectorValue: { marginTop: 5, flexDirection: 'row', alignItems: 'center', gap: 8 }, currencySelectorCode: { color: '#FBBF24', fontSize: 15, fontWeight: '900' }, currencySelectorName: { flex: 1, color: Colors.textSecondary, fontSize: 10 }, bnrStatus: { minHeight: 45, paddingHorizontal: 12, borderRadius: 14, backgroundColor: '#22C55E08', borderWidth: 1, borderColor: '#22C55E22', flexDirection: 'row', alignItems: 'center', gap: 8 }, bnrStatusText: { color: '#8FE3B2', fontSize: 9, fontWeight: '800' }, bnrRefresh: { minHeight: 56, paddingHorizontal: 12, borderRadius: 15, backgroundColor: '#38BDF808', borderWidth: 1, borderColor: '#38BDF82C', flexDirection: 'row', alignItems: 'center', gap: 10 }, bnrRefreshTitle: { color: '#38BDF8', fontSize: 10, fontWeight: '900' }, bnrRefreshText: { marginTop: 3, color: Colors.textMuted, fontSize: 8 }, currencySheet: { maxHeight: '88%' }, currencyCount: { marginTop: 11, paddingHorizontal: 3, flexDirection: 'row', alignItems: 'center', gap: 6 }, currencyCountText: { color: Colors.textMuted, fontSize: 9, fontWeight: '800' }, currencyList: { paddingTop: 8, gap: 6 }, currencyOption: { minHeight: 57, paddingHorizontal: 10, borderRadius: 15, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder, flexDirection: 'row', alignItems: 'center', gap: 10 }, currencyOptionActive: { backgroundColor: '#22C55E08', borderColor: '#22C55E32' }, currencyOptionCode: { width: 48, height: 34, borderRadius: 11, backgroundColor: '#FFFFFF08', alignItems: 'center', justifyContent: 'center' }, currencyOptionCodeActive: { backgroundColor: '#22C55E12' }, currencyOptionCodeText: { color: '#FBBF24', fontSize: 10, fontWeight: '900' }, currencyOptionCodeTextActive: { color: '#5EEAA4' }, currencyOptionName: { flex: 1, color: Colors.textPrimary, fontSize: 11, fontWeight: '700' },
-  lineList: { gap: 12 }, lineCard: { padding: 11, borderRadius: 23, backgroundColor: '#17161A', borderWidth: 1, borderColor: Colors.cardBorder, gap: 10 }, lineCardMatched: { borderColor: '#22C55E55' }, lineHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 3, paddingVertical: 3 }, lineNumber: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#A78BFA16', borderWidth: 1, borderColor: '#A78BFA30' }, lineProductImage: { width: 44, height: 44, borderRadius: 14, backgroundColor: '#FFFFFF08' }, lineNumberText: { color: '#A78BFA', fontSize: 11, fontWeight: '900' }, lineProduct: { color: Colors.textPrimary, fontSize: 14, fontWeight: '800' }, matchText: { marginTop: 4, fontSize: 10, fontWeight: '800' }, deleteLine: { width: 38, height: 38, borderRadius: 13, backgroundColor: Colors.errorDim, alignItems: 'center', justifyContent: 'center' }, productAssociation: { flex: 1, minHeight: 45, paddingHorizontal: 10, borderRadius: 13, borderWidth: 1, borderColor: Colors.orangeMid, backgroundColor: Colors.orangeDim, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }, productAssociationMatched: { borderColor: '#22C55E44', backgroundColor: Colors.successDim }, productAssociationText: { flex: 0, color: Colors.orange, fontSize: 10, fontWeight: '800' }, autoCodeStatus: { minHeight: 53, paddingHorizontal: 12, borderRadius: 14, backgroundColor: '#38BDF80A', borderWidth: 1, borderColor: '#38BDF82B', flexDirection: 'row', alignItems: 'center', gap: 9 }, autoCodeStatusMatched: { backgroundColor: '#22C55E09', borderColor: '#22C55E2E' }, autoCodeTitle: { color: '#38BDF8', fontSize: 10, fontWeight: '900' }, autoCodeText: { marginTop: 3, color: Colors.textMuted, fontSize: 9, lineHeight: 13 }, lineTotal: { minHeight: 75, padding: 12, borderRadius: 15, backgroundColor: '#F9731610', borderWidth: 1, borderColor: '#F9731635', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, lineTotalLabel: { color: Colors.orangeLight, fontSize: 9, fontWeight: '900' }, lineTotalHint: { marginTop: 4, color: Colors.textMuted, fontSize: 8 }, lineTotalCost: { marginTop: 5, color: '#D6A27B', fontSize: 8, fontWeight: '800' }, lineTotalValue: { color: Colors.orangeLight, fontSize: 16, fontWeight: '900' },
+  lineList: { gap: 12 }, lineCard: { padding: 11, borderRadius: 23, backgroundColor: '#17161A', borderWidth: 1, borderColor: Colors.cardBorder, gap: 10 }, lineCardMatched: { borderColor: '#22C55E55' }, lineHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 3, paddingVertical: 3 }, lineNumber: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#A78BFA16', borderWidth: 1, borderColor: '#A78BFA30' }, lineProductImage: { width: 44, height: 44, borderRadius: 14, backgroundColor: '#FFFFFF08' }, lineProductPlaceholder: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#A78BFA12', borderWidth: 1, borderColor: '#A78BFA38' }, lineProductPlaceholderMatched: { backgroundColor: '#2DD4BF10', borderColor: '#2DD4BF38' }, lineNumberText: { color: '#A78BFA', fontSize: 11, fontWeight: '900' }, lineProduct: { color: Colors.textPrimary, fontSize: 14, fontWeight: '800' }, matchText: { marginTop: 4, fontSize: 10, fontWeight: '800' }, deleteLine: { width: 38, height: 38, borderRadius: 13, backgroundColor: Colors.errorDim, alignItems: 'center', justifyContent: 'center' }, productAssociation: { flex: 1, minHeight: 45, paddingHorizontal: 10, borderRadius: 13, borderWidth: 1, borderColor: Colors.orangeMid, backgroundColor: Colors.orangeDim, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }, productAssociationMatched: { borderColor: '#22C55E44', backgroundColor: Colors.successDim }, productAssociationText: { flex: 0, color: Colors.orange, fontSize: 10, fontWeight: '800' }, autoCodeStatus: { minHeight: 53, paddingHorizontal: 12, borderRadius: 14, backgroundColor: '#38BDF80A', borderWidth: 1, borderColor: '#38BDF82B', flexDirection: 'row', alignItems: 'center', gap: 9 }, autoCodeStatusMatched: { backgroundColor: '#22C55E09', borderColor: '#22C55E2E' }, autoCodeTitle: { color: '#38BDF8', fontSize: 10, fontWeight: '900' }, autoCodeText: { marginTop: 3, color: Colors.textMuted, fontSize: 9, lineHeight: 13 }, lineTotal: { minHeight: 75, padding: 12, borderRadius: 15, backgroundColor: '#F9731610', borderWidth: 1, borderColor: '#F9731635', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, lineTotalLabel: { color: Colors.orangeLight, fontSize: 9, fontWeight: '900' }, lineTotalHint: { marginTop: 4, color: Colors.textMuted, fontSize: 8 }, lineTotalCost: { marginTop: 5, color: '#D6A27B', fontSize: 8, fontWeight: '800' }, lineTotalValue: { color: Colors.orangeLight, fontSize: 16, fontWeight: '900' },
   priceComparison: { padding: 12, gap: 8, borderRadius: 15, backgroundColor: '#38BDF80A', borderWidth: 1, borderColor: '#38BDF82E' }, priceComparisonWarning: { backgroundColor: '#F59E0B0D', borderColor: '#F59E0B4A' }, priceComparisonLabel: { color: Colors.textMuted, fontSize: 8, fontWeight: '900', letterSpacing: 0.6 }, priceComparisonValue: { marginTop: 4, color: Colors.textPrimary, fontSize: 12, fontWeight: '800' }, priceComparisonMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 }, priceComparisonMetaText: { color: Colors.textSecondary, fontSize: 10 }, priceComparisonVariance: { color: '#38BDF8', fontSize: 11, fontWeight: '900' }, priceComparisonAlert: { color: Colors.warning, fontSize: 10, lineHeight: 15, fontWeight: '700' },
   differenceBox: { gap: 8, padding: 10, borderRadius: 15, backgroundColor: '#F59E0B08', borderWidth: 1, borderColor: '#F59E0B2E' }, differenceReasons: { gap: 7 }, differenceChip: { minHeight: 38, paddingHorizontal: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder }, differenceChipActive: { backgroundColor: Colors.orangeDim, borderColor: Colors.orangeMid }, differenceChipText: { color: Colors.textSecondary, fontSize: 10, fontWeight: '800' }, differenceChipTextActive: { color: Colors.orange },
   stockItemToggle: { minHeight: 64, paddingHorizontal: 13, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFFFFF05', borderWidth: 1, borderColor: Colors.cardBorder }, stockItemToggleActive: { backgroundColor: '#22C55E0A', borderColor: '#22C55E33' }, stockItemText: { color: Colors.textSecondary, fontSize: 11, fontWeight: '900' }, stockItemTextActive: { color: Colors.success }, stockItemHint: { marginTop: 4, color: Colors.textMuted, fontSize: 9, lineHeight: 13 }, stockSwitchTrack: { width: 48, height: 28, padding: 3, borderRadius: 14, backgroundColor: '#37343C', justifyContent: 'center' }, stockSwitchTrackActive: { backgroundColor: '#22C55E55' }, stockSwitchThumb: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: '#8B8790' }, stockSwitchThumbActive: { marginLeft: 20, backgroundColor: '#5EEAA4' },

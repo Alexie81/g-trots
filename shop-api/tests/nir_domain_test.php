@@ -33,6 +33,14 @@ nirAssertSame('TYRE-001-A', shopNirNormalizeSupplierCode('  Tyre-001-A  '), 'nor
 nirAssertSame('0001/A.2', shopNirNormalizeSupplierCode(' 0001/a.2 '), 'păstrează zero, slash, punct');
 nirAssertSame('COD CU SPAȚII', shopNirNormalizeSupplierCode("cod   cu\tspații"), 'compactează spațiile consecutive');
 nirAssertSame(shopNirNormalizeSupplierCode('kg4-brake-01'), shopNirNormalizeSupplierCode('KG4-BRAKE-01'), 'comparația este case-insensitive');
+nirAssertSame('casti premium george', shopNirNormalizeSupplierProductName('  Căști  PREMIUM, George!  '), 'normalizează denumirea memorată la furnizor');
+nirAssertSame(
+    shopNirSupplierProductNameKey('Căști premium George'),
+    shopNirSupplierProductNameKey('casti PREMIUM, george!'),
+    'denumirile identice au aceeași cheie de asociere'
+);
+nirAssertSame(false, shopNirSupplierProductNameKey('Cască George') === shopNirSupplierProductNameKey('Cască Kidotoys'), 'denumirile diferite rămân asocieri diferite');
+nirAssertSame('', shopNirSupplierProductNameKey('   '), 'denumirea goală nu creează asociere');
 
 $ron = shopNirCalculateLine([
     'accepted_quantity' => '10', 'conversion_factor' => '1', 'unit_price' => '50',

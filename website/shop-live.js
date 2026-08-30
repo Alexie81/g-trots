@@ -93,6 +93,46 @@
     };
   }
 
+  function decodeCatalogPayload(payload) {
+    if (Array.isArray(payload)) return payload;
+    if (payload?.v !== 1 || !Array.isArray(payload.p)) return [];
+    return payload.p.map(row => {
+      const promotion = Array.isArray(row[27]) ? {
+        id: row[27][0], code: row[27][1], title: row[27][2], discount_type: row[27][3], discount_value: row[27][4]
+      } : null;
+      return {
+        id: row[0], slug: row[1], sku: row[2], ean: row[3], name: row[4], short_description: row[5],
+        category_id: row[6], category_name: row[7], category_slug: row[8],
+        manufacturer_id: row[9], manufacturer_name: row[10], manufacturer_slug: row[11],
+        brands: Array.isArray(row[12]) ? row[12].map(brand => ({ id: brand[0], name: brand[1], slug: brand[2] })) : [],
+        images: row[13] ? [{ url: row[13] }] : [],
+        price: row[14], sale_price: row[15], discount_type: row[16], discount_value: row[17], currency: row[18],
+        stock_mode: row[19], stock_quantity: row[20], low_stock_threshold: row[21], is_featured: row[22], featured_rank: row[23],
+        promotion_price: row[24], price_before_promotion: row[25], promotion_discount_percent: row[26], active_promotion: promotion
+      };
+    });
+  }
+
+  const CATALOG_CACHE_KEY = "g-trots:catalog-compact:v1";
+  function readCatalogSnapshot() {
+    try {
+      const cached = JSON.parse(localStorage.getItem(CATALOG_CACHE_KEY) || "null");
+      if (!cached?.savedAt || Date.now() - Number(cached.savedAt) > 24 * 60 * 60 * 1000 || !Array.isArray(cached.rows)) return [];
+      return decodeCatalogPayload({ v: 1, p: cached.rows });
+    } catch {
+      return [];
+    }
+  }
+
+  function writeCatalogSnapshot(payloads) {
+    try {
+      const rows = payloads.flatMap(payload => payload?.v === 1 && Array.isArray(payload.p) ? payload.p : []);
+      if (rows.length) localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), rows }));
+    } catch {
+      // Catalogul rămâne funcțional chiar dacă browserul nu permite cache local.
+    }
+  }
+
   function normalizeProductIdentity(value) {
     return String(value ?? "")
       .normalize("NFD")
@@ -156,7 +196,7 @@
           ...(deviceToken ? { "X-Shop-Device": deviceToken } : {})
         },
         body: options.body ? JSON.stringify(options.body) : undefined,
-        cache: "no-store",
+        cache: options.cache || (["publicProducts", "publicProductsCompact", "publicProductsPage"].includes(action) ? "default" : "no-store"),
         signal: controller.signal
       });
       const payload = await response.json().catch(() => ({}));
@@ -174,6 +214,36 @@
     window.GTrotsShopCatalog?.renderLiveProducts?.(uniqueProducts);
     document.dispatchEvent(new CustomEvent("g-trots:live-products", { detail: normalized }));
     return normalized;
+  }
+
+  async function loadCatalogFast(cache = "default") {
+    const cachedProducts = readCatalogSnapshot();
+    if (cachedProducts.length) registerProducts(cachedProducts);
+    const firstPayload = await api("publicProductsPage", { query: "&page=1&page_size=24", cache });
+    const firstProducts = decodeCatalogPayload(firstPayload);
+    if (firstProducts.length && !cachedProducts.length) registerProducts(firstProducts);
+
+    const total = Math.max(firstProducts.length, Number(firstPayload?.total || 0));
+    const pageSize = 400;
+    const pageCount = Math.max(1, Math.ceil(total / pageSize));
+    if (total <= firstProducts.length) {
+      writeCatalogSnapshot([firstPayload]);
+      return cachedProducts.length ? cachedProducts : firstProducts;
+    }
+
+    void Promise.all(Array.from({ length: pageCount }, (_, index) => api("publicProductsPage", {
+      query: `&page=${index + 1}&page_size=${pageSize}`,
+      cache
+    }))).then(payloads => {
+      const complete = payloads.flatMap(decodeCatalogPayload);
+      if (complete.length) {
+        registerProducts(complete);
+        writeCatalogSnapshot(payloads);
+      }
+    }).catch(() => {
+      // Prima pagina este deja vizibila; o eroare de fundal nu blocheaza magazinul.
+    });
+    return cachedProducts.length ? cachedProducts : firstProducts;
   }
 
   function setText(selector, value) {
@@ -937,8 +1007,7 @@
 
     let products = [];
     try {
-      products = await api("publicProducts");
-      if (Array.isArray(products)) registerProducts(products);
+      products = await loadCatalogFast();
     } catch {
       window.GTrotsShopCatalog?.showCatalogError?.();
       document.dispatchEvent(new CustomEvent("g-trots:catalog-error"));
@@ -955,8 +1024,7 @@
         const identifier = pathMatch ? decodeURIComponent(pathMatch[1]) : (new URLSearchParams(window.location.search).get("slug") || document.body.dataset.productId);
         if (identifier) applyLiveProduct(await api("publicProduct", { query: `&slug=${encodeURIComponent(identifier)}` }));
       }
-      const products = await api("publicProducts");
-      if (Array.isArray(products)) registerProducts(products);
+      await loadCatalogFast("reload");
     } catch {
       // Păstrăm ultima versiune validă a catalogului dacă reîmprospătarea eșuează.
     }

@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+$shopRequestStartedAt = microtime(true);
+
 date_default_timezone_set('Europe/Bucharest');
 
 ini_set('display_errors', '0');
@@ -86,6 +88,7 @@ function shopConfig(): array {
 
 function jsonResponse($payload, int $status = 200): void {
     http_response_code($status);
+    $encodingStartedAt = microtime(true);
     $json = json_encode(
         $payload,
         JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE
@@ -96,8 +99,33 @@ function jsonResponse($payload, int $status = 200): void {
             'error' => 'Raspunsul SHOP nu a putut fi serializat.',
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
+    if (isset($GLOBALS['shopPublicCatalogResponseTiming'])) {
+        $responseTiming = $GLOBALS['shopPublicCatalogResponseTiming'];
+        header(sprintf(
+            'Server-Timing: shape;dur=%.1f, encode;dur=%.1f',
+            (float)($responseTiming['shape'] ?? 0),
+            (microtime(true) - $encodingStartedAt) * 1000
+        ), false);
+    }
     echo $json;
     exit;
+}
+
+function scheduleSupplierStockSyncAfterResponse(PDO $db, array $config): void {
+    // Pe hosting-ul PHP-FPM trimitem mai intai catalogul catre client, apoi lasam
+    // sincronizarea periodica Boomag sa ruleze in fundal. Astfel prima afisare a
+    // magazinului nu mai asteapta dupa furnizor.
+    if (!function_exists('fastcgi_finish_request')) return;
+    register_shutdown_function(static function () use ($db, $config): void {
+        fastcgi_finish_request();
+        ignore_user_abort(true);
+        @set_time_limit(120);
+        try {
+            gomagMaybeSyncSupplierStock($db, $config);
+        } catch (Throwable $error) {
+            error_log('Sincronizarea Boomag de dupa raspuns a esuat: ' . $error->getMessage());
+        }
+    });
 }
 
 function requestHeader(string $name): string {
@@ -164,7 +192,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026082905;
+    $schemaVersion = 2026083001;
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_schema_meta (
             meta_key VARCHAR(80) NOT NULL PRIMARY KEY,
@@ -1375,6 +1403,15 @@ function ensureShopSchema(PDO $db): void {
     // apelează aceeași rutină idempotentă pentru fiecare produs.
     shopNirEnsureBoomagKidotoysReferences($db);
 
+    // NIR-urile vechi pot avea produsul intern asociat, dar fără o referință
+    // separată pentru denumirea/codul fiecărui furnizor. Migrarea le repară
+    // idempotent, fără să compare ori să modifice SKU-ul intern.
+    shopNirBackfillProductSupplierReferences($db, null, [
+        'id' => 'system-nir-alias-migration',
+        'name' => 'SYSTEM NIR ALIAS MIGRATION',
+        'role' => 'admin',
+    ]);
+
     // Datele comerciale sunt administrate exclusiv din CRM. Schema nu
     // reintroduce automat surse, marci sau livrari demonstrative.
 }
@@ -2194,6 +2231,145 @@ function publicCatalogProductRow(array $row): array {
         'promotion_discount_percent' => (float)($row['promotion_discount_percent'] ?? 0),
         'active_promotion' => $row['active_promotion'] ?? null,
     ];
+}
+
+function compactPublicCatalogPayload(array $products): array {
+    return [
+        'v' => 1,
+        'p' => array_map(static function (array $product): array {
+            $image = is_array($product['images'] ?? null) ? ($product['images'][0] ?? null) : null;
+            $brands = is_array($product['brands'] ?? null) ? array_map(static fn(array $brand): array => [
+                (string)($brand['id'] ?? ''),
+                (string)($brand['name'] ?? ''),
+                (string)($brand['slug'] ?? ''),
+            ], $product['brands']) : [];
+            $promotion = is_array($product['active_promotion'] ?? null) ? [
+                (string)($product['active_promotion']['id'] ?? ''),
+                (string)($product['active_promotion']['code'] ?? ''),
+                (string)($product['active_promotion']['title'] ?? ''),
+                (string)($product['active_promotion']['discount_type'] ?? ''),
+                (float)($product['active_promotion']['discount_value'] ?? 0),
+            ] : null;
+            return [
+                (string)($product['id'] ?? ''),
+                (string)($product['slug'] ?? ''),
+                (string)($product['sku'] ?? ''),
+                (string)($product['ean'] ?? ''),
+                (string)($product['name'] ?? ''),
+                mb_substr((string)($product['short_description'] ?? ''), 0, 180),
+                $product['category_id'] ?? null,
+                (string)($product['category_name'] ?? ''),
+                (string)($product['category_slug'] ?? ''),
+                $product['manufacturer_id'] ?? null,
+                (string)($product['manufacturer_name'] ?? ''),
+                (string)($product['manufacturer_slug'] ?? ''),
+                $brands,
+                is_array($image) ? (string)($image['url'] ?? '') : '',
+                (float)($product['price'] ?? 0),
+                $product['sale_price'] === null ? null : (float)$product['sale_price'],
+                (string)($product['discount_type'] ?? 'percent'),
+                $product['discount_value'] === null ? null : (float)$product['discount_value'],
+                (string)($product['currency'] ?? 'RON'),
+                (string)($product['stock_mode'] ?? 'tracked'),
+                (int)($product['stock_quantity'] ?? 0),
+                (int)($product['low_stock_threshold'] ?? 0),
+                (bool)($product['is_featured'] ?? false),
+                $product['featured_rank'] === null ? null : (int)$product['featured_rank'],
+                $product['promotion_price'] === null ? null : (float)$product['promotion_price'],
+                $product['price_before_promotion'] === null ? null : (float)$product['price_before_promotion'],
+                (float)($product['promotion_discount_percent'] ?? 0),
+                $promotion,
+            ];
+        }, $products),
+    ];
+}
+
+function publicCatalogProductSelectSql(): string {
+    return 'SELECT p.id, p.category_id, p.manufacturer_id, p.source_id,
+                   p.sku, p.supplier_external_id, p.supplier_product_code, p.ean,
+                   p.name, p.slug, p.short_description,
+                   p.price, p.sale_price, p.discount_type, p.discount_value, p.currency,
+                   p.stock_mode, p.stock_quantity, p.low_stock_threshold,
+                   p.is_featured, p.featured_rank,
+                   c.name AS category_name, c.slug AS category_slug,
+                   m.name AS manufacturer_name, m.slug AS manufacturer_slug
+            FROM shop_products p
+            LEFT JOIN shop_categories c ON c.id = p.category_id
+            LEFT JOIN shop_manufacturers m ON m.id = p.manufacturer_id
+            LEFT JOIN shop_product_sources s ON s.id = p.source_id';
+}
+
+function publicCatalogRows(PDO $db, array $rows, array $config): array {
+    if (!$rows) return [];
+    $hydrateStartedAt = microtime(true);
+    $ids = array_values(array_unique(array_map(static fn(array $row): string => (string)$row['id'], $rows)));
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+
+    $imagesByProduct = [];
+    $imageStmt = $db->prepare(
+        "SELECT id, product_id, image_path, alt_text, sort_order
+         FROM shop_product_images
+         WHERE product_id IN ({$placeholders})
+         ORDER BY product_id ASC, sort_order ASC, created_at ASC"
+    );
+    $imageStmt->execute($ids);
+    $imageRows = $imageStmt->fetchAll();
+    $imagesFetchedAt = microtime(true);
+    foreach ($imageRows as $image) {
+        $productId = (string)$image['product_id'];
+        if (isset($imagesByProduct[$productId])) continue;
+        $path = (string)$image['image_path'];
+        $imagesByProduct[$productId] = [[
+            'id' => (string)$image['id'],
+            'url' => preg_match('#^https?://#i', $path)
+                ? $path
+                : rtrim((string)$config['public_base_url'], '/') . '/' . ltrim($path, '/'),
+            'alt_text' => (string)($image['alt_text'] ?? ''),
+            'sort_order' => (int)$image['sort_order'],
+        ]];
+    }
+
+    $brandsByProduct = [];
+    $brandStmt = $db->prepare(
+        "SELECT pb.product_id, b.id, b.name, b.slug
+         FROM shop_product_brands pb
+         INNER JOIN shop_brands b ON b.id = pb.brand_id
+         WHERE pb.product_id IN ({$placeholders})
+         ORDER BY pb.product_id ASC, b.name ASC"
+    );
+    $brandStmt->execute($ids);
+    $brandRows = $brandStmt->fetchAll();
+    $brandsFetchedAt = microtime(true);
+    foreach ($brandRows as $brand) {
+        $productId = (string)$brand['product_id'];
+        unset($brand['product_id']);
+        $brandsByProduct[$productId][] = $brand;
+    }
+
+    $result = array_map(static function (array $row) use ($config, $imagesByProduct, $brandsByProduct): array {
+        $productId = (string)$row['id'];
+        $row['images'] = $imagesByProduct[$productId] ?? [];
+        if (!$row['images']) {
+            $legacyImageUrl = legacyProductImageUrl($row, $config);
+            if ($legacyImageUrl !== '') {
+                $row['images'][] = [
+                    'id' => 'legacy-image-' . (string)($row['slug'] ?? ''),
+                    'url' => $legacyImageUrl,
+                    'alt_text' => (string)($row['name'] ?? 'Produs G-Trots'),
+                    'sort_order' => 0,
+                    'is_legacy' => true,
+                ];
+            }
+        }
+        $row['brands'] = $brandsByProduct[$productId] ?? [];
+        return $row;
+    }, $rows);
+    $GLOBALS['shopPublicCatalogHydrationTiming'] = [
+        'images' => ($imagesFetchedAt - $hydrateStartedAt) * 1000,
+        'brands' => ($brandsFetchedAt - $imagesFetchedAt) * 1000,
+        'map' => (microtime(true) - $brandsFetchedAt) * 1000,
+    ];
+    return $result;
 }
 
 function productSelectSql(): string {
@@ -3481,9 +3657,9 @@ try {
     // preturile (pastrand diferenta comerciala), cat si stocurile. Listele CRM
     // si selectoarele usoare raman rapide, iar pagina unui produs are in plus
     // propria sincronizare imediata mai jos.
-    if ($action === 'publicProducts') {
-        gomagMaybeSyncSupplierStock($db, $config);
-    }
+    // Sincronizarea completa Boomag ramane o actiune explicita/cron. Nu o
+    // atasam citirii catalogului: unele configuratii FastCGI nu elibereaza
+    // raspunsul inaintea shutdown-ului si ar tine pagina blocata cateva secunde.
 
     if ($action === 'stripeWebhook' && $method === 'POST') {
         jsonResponse(stripeProcessWebhook($db, $config, rawRequestBody(), requestHeader('Stripe-Signature')));
@@ -3904,7 +4080,8 @@ try {
         ]);
     }
 
-    if ($action === 'publicProducts' && $method === 'GET') {
+    if (in_array($action, ['publicProducts', 'publicProductsCompact', 'publicProductsPage'], true) && $method === 'GET') {
+        $catalogStartedAt = microtime(true);
         $where = ['p.is_active = 1', 's.is_active = 1'];
         $params = [];
         $search = trim((string)($_GET['q'] ?? ''));
@@ -3925,12 +4102,50 @@ try {
             $where[] = 'EXISTS (SELECT 1 FROM shop_product_brands pb WHERE pb.product_id = p.id AND pb.brand_id = ?)';
             $params[] = $brandId;
         }
-        $sql = productSelectSql() . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.is_featured DESC, COALESCE(p.featured_rank, 2147483647) ASC, p.created_at DESC LIMIT 2500';
+        $pageSize = $action === 'publicProductsPage' ? max(1, min(500, (int)($_GET['page_size'] ?? 24))) : 2500;
+        $catalogPage = $action === 'publicProductsPage' ? max(1, (int)($_GET['page'] ?? 1)) : 1;
+        $offset = ($catalogPage - 1) * $pageSize;
+        $totalProducts = null;
+        if ($action === 'publicProductsPage') {
+            $countSql = 'SELECT COUNT(*) FROM shop_products p LEFT JOIN shop_product_sources s ON s.id = p.source_id WHERE ' . implode(' AND ', $where);
+            $countStmt = $db->prepare($countSql);
+            $countStmt->execute($params);
+            $totalProducts = (int)$countStmt->fetchColumn();
+        }
+        $sql = publicCatalogProductSelectSql() . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.is_featured DESC, COALESCE(p.featured_rank, 2147483647) ASC, p.created_at DESC LIMIT ' . $offset . ', ' . $pageSize;
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
-        $products = productRows($db, deduplicateCatalogProductRows($stmt->fetchAll()), $config, false, false);
+        $rawProducts = $stmt->fetchAll();
+        $catalogQueriedAt = microtime(true);
+        $products = publicCatalogRows($db, deduplicateCatalogProductRows($rawProducts), $config);
+        $catalogHydratedAt = microtime(true);
         $products = applyCatalogPromotionPrices($db, $products, optionalCustomer($db), promotionDeviceHash($body));
-        jsonResponse(array_map('publicCatalogProductRow', $products));
+        $catalogPromotedAt = microtime(true);
+        header('Cache-Control: private, max-age=120, stale-while-revalidate=300');
+        header('Vary: X-Customer-Token, X-Shop-Device, Accept-Encoding');
+        $hydrationTiming = $GLOBALS['shopPublicCatalogHydrationTiming'] ?? [];
+        header(sprintf(
+            'Server-Timing: bootstrap;dur=%.1f, query;dur=%.1f, images;dur=%.1f, brands;dur=%.1f, map;dur=%.1f, promotions;dur=%.1f',
+            ($catalogStartedAt - $shopRequestStartedAt) * 1000,
+            ($catalogQueriedAt - $catalogStartedAt) * 1000,
+            (float)($hydrationTiming['images'] ?? 0),
+            (float)($hydrationTiming['brands'] ?? 0),
+            (float)($hydrationTiming['map'] ?? 0),
+            ($catalogPromotedAt - $catalogHydratedAt) * 1000
+        ));
+        $shapeStartedAt = microtime(true);
+        $publicProducts = array_map('publicCatalogProductRow', $products);
+        $GLOBALS['shopPublicCatalogResponseTiming'] = [
+            'shape' => (microtime(true) - $shapeStartedAt) * 1000,
+        ];
+        if ($action === 'publicProductsPage') {
+            $payload = compactPublicCatalogPayload($publicProducts);
+            $payload['total'] = $totalProducts;
+            $payload['page'] = $catalogPage;
+            $payload['page_size'] = $pageSize;
+            jsonResponse($payload);
+        }
+        jsonResponse($action === 'publicProductsCompact' ? compactPublicCatalogPayload($publicProducts) : $publicProducts);
     }
 
     if ($action === 'publicProduct' && $method === 'GET') {

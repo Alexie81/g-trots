@@ -289,6 +289,51 @@ ipcMain.handle('save-pdf', async (_event, { defaultName, buffer }) => {
   return { success: true, filePath };
 });
 
+function safeDownloadedName(value, fallback = 'document') {
+  return String(value || fallback).replace(/[<>:"/\\|?*\x00-\x1F]/g, '-').replace(/\s+/g, ' ').trim() || fallback;
+}
+
+async function fetchLegacyNirAttachment(url) {
+  const parsed = new URL(String(url || ''));
+  if (parsed.protocol !== 'https:' || parsed.hostname !== 'g-trots.ro' || !/^\/shop-api\/uploads\/nir\/\d{4}\/\d{2}\/[a-f0-9]+\.[a-z0-9]+$/i.test(parsed.pathname)) {
+    throw new Error('Adresa documentului nu este permisă.');
+  }
+  const response = await fetch(parsed.toString(), { redirect: 'error' });
+  if (!response.ok) throw new Error(`Documentul nu mai este disponibil (${response.status}).`);
+  return Buffer.from(await response.arrayBuffer());
+}
+
+ipcMain.handle('save-remote-files', async (_event, { files }) => {
+  const requested = Array.isArray(files) ? files.filter(file => file?.url) : [];
+  if (!requested.length) return { success: false, error: 'Nu există documente de descărcat.' };
+  if (requested.length === 1) {
+    const fileName = safeDownloadedName(requested[0].fileName, 'document');
+    const selection = await dialog.showSaveDialog({ defaultPath: fileName });
+    if (selection.canceled || !selection.filePath) return { success: false, canceled: true };
+    fs.writeFileSync(selection.filePath, await fetchLegacyNirAttachment(requested[0].url));
+    return { success: true, count: 1, path: selection.filePath };
+  }
+  const selection = await dialog.showOpenDialog({ title: 'Alege folderul pentru documentele NIR', properties: ['openDirectory', 'createDirectory'] });
+  if (selection.canceled || !selection.filePaths?.[0]) return { success: false, canceled: true };
+  const destination = selection.filePaths[0];
+  const used = new Set();
+  const savedPaths = [];
+  for (const [index, file] of requested.entries()) {
+    const original = safeDownloadedName(file.fileName, `document-${index + 1}`);
+    const extension = path.extname(original);
+    const base = path.basename(original, extension);
+    let candidate = original;
+    let suffix = 2;
+    while (used.has(candidate.toLowerCase()) || fs.existsSync(path.join(destination, candidate))) candidate = `${base}-${suffix++}${extension}`;
+    used.add(candidate.toLowerCase());
+    const savedPath = path.join(destination, candidate);
+    fs.writeFileSync(savedPath, await fetchLegacyNirAttachment(file.url));
+    savedPaths.push(savedPath);
+  }
+  shell.showItemInFolder(savedPaths[0]);
+  return { success: true, count: requested.length, path: destination };
+});
+
 function safePdfName(defaultName) {
   const rawName = String(defaultName || 'fisa-service.pdf')
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')

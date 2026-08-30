@@ -115,6 +115,13 @@ export type ShopSupplierProductReference = {
   last_confirmed_at: string | null;
   row_version: number;
   match_type?: 'supplier_code' | 'ean' | 'name_exact';
+  association_source?: 'confirmed_nir' | 'reference';
+  purchase_count?: number;
+  aliases?: Array<{
+    type: 'code' | 'name' | 'ean';
+    value: string;
+    source: 'reference' | 'confirmed_nir';
+  }>;
 };
 
 export type ShopNirLine = {
@@ -692,6 +699,18 @@ export type ShopProductManagerBootstrap = {
 const SHOP_API_BASE = (process.env.EXPO_PUBLIC_SHOP_API_URL || 'https://g-trots.ro/shop-api').replace(/\/$/, '');
 const SHOP_API_KEY = process.env.EXPO_PUBLIC_SHOP_API_KEY || process.env.EXPO_PUBLIC_API_KEY || 'GTROTS_X9K3M7_2026_SECURE';
 
+export function isUnknownShopAction(error: unknown): boolean {
+  return error instanceof Error && /actiune\s+shop\s+necunoscuta/i.test(error.message.normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+}
+
+export function legacyNirAttachmentUrl(attachment: ShopNirAttachment): string | null {
+  const date = String(attachment.created_at || '').match(/^(\d{4})-(\d{2})/);
+  const id = String(attachment.id || '').replace(/-/g, '').toLowerCase();
+  const extension = String(attachment.extension || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!date || !/^[a-f0-9]{32}$/.test(id) || !extension) return null;
+  return `${SHOP_API_BASE}/uploads/nir/${date[1]}/${date[2]}/${id}.${extension}`;
+}
+
 async function shopCall<T>(action: string, token: string, init?: RequestInit, id?: string, attempt = 0, query: Record<string, string | number | undefined> = {}): Promise<T> {
   const controller = new AbortController();
   // Stergerea sincronizeaza arhivarea cu Stripe inainte de eliminarea locala.
@@ -850,7 +869,7 @@ export const shopApi = {
   getNirFifoLayers: (token: string, id: string) => shopCall<ShopFifoLayer[]>('getNirFifoLayers', token, undefined, id),
   exportNir: (token: string, id: string, format: 'pdf' | 'xlsx') => shopCall<{ file_name: string; mime_type: string; content_base64: string }>('exportNir', token, undefined, id, 0, { format }),
   resolveSupplierProductReference: (token: string, supplierId: string, code: string, ean = '', name = '') => shopCall<{ matched: boolean; reference: ShopSupplierProductReference | null; normalized_code: string; match_method?: string; reason?: string }>('resolveSupplierProductReference', token, undefined, undefined, 0, { supplier_id: supplierId, code, ean, name }),
-  createSupplierProductReference: (token: string, payload: Partial<ShopSupplierProductReference> & { supplier_id: string; product_id: string; supplier_product_code: string }) => shopCall<ShopSupplierProductReference>('createSupplierProductReference', token, { method: 'POST', body: JSON.stringify(payload) }),
+  createSupplierProductReference: (token: string, payload: Partial<ShopSupplierProductReference> & { supplier_id: string; product_id: string; supplier_product_code?: string; supplier_product_name?: string | null }) => shopCall<ShopSupplierProductReference>('createSupplierProductReference', token, { method: 'POST', body: JSON.stringify(payload) }),
   updateSupplierProductReference: (token: string, id: string, payload: Partial<ShopSupplierProductReference>) => shopCall<ShopSupplierProductReference>('updateSupplierProductReference', token, { method: 'PATCH', body: JSON.stringify(payload) }, id),
   listProductSupplierReferences: (token: string, productId: string) => shopCall<ShopSupplierProductReference[]>('listProductSupplierReferences', token, undefined, productId),
   listSupplierProducts: (token: string, supplierId: string) => shopCall<ShopSupplierProductReference[]>('listSupplierProducts', token, undefined, supplierId),

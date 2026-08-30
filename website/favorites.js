@@ -1,6 +1,10 @@
 (() => {
   if (window.GTrotsFavorites) return;
 
+  const COMMERCE_PREVIEW = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)
+    || window.location.hostname.endsWith(".localhost");
+  document.documentElement.classList.toggle("commerce-preview", COMMERCE_PREVIEW);
+
   const STORAGE_KEY = "g-trots-favorite-products-v1";
   const CART_STORAGE_KEY = "g-trots-cart-products-v1";
   const CUSTOMER_TOKEN_KEY = "g-trots-customer-session-v1";
@@ -649,6 +653,31 @@
   }
 
   function initialize() {
+    if (!COMMERCE_PREVIEW) {
+      document.querySelectorAll([
+        ".nav-shop-link",
+        ".hero-shop-button",
+        ".shop-bridge",
+        ".global-shop-actions",
+        ".mobile-nav-account",
+        ".shop-header-cta",
+        ".product-detail-favorite",
+        ".product-add-cart",
+        ".favorite-button",
+        ".cart-button",
+        'a[href="magazin.html"]',
+        'a[href="/magazin.html"]',
+        'a[href="favorite.html"]',
+        'a[href="/favorite.html"]',
+        'a[href="cos.html"]',
+        'a[href="/cos.html"]',
+        'a[href="cont.html"]',
+        'a[href="/cont.html"]',
+        'a[href="login.html"]',
+        'a[href="/login.html"]'
+      ].join(",")).forEach(element => element.remove());
+      return;
+    }
     ensureStyles();
     refreshArticleStyles();
     ensurePromotionLayer();

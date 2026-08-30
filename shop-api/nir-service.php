@@ -145,7 +145,20 @@ function shopNirReferenceRow(array $row): array {
     $row['is_primary_for_supplier'] = (bool)$row['is_primary_for_supplier'];
     $row['is_active'] = (bool)$row['is_active'];
     $row['row_version'] = (int)$row['row_version'];
+    if (array_key_exists('product_image_url', $row)) $row['product_image_url'] = shopNirProductImageUrl($row['product_image_url']);
     return $row;
+}
+
+function shopNirProductImageUrl($value): ?string {
+    $path = trim((string)$value);
+    if ($path === '') return null;
+    if (preg_match('#^https?://#i', $path)) return $path;
+    $base = 'https://g-trots.ro/shop-api';
+    if (function_exists('shopConfig')) {
+        $config = shopConfig();
+        $base = rtrim((string)($config['public_base_url'] ?? $base), '/');
+    }
+    return $base . '/' . ltrim($path, '/');
 }
 
 function shopNirDocumentRow(array $row, bool $canViewCosts = true): array {
@@ -164,6 +177,7 @@ function shopNirLineRow(array $row, bool $canViewCosts = true): array {
     $row['line_number'] = (int)$row['line_number'];
     $row['row_version'] = (int)$row['row_version'];
     $row['is_stock_item'] = !isset($row['is_stock_item']) || (bool)$row['is_stock_item'];
+    if (array_key_exists('product_image_url', $row)) $row['product_image_url'] = shopNirProductImageUrl($row['product_image_url']);
     if (!$canViewCosts) {
         foreach (['unit_price', 'discount_percent', 'line_net', 'line_vat', 'line_total', 'line_net_ron', 'line_vat_ron', 'line_total_ron', 'allocated_cost_ron', 'inventory_unit_cost_ron', 'inventory_cost_total_ron'] as $field) {
             unset($row[$field]);
@@ -260,6 +274,7 @@ function shopNirFetchDocument(PDO $db, string $id, array $user, bool $withDetail
         'SELECT l.*, COALESCE(l.product_snapshot_name, p.name) AS product_name,
                 COALESCE(l.sku_snapshot, p.sku) AS product_sku,
                 COALESCE(l.ean_snapshot, p.ean) AS product_ean,
+                (SELECT pi.image_path FROM shop_product_images pi WHERE pi.product_id = p.id ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS product_image_url,
                 r.supplier_product_code_original AS reference_code
          FROM shop_nir_lines l
          LEFT JOIN shop_products p ON p.id = l.product_id
@@ -352,6 +367,45 @@ function shopNirResolveReference(PDO $db, string $supplierId, string $code, stri
     return null;
 }
 
+function shopNirResolveReferenceByName(PDO $db, string $supplierId, string $name): ?array {
+    $normalizedName = shopNirNormalizeSupplierProductName($name);
+    if ($supplierId === '' || $normalizedName === '') return null;
+
+    // Name-only aliases have a deterministic key and are the fastest path.
+    $nameKey = shopNirSupplierProductNameKey($name);
+    $stmt = $db->prepare(
+        'SELECT r.*, p.name AS product_name, p.sku AS product_sku,
+                (SELECT pi.image_path FROM shop_product_images pi WHERE pi.product_id = p.id ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS product_image_url
+         FROM shop_supplier_product_references r
+         INNER JOIN shop_products p ON p.id = r.product_id
+         WHERE r.supplier_id = ? AND r.supplier_product_code_normalized = ? AND r.is_active = 1 LIMIT 1'
+    );
+    $stmt->execute([$supplierId, $nameKey]);
+    $row = $stmt->fetch();
+    if ($row) { $row['match_type'] = 'name_exact'; return shopNirReferenceRow($row); }
+
+    // A code reference may also carry the exact name printed by that supplier.
+    // Accept it only when every identical alias points to the same product.
+    $stmt = $db->prepare(
+        'SELECT r.*, p.name AS product_name, p.sku AS product_sku,
+                (SELECT pi.image_path FROM shop_product_images pi WHERE pi.product_id = p.id ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS product_image_url
+         FROM shop_supplier_product_references r
+         INNER JOIN shop_products p ON p.id = r.product_id
+         WHERE r.supplier_id = ? AND r.is_active = 1 AND r.supplier_product_name IS NOT NULL
+         ORDER BY r.is_primary_for_supplier DESC, r.last_used_at DESC, r.updated_at DESC'
+    );
+    $stmt->execute([$supplierId]);
+    $matches = [];
+    foreach ($stmt->fetchAll() as $candidate) {
+        if (shopNirNormalizeSupplierProductName($candidate['supplier_product_name'] ?? '') !== $normalizedName) continue;
+        $matches[(string)$candidate['product_id']] = $candidate;
+    }
+    if (count($matches) !== 1) return null;
+    $row = array_values($matches)[0];
+    $row['match_type'] = 'name_exact';
+    return shopNirReferenceRow($row);
+}
+
 function shopNirMatchSupplierProduct(PDO $db, string $supplierId, string $code, string $ean = '', string $sku = '', string $name = ''): array {
     $reference = shopNirResolveReference($db, $supplierId, $code, $ean);
     if ($reference) {
@@ -363,16 +417,25 @@ function shopNirMatchSupplierProduct(PDO $db, string $supplierId, string $code, 
             'suggestions' => [], 'reason' => $method === 'ean' ? 'Recunoscut după EAN' : 'Recunoscut după cod',
         ];
     }
+    $reference = shopNirResolveReferenceByName($db, $supplierId, $name);
+    if ($reference) {
+        return [
+            'matched' => true, 'reference' => $reference, 'normalized_code' => shopNirNormalizeSupplierCode($code),
+            'matched_stock_item_id' => $reference['product_id'], 'supplier_product_reference_id' => $reference['id'],
+            'match_method' => 'name_exact', 'confidence' => 1.0, 'requires_confirmation' => false, 'conflict' => false,
+            'suggestions' => [], 'reason' => 'Recunoscut după denumirea memorată pentru acest furnizor.',
+        ];
+    }
     $exactProduct = null;
     $matchMethod = null;
     if (trim($ean) !== '') {
-        $stmt = $db->prepare('SELECT p.id, p.name, p.sku, p.ean, p.accounting_stock_quantity, (SELECT pi.image_url FROM shop_product_images pi WHERE pi.product_id = p.id ORDER BY pi.is_primary DESC, pi.sort_order ASC LIMIT 1) AS image_url FROM shop_products p WHERE p.ean = ? AND p.is_active = 1 LIMIT 2');
+        $stmt = $db->prepare('SELECT p.id, p.name, p.sku, p.ean, p.accounting_stock_quantity, (SELECT pi.image_path FROM shop_product_images pi WHERE pi.product_id = p.id ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS image_url FROM shop_products p WHERE p.ean = ? AND p.is_active = 1 LIMIT 2');
         $stmt->execute([trim($ean)]);
         $rows = $stmt->fetchAll();
         if (count($rows) === 1) { $exactProduct = $rows[0]; $matchMethod = 'ean'; }
     }
     if (!$exactProduct && trim($sku) !== '') {
-        $stmt = $db->prepare('SELECT p.id, p.name, p.sku, p.ean, p.accounting_stock_quantity, (SELECT pi.image_url FROM shop_product_images pi WHERE pi.product_id = p.id ORDER BY pi.is_primary DESC, pi.sort_order ASC LIMIT 1) AS image_url FROM shop_products p WHERE UPPER(p.sku) = UPPER(?) AND p.is_active = 1 LIMIT 2');
+        $stmt = $db->prepare('SELECT p.id, p.name, p.sku, p.ean, p.accounting_stock_quantity, (SELECT pi.image_path FROM shop_product_images pi WHERE pi.product_id = p.id ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS image_url FROM shop_products p WHERE UPPER(p.sku) = UPPER(?) AND p.is_active = 1 LIMIT 2');
         $stmt->execute([trim($sku)]);
         $rows = $stmt->fetchAll();
         if (count($rows) === 1) { $exactProduct = $rows[0]; $matchMethod = 'sku'; }
@@ -384,7 +447,7 @@ function shopNirMatchSupplierProduct(PDO $db, string $supplierId, string $code, 
         if (count($rows) === 1) { $exactProduct = $rows[0]; $matchMethod = 'name_exact'; }
     }
     if ($exactProduct && $matchMethod === 'name_exact') {
-        $nameKey = '__NAME__' . strtoupper(substr(hash('sha256', normalizedSearchText($name)), 0, 40));
+        $nameKey = shopNirSupplierProductNameKey($name);
         $existing = $db->prepare(
             'SELECT r.*, p.name AS product_name, p.sku AS product_sku,
                     (SELECT pi.image_path FROM shop_product_images pi WHERE pi.product_id = p.id ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS product_image_url
@@ -399,18 +462,18 @@ function shopNirMatchSupplierProduct(PDO $db, string $supplierId, string $code, 
             'supplier_product_code_original' => '', 'supplier_product_name' => trim($name), 'supplier_ean' => trim($ean) ?: null,
             'purchase_unit' => 'buc', 'stock_unit' => 'buc', 'conversion_factor' => '1.000000',
             'product_name' => (string)$exactProduct['name'], 'product_sku' => $exactProduct['sku'] ?? null,
-            'product_image_url' => $exactProduct['image_url'] ?? null, 'match_type' => 'name_exact',
+            'product_image_url' => shopNirProductImageUrl($exactProduct['image_url'] ?? null), 'match_type' => 'name_exact',
         ];
         return [
             'matched' => true, 'reference' => $reference, 'normalized_code' => shopNirNormalizeSupplierCode($code),
             'matched_stock_item_id' => (string)$exactProduct['id'], 'supplier_product_reference_id' => $reference['id'] ?? null,
             'match_method' => 'name_exact', 'confidence' => 1.0, 'requires_confirmation' => false, 'conflict' => false,
-            'suggestions' => [], 'reason' => 'Recunoscut după denumirea identică de pe factură.',
+            'suggestions' => [], 'reason' => 'Denumirea coincide cu produsul intern; asocierea va fi memorată pentru acest furnizor la salvare.',
         ];
     }
     $suggestions = [];
     if (trim($name) !== '') {
-        $rows = $db->query('SELECT p.id, p.name, p.sku, p.ean, p.accounting_stock_quantity, (SELECT pi.image_url FROM shop_product_images pi WHERE pi.product_id = p.id ORDER BY pi.is_primary DESC, pi.sort_order ASC LIMIT 1) AS image_url FROM shop_products p WHERE p.is_active = 1 ORDER BY p.updated_at DESC LIMIT 300')->fetchAll();
+        $rows = $db->query('SELECT p.id, p.name, p.sku, p.ean, p.accounting_stock_quantity, (SELECT pi.image_path FROM shop_product_images pi WHERE pi.product_id = p.id ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS image_url FROM shop_products p WHERE p.is_active = 1 ORDER BY p.updated_at DESC LIMIT 300')->fetchAll();
         foreach ($rows as $row) {
             $score = function_exists('productSemanticSearchScore') ? productSemanticSearchScore($row, $name) : 0.0;
             if ($score <= 0) continue;
@@ -435,7 +498,7 @@ function shopNirCreateReference(PDO $db, array $body, array $user): array {
     $originalCode = mb_substr(trim((string)($body['supplier_product_code'] ?? $body['supplier_product_code_original'] ?? '')), 0, 180);
     $supplierName = mb_substr(trim((string)($body['supplier_product_name'] ?? '')), 0, 255);
     $normalizedCode = shopNirNormalizeSupplierCode($originalCode);
-    if ($normalizedCode === '' && $supplierName !== '') $normalizedCode = '__NAME__' . strtoupper(substr(hash('sha256', normalizedSearchText($supplierName)), 0, 40));
+    if ($normalizedCode === '' && $supplierName !== '') $normalizedCode = shopNirSupplierProductNameKey($supplierName);
     if ($supplierId === '' || $productId === '' || $normalizedCode === '') throw new InvalidArgumentException('Furnizorul, produsul și codul sau denumirea produsului sunt obligatorii.');
     $supplier = $db->prepare('SELECT id FROM shop_suppliers WHERE id = ? AND is_active = 1');
     $supplier->execute([$supplierId]);
@@ -452,6 +515,24 @@ function shopNirCreateReference(PDO $db, array $body, array $user): array {
             'conflict' => true,
             'existing_reference' => shopNirReferenceRow($row),
         ]);
+    }
+
+    if ($supplierName !== '') {
+        $sameName = $db->prepare(
+            'SELECT id, product_id, supplier_product_name FROM shop_supplier_product_references
+             WHERE supplier_id = ? AND is_active = 1 AND supplier_product_name IS NOT NULL FOR UPDATE'
+        );
+        $sameName->execute([$supplierId]);
+        foreach ($sameName->fetchAll() as $candidate) {
+            if ((string)$candidate['id'] === (string)($row['id'] ?? '')) continue;
+            if (shopNirNormalizeSupplierProductName($candidate['supplier_product_name'] ?? '') !== shopNirNormalizeSupplierProductName($supplierName)) continue;
+            if ((string)$candidate['product_id'] !== $productId) {
+                throw new ShopNirHttpException('Denumirea este deja asociată altui produs pentru acest furnizor.', 409, [
+                    'conflict' => true,
+                    'existing_product_id' => (string)$candidate['product_id'],
+                ]);
+            }
+        }
     }
 
     $actor = shopNirActor($user);
@@ -581,21 +662,75 @@ function shopNirBindReferencesOnExplicitSave(PDO $db, array $lines, array $heade
         $productId = trim((string)($line['product_id'] ?? ''));
         $supplierCode = trim((string)($line['supplier_product_code'] ?? ''));
         $supplierName = trim((string)($line['supplier_product_name'] ?? $line['product_name'] ?? ''));
-        if ($referenceId !== '' || $productId === '' || ($supplierCode === '' && $supplierName === '')) continue;
-        $reference = shopNirCreateReference($db, [
+        if ($productId === '' || ($supplierCode === '' && $supplierName === '')) continue;
+        $referenceBody = [
             'supplier_id' => $supplierId,
             'product_id' => $productId,
             'supplier_product_code' => $supplierCode,
-            'supplier_product_name' => $line['supplier_product_name'] ?? $line['product_name'] ?? null,
+            'supplier_product_name' => $supplierName,
             'supplier_ean' => $line['supplier_ean'] ?? null,
             'purchase_unit' => $line['purchase_unit'] ?? 'buc',
             'stock_unit' => $line['stock_unit'] ?? 'buc',
             'conversion_factor' => $line['conversion_factor'] ?? 1,
             'is_primary_for_supplier' => false,
-        ], $user);
-        $lines[$index]['supplier_product_reference_id'] = $reference['id'];
+        ];
+        if ($referenceId === '') {
+            $reference = shopNirCreateReference($db, $referenceBody, $user);
+            $lines[$index]['supplier_product_reference_id'] = $reference['id'];
+        }
+        // Store the invoice name as an independent alias as well. Thus a later
+        // invoice without a code can still identify the product for this same
+        // supplier, and a new invoice name never depends on the internal SKU.
+        if ($supplierCode !== '' && $supplierName !== '') {
+            shopNirCreateReference($db, array_merge($referenceBody, ['supplier_product_code' => '']), $user);
+        }
     }
     return $lines;
+}
+
+/**
+ * One-time/self-healing import for NIRs confirmed before supplier name aliases
+ * were persisted. The invoice line remains the source and the internal SKU is
+ * intentionally never consulted.
+ */
+function shopNirBackfillProductSupplierReferences(PDO $db, ?string $productId, array $user): array {
+    $sql =
+        'SELECT l.*, n.supplier_id
+         FROM shop_nir_lines l
+         INNER JOIN shop_nir_documents n ON n.id = l.nir_document_id AND n.status = "confirmed"
+         WHERE l.product_id IS NOT NULL AND l.accepted_quantity > 0 AND COALESCE(l.resolution_status, "") <> "reversal"
+           AND (TRIM(COALESCE(l.supplier_product_code, "")) <> "" OR TRIM(COALESCE(l.supplier_product_name, "")) <> "")';
+    $params = [];
+    if ($productId !== null && trim($productId) !== '') {
+        $sql .= ' AND l.product_id = ?';
+        $params[] = trim($productId);
+    }
+    $sql .= ' ORDER BY n.reception_date ASC, l.line_number ASC';
+    $stmt = $db->prepare($sql);
+    $stmt->execute($params);
+    $updateLine = $db->prepare(
+        'UPDATE shop_nir_lines SET supplier_product_reference_id = ?, updated_at = updated_at
+         WHERE id = ? AND (supplier_product_reference_id IS NULL OR supplier_product_reference_id = "")'
+    );
+    $result = ['processed' => 0, 'linked_lines' => 0, 'conflicts' => 0, 'skipped' => 0];
+    foreach ($stmt->fetchAll() as $line) {
+        $result['processed']++;
+        try {
+            $bound = shopNirBindReferencesOnExplicitSave($db, [$line], ['supplier_id' => $line['supplier_id']], $user);
+            $referenceId = trim((string)($bound[0]['supplier_product_reference_id'] ?? ''));
+            if ($referenceId === '') { $result['skipped']++; continue; }
+            $updateLine->execute([$referenceId, (string)$line['id']]);
+            if ($updateLine->rowCount() > 0) $result['linked_lines']++;
+        } catch (ShopNirHttpException $error) {
+            if ($error->status === 409) { $result['conflicts']++; continue; }
+            throw $error;
+        } catch (InvalidArgumentException $error) {
+            // Historical references to inactive suppliers remain visible from
+            // the confirmed NIR history, but are not silently reactivated.
+            $result['skipped']++;
+        }
+    }
+    return $result;
 }
 
 function shopNirReferenceUpdate(PDO $db, string $id, array $body, array $user): array {
@@ -1079,6 +1214,7 @@ function shopNirConfirm(PDO $db, string $id, array $body, array $user): array {
         $lineStmt->execute([$id]);
         $storedLines = $lineStmt->fetchAll();
         $header = shopNirHeaderPayload($db, [], $document);
+        $storedLines = shopNirBindReferencesOnExplicitSave($db, $storedLines, $header, $user);
         $prepared = shopNirPrepareLines($db, $storedLines, $header);
         shopNirWriteLines($db, $id, $prepared);
         $totals = $prepared['totals'];
@@ -1364,11 +1500,32 @@ function shopNirProductReferences(PDO $db, string $productId): array {
     $stmt->execute([$productId]);
     $references = array_map('shopNirReferenceRow', $stmt->fetchAll());
 
+    $addAlias = static function (array &$group, string $type, $value, string $source): void {
+        $value = trim((string)$value);
+        if ($value === '') return;
+        $normalized = $type === 'name' ? shopNirNormalizeSupplierProductName($value) : shopNirNormalizeSupplierCode($value);
+        if ($normalized === '') return;
+        $group['aliases'][$type . '|' . $normalized] = ['type' => $type, 'value' => $value, 'source' => $source];
+    };
+
+    // Multiple codes and invoice names may exist for the same supplier/product.
+    // The product sheet receives one supplier card with all of those aliases.
+    $referenceGroups = [];
+    foreach ($references as $reference) {
+        $supplierId = trim((string)($reference['supplier_id'] ?? ''));
+        if ($supplierId === '') continue;
+        if (!isset($referenceGroups[$supplierId])) $referenceGroups[$supplierId] = ['base' => $reference, 'aliases' => []];
+        $addAlias($referenceGroups[$supplierId], 'code', $reference['supplier_product_code_original'] ?? '', 'reference');
+        $addAlias($referenceGroups[$supplierId], 'name', $reference['supplier_product_name'] ?? '', 'reference');
+        $addAlias($referenceGroups[$supplierId], 'ean', $reference['supplier_ean'] ?? '', 'reference');
+    }
+
     // The product sheet is a purchase view, so a supplier must not disappear just
     // because that supplier's invoice did not contain a product code.  Confirmed
     // NIR lines are the accounting source of truth for suppliers we bought from.
     $purchases = $db->prepare(
-        'SELECT n.supplier_id, s.name AS supplier_name, s.cui AS supplier_cui, s.is_active AS supplier_is_active,
+        'SELECT n.id AS nir_id, n.supplier_id, s.name AS supplier_name, s.cui AS supplier_cui, s.is_active AS supplier_is_active,
+                l.supplier_product_code, l.supplier_product_name, l.supplier_ean,
                 l.unit_price AS last_confirmed_purchase_price, n.currency AS last_confirmed_currency,
                 l.inventory_unit_cost_ron AS last_confirmed_price_ron,
                 COALESCE(n.confirmed_at, n.updated_at) AS last_confirmed_at
@@ -1380,48 +1537,60 @@ function shopNirProductReferences(PDO $db, string $productId): array {
     );
     $purchases->execute([$productId]);
 
-    $referencesBySupplier = [];
-    foreach ($references as $reference) {
-        $supplierId = trim((string)($reference['supplier_id'] ?? ''));
-        if ($supplierId !== '' && !isset($referencesBySupplier[$supplierId])) $referencesBySupplier[$supplierId] = $reference;
-    }
     $purchasedReferences = [];
     foreach ($purchases->fetchAll() as $purchase) {
         $supplierId = trim((string)($purchase['supplier_id'] ?? ''));
-        if ($supplierId === '' || isset($purchasedReferences[$supplierId])) continue;
-        $reference = $referencesBySupplier[$supplierId] ?? [
-            'id' => 'nir-supplier-' . $supplierId,
-            'supplier_id' => $supplierId,
-            'product_id' => $productId,
-            'supplier_product_code_original' => '',
-            'supplier_product_code_normalized' => '',
-            'supplier_product_name' => null,
-            'supplier_ean' => null,
-            'purchase_unit' => 'buc',
-            'stock_unit' => 'buc',
-            'conversion_factor' => '1.000000',
-            'is_primary_for_supplier' => false,
-            'is_active' => true,
-            'last_used_at' => null,
-            'last_confirmed_purchase_price' => null,
-            'last_confirmed_currency' => null,
-            'last_confirmed_price_ron' => null,
-            'last_confirmed_at' => null,
-            'row_version' => 0,
-            'match_type' => 'name_exact',
-        ];
-        $reference['supplier_name'] = $purchase['supplier_name'];
-        $reference['supplier_cui'] = $purchase['supplier_cui'] ?? null;
-        $reference['is_active'] = (bool)($purchase['supplier_is_active'] ?? true);
-        $reference['last_used_at'] = $purchase['last_confirmed_at'] ?? $reference['last_used_at'] ?? null;
-        $reference['last_confirmed_purchase_price'] = $purchase['last_confirmed_purchase_price'] ?? null;
-        $reference['last_confirmed_currency'] = $purchase['last_confirmed_currency'] ?? null;
-        $reference['last_confirmed_price_ron'] = $purchase['last_confirmed_price_ron'] ?? null;
-        $reference['last_confirmed_at'] = $purchase['last_confirmed_at'] ?? null;
-        $reference['association_source'] = 'confirmed_nir';
-        $purchasedReferences[$supplierId] = shopNirReferenceRow($reference);
+        if ($supplierId === '') continue;
+        if (!isset($purchasedReferences[$supplierId])) {
+            $reference = $referenceGroups[$supplierId]['base'] ?? [
+                'id' => 'nir-supplier-' . $supplierId,
+                'supplier_id' => $supplierId,
+                'product_id' => $productId,
+                'supplier_product_code_original' => '',
+                'supplier_product_code_normalized' => '',
+                'supplier_product_name' => null,
+                'supplier_ean' => null,
+                'purchase_unit' => 'buc',
+                'stock_unit' => 'buc',
+                'conversion_factor' => '1.000000',
+                'is_primary_for_supplier' => false,
+                'is_active' => true,
+                'last_used_at' => null,
+                'last_confirmed_purchase_price' => null,
+                'last_confirmed_currency' => null,
+                'last_confirmed_price_ron' => null,
+                'last_confirmed_at' => null,
+                'row_version' => 0,
+                'match_type' => 'name_exact',
+            ];
+            $reference['supplier_name'] = $purchase['supplier_name'];
+            $reference['supplier_cui'] = $purchase['supplier_cui'] ?? null;
+            $reference['is_active'] = (bool)($purchase['supplier_is_active'] ?? true);
+            $reference['last_used_at'] = $purchase['last_confirmed_at'] ?? $reference['last_used_at'] ?? null;
+            $reference['last_confirmed_purchase_price'] = $purchase['last_confirmed_purchase_price'] ?? null;
+            $reference['last_confirmed_currency'] = $purchase['last_confirmed_currency'] ?? null;
+            $reference['last_confirmed_price_ron'] = $purchase['last_confirmed_price_ron'] ?? null;
+            $reference['last_confirmed_at'] = $purchase['last_confirmed_at'] ?? null;
+            $reference['association_source'] = 'confirmed_nir';
+            $purchasedReferences[$supplierId] = [
+                'base' => $reference,
+                'aliases' => $referenceGroups[$supplierId]['aliases'] ?? [],
+                'nir_ids' => [],
+            ];
+        }
+        $addAlias($purchasedReferences[$supplierId], 'code', $purchase['supplier_product_code'] ?? '', 'confirmed_nir');
+        $addAlias($purchasedReferences[$supplierId], 'name', $purchase['supplier_product_name'] ?? '', 'confirmed_nir');
+        $addAlias($purchasedReferences[$supplierId], 'ean', $purchase['supplier_ean'] ?? '', 'confirmed_nir');
+        $purchasedReferences[$supplierId]['nir_ids'][(string)$purchase['nir_id']] = true;
     }
-    $result = $purchasedReferences ? array_values($purchasedReferences) : $references;
+    $groups = $purchasedReferences ?: array_map(static fn(array $group): array => $group + ['nir_ids' => []], $referenceGroups);
+    $result = [];
+    foreach ($groups as $group) {
+        $reference = $group['base'];
+        $reference['aliases'] = array_values($group['aliases']);
+        $reference['purchase_count'] = count($group['nir_ids']);
+        $result[] = shopNirReferenceRow($reference);
+    }
     usort($result, static fn(array $left, array $right): int => strcasecmp((string)($left['supplier_name'] ?? ''), (string)($right['supplier_name'] ?? '')));
     return $result;
 }
@@ -1444,7 +1613,10 @@ function shopNirPurchaseHistory(PDO $db, string $productId, array $user): array 
                 l.inventory_unit_cost_ron, l.inventory_cost_total_ron, l.line_net_ron, l.line_vat_ron, l.line_total_ron,
                 n.id AS nir_id, n.nir_number, n.supplier_invoice_series, n.supplier_invoice_number, n.supplier_invoice_date,
                 n.reception_date, n.currency, n.exchange_rate, n.confirmed_by,
-                s.id AS supplier_id, s.name AS supplier_name, r.supplier_product_code_original AS supplier_code
+                s.id AS supplier_id, s.name AS supplier_name,
+                COALESCE(NULLIF(l.supplier_product_code, ""), r.supplier_product_code_original) AS supplier_code,
+                COALESCE(NULLIF(l.supplier_product_name, ""), r.supplier_product_name) AS supplier_product_name,
+                COALESCE(NULLIF(l.supplier_ean, ""), r.supplier_ean) AS supplier_ean
                 , layer.remaining_quantity AS fifo_remaining_quantity
          FROM shop_nir_lines l
          INNER JOIN shop_nir_documents n ON n.id = l.nir_document_id AND n.status IN ("confirmed", "reversed")
@@ -1470,7 +1642,7 @@ function shopNirPurchaseHistory(PDO $db, string $productId, array $user): array 
             'supplier_id' => $item['supplier_id'], 'supplier_name' => $item['supplier_name'], 'purchase_count' => 0,
             'last_unit_cost_ron' => $item['inventory_unit_cost_ron'], 'last_original_price' => $item['unit_price'],
             'last_currency' => $item['currency'], 'last_purchase_at' => $item['reception_date'], 'last_quantity' => $item['stock_quantity'],
-            'minimum_scaled' => $cost, 'maximum_scaled' => $cost, 'weighted_quantity' => 0, 'weighted_cost' => 0, 'codes' => [],
+            'minimum_scaled' => $cost, 'maximum_scaled' => $cost, 'weighted_quantity' => 0, 'weighted_cost' => 0, 'codes' => [], 'names' => [], 'eans' => [],
         ];
         $supplierStats[$supplierKey]['purchase_count']++;
         $supplierStats[$supplierKey]['minimum_scaled'] = min($supplierStats[$supplierKey]['minimum_scaled'], $cost);
@@ -1478,6 +1650,8 @@ function shopNirPurchaseHistory(PDO $db, string $productId, array $user): array 
         $supplierStats[$supplierKey]['weighted_quantity'] += $quantity;
         $supplierStats[$supplierKey]['weighted_cost'] += shopNirMultiplyScaled($quantity, 4, $cost, 6, 6);
         if (!empty($item['supplier_code'])) $supplierStats[$supplierKey]['codes'][(string)$item['supplier_code']] = true;
+        if (!empty($item['supplier_product_name'])) $supplierStats[$supplierKey]['names'][(string)$item['supplier_product_name']] = true;
+        if (!empty($item['supplier_ean'])) $supplierStats[$supplierKey]['eans'][(string)$item['supplier_ean']] = true;
     }
     $supplierRows = [];
     foreach ($supplierStats as $stat) {
@@ -1488,7 +1662,7 @@ function shopNirPurchaseHistory(PDO $db, string $productId, array $user): array 
             'minimum_unit_cost_ron' => shopNirScaledToDecimal($stat['minimum_scaled'], 6),
             'maximum_unit_cost_ron' => shopNirScaledToDecimal($stat['maximum_scaled'], 6),
             'weighted_average_unit_cost_ron' => $stat['weighted_quantity'] > 0 ? shopNirScaledToDecimal(shopNirDivideRounded($stat['weighted_cost'] * 10000, $stat['weighted_quantity']), 6) : null,
-            'codes' => array_keys($stat['codes']),
+            'codes' => array_keys($stat['codes']), 'names' => array_keys($stat['names']), 'eans' => array_keys($stat['eans']),
         ];
     }
     return [

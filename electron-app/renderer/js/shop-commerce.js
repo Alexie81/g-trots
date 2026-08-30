@@ -2507,10 +2507,42 @@
     };
   }
 
+  function wireNirKeyboardRecovery(control) {
+    if (!control || control.disabled || control.readOnly) return;
+    control.addEventListener('keydown', event => {
+      if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.key.length !== 1) return;
+      const inputType = String(control.type || '').toLowerCase();
+      if (['date', 'datetime-local', 'time', 'file', 'checkbox', 'radio'].includes(inputType)) return;
+      const character = inputType === 'number' && event.key === ',' ? '.' : event.key;
+      if (inputType === 'number' && !/[0-9.\-]/.test(character)) return;
+      const valueBefore = control.value;
+      const selectionStart = typeof control.selectionStart === 'number' ? control.selectionStart : valueBefore.length;
+      const selectionEnd = typeof control.selectionEnd === 'number' ? control.selectionEnd : valueBefore.length;
+      window.setTimeout(() => {
+        if (document.activeElement !== control || control.value !== valueBefore) return;
+        let inserted = false;
+        try {
+          inserted = Boolean(document.execCommand?.('insertText', false, character));
+        } catch (_) {
+          inserted = false;
+        }
+        if (inserted && control.value !== valueBefore) return;
+        const nextValue = `${valueBefore.slice(0, selectionStart)}${character}${valueBefore.slice(selectionEnd)}`;
+        if (inputType === 'number' && nextValue && !Number.isFinite(Number(nextValue))) return;
+        control.value = nextValue;
+        if (typeof control.setSelectionRange === 'function') {
+          try { control.setSelectionRange(selectionStart + character.length, selectionStart + character.length); } catch (_) { /* number inputs do not expose a selection range */ }
+        }
+        control.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: character }));
+      }, 0);
+    });
+  }
+
   function wireNirEditor(editable) {
     $('shop-nir-editor').querySelectorAll('[data-nir-attachment-download]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); void downloadNirAttachment(button.dataset.nirAttachmentDownload); }));
     $('shop-nir-download-all')?.addEventListener('click', () => void downloadAllNirAttachments());
     if (!editable) return;
+    $('shop-nir-editor').querySelectorAll('input:not(:disabled), textarea:not(:disabled)').forEach(wireNirKeyboardRecovery);
     $('shop-nir-editor').querySelectorAll('.shop-nir-line').forEach((details, index) => {
       details.querySelector(':scope > summary')?.addEventListener('click', event => {
         event.preventDefault();

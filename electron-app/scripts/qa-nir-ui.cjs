@@ -221,6 +221,20 @@ app.whenReady().then(async () => {
   await wait(120);
   const documentDownloads = await win.webContents.executeJavaScript(`({ one:window.__nirQaCalls.downloadOne, all:window.__nirQaCalls.downloadAll })`);
   const confirmedCorrection = await win.webContents.executeJavaScript(`(async () => { const button=document.getElementById('shop-nir-correct'); const visible=Boolean(button && !button.hidden); const beforeLabel=button?.textContent.trim(); window.confirm=()=>true; button?.click(); await new Promise(resolve=>setTimeout(resolve,180)); return { visible, beforeLabel, afterLabel:button?.textContent.trim(), sameButton:button === document.getElementById('shop-nir-correct'), calls:window.__nirQaCalls.reopen, status:document.getElementById('shop-nir-status')?.textContent, sameNumber:document.getElementById('shop-nir-title')?.textContent === 'NIR-2026-000099', supplierEditable:!document.querySelector('[data-nir-field="supplier_id"]')?.disabled, exportsHidden:document.getElementById('shop-nir-export-pdf')?.hidden && document.getElementById('shop-nir-export-xlsx')?.hidden, regularActionsHidden:document.getElementById('shop-nir-save')?.hidden && document.getElementById('shop-nir-confirm')?.hidden }; })()`);
+  const correctionTypingBefore = await win.webContents.executeJavaScript(`(() => {
+    const input=document.querySelector('[data-nir-field="supplier_invoice_series"]');
+    input.focus();
+    input.setSelectionRange(0,input.value.length);
+    input.addEventListener('keydown', event => event.preventDefault(), { once:true });
+    const style=getComputedStyle(input);
+    return { value:input.value, active:document.activeElement===input, disabled:input.disabled, readOnly:input.readOnly, pointerEvents:style.pointerEvents, userSelect:style.userSelect, appRegion:style.webkitAppRegion };
+  })()`);
+  win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Q' });
+  win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Q' });
+  await wait(80);
+  const correctionTypingAfter = await win.webContents.executeJavaScript(`(() => { const input=document.querySelector('[data-nir-field="supplier_invoice_series"]'); return { value:input.value, active:document.activeElement===input }; })()`);
+  if (correctionTypingAfter.value.toLowerCase() !== 'q' || !correctionTypingAfter.active) throw new Error('Campurile NIR nu recupereaza tastarea blocata in modul de corectare.');
+  const correctionTyping = { before:correctionTypingBefore, after:correctionTypingAfter };
   await win.webContents.executeJavaScript(`document.querySelector('[data-commerce-close="shop-nir-modal"]').click(); window.switchTab('shop-products')`);
   await wait(220);
   const productSearch = await win.webContents.executeJavaScript(`(async () => { const input=document.getElementById('shop-products-search'); const original=input; input.focus(); input.value='casca'; input.dispatchEvent(new Event('input',{bubbles:true})); await new Promise(resolve => setTimeout(resolve, 420)); return { exists:Boolean(input), sameNode:original === document.getElementById('shop-products-search'), keepsFocus:document.activeElement === original, value:original.value, rows:document.querySelectorAll('#shop-products-results tbody tr').length, resultName:document.querySelector('#shop-products-results tbody tr strong')?.textContent }; })()`);
@@ -233,7 +247,7 @@ app.whenReady().then(async () => {
   await wait(120);
   const productSupplierList = path.join(output, 'product-suppliers.png');
   fs.writeFileSync(productSupplierList, (await win.webContents.capturePage()).toPNG());
-  process.stdout.write(JSON.stringify({ ...metrics, wideRegistry, liveCalculation, nameMatch, directProductAssociation, searchKeepsFocus, currencyPickerLayout, currencyPickerClosing, deleteDialogOpening, deleteDialogClosing, savedDelete, inventorySearch, semanticInventorySearch, stockSheetPageOne, stockSheetPageTwo, confirmedDocuments, documentDownloads, confirmedCorrection, productSearch, productSuppliers, errors, screenshots:{ registry, registryWide, editor, currencyPicker, editorLines, editorReview, deleteDialog, inventory, stockSheet, confirmedNirDocuments, productsSearch, productSupplierList } }, null, 2));
+  process.stdout.write(JSON.stringify({ ...metrics, wideRegistry, liveCalculation, nameMatch, directProductAssociation, searchKeepsFocus, currencyPickerLayout, currencyPickerClosing, deleteDialogOpening, deleteDialogClosing, savedDelete, inventorySearch, semanticInventorySearch, stockSheetPageOne, stockSheetPageTwo, confirmedDocuments, documentDownloads, confirmedCorrection, correctionTyping, productSearch, productSuppliers, errors, screenshots:{ registry, registryWide, editor, currencyPicker, editorLines, editorReview, deleteDialog, inventory, stockSheet, confirmedNirDocuments, productsSearch, productSupplierList } }, null, 2));
   await win.destroy();
   app.quit();
 }).catch(error => { console.error(error); app.exit(1); });

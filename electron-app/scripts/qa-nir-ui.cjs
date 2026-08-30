@@ -51,7 +51,11 @@ app.whenReady().then(async () => {
       confirmNir: async () => ({ ...qaDocument, id:'nir-saved', status:'confirmed', nir_number:'NIR-2026-000022' }),
       reopenNir: async (id, rowVersion) => { window.__nirQaCalls.reopen += 1; return { ...qaDocument, id, status:'draft', nir_number:'NIR-2026-000099', row_version:Number(rowVersion || 0) + 1, attachments:[{ id:'attachment-1', original_name:'factura-furnizor.pdf', mime_type:'application/pdf', extension:'pdf', file_size:409600, sha256:'qa1', extraction_status:'extracted', extraction_message:null, created_at:'2026-08-29' }] }; },
       reverseNir: async (id, rowVersion, reason) => { window.__nirQaCalls.reverse += 1; window.__nirQaCalls.reverseReason = reason; return { original:{ ...qaDocument, id, status:'reversed', nir_number:'NIR-2026-000099', row_version:Number(rowVersion || 0) + 1 }, reversal:{ ...qaDocument, id:'reversal-1', status:'confirmed', nir_number:'REV-2026-000100' } }; },
-      getNirFifoLayers: async () => [], getNirMovements: async () => [],
+      getNirFifoLayers: async () => [],
+      getNirMovements: async () => [
+        { id:'movement-in', product_id:'stock-1', product_name:'Cască FRV Street Panther', product_sku:'SE-CMM087', nir_document_id:'nir-2', movement_type:'NIR_IN', quantity_delta:'1', quantity_after:'2', accounting_quantity_delta:'1', accounting_quantity_after:'2', movement_document_number:'NIR-2026-000099', created_by:'Administrator', created_at:'2026-08-30 12:43:34' },
+        { id:'movement-reversal', product_id:'stock-1', product_name:'Cască FRV Street Panther', product_sku:'SE-CMM087', nir_document_id:'reversal-1', movement_type:'NIR_REVERSAL', quantity_delta:'-1', quantity_after:'1', accounting_quantity_delta:'-1', accounting_quantity_after:'1', movement_document_number:'REV-2026-000100', created_by:'Administrator', created_at:'2026-08-30 12:47:09' },
+      ],
       downloadNirAttachment: async () => { window.__nirQaCalls.downloadOne += 1; return { file_name:'factura-furnizor.pdf', mime_type:'application/pdf', content_base64:'UUE=' }; },
       downloadAllNirAttachments: async () => { window.__nirQaCalls.downloadAll += 1; return { file_name:'NIR-documente.zip', mime_type:'application/zip', content_base64:'UUE=' }; },
       loadProductManager: async options => { const normalize=value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); const term=normalize(options.q); const rows = term ? inventory.filter(product => normalize(product.name + ' ' + product.sku).includes(term)) : inventory; return { products:rows, total:rows.length, page:1, page_size:10, categories:[], brands:[], manufacturers:[], sources:[] }; },
@@ -218,6 +222,19 @@ app.whenReady().then(async () => {
   await wait(180);
   const confirmedNirDocuments = path.join(output, 'confirmed-nir-documents.png');
   fs.writeFileSync(confirmedNirDocuments, (await win.webContents.capturePage()).toPNG());
+  await win.webContents.executeJavaScript(`document.getElementById('shop-nir-accounting-details')?.scrollIntoView({ block:'center' })`);
+  await wait(180);
+  const movementJournal = await win.webContents.executeJavaScript(`(() => ({
+    board:Boolean(document.querySelector('.shop-nir-movement-board')),
+    cards:document.querySelectorAll('.shop-nir-movement-card').length,
+    incoming:document.querySelectorAll('.shop-nir-movement-card.incoming').length,
+    outgoing:document.querySelectorAll('.shop-nir-movement-card.outgoing').length,
+    summary:document.querySelector('.shop-nir-movement-summary')?.textContent,
+    documents:[...document.querySelectorAll('.shop-nir-movement-main > p em')].map(item => item.textContent),
+  }))()`);
+  if (!movementJournal.board || movementJournal.cards !== 2 || movementJournal.incoming !== 1 || movementJournal.outgoing !== 1 || !movementJournal.documents.includes('REV-2026-000100')) throw new Error('Jurnalul vizual de mișcări nu explică intrarea și reversarea.');
+  const nirMovements = path.join(output, 'nir-movements.png');
+  fs.writeFileSync(nirMovements, (await win.webContents.capturePage()).toPNG());
   await win.webContents.executeJavaScript(`document.querySelector('[data-nir-attachment-download]').click(); document.getElementById('shop-nir-download-all').click()`);
   await wait(120);
   const documentDownloads = await win.webContents.executeJavaScript(`({ one:window.__nirQaCalls.downloadOne, all:window.__nirQaCalls.downloadAll })`);
@@ -275,7 +292,7 @@ app.whenReady().then(async () => {
   await wait(120);
   const productSupplierList = path.join(output, 'product-suppliers.png');
   fs.writeFileSync(productSupplierList, (await win.webContents.capturePage()).toPNG());
-  process.stdout.write(JSON.stringify({ ...metrics, wideRegistry, liveCalculation, nameMatch, directProductAssociation, searchKeepsFocus, currencyPickerLayout, currencyPickerClosing, deleteDialogOpening, deleteDialogClosing, savedDelete, inventorySearch, semanticInventorySearch, stockSheetPageOne, stockSheetPageTwo, confirmedDocuments, documentDownloads, reversalFlow, confirmedCorrection, correctionTyping, productKeyboardRecovery, productSearch, productSuppliers, errors, screenshots:{ registry, registryWide, editor, currencyPicker, editorLines, editorReview, deleteDialog, inventory, stockSheet, confirmedNirDocuments, productsSearch, productSupplierList } }, null, 2));
+  process.stdout.write(JSON.stringify({ ...metrics, wideRegistry, liveCalculation, nameMatch, directProductAssociation, searchKeepsFocus, currencyPickerLayout, currencyPickerClosing, deleteDialogOpening, deleteDialogClosing, savedDelete, inventorySearch, semanticInventorySearch, stockSheetPageOne, stockSheetPageTwo, confirmedDocuments, movementJournal, documentDownloads, reversalFlow, confirmedCorrection, correctionTyping, productKeyboardRecovery, productSearch, productSuppliers, errors, screenshots:{ registry, registryWide, editor, currencyPicker, editorLines, editorReview, deleteDialog, inventory, stockSheet, confirmedNirDocuments, nirMovements, productsSearch, productSupplierList } }, null, 2));
   await win.destroy();
   app.quit();
 }).catch(error => { console.error(error); app.exit(1); });

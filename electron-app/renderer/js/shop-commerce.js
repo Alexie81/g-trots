@@ -3040,8 +3040,27 @@
     if (!state.nirEditor) return;
     try {
       const movements = await window.SHOP_API.getNirMovements(state.nirEditor.id);
-      const movementRows = movements.map(movement => `<tr><td>${esc(movement.product_name)}</td><td><b>${esc(movement.movement_type)}</b></td><td>${esc(movement.accounting_quantity_delta ?? movement.quantity_delta)}</td><td>${esc(movement.accounting_quantity_after ?? movement.quantity_after)}</td><td>${esc(movement.created_at)}</td></tr>`).join('');
-      $('shop-nir-accounting-details').innerHTML = `<div class="shop-nir-detail-tabs"><strong>Miscari de stoc (${movements.length})</strong>${state.nirEditor.status === 'confirmed' && nirCan('NIR_REVERSE') ? '<button type="button" class="danger" id="shop-nir-reverse">Reverseaza NIR</button>' : ''}</div><div><table><thead><tr><th>Produs</th><th>Tip</th><th>Delta</th><th>Stoc dupa</th><th>Data</th></tr></thead><tbody>${movementRows}</tbody></table></div>`;
+      const movementQuantity = value => new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 0, maximumFractionDigits: 4 }).format(Number(value || 0));
+      const movementDate = value => {
+        const parsed = new Date(String(value || '').replace(' ', 'T'));
+        return Number.isNaN(parsed.getTime()) ? String(value || '—') : parsed.toLocaleString('ro-RO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      };
+      const movementType = value => ({ NIR_IN: 'INTRARE NIR', NIR_REVERSAL: 'REVERSARE NIR', SALE_OUT: 'IESIRE VANZARE', MANUAL_ADJUSTMENT: 'AJUSTARE MANUALA' }[String(value || '').toUpperCase()] || String(value || 'MISCARE STOC').replaceAll('_', ' '));
+      const summary = movements.reduce((totals, movement) => {
+        const delta = Number(movement.accounting_quantity_delta ?? movement.quantity_delta ?? 0);
+        totals.entries += delta > 0 ? delta : 0;
+        totals.exits += delta < 0 ? Math.abs(delta) : 0;
+        totals.net += delta;
+        return totals;
+      }, { entries: 0, exits: 0, net: 0 });
+      const movementCards = movements.map((movement, index) => {
+        const delta = Number(movement.accounting_quantity_delta ?? movement.quantity_delta ?? 0);
+        const incoming = delta >= 0;
+        const documentNumber = movement.movement_document_number || movement.note || 'Document de stoc';
+        return `<article class="shop-nir-movement-card ${incoming ? 'incoming' : 'outgoing'}"><span class="shop-nir-movement-direction" aria-hidden="true">${incoming ? '<svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 20h14"/></svg>' : nirUiIcon('reverse')}</span><div class="shop-nir-movement-main"><header><b>${esc(movementType(movement.movement_type))}</b><time>${esc(movementDate(movement.created_at))}</time></header><strong>${esc(movement.product_name || `Miscare ${index + 1}`)}</strong><p><span>${esc(movement.product_sku || 'Fara SKU')}</span><i>·</i><em>${esc(documentNumber)}</em></p><footer><span><small>CANTITATE</small><b>${delta > 0 ? '+' : '−'}${movementQuantity(Math.abs(delta))} buc</b></span><span><small>STOC DUPA</small><b>${movementQuantity(movement.accounting_quantity_after ?? movement.quantity_after)} buc</b></span><span><small>OPERATOR</small><b>${esc(movement.created_by || 'Sistem')}</b></span></footer></div></article>`;
+      }).join('');
+      const emptyState = '<div class="shop-nir-movement-empty"><span>' + nirUiIcon('product') + '</span><strong>Nu exista miscari de stoc</strong><p>Acest document nu a produs inca o intrare sau iesire contabila.</p></div>';
+      $('shop-nir-accounting-details').innerHTML = `<section class="shop-nir-movement-board"><header class="shop-nir-movement-head"><span>${nirUiIcon('product')}</span><div><small>JURNAL CONTABIL</small><strong>Traseul stocului</strong><p>${state.nirEditor.status === 'reversed' ? 'Intrarea initiala si anularea ei prin documentul de reversare, in ordine cronologica.' : 'Fiecare miscare produsa de acest NIR, explicata clar.'}</p></div><b>${movements.length}<small>MISCARI</small></b>${state.nirEditor.status === 'confirmed' && nirCan('NIR_REVERSE') ? '<button type="button" class="danger" id="shop-nir-reverse">' + nirUiIcon('reverse') + '<span>Reverseaza NIR</span></button>' : ''}</header><div class="shop-nir-movement-summary"><span><small>INTRARI</small><strong class="positive">+${movementQuantity(summary.entries)}</strong></span><span><small>IESIRI</small><strong class="negative">−${movementQuantity(summary.exits)}</strong></span><span><small>EFECT NET</small><strong>${summary.net > 0 ? '+' : ''}${movementQuantity(summary.net)}</strong></span></div><div class="shop-nir-movement-list">${movementCards || emptyState}</div></section>`;
       $('shop-nir-reverse')?.addEventListener('click', openNirReverseDialog);
     } catch (error) { $('shop-nir-accounting-details').innerHTML = `<p>${esc(error.message)}</p>`; }
   }

@@ -82,5 +82,26 @@ foreach (['reverseNir', 'NIR_REVERSE', 'reversării'] as $needle) {
         $failed++;
     }
 }
+$movementStart = strpos((string)$service, 'function shopNirDocumentMovements');
+$movementEnd = strpos((string)$service, 'function shopNirDocumentLayers');
+$movementContract = $movementStart !== false && $movementEnd !== false
+    ? substr((string)$service, $movementStart, $movementEnd - $movementStart)
+    : '';
+foreach (['status', 'reversal_of_id', 'movement_document_number', 'movement_document_source'] as $needle) {
+    if (!str_contains($movementContract, $needle)) {
+        fwrite(STDERR, "FAIL jurnal mișcări NIR reversat: {$needle}\n");
+        $failed++;
+    }
+}
+if (!str_contains((string)$mobile, 'movementBoard') || !str_contains((string)$desktop, 'shop-nir-movement-board')) {
+    fwrite(STDERR, "FAIL structură jurnal vizual mișcări mobil+desktop\n");
+    $failed++;
+}
+foreach (['NIR_REVERSAL', 'Traseul stocului'] as $needle) {
+    if (!str_contains((string)$mobile, $needle) || !str_contains((string)$desktop, $needle)) {
+        fwrite(STDERR, "FAIL jurnal vizual mișcări mobil+desktop: {$needle}\n");
+        $failed++;
+    }
+}
 fwrite(STDOUT, 'NIR contract: ' . ($failed ? "{$failed} verificări eșuate" : 'toate verificările au trecut') . ".\n");
 exit($failed === 0 ? 0 : 1);

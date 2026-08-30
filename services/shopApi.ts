@@ -693,6 +693,10 @@ export type ShopInventoryMovement = {
   note: string | null;
   created_by: string | null;
   created_at: string;
+  movement_document_number?: string | null;
+  movement_document_source?: string | null;
+  movement_document_status?: string | null;
+  movement_reversal_of_id?: string | null;
 };
 
 export type ShopProductManagerBootstrap = {

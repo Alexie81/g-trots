@@ -2186,8 +2186,28 @@ function shopNirExtractAttachment(PDO $db, string $documentId, string $attachmen
 }
 
 function shopNirDocumentMovements(PDO $db, string $id): array {
-    $stmt = $db->prepare('SELECT m.*, p.name AS product_name, p.sku AS product_sku FROM shop_inventory_movements m INNER JOIN shop_products p ON p.id = m.product_id WHERE m.nir_document_id = ? ORDER BY m.created_at, m.id');
-    $stmt->execute([$id]);
+    $documentStmt = $db->prepare('SELECT id, status, reversal_of_id FROM shop_nir_documents WHERE id = ?');
+    $documentStmt->execute([$id]);
+    $document = $documentStmt->fetch();
+    if (!$document) throw new ShopNirHttpException('NIR-ul nu există.', 404);
+    $documentIds = [$id];
+    if ((string)$document['status'] === 'reversed') {
+        $reversalStmt = $db->prepare('SELECT id FROM shop_nir_documents WHERE reversal_of_id = ? ORDER BY confirmed_at, id');
+        $reversalStmt->execute([$id]);
+        $documentIds = array_merge($documentIds, array_map('strval', $reversalStmt->fetchAll(PDO::FETCH_COLUMN)));
+    }
+    $placeholders = implode(',', array_fill(0, count($documentIds), '?'));
+    $stmt = $db->prepare(
+        "SELECT m.*, p.name AS product_name, p.sku AS product_sku,
+                n.nir_number AS movement_document_number, n.source_type AS movement_document_source,
+                n.status AS movement_document_status, n.reversal_of_id AS movement_reversal_of_id
+         FROM shop_inventory_movements m
+         INNER JOIN shop_products p ON p.id = m.product_id
+         INNER JOIN shop_nir_documents n ON n.id = m.nir_document_id
+         WHERE m.nir_document_id IN ({$placeholders})
+         ORDER BY m.created_at, m.id"
+    );
+    $stmt->execute($documentIds);
     return $stmt->fetchAll();
 }
 

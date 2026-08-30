@@ -445,7 +445,13 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
   };
 
   const changeSupplierCode = (index: number, supplier_product_code: string) => {
-    const supplierName = editor?.lines?.[index]?.supplier_product_name?.trim() || '';
+    const currentLine = editor?.lines?.[index];
+    const supplierName = currentLine?.supplier_product_name?.trim() || '';
+    if (currentLine?.product_id) {
+      clearTimeout(codeResolveTimers.current[index]);
+      patchLine(index, { supplier_product_code, supplier_product_reference_id: null, resolution_status: 'matched_manual' });
+      return;
+    }
     patchLine(index, { supplier_product_code, supplier_product_reference_id: null, product_id: null, product_name: '', resolution_status: supplier_product_code.trim() ? 'matching_code' : supplierName ? 'matching_name' : 'unmatched' });
     clearTimeout(codeResolveTimers.current[index]);
     const requestId = (codeResolveRequestIds.current[index] || 0) + 1;
@@ -456,6 +462,11 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
 
   const changeSupplierName = (index: number, supplier_product_name: string) => {
     const line = editor?.lines?.[index];
+    if (line?.product_id) {
+      clearTimeout(codeResolveTimers.current[index]);
+      patchLine(index, { supplier_product_name, supplier_product_reference_id: null, resolution_status: 'matched_manual' });
+      return;
+    }
     if (line?.supplier_product_code?.trim()) { patchLine(index, { supplier_product_name }); return; }
     patchLine(index, { supplier_product_name, supplier_product_reference_id: null, product_id: null, product_name: '', resolution_status: supplier_product_name.trim() ? 'matching_name' : 'unmatched' });
     clearTimeout(codeResolveTimers.current[index]);
@@ -491,7 +502,24 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     const line = editor.lines?.[index];
     setProductPickerLine(null);
     if (!line) return;
-    patchLine(index, { product_id: product.id, product_name: product.name, product_image_url: product.images?.[0]?.url || null, supplier_product_reference_id: null, resolution_status: 'matched_manual' });
+    const reference = product.supplier_reference || null;
+    const currentCode = line.supplier_product_code.trim();
+    const currentName = line.supplier_product_name.trim();
+    const currentEan = line.supplier_ean.trim();
+    const canReuseReference = Boolean(reference && !currentCode && !currentName && !currentEan);
+    patchLine(index, {
+      product_id: product.id,
+      product_name: product.name,
+      product_image_url: product.images?.[0]?.url || null,
+      supplier_product_reference_id: canReuseReference ? reference?.id || null : null,
+      supplier_product_code: currentCode || (canReuseReference ? reference?.supplier_product_code_original || '' : ''),
+      supplier_product_name: currentName || (canReuseReference ? reference?.supplier_product_name || product.name : product.name),
+      supplier_ean: currentEan || (canReuseReference ? reference?.supplier_ean || '' : ''),
+      purchase_unit: canReuseReference ? reference?.purchase_unit || line.purchase_unit || 'buc' : line.purchase_unit,
+      stock_unit: canReuseReference ? reference?.stock_unit || line.stock_unit || 'buc' : line.stock_unit,
+      conversion_factor: canReuseReference ? reference?.conversion_factor || line.conversion_factor || '1' : line.conversion_factor,
+      resolution_status: canReuseReference ? (reference?.supplier_product_code_original ? 'matched_code' : 'matched_name') : 'matched_manual',
+    });
   };
 
   const addSupplier = async () => {
@@ -869,7 +897,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
 
         <Modal visible={supplierPicker} transparent animationType="slide" onRequestClose={() => setSupplierPicker(false)}><Pressable style={styles.backdrop} onPress={() => setSupplierPicker(false)}><Pressable style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}><SheetHeader title="Selectează furnizorul" onClose={() => setSupplierPicker(false)} /><SearchBox value={supplierSearch} onChangeText={setSupplierSearch} placeholder="Denumire sau CUI" />{newSupplier ? <View style={styles.inlineCreate}><Field label="DENUMIRE *" value={newSupplier.name} onChangeText={(name) => setNewSupplier({ ...newSupplier, name })} placeholder="Firma furnizoare" /><Field label="CUI" value={newSupplier.cui} onChangeText={(cui) => setNewSupplier({ ...newSupplier, cui })} placeholder="RO123456" /><TouchableOpacity style={styles.confirmAction} onPress={() => void addSupplier()}><Check size={18} color={Colors.white} /><Text style={styles.confirmActionText}>Creează și selectează</Text></TouchableOpacity></View> : <><ScrollView style={{ maxHeight: 430 }}>{filteredSuppliers.map((supplier) => <TouchableOpacity style={styles.pickerRow} key={supplier.id} onPress={() => { const supplierCurrency = supplier.default_currency || editor.currency; patchEditor({ supplier_id: supplier.id, supplier_name: supplier.name }); setSupplierPicker(false); if (supplierCurrency !== editor.currency) selectCurrency(supplierCurrency); }}><View style={styles.pickerIcon}><Building2 size={18} color="#5EEAD4" /></View><View style={{ flex: 1 }}><Text style={styles.pickerTitle}>{supplier.name}</Text><Text style={styles.pickerMeta}>{supplier.cui || 'CUI necompletat'}</Text></View><ChevronRight size={18} color={Colors.textMuted} /></TouchableOpacity>)}</ScrollView>{can('SUPPLIER_CREATE') && <TouchableOpacity style={styles.addLine} onPress={() => setNewSupplier({ name: supplierSearch, cui: '' })}><Plus size={18} color={Colors.orange} /><Text style={styles.addLineText}>Furnizor nou</Text></TouchableOpacity>}</>}</Pressable></Pressable></Modal>
 
-        <Modal visible={productPickerLine !== null} transparent animationType="slide" onRequestClose={() => setProductPickerLine(null)}><Pressable style={styles.backdrop} onPress={() => setProductPickerLine(null)}><Pressable style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}><SheetHeader title="Asociază produsul intern" onClose={() => setProductPickerLine(null)} /><SearchBox value={productSearch} onChangeText={setProductSearch} placeholder="Denumire, SKU sau cod" />{loadingProducts ? <ActivityIndicator color={Colors.orange} style={{ margin: 28 }} /> : <ScrollView style={{ maxHeight: 520 }}>{products.map((product) => <TouchableOpacity key={product.id} style={styles.pickerRow} onPress={() => void selectProduct(product)}>{product.images?.[0]?.url ? <Image source={{ uri: product.images[0].url }} style={styles.pickerImage} resizeMode="cover" /> : <View style={styles.pickerIcon}><PackageSearch size={18} color="#A78BFA" /></View>}<View style={{ flex: 1 }}><Text style={styles.pickerTitle}>{product.name}</Text><Text style={styles.pickerMeta}>{product.sku || 'Fără SKU'} · stoc conta {product.accounting_stock_quantity}</Text></View><Link2 size={17} color={Colors.orange} /></TouchableOpacity>)}</ScrollView>}</Pressable></Pressable></Modal>
+        <Modal visible={productPickerLine !== null} transparent animationType="slide" onRequestClose={() => setProductPickerLine(null)}><Pressable style={styles.backdrop} onPress={() => setProductPickerLine(null)}><Pressable style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}><SheetHeader title="Asociază produsul intern" onClose={() => setProductPickerLine(null)} /><SearchBox value={productSearch} onChangeText={setProductSearch} placeholder="Denumire, SKU sau cod" />{loadingProducts ? <ActivityIndicator color={Colors.orange} style={{ margin: 28 }} /> : <ScrollView style={{ maxHeight: 520 }}>{products.map((product) => { const supplierAlias = product.supplier_reference?.supplier_product_code_original || product.supplier_reference?.supplier_product_name; return <TouchableOpacity key={product.id} style={styles.pickerRow} onPress={() => void selectProduct(product)}>{product.images?.[0]?.url ? <Image source={{ uri: product.images[0].url }} style={styles.pickerImage} resizeMode="cover" /> : <View style={styles.pickerIcon}><PackageSearch size={18} color="#A78BFA" /></View>}<View style={{ flex: 1 }}><Text style={styles.pickerTitle}>{product.name}</Text><Text style={styles.pickerMeta}>{product.sku || 'Fără SKU'} · {supplierAlias ? `asociat: ${supplierAlias}` : 'fără alias la acest furnizor'}</Text></View><Link2 size={17} color={Colors.orange} /></TouchableOpacity>; })}</ScrollView>}</Pressable></Pressable></Modal>
       </View>
     );
   }

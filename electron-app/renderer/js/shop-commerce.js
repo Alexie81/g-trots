@@ -2631,6 +2631,13 @@
       if (lineField === 'is_stock_item') renderNirEditor();
       if (lineField === 'difference_reason') { line.mismatch_reason = input.value; renderNirEditor(); }
       if (lineField === 'difference_notes') line.mismatch_reason = input.value || line.difference_reason;
+      if ((lineField === 'supplier_product_code' || lineField === 'supplier_product_name') && line.product_id) {
+        clearTimeout(state.nirResolveTimers.get(lineIndex));
+        line.supplier_product_reference_id = null;
+        line.resolution_status = 'matched_manual';
+        scheduleNirAutosave();
+        return;
+      }
       if (lineField === 'supplier_product_code') {
         const code = input.value.trim();
         const name = String(line.supplier_product_name || '').trim();
@@ -2804,14 +2811,32 @@
   async function searchNirProducts(query) {
     try {
       const products = await window.SHOP_API.listProductOptions({ q: String(query || '').trim(), supplier_id: state.nirEditor?.supplier_id || '', limit: 50 });
-      $('shop-nir-product-results').innerHTML = products.map(product => `<button type="button" data-nir-product-select="${esc(product.id)}">${productPicture(product.images?.[0], 'shop-nir-product-image')}<span><b>${esc(product.name)}</b><small>${esc(product.sku || 'Fara SKU')} · stoc Conta ${esc(product.accounting_stock_quantity || 0)}</small></span><i>Asociaza ›</i></button>`).join('') || '<p>Niciun produs gasit.</p>';
+      $('shop-nir-product-results').innerHTML = products.map(product => { const reference = product.supplier_reference; const supplierAlias = reference ? reference.supplier_product_code_original || reference.supplier_product_name : ''; return `<button type="button" data-nir-product-select="${esc(product.id)}">${productPicture(product.images?.[0], 'shop-nir-product-image')}<span><b>${esc(product.name)}</b><small>${esc(product.sku || 'Fara SKU')} · ${supplierAlias ? `asociat: ${esc(supplierAlias)}` : 'fara alias la acest furnizor'}</small></span><i>Asociaza ›</i></button>`; }).join('') || '<p>Niciun produs gasit.</p>';
       $('shop-nir-product-results').querySelectorAll('[data-nir-product-select]').forEach(button => button.addEventListener('click', () => void selectNirProduct(products.find(item => item.id === button.dataset.nirProductSelect))));
     } catch (error) { $('shop-nir-product-results').innerHTML = `<p>${esc(error.message)}</p>`; }
   }
   async function selectNirProduct(product) {
     const document = state.nirEditor; const line = document?.lines?.[state.nirProductLineIndex]; if (!product || !line) return;
-    Object.assign(line, { product_id: product.id, product_name: product.name, product_image_url: product.images?.[0]?.url || product.images?.[0]?.preview || '', supplier_product_reference_id: null, resolution_status: 'matched_manual' });
-    closeModal('shop-nir-product-picker'); renderNirEditor(); scheduleNirAutosave(); toast('Asocierea va fi memorata cand apesi Salveaza.');
+    const reference = product.supplier_reference || null;
+    const currentCode = String(line.supplier_product_code || '').trim();
+    const currentName = String(line.supplier_product_name || '').trim();
+    const currentEan = String(line.supplier_ean || '').trim();
+    const canReuseReference = Boolean(reference && !currentCode && !currentName && !currentEan);
+    Object.assign(line, {
+      product_id: product.id,
+      product_name: product.name,
+      product_image_url: product.images?.[0]?.url || product.images?.[0]?.preview || '',
+      supplier_product_reference_id: canReuseReference ? reference.id : null,
+      supplier_product_code: currentCode || (canReuseReference ? reference.supplier_product_code_original || '' : ''),
+      supplier_product_name: currentName || (canReuseReference ? reference.supplier_product_name || product.name : product.name),
+      supplier_ean: currentEan || (canReuseReference ? reference.supplier_ean || '' : ''),
+      purchase_unit: canReuseReference ? reference.purchase_unit || line.purchase_unit || 'buc' : line.purchase_unit,
+      stock_unit: canReuseReference ? reference.stock_unit || line.stock_unit || 'buc' : line.stock_unit,
+      conversion_factor: canReuseReference ? reference.conversion_factor || line.conversion_factor || '1' : line.conversion_factor,
+      resolution_status: canReuseReference ? (reference.supplier_product_code_original ? 'matched_code' : 'matched_name') : 'matched_manual',
+    });
+    closeModal('shop-nir-product-picker'); renderNirEditor(); scheduleNirAutosave();
+    toast(canReuseReference ? 'Codul și denumirea cunoscute au fost completate. Le poți modifica pentru un alias nou.' : 'Produsul a fost selectat. Denumirea rămâne editabilă și asocierea se memorează la salvare.');
   }
 
   async function confirmNir() {

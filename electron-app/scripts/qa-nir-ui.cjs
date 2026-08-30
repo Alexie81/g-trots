@@ -45,7 +45,7 @@ app.whenReady().then(async () => {
       createNir: async value => { window.__nirQaCalls.create += 1; return { ...qaDocument, ...value, id:'nir-saved', temporary_number:'DRAFT-SAVED', row_version:1 }; },
       updateNir: async (_id, value) => { window.__nirQaCalls.update += 1; return { ...qaDocument, ...value, id:'nir-saved', row_version:2 }; },
       deleteNir: async id => { window.__nirQaCalls.delete += 1; window.__nirQaCalls.deletedId = id; return { success:true, deleted:1, deleted_ids:[id] }; },
-      listProductOptions: async () => [{ id:'product-1', name:'Cască FRV Street Panther full face, negru mat', sku:'WT-SP-1386', accounting_stock_quantity:'8' }],
+      listProductOptions: async () => [{ id:'product-1', name:'Cască FRV Street Panther full face, negru mat', sku:'WT-SP-1386', accounting_stock_quantity:'8', images:[], supplier_reference:{ id:'reference-qa', supplier_product_code_original:'CASCA-FRV-02', supplier_product_name:'Cască Panther furnizor', supplier_ean:'594000000001', purchase_unit:'cutie', stock_unit:'buc', conversion_factor:'2', is_primary_for_supplier:true } }],
       resolveSupplierProductReference: async (_supplierId, code, _ean, name) => !code && name === 'Cască FRV Street Panther full face, negru mat' ? ({ match_method:'name_exact', reference:{ id:null, product_id:'product-1', product_name:name, product_image_url:'', supplier_product_name:name, conversion_factor:'1', purchase_unit:'buc', stock_unit:'buc' } }) : ({ reference:null }),
       validateNir: async () => ({ valid:true, errors:[], warnings:[] }),
       confirmNir: async () => ({ ...qaDocument, id:'nir-saved', status:'confirmed', nir_number:'NIR-2026-000022' }),
@@ -140,6 +140,17 @@ app.whenReady().then(async () => {
     setLine('discount_percent', '0'); setLine('vat_rate', '19'); setLine('allocated_cost_ron', '0');
     return { total:document.querySelector('.shop-nir-line-total strong')?.textContent, unitCost:document.querySelector('.shop-nir-line-total b')?.textContent, currencyLabel:document.querySelector('.shop-nir-line-panel.pricing label span')?.textContent, foreignCurrency, priceInputKeepsFocus, quantitySync };
   } catch (error) { return { error:String(error && error.stack || error) }; } })()`);
+  const directProductAssociation = await win.webContents.executeJavaScript(`(async () => {
+    document.getElementById('shop-nir-add-line').click();
+    document.querySelector('[data-nir-product="1"]').click();
+    await new Promise(resolve => setTimeout(resolve, 80));
+    document.querySelector('[data-nir-product-select="product-1"]').click();
+    const code = document.querySelector('[data-nir-line="1"][data-nir-line-field="supplier_product_code"]');
+    const name = document.querySelector('[data-nir-line="1"][data-nir-line-field="supplier_product_name"]');
+    const initial = { code:code.value, name:name.value, codeEditable:!code.disabled, nameEditable:!name.disabled, product:document.querySelectorAll('.shop-nir-product-link strong')[1]?.textContent };
+    code.value='CASCA-FRV-NOU'; code.dispatchEvent(new Event('input',{bubbles:true}));
+    return { ...initial, editedCode:code.value, productAfterAliasEdit:document.querySelectorAll('.shop-nir-product-link strong')[1]?.textContent };
+  })()`);
   await win.webContents.executeJavaScript(`document.querySelector('.shop-nir-editor-section.review').scrollIntoView({ block:'start' })`);
   await wait(300);
   const editorReview = path.join(output, 'nir-editor-review.png');
@@ -222,7 +233,7 @@ app.whenReady().then(async () => {
   await wait(120);
   const productSupplierList = path.join(output, 'product-suppliers.png');
   fs.writeFileSync(productSupplierList, (await win.webContents.capturePage()).toPNG());
-  process.stdout.write(JSON.stringify({ ...metrics, wideRegistry, liveCalculation, nameMatch, searchKeepsFocus, currencyPickerLayout, currencyPickerClosing, deleteDialogOpening, deleteDialogClosing, savedDelete, inventorySearch, semanticInventorySearch, stockSheetPageOne, stockSheetPageTwo, confirmedDocuments, documentDownloads, confirmedCorrection, productSearch, productSuppliers, errors, screenshots:{ registry, registryWide, editor, currencyPicker, editorLines, editorReview, deleteDialog, inventory, stockSheet, confirmedNirDocuments, productsSearch, productSupplierList } }, null, 2));
+  process.stdout.write(JSON.stringify({ ...metrics, wideRegistry, liveCalculation, nameMatch, directProductAssociation, searchKeepsFocus, currencyPickerLayout, currencyPickerClosing, deleteDialogOpening, deleteDialogClosing, savedDelete, inventorySearch, semanticInventorySearch, stockSheetPageOne, stockSheetPageTwo, confirmedDocuments, documentDownloads, confirmedCorrection, productSearch, productSuppliers, errors, screenshots:{ registry, registryWide, editor, currencyPicker, editorLines, editorReview, deleteDialog, inventory, stockSheet, confirmedNirDocuments, productsSearch, productSupplierList } }, null, 2));
   await win.destroy();
   app.quit();
 }).catch(error => { console.error(error); app.exit(1); });

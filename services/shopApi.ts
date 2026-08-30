@@ -316,6 +316,16 @@ export type ShopProduct = {
   manufacturer_name: string | null;
   sku: string | null;
   supplier_product_code: string | null;
+  supplier_reference?: {
+    id: string;
+    supplier_product_code_original: string;
+    supplier_product_name: string | null;
+    supplier_ean: string | null;
+    purchase_unit: string;
+    stock_unit: string;
+    conversion_factor: string;
+    is_primary_for_supplier: boolean;
+  } | null;
   ean: string | null;
   source_id: string | null;
   source_name: string | null;

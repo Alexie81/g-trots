@@ -5169,28 +5169,37 @@ try {
         // cautarii si produsele deja selectate, ca sa ramana rapid si la zeci
         // de mii de produse.
         $query = mb_substr(trim((string)($body['q'] ?? ($_GET['q'] ?? ''))), 0, 160);
+        $supplierId = mb_substr(trim((string)($body['supplier_id'] ?? ($_GET['supplier_id'] ?? ''))), 0, 36);
         $rawIds = is_array($body['ids'] ?? null) ? $body['ids'] : [];
         $ids = array_values(array_unique(array_filter(array_map(static fn($value): string => trim((string)$value), $rawIds))));
         $ids = array_slice($ids, 0, 250);
         $limit = max(1, min($ids ? 250 : 50, (int)($body['limit'] ?? ($_GET['limit'] ?? 40))));
 
-        if ($query === '' && !$ids) jsonResponse([]);
+        if ($query === '' && !$ids && $supplierId === '') jsonResponse([]);
 
         $conditions = [];
         $params = [];
         if ($query !== '') {
             $needle = '%' . $query . '%';
             $referenceMatch = $supplierId !== ''
-                ? 'EXISTS (SELECT 1 FROM shop_supplier_product_references ref WHERE ref.product_id = p.id AND ref.is_active = 1 AND ref.supplier_id = ? AND (ref.supplier_product_code_original LIKE ? OR ref.supplier_product_code_normalized LIKE ?))'
-                : 'EXISTS (SELECT 1 FROM shop_supplier_product_references ref WHERE ref.product_id = p.id AND ref.is_active = 1 AND (ref.supplier_product_code_original LIKE ? OR ref.supplier_product_code_normalized LIKE ?))';
+                ? 'EXISTS (SELECT 1 FROM shop_supplier_product_references ref WHERE ref.product_id = p.id AND ref.is_active = 1 AND ref.supplier_id = ? AND (ref.supplier_product_code_original LIKE ? OR ref.supplier_product_code_normalized LIKE ? OR ref.supplier_product_name LIKE ?))'
+                : 'EXISTS (SELECT 1 FROM shop_supplier_product_references ref WHERE ref.product_id = p.id AND ref.is_active = 1 AND (ref.supplier_product_code_original LIKE ? OR ref.supplier_product_code_normalized LIKE ? OR ref.supplier_product_name LIKE ?))';
             $conditions[] = '(p.name LIKE ? OR p.sku LIKE ? OR p.supplier_product_code LIKE ? OR p.ean LIKE ? OR ' . $referenceMatch . ')';
             array_push($params, $needle, $needle, $needle, $needle);
             if ($supplierId !== '') $params[] = $supplierId;
-            array_push($params, $needle, '%' . shopNirNormalizeSupplierCode($query) . '%');
+            array_push($params, $needle, '%' . shopNirNormalizeSupplierCode($query) . '%', $needle);
         }
         if ($ids) {
             $conditions[] = 'p.id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')';
             array_push($params, ...$ids);
+        }
+        if (!$conditions) $conditions[] = '1 = 1';
+
+        $associationOrder = '';
+        $orderParams = [];
+        if ($supplierId !== '') {
+            $associationOrder = 'CASE WHEN EXISTS (SELECT 1 FROM shop_supplier_product_references ranked_ref WHERE ranked_ref.product_id = p.id AND ranked_ref.supplier_id = ? AND ranked_ref.is_active = 1) THEN 0 ELSE 1 END ASC, ';
+            $orderParams[] = $supplierId;
         }
 
         $sql = "SELECT p.id, p.name, p.sku, p.supplier_product_code, p.stock_mode, p.stock_quantity,
@@ -5201,12 +5210,27 @@ try {
                         LIMIT 1) AS image_path
                 FROM shop_products p
                 WHERE " . implode(' OR ', $conditions) . "
-                ORDER BY p.name ASC, p.id ASC
+                ORDER BY " . $associationOrder . "p.name ASC, p.id ASC
                 LIMIT " . $limit;
         $stmt = $db->prepare($sql);
-        $stmt->execute($params);
+        $stmt->execute(array_merge($params, $orderParams));
         $rows = $stmt->fetchAll();
-        jsonResponse(array_map(static function (array $row) use ($config): array {
+        $referencesByProduct = [];
+        if ($supplierId !== '' && $rows) {
+            $productIds = array_values(array_unique(array_map(static fn(array $row): string => (string)$row['id'], $rows)));
+            $referenceSql =
+                'SELECT r.* FROM shop_supplier_product_references r
+                 WHERE r.supplier_id = ? AND r.is_active = 1
+                   AND r.product_id IN (' . implode(',', array_fill(0, count($productIds), '?')) . ')
+                 ORDER BY r.product_id ASC, r.is_primary_for_supplier DESC, r.last_used_at DESC, r.updated_at DESC, r.created_at DESC';
+            $referenceStmt = $db->prepare($referenceSql);
+            $referenceStmt->execute(array_merge([$supplierId], $productIds));
+            foreach ($referenceStmt->fetchAll() as $reference) {
+                $productId = (string)$reference['product_id'];
+                if (!isset($referencesByProduct[$productId])) $referencesByProduct[$productId] = $reference;
+            }
+        }
+        jsonResponse(array_map(static function (array $row) use ($config, $referencesByProduct): array {
             $path = trim((string)($row['image_path'] ?? ''));
             $images = [];
             if ($path !== '') {
@@ -5217,6 +5241,7 @@ try {
                     'sort_order' => 0,
                 ];
             }
+            $reference = $referencesByProduct[(string)$row['id']] ?? null;
             return [
                 'id' => (string)$row['id'],
                 'name' => (string)$row['name'],
@@ -5225,6 +5250,16 @@ try {
                 'stock_mode' => (string)($row['stock_mode'] ?? 'tracked'),
                 'stock_quantity' => (int)($row['stock_quantity'] ?? 0),
                 'images' => $images,
+                'supplier_reference' => $reference ? [
+                    'id' => (string)$reference['id'],
+                    'supplier_product_code_original' => (string)($reference['supplier_product_code_original'] ?? ''),
+                    'supplier_product_name' => $reference['supplier_product_name'] !== null ? (string)$reference['supplier_product_name'] : null,
+                    'supplier_ean' => $reference['supplier_ean'] !== null ? (string)$reference['supplier_ean'] : null,
+                    'purchase_unit' => (string)($reference['purchase_unit'] ?? 'buc'),
+                    'stock_unit' => (string)($reference['stock_unit'] ?? 'buc'),
+                    'conversion_factor' => (string)($reference['conversion_factor'] ?? '1'),
+                    'is_primary_for_supplier' => (bool)($reference['is_primary_for_supplier'] ?? false),
+                ] : null,
             ];
         }, $rows));
     }

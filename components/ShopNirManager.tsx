@@ -503,6 +503,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     setProductPickerLine(null);
     if (!line) return;
     const reference = product.supplier_reference || null;
+    const existingReferenceId = line.supplier_product_reference_id || null;
     const currentCode = line.supplier_product_code.trim();
     const currentName = line.supplier_product_name.trim();
     const currentEan = line.supplier_ean.trim();
@@ -511,7 +512,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
       product_id: product.id,
       product_name: product.name,
       product_image_url: product.images?.[0]?.url || null,
-      supplier_product_reference_id: canReuseReference ? reference?.id || null : null,
+      supplier_product_reference_id: canReuseReference ? reference?.id || null : existingReferenceId,
       supplier_product_code: currentCode || (canReuseReference ? reference?.supplier_product_code_original || '' : ''),
       supplier_product_name: currentName || (canReuseReference ? reference?.supplier_product_name || product.name : product.name),
       supplier_ean: currentEan || (canReuseReference ? reference?.supplier_ean || '' : ''),

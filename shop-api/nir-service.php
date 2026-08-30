@@ -674,6 +674,37 @@ function shopNirBindReferencesOnExplicitSave(PDO $db, array $lines, array $heade
             'conversion_factor' => $line['conversion_factor'] ?? 1,
             'is_primary_for_supplier' => false,
         ];
+        $explicitReassignment = false;
+        $previousProductId = '';
+        if ($referenceId !== '') {
+            $currentReferenceStmt = $db->prepare('SELECT * FROM shop_supplier_product_references WHERE id = ? FOR UPDATE');
+            $currentReferenceStmt->execute([$referenceId]);
+            $currentReference = $currentReferenceStmt->fetch();
+            if (!$currentReference || (string)$currentReference['supplier_id'] !== $supplierId) {
+                throw new ShopNirHttpException('Asocierea furnizor-produs nu mai există sau aparține altui furnizor.', 409, ['conflict' => true]);
+            }
+            $lineIdentity = $supplierCode !== '' ? shopNirNormalizeSupplierCode($supplierCode) : shopNirSupplierProductNameKey($supplierName);
+            if ($lineIdentity !== (string)$currentReference['supplier_product_code_normalized']) {
+                // Codul sau denumirea a fost editată. Păstrăm asocierea veche și
+                // memorăm valoarea nouă ca alias independent pentru același produs.
+                $referenceId = '';
+                $lines[$index]['supplier_product_reference_id'] = null;
+            } else {
+                $previousProductId = (string)$currentReference['product_id'];
+                $explicitReassignment = $previousProductId !== $productId;
+                if ($explicitReassignment) {
+                    shopNirReferenceUpdate($db, $referenceId, [
+                        'row_version' => (int)$currentReference['row_version'],
+                        'product_id' => $productId,
+                        'is_active' => true,
+                    ], $user);
+                }
+                // Actualizează și metadatele asocierii (denumire, EAN, unități,
+                // conversie), nu doar produsul intern ales.
+                $reference = shopNirCreateReference($db, $referenceBody, $user);
+                $lines[$index]['supplier_product_reference_id'] = $reference['id'];
+            }
+        }
         if ($referenceId === '') {
             $reference = shopNirCreateReference($db, $referenceBody, $user);
             $lines[$index]['supplier_product_reference_id'] = $reference['id'];
@@ -682,7 +713,21 @@ function shopNirBindReferencesOnExplicitSave(PDO $db, array $lines, array $heade
         // invoice without a code can still identify the product for this same
         // supplier, and a new invoice name never depends on the internal SKU.
         if ($supplierCode !== '' && $supplierName !== '') {
-            shopNirCreateReference($db, array_merge($referenceBody, ['supplier_product_code' => '']), $user);
+            $nameReferenceBody = array_merge($referenceBody, ['supplier_product_code' => '']);
+            if ($explicitReassignment) {
+                $nameKey = shopNirSupplierProductNameKey($supplierName);
+                $nameReferenceStmt = $db->prepare('SELECT * FROM shop_supplier_product_references WHERE supplier_id = ? AND supplier_product_code_normalized = ? FOR UPDATE');
+                $nameReferenceStmt->execute([$supplierId, $nameKey]);
+                $nameReference = $nameReferenceStmt->fetch();
+                if ($nameReference && (string)$nameReference['product_id'] !== $productId && (string)$nameReference['product_id'] === $previousProductId) {
+                    shopNirReferenceUpdate($db, (string)$nameReference['id'], [
+                        'row_version' => (int)$nameReference['row_version'],
+                        'product_id' => $productId,
+                        'is_active' => true,
+                    ], $user);
+                }
+            }
+            shopNirCreateReference($db, $nameReferenceBody, $user);
         }
     }
     return $lines;

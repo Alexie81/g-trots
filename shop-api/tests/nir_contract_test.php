@@ -33,6 +33,17 @@ foreach (['beginTransaction()', 'SELECT * FROM shop_nir_documents WHERE id = ? F
         $failed++;
     }
 }
+$bindReferencesStart = strpos((string)$service, 'function shopNirBindReferencesOnExplicitSave');
+$backfillReferencesStart = strpos((string)$service, 'function shopNirBackfillProductSupplierReferences');
+$bindReferencesContract = $bindReferencesStart !== false && $backfillReferencesStart !== false
+    ? substr((string)$service, $bindReferencesStart, $backfillReferencesStart - $bindReferencesStart)
+    : '';
+foreach (['explicitReassignment', 'previousProductId', 'shopNirReferenceUpdate', 'nameReference'] as $needle) {
+    if (!str_contains($bindReferencesContract, $needle)) {
+        fwrite(STDERR, "FAIL reasociere furnizor-produs: {$needle}\n");
+        $failed++;
+    }
+}
 $productReferencesStart = strpos((string)$service, 'function shopNirProductReferences');
 $supplierProductsStart = strpos((string)$service, 'function shopNirSupplierProducts');
 $productReferencesContract = $productReferencesStart !== false && $supplierProductsStart !== false
@@ -49,6 +60,10 @@ foreach (['nir_date', 'reception_date', 'currency', 'exchange_rate', 'exchange_r
         fwrite(STDERR, "FAIL contract UI mobil+desktop: {$needle}\n");
         $failed++;
     }
+}
+if (!str_contains((string)$mobile, 'existingReferenceId') || !str_contains((string)$desktop, 'existingReferenceId')) {
+    fwrite(STDERR, "FAIL reasocierea existentă nu este păstrată în UI mobil+desktop\n");
+    $failed++;
 }
 fwrite(STDOUT, 'NIR contract: ' . ($failed ? "{$failed} verificări eșuate" : 'toate verificările au trecut') . ".\n");
 exit($failed === 0 ? 0 : 1);

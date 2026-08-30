@@ -238,6 +238,13 @@ app.whenReady().then(async () => {
   const correctionTyping = { before:correctionTypingBefore, after:correctionTypingAfter };
   await win.webContents.executeJavaScript(`document.querySelector('[data-commerce-close="shop-nir-modal"]').click(); window.switchTab('shop-products')`);
   await wait(220);
+  const productKeyboardBefore = await win.webContents.executeJavaScript(`(() => { const input=document.getElementById('shop-products-search'); input.focus(); input.value=''; input.addEventListener('keydown', event => event.preventDefault(), { once:true }); return { active:document.activeElement===input, recoveryBound:input.dataset.keyboardRecoveryBound }; })()`);
+  win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'C' });
+  win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'C' });
+  await wait(80);
+  const productKeyboardAfter = await win.webContents.executeJavaScript(`(() => { const input=document.getElementById('shop-products-search'); return { value:input.value, active:document.activeElement===input }; })()`);
+  if (productKeyboardAfter.value.toLowerCase() !== 'c' || !productKeyboardAfter.active) throw new Error('Bara de căutare Produse nu recuperează tastarea blocată.');
+  const productKeyboardRecovery = { before:productKeyboardBefore, after:productKeyboardAfter };
   const productSearch = await win.webContents.executeJavaScript(`(async () => { const input=document.getElementById('shop-products-search'); const original=input; input.focus(); input.value='casca'; input.dispatchEvent(new Event('input',{bubbles:true})); await new Promise(resolve => setTimeout(resolve, 420)); return { exists:Boolean(input), sameNode:original === document.getElementById('shop-products-search'), keepsFocus:document.activeElement === original, value:original.value, rows:document.querySelectorAll('#shop-products-results tbody tr').length, resultName:document.querySelector('#shop-products-results tbody tr strong')?.textContent }; })()`);
   const productsSearch = path.join(output, 'products-search.png');
   fs.writeFileSync(productsSearch, (await win.webContents.capturePage()).toPNG());
@@ -248,7 +255,7 @@ app.whenReady().then(async () => {
   await wait(120);
   const productSupplierList = path.join(output, 'product-suppliers.png');
   fs.writeFileSync(productSupplierList, (await win.webContents.capturePage()).toPNG());
-  process.stdout.write(JSON.stringify({ ...metrics, wideRegistry, liveCalculation, nameMatch, directProductAssociation, searchKeepsFocus, currencyPickerLayout, currencyPickerClosing, deleteDialogOpening, deleteDialogClosing, savedDelete, inventorySearch, semanticInventorySearch, stockSheetPageOne, stockSheetPageTwo, confirmedDocuments, documentDownloads, confirmedCorrection, correctionTyping, productSearch, productSuppliers, errors, screenshots:{ registry, registryWide, editor, currencyPicker, editorLines, editorReview, deleteDialog, inventory, stockSheet, confirmedNirDocuments, productsSearch, productSupplierList } }, null, 2));
+  process.stdout.write(JSON.stringify({ ...metrics, wideRegistry, liveCalculation, nameMatch, directProductAssociation, searchKeepsFocus, currencyPickerLayout, currencyPickerClosing, deleteDialogOpening, deleteDialogClosing, savedDelete, inventorySearch, semanticInventorySearch, stockSheetPageOne, stockSheetPageTwo, confirmedDocuments, documentDownloads, confirmedCorrection, correctionTyping, productKeyboardRecovery, productSearch, productSuppliers, errors, screenshots:{ registry, registryWide, editor, currencyPicker, editorLines, editorReview, deleteDialog, inventory, stockSheet, confirmedNirDocuments, productsSearch, productSupplierList } }, null, 2));
   await win.destroy();
   app.quit();
 }).catch(error => { console.error(error); app.exit(1); });

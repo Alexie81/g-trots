@@ -829,6 +829,7 @@
     $('shop-products-content').querySelectorAll('[data-product-delete]').forEach(button => button.addEventListener('click', () => deleteProduct(button.dataset.productDelete)));
     $('shop-products-content').querySelectorAll('[data-product-open]').forEach(row => row.addEventListener('click', event => { if (!event.target.closest('button')) openProductDetail(row.dataset.productOpen); }));
     const productSearch = $('shop-products-search');
+    wireKeyboardInputRecovery(productSearch);
     if (productSearch && !productSearch.dataset.searchBound) productSearch.addEventListener('input', event => {
       const input = event.currentTarget;
       state.productQuery = input.value;
@@ -2507,8 +2508,9 @@
     };
   }
 
-  function wireNirKeyboardRecovery(control) {
-    if (!control || control.disabled || control.readOnly) return;
+  function wireKeyboardInputRecovery(control) {
+    if (!control || control.disabled || control.readOnly || control.dataset.keyboardRecoveryBound) return;
+    control.dataset.keyboardRecoveryBound = 'true';
     control.addEventListener('keydown', event => {
       if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.key.length !== 1) return;
       const inputType = String(control.type || '').toLowerCase();
@@ -2542,7 +2544,7 @@
     $('shop-nir-editor').querySelectorAll('[data-nir-attachment-download]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); void downloadNirAttachment(button.dataset.nirAttachmentDownload); }));
     $('shop-nir-download-all')?.addEventListener('click', () => void downloadAllNirAttachments());
     if (!editable) return;
-    $('shop-nir-editor').querySelectorAll('input:not(:disabled), textarea:not(:disabled)').forEach(wireNirKeyboardRecovery);
+    $('shop-nir-editor').querySelectorAll('input:not(:disabled), textarea:not(:disabled)').forEach(wireKeyboardInputRecovery);
     $('shop-nir-editor').querySelectorAll('.shop-nir-line').forEach((details, index) => {
       details.querySelector(':scope > summary')?.addEventListener('click', event => {
         event.preventDefault();
@@ -2850,6 +2852,7 @@
   async function selectNirProduct(product) {
     const document = state.nirEditor; const line = document?.lines?.[state.nirProductLineIndex]; if (!product || !line) return;
     const reference = product.supplier_reference || null;
+    const existingReferenceId = line.supplier_product_reference_id || null;
     const currentCode = String(line.supplier_product_code || '').trim();
     const currentName = String(line.supplier_product_name || '').trim();
     const currentEan = String(line.supplier_ean || '').trim();
@@ -2858,7 +2861,7 @@
       product_id: product.id,
       product_name: product.name,
       product_image_url: product.images?.[0]?.url || product.images?.[0]?.preview || '',
-      supplier_product_reference_id: canReuseReference ? reference.id : null,
+      supplier_product_reference_id: canReuseReference ? reference.id : existingReferenceId,
       supplier_product_code: currentCode || (canReuseReference ? reference.supplier_product_code_original || '' : ''),
       supplier_product_name: currentName || (canReuseReference ? reference.supplier_product_name || product.name : product.name),
       supplier_ean: currentEan || (canReuseReference ? reference.supplier_ean || '' : ''),

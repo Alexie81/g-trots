@@ -31,8 +31,8 @@ app.whenReady().then(async () => {
     ];
     const stockMovements = Array.from({ length:8 }, (_, index) => ({ id:'stock-movement-' + index, product_id:'stock-1', product_name:'Cască FRV Street Panther', nir_document_id:'stock-nir-' + (index + 1), movement_type:'NIR_IN', quantity_delta:index + 1, quantity_after:20 + index, accounting_quantity_delta:String(index + 1), accounting_quantity_after:String(20 + index), inventory_unit_cost_ron:String(80 + index), inventory_cost_total_ron:String((80 + index) * (index + 1)), note:'Recepție NIR-2026-0000' + (index + 1), created_at:'2026-08-' + String(20 + index).padStart(2, '0') + 'T14:3' + index + ':00' })).concat(Array.from({ length:4 }, (_, index) => ({ id:'stock-adjustment-' + index, product_id:'stock-1', product_name:'Cască FRV Street Panther', nir_document_id:null, movement_type:index % 2 ? 'SALE_OUT' : 'MANUAL_ADJUSTMENT', quantity_delta:index % 2 ? -1 : 2, quantity_after:30 - index, accounting_quantity_delta:String(index % 2 ? -1 : 2), accounting_quantity_after:String(30 - index), note:index % 2 ? 'Ieșire test' : 'Corecție inventar', created_at:'2026-08-29T16:0' + index + ':00' })));
     const blankLine = { id:'line-local', product_id:null, product_name:'', supplier_product_reference_id:null, supplier_product_code:'CASCA-FRV-02', supplier_product_name:'Cască FRV Street Panther negru mat', supplier_ean:'', purchase_unit:'buc', stock_unit:'buc', invoiced_quantity:'2', received_quantity:'2', accepted_quantity:'2', rejected_quantity:'0', conversion_factor:'1', unit_price:'420', discount_percent:'0', vat_rate:'21', allocated_cost_ron:'0', is_stock_item:true, resolution_status:'unmatched', line_total_ron:'1016.40', inventory_unit_cost_ron:'420' };
-    const qaDocument = { id:'local-nir-test', temporary_number:'NIR nesalvat', nir_number:null, status:'draft', supplier_id:supplier.id, supplier_name:supplier.name, warehouse_id:warehouse.id, supplier_invoice_series:'FT', supplier_invoice_number:'1028', supplier_invoice_date:'2026-08-29', nir_date:'2026-08-29', reception_date:'2026-08-29', currency:'EUR', exchange_rate:'5.07000000', exchange_rate_date:'2026-08-29', notes:'', row_version:0, subtotal_ron:'0', vat_total_ron:'0', grand_total_ron:'0', inventory_cost_total_ron:'0', lines:[blankLine], attachments:[], permissions:['NIR_CREATE','NIR_EDIT_DRAFT','NIR_CONFIRM','NIR_VIEW_COSTS','NIR_EXPORT','SUPPLIER_CREATE'] };
-    window.__nirQaCalls = { create:0, update:0, delete:0, reopen:0, deletedId:null, openedNirId:null, downloadOne:0, downloadAll:0 };
+    const qaDocument = { id:'local-nir-test', temporary_number:'NIR nesalvat', nir_number:null, status:'draft', supplier_id:supplier.id, supplier_name:supplier.name, warehouse_id:warehouse.id, supplier_invoice_series:'FT', supplier_invoice_number:'1028', supplier_invoice_date:'2026-08-29', nir_date:'2026-08-29', reception_date:'2026-08-29', currency:'EUR', exchange_rate:'5.07000000', exchange_rate_date:'2026-08-29', notes:'', row_version:0, subtotal_ron:'0', vat_total_ron:'0', grand_total_ron:'0', inventory_cost_total_ron:'0', lines:[blankLine], attachments:[], permissions:['NIR_CREATE','NIR_EDIT_DRAFT','NIR_CONFIRM','NIR_REVERSE','NIR_VIEW_COSTS','NIR_EXPORT','SUPPLIER_CREATE'] };
+    window.__nirQaCalls = { create:0, update:0, delete:0, reopen:0, reverse:0, reverseReason:null, deletedId:null, openedNirId:null, downloadOne:0, downloadAll:0 };
     window.SHOP_API = {
       getNirPermissions: async () => ({ permissions:qaDocument.permissions }),
       getBnrExchangeRate: async (currency, date) => ({ currency, rate:currency === 'EUR' ? '5.07000000' : '1.00000000', date:date || '2026-08-29', requested_date:date || '2026-08-29', source:'BNR' }),
@@ -50,6 +50,7 @@ app.whenReady().then(async () => {
       validateNir: async () => ({ valid:true, errors:[], warnings:[] }),
       confirmNir: async () => ({ ...qaDocument, id:'nir-saved', status:'confirmed', nir_number:'NIR-2026-000022' }),
       reopenNir: async (id, rowVersion) => { window.__nirQaCalls.reopen += 1; return { ...qaDocument, id, status:'draft', nir_number:'NIR-2026-000099', row_version:Number(rowVersion || 0) + 1, attachments:[{ id:'attachment-1', original_name:'factura-furnizor.pdf', mime_type:'application/pdf', extension:'pdf', file_size:409600, sha256:'qa1', extraction_status:'extracted', extraction_message:null, created_at:'2026-08-29' }] }; },
+      reverseNir: async (id, rowVersion, reason) => { window.__nirQaCalls.reverse += 1; window.__nirQaCalls.reverseReason = reason; return { original:{ ...qaDocument, id, status:'reversed', nir_number:'NIR-2026-000099', row_version:Number(rowVersion || 0) + 1 }, reversal:{ ...qaDocument, id:'reversal-1', status:'confirmed', nir_number:'REV-2026-000100' } }; },
       getNirFifoLayers: async () => [], getNirMovements: async () => [],
       downloadNirAttachment: async () => { window.__nirQaCalls.downloadOne += 1; return { file_name:'factura-furnizor.pdf', mime_type:'application/pdf', content_base64:'UUE=' }; },
       downloadAllNirAttachments: async () => { window.__nirQaCalls.downloadAll += 1; return { file_name:'NIR-documente.zip', mime_type:'application/zip', content_base64:'UUE=' }; },
@@ -220,6 +221,25 @@ app.whenReady().then(async () => {
   await win.webContents.executeJavaScript(`document.querySelector('[data-nir-attachment-download]').click(); document.getElementById('shop-nir-download-all').click()`);
   await wait(120);
   const documentDownloads = await win.webContents.executeJavaScript(`({ one:window.__nirQaCalls.downloadOne, all:window.__nirQaCalls.downloadAll })`);
+  const reversalFlow = await win.webContents.executeJavaScript(`(async () => {
+    const trigger=document.getElementById('shop-nir-reverse-trigger');
+    const triggerVisible=!trigger.hidden;
+    trigger.click();
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    const dialog=document.getElementById('shop-nir-reverse-dialog');
+    const reason=document.getElementById('shop-nir-reverse-reason');
+    document.getElementById('shop-nir-reverse-confirm').click();
+    const emptyBlocked=window.__nirQaCalls.reverse===0 && reason.classList.contains('invalid') && !document.getElementById('shop-nir-reverse-error').hidden;
+    reason.value='Recepție introdusă din greșeală'; reason.dispatchEvent(new Event('input',{bubbles:true}));
+    document.getElementById('shop-nir-reverse-confirm').click();
+    await new Promise(resolve=>setTimeout(resolve,180));
+    return { triggerVisible, dialogOpened:dialog.classList.contains('visible') || dialog.hidden === false, emptyBlocked, calls:window.__nirQaCalls.reverse, reason:window.__nirQaCalls.reverseReason, status:document.getElementById('shop-nir-status')?.textContent, dialogClosed:!dialog.classList.contains('visible') };
+  })()`);
+  if (!reversalFlow.triggerVisible || !reversalFlow.emptyBlocked || reversalFlow.calls !== 1 || reversalFlow.status !== 'REVERSAT' || !reversalFlow.dialogClosed) throw new Error('Fluxul personalizat de reversare NIR nu funcționează complet.');
+  await win.webContents.executeJavaScript(`(() => { document.querySelector('[data-commerce-close="shop-nir-modal"]').click(); window.switchTab('shop-nirs'); })()`);
+  await wait(220);
+  await win.webContents.executeJavaScript(`document.querySelector('[data-nir-open="nir-2"]').click()`);
+  await wait(260);
   const confirmedCorrection = await win.webContents.executeJavaScript(`(async () => { const button=document.getElementById('shop-nir-correct'); const visible=Boolean(button && !button.hidden); const beforeLabel=button?.textContent.trim(); window.__nirQaConfirmCalls=0; window.confirm=()=>{ window.__nirQaConfirmCalls += 1; return true; }; const started=performance.now(); button?.click(); await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))); return { visible, beforeLabel, afterLabel:button?.textContent.trim(), sameButton:button === document.getElementById('shop-nir-correct'), calls:window.__nirQaCalls.reopen, status:document.getElementById('shop-nir-status')?.textContent, sameNumber:document.getElementById('shop-nir-title')?.textContent === 'NIR-2026-000099', supplierEditable:!document.querySelector('[data-nir-field="supplier_id"]')?.disabled, exportsHidden:document.getElementById('shop-nir-export-pdf')?.hidden && document.getElementById('shop-nir-export-xlsx')?.hidden, regularActionsHidden:document.getElementById('shop-nir-save')?.hidden && document.getElementById('shop-nir-confirm')?.hidden, focusedField:document.activeElement?.dataset?.nirField || '', activationMs:Math.round((performance.now()-started)*10)/10, nativeConfirmCalls:window.__nirQaConfirmCalls }; })()`);
   if (confirmedCorrection.focusedField !== 'supplier_invoice_series' || confirmedCorrection.nativeConfirmCalls !== 0) throw new Error('Editarea NIR nu activeaza imediat primul camp.');
   const correctionTypingBefore = await win.webContents.executeJavaScript(`(() => {
@@ -255,7 +275,7 @@ app.whenReady().then(async () => {
   await wait(120);
   const productSupplierList = path.join(output, 'product-suppliers.png');
   fs.writeFileSync(productSupplierList, (await win.webContents.capturePage()).toPNG());
-  process.stdout.write(JSON.stringify({ ...metrics, wideRegistry, liveCalculation, nameMatch, directProductAssociation, searchKeepsFocus, currencyPickerLayout, currencyPickerClosing, deleteDialogOpening, deleteDialogClosing, savedDelete, inventorySearch, semanticInventorySearch, stockSheetPageOne, stockSheetPageTwo, confirmedDocuments, documentDownloads, confirmedCorrection, correctionTyping, productKeyboardRecovery, productSearch, productSuppliers, errors, screenshots:{ registry, registryWide, editor, currencyPicker, editorLines, editorReview, deleteDialog, inventory, stockSheet, confirmedNirDocuments, productsSearch, productSupplierList } }, null, 2));
+  process.stdout.write(JSON.stringify({ ...metrics, wideRegistry, liveCalculation, nameMatch, directProductAssociation, searchKeepsFocus, currencyPickerLayout, currencyPickerClosing, deleteDialogOpening, deleteDialogClosing, savedDelete, inventorySearch, semanticInventorySearch, stockSheetPageOne, stockSheetPageTwo, confirmedDocuments, documentDownloads, reversalFlow, confirmedCorrection, correctionTyping, productKeyboardRecovery, productSearch, productSuppliers, errors, screenshots:{ registry, registryWide, editor, currencyPicker, editorLines, editorReview, deleteDialog, inventory, stockSheet, confirmedNirDocuments, productsSearch, productSupplierList } }, null, 2));
   await win.destroy();
   app.quit();
 }).catch(error => { console.error(error); app.exit(1); });

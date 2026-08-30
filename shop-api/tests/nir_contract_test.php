@@ -65,5 +65,22 @@ if (!str_contains((string)$mobile, 'existingReferenceId') || !str_contains((stri
     fwrite(STDERR, "FAIL reasocierea existentă nu este păstrată în UI mobil+desktop\n");
     $failed++;
 }
+$reversalStart = strpos((string)$service, 'function shopNirReverse');
+$reversalEnd = strpos((string)$service, 'function shopNirProductReferences');
+$reversalContract = $reversalStart !== false && $reversalEnd !== false
+    ? substr((string)$service, $reversalStart, $reversalEnd - $reversalStart)
+    : '';
+foreach (['NIR_REVERSAL', 'reversal_of_id', 'shop_inventory_layer_consumptions', 'cost_price', 'NirReversed'] as $needle) {
+    if (!str_contains($reversalContract, $needle)) {
+        fwrite(STDERR, "FAIL contract reversare server: {$needle}\n");
+        $failed++;
+    }
+}
+foreach (['reverseNir', 'NIR_REVERSE', 'reversării'] as $needle) {
+    if (!str_contains((string)$mobile, $needle) || !str_contains((string)$desktop, $needle)) {
+        fwrite(STDERR, "FAIL contract reversare mobil+desktop: {$needle}\n");
+        $failed++;
+    }
+}
 fwrite(STDOUT, 'NIR contract: ' . ($failed ? "{$failed} verificări eșuate" : 'toate verificările au trecut') . ".\n");
 exit($failed === 0 ? 0 : 1);

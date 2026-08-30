@@ -28,7 +28,7 @@ function shopNirPermissions(array $user): array {
     ];
     if ($role === 'admin') return $all;
     if ($role === 'manager') {
-        return array_values(array_diff($all, ['NIR_REVERSE', 'FIFO_OPENING_BALANCE_MANAGE']));
+        return array_values(array_diff($all, ['FIFO_OPENING_BALANCE_MANAGE']));
     }
     return ['NIR_VIEW'];
 }
@@ -1438,10 +1438,14 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
         $layerStmt = $db->prepare('SELECT * FROM shop_inventory_cost_layers WHERE nir_document_id = ? ORDER BY created_at FOR UPDATE');
         $layerStmt->execute([$id]);
         $layers = $layerStmt->fetchAll();
-        if (!$layers) throw new ShopNirHttpException('NIR-ul nu are loturi FIFO care pot fi reversate.', 409);
+        $consumptionStmt = $db->prepare('SELECT COUNT(*) FROM shop_inventory_layer_consumptions WHERE inventory_cost_layer_id = ? AND reversed_at IS NULL');
         foreach ($layers as $layer) {
+            $consumptionStmt->execute([(string)$layer['id']]);
             if (shopNirDecimalToScaled($layer['remaining_quantity'], 4) !== shopNirDecimalToScaled($layer['original_quantity'], 4)) {
-                throw new ShopNirHttpException('O parte din acest lot a fost deja consumată. Este necesar un document de corecție.', 409, ['layer_id' => $layer['id']]);
+                throw new ShopNirHttpException('O parte din marfa acestui NIR a fost deja consumată. Anulează mai întâi documentele de ieșire legate, apoi încearcă din nou.', 409, ['layer_id' => $layer['id']]);
+            }
+            if ((int)$consumptionStmt->fetchColumn() > 0) {
+                throw new ShopNirHttpException('Acest NIR este folosit de un document de ieșire. Anulează mai întâi ieșirea, apoi reversează NIR-ul.', 409, ['layer_id' => $layer['id']]);
             }
         }
 
@@ -1469,16 +1473,28 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
         $lineStmt = $db->prepare('SELECT * FROM shop_nir_lines WHERE nir_document_id = ? ORDER BY line_number');
         $lineStmt->execute([$id]);
         $originalLines = $lineStmt->fetchAll();
+        if (!$originalLines) throw new ShopNirHttpException('NIR-ul nu are poziții care pot fi reversate.', 409);
         $lineById = [];
         foreach ($originalLines as $line) $lineById[(string)$line['id']] = $line;
         $insertReverseLine = $db->prepare(
             'INSERT INTO shop_nir_lines
              (id, nir_document_id, line_number, product_id, supplier_product_reference_id, supplier_product_code, supplier_product_name,
-              supplier_ean, purchase_unit, stock_unit, invoiced_quantity, accepted_quantity, rejected_quantity, conversion_factor,
+              supplier_ean, purchase_unit, stock_unit, invoiced_quantity, received_quantity, accepted_quantity, rejected_quantity, conversion_factor,
               stock_quantity, unit_price, discount_percent, vat_rate, line_net, line_vat, line_total, line_net_ron, line_vat_ron,
-              line_total_ron, allocated_cost_ron, inventory_unit_cost_ron, inventory_cost_total_ron, resolution_status, mismatch_reason)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "reversal", ?)'
+              line_total_ron, allocated_cost_ron, inventory_unit_cost_ron, inventory_cost_total_ron, resolution_status, is_stock_item, mismatch_reason)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "reversal", ?, ?)'
         );
+        $negative = static fn($value, int $scale): string => shopNirScaledToDecimal(-shopNirDecimalToScaled($value, $scale), $scale);
+        $insertReversalLine = static function (array $line, string $reverseLineId) use ($insertReverseLine, $reversalId, $negative, $reason): void {
+            $insertReverseLine->execute([
+                $reverseLineId, $reversalId, (int)$line['line_number'], $line['product_id'], $line['supplier_product_reference_id'], $line['supplier_product_code'], $line['supplier_product_name'],
+                $line['supplier_ean'], $line['purchase_unit'], $line['stock_unit'], $negative($line['invoiced_quantity'], 4), $negative($line['received_quantity'] ?? $line['accepted_quantity'], 4), $negative($line['accepted_quantity'], 4),
+                $line['conversion_factor'], $negative($line['stock_quantity'], 4), $line['unit_price'], $line['discount_percent'], $line['vat_rate'],
+                $negative($line['line_net'], 6), $negative($line['line_vat'], 6), $negative($line['line_total'], 6), $negative($line['line_net_ron'], 2),
+                $negative($line['line_vat_ron'], 2), $negative($line['line_total_ron'], 2), $negative($line['allocated_cost_ron'], 2),
+                $line['inventory_unit_cost_ron'], $negative($line['inventory_cost_total_ron'], 2), (int)($line['is_stock_item'] ?? 1), $reason,
+            ]);
+        };
         $productLock = $db->prepare('SELECT accounting_stock_quantity FROM shop_products WHERE id = ? FOR UPDATE');
         $updateProduct = $db->prepare('UPDATE shop_products SET accounting_stock_quantity = accounting_stock_quantity - ? WHERE id = ? AND accounting_stock_quantity >= ?');
         $readStock = $db->prepare('SELECT accounting_stock_quantity FROM shop_products WHERE id = ?');
@@ -1490,20 +1506,16 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
              VALUES (?, ?, ?, ?, ?, ?, "NIR_REVERSAL", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $originalMovement = $db->prepare('SELECT id FROM shop_inventory_movements WHERE inventory_cost_layer_id = ? AND movement_type = "NIR_IN" LIMIT 1');
-        foreach ($layers as $index => $layer) {
+        $affectedProducts = [];
+        $reversedLineIds = [];
+        foreach ($layers as $layer) {
             $line = $lineById[(string)$layer['nir_line_id']] ?? null;
             if (!$line) throw new RuntimeException('Linia sursă a lotului nu mai există.');
             $reverseLineId = uuidV4();
-            $negative = static fn($value, int $scale): string => shopNirScaledToDecimal(-shopNirDecimalToScaled($value, $scale), $scale);
-            $insertReverseLine->execute([
-                $reverseLineId, $reversalId, $index + 1, $line['product_id'], $line['supplier_product_reference_id'], $line['supplier_product_code'], $line['supplier_product_name'],
-                $line['supplier_ean'], $line['purchase_unit'], $line['stock_unit'], $negative($line['invoiced_quantity'], 4), $negative($line['accepted_quantity'], 4),
-                $line['conversion_factor'], $negative($line['stock_quantity'], 4), $line['unit_price'], $line['discount_percent'], $line['vat_rate'],
-                $negative($line['line_net'], 6), $negative($line['line_vat'], 6), $negative($line['line_total'], 6), $negative($line['line_net_ron'], 2),
-                $negative($line['line_vat_ron'], 2), $negative($line['line_total_ron'], 2), $negative($line['allocated_cost_ron'], 2),
-                $line['inventory_unit_cost_ron'], $negative($line['inventory_cost_total_ron'], 2), $reason,
-            ]);
+            $insertReversalLine($line, $reverseLineId);
+            $reversedLineIds[(string)$line['id']] = true;
             $productId = (string)$layer['product_id'];
+            $affectedProducts[$productId] = true;
             $productLock->execute([$productId]);
             $productLock->fetch();
             $updateProduct->execute([$layer['original_quantity'], $productId, $layer['original_quantity']]);
@@ -1521,6 +1533,19 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
                 'Reversare ' . $reversalNumber . ': ' . $reason, $actor['name'],
             ]);
             $db->prepare('UPDATE shop_inventory_cost_layers SET remaining_quantity = 0, status = "reversed", is_reversed = 1, reversed_at = NOW(), row_version = row_version + 1 WHERE id = ?')->execute([(string)$layer['id']]);
+        }
+        foreach ($originalLines as $line) {
+            if (isset($reversedLineIds[(string)$line['id']])) continue;
+            if (!empty($line['is_stock_item'])) {
+                throw new ShopNirHttpException('O poziție de stoc nu mai are lotul FIFO asociat. Reversarea a fost oprită fără să modifice datele.', 409, ['nir_line_id' => $line['id']]);
+            }
+            $insertReversalLine($line, uuidV4());
+        }
+        $latestCost = $db->prepare('SELECT unit_cost_ron FROM shop_inventory_cost_layers WHERE product_id = ? AND is_reversed = 0 AND remaining_quantity > 0 ORDER BY reception_date DESC, confirmed_at DESC, created_at DESC LIMIT 1');
+        $updateCost = $db->prepare('UPDATE shop_products SET cost_price = ? WHERE id = ?');
+        foreach (array_keys($affectedProducts) as $productId) {
+            $latestCost->execute([$productId]);
+            $updateCost->execute([(string)($latestCost->fetchColumn() ?: '0'), $productId]);
         }
         $updateOriginal = $db->prepare('UPDATE shop_nir_documents SET status = "reversed", reversed_at = NOW(), reversed_by = ?, updated_by = ?, row_version = row_version + 1 WHERE id = ? AND row_version = ? AND status = "confirmed"');
         $updateOriginal->execute([$actor['name'], $actor['name'], $id, $expectedVersion]);

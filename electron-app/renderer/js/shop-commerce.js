@@ -2914,13 +2914,19 @@
   async function reopenNirForCorrection() {
     const document = state.nirEditor;
     if (!document || document.status !== 'confirmed') return;
-    const accepted = confirm(`Editezi ${document.nir_number || document.temporary_number}?\n\nPoți modifica orice câmp. NIR-ul rămâne confirmat și stocul nu se schimbă până când apeși „Corectează NIR”.`);
-    if (!accepted) return;
     state.nirCorrectionOriginal = JSON.parse(JSON.stringify(document));
     state.nirEditor = JSON.parse(JSON.stringify(document));
     state.nirPendingFiles = [];
     state.nirEditRevision = 0;
     renderNirEditor();
+    requestAnimationFrame(() => {
+      const firstField = $('shop-nir-editor')?.querySelector('[data-nir-field="supplier_invoice_series"]');
+      firstField?.focus({ preventScroll: true });
+      if (typeof firstField?.setSelectionRange === 'function') {
+        const end = firstField.value.length;
+        firstField.setSelectionRange(end, end);
+      }
+    });
     toast('Editarea este activă. NIR-ul rămâne confirmat până la aplicarea corectării.');
   }
 

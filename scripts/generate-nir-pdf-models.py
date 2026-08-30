@@ -175,12 +175,15 @@ def document_header(c: canvas.Canvas, title: str, subtitle: str, number: str, st
     c.setFillColor(SUBTLE)
     c.drawCentredString(center_x, PAGE_H - 58, "Document financiar-contabil generat electronic")
 
-    small_caps(c, "Document", PAGE_W - 192, PAGE_H - 28)
-    value(c, number, PAGE_W - 192, PAGE_H - 43, INK, 10.5, 105)
-    pill(c, PAGE_W - 90, PAGE_H - 53, status, status_soft, status_fill, 9, 22, status_fill)
+    right_x = PAGE_W - 190
+    right_edge = PAGE_W - 28
+    small_caps(c, "Document", right_x, PAGE_H - 28)
+    value(c, number, right_x, PAGE_H - 43, INK, 10.5, right_edge - right_x)
     c.setFillColor(SUBTLE)
-    c.setFont(FONT_BOLD, 6.2)
-    c.drawRightString(PAGE_W - 28, PAGE_H - 67, page_label)
+    c.setFont(FONT_BOLD, 5.5)
+    c.drawString(right_x, PAGE_H - 65, page_label)
+    status_width = pdfmetrics.stringWidth(status, FONT_BOLD, 7.2) + 18
+    pill(c, right_edge - status_width, PAGE_H - 71, status, status_soft, status_fill, 9, 18, status_fill)
     c.setStrokeColor(LINE)
     c.setLineWidth(0.7)
     c.line(28, PAGE_H - 74, PAGE_W - 28, PAGE_H - 74)
@@ -281,7 +284,7 @@ def signature_card(c: canvas.Canvas, x: float, y: float, w: float, role: str, na
 
 
 def entry_page_one(c: canvas.Canvas) -> None:
-    number = "NIR-GT-2026-000154"
+    number = "NIR-2026-000154"
     document_header(c, "NOTĂ DE RECEPȚIE ȘI CONSTATARE DE DIFERENȚE", "NIR - Cod 14-3-1A",
                     number, "FINALIZAT", GREEN, GREEN_SOFT, "MODEL DE PREZENTARE")
 
@@ -295,32 +298,32 @@ def entry_page_one(c: canvas.Canvas) -> None:
     info_card(c, margin + card_w + gap, y, card_w, 104, "02 / Furnizor", "KIDOTOYS SRL",
               [("CUI / CIF", "RO42489094"), ("Țară", "România"),
                ("Adresă", "București, România"), ("Contact", "Date furnizor validate")], ORANGE)
-    info_card(c, margin + (card_w + gap) * 2, y, card_w, 104, "03 / Document sursă", "Factura SR TESTR001",
-              [("Data facturii", "29.08.2026"), ("Fișier", "FS-20260623-0001.pdf"),
+    info_card(c, margin + (card_w + gap) * 2, y, card_w, 104, "03 / Document sursă", "Factura KID 190",
+              [("Data facturii", "29.08.2026"), ("Fișier", "factura-kid-190.pdf"),
                ("Monedă", "RON"), ("Curs", "1,00000000 RON")], BLUE)
 
     c.setFillColor(AMBER_SOFT)
     c.roundRect(margin, 370, PAGE_W - margin * 2, 18, 7, fill=1, stroke=0)
     c.setFillColor(AMBER)
     c.setFont(FONT_BOLD, 7)
-    c.drawString(margin + 10, 376, "REZULTAT RECEPȚIE: CU DIFERENȚE CONTROLATE")
+    c.drawString(margin + 10, 376, "REZULTAT RECEPȚIE: MARFĂ VERIFICATĂ ȘI ACCEPTATĂ")
     c.setFillColor(MUTED)
     c.setFont(FONT_REGULAR, 6.4)
-    c.drawRightString(PAGE_W - margin - 10, 376, "4 poziții  |  8 buc. facturate  |  7 buc. acceptate  |  1 buc. în carantină")
+    c.drawRightString(PAGE_W - margin - 10, 376, "4 poziții  |  8 buc. facturate  |  8 buc. recepționate  |  8 buc. acceptate")
 
-    metric(c, margin, 309, 145, "Poziții", "4", "toate asociate", GREEN, GREEN_SOFT)
-    metric(c, margin + 153, 309, 145, "Cantitate primită", "8 buc.", "verificată fizic", BLUE, BLUE_SOFT)
-    metric(c, margin + 306, 309, 145, "Acceptat în gestiune", "7 buc.", "intrare efectivă", GREEN, GREEN_SOFT)
-    metric(c, margin + 459, 309, 145, "Respins / blocat", "1 buc.", "carantină C-02", AMBER, AMBER_SOFT)
-    metric(c, margin + 612, 309, PAGE_W - margin * 2 - 612, "Valoare intrare", "689,00 lei", "cost istoric", ORANGE_DARK, ORANGE_SOFT)
+    metric_w = (PAGE_W - margin * 2 - 30) / 4
+    metric(c, margin, 309, metric_w, "Poziții", "4", "toate asociate", GREEN, GREEN_SOFT)
+    metric(c, margin + metric_w + 10, 309, metric_w, "Cantitate primită", "8 buc.", "verificată fizic", BLUE, BLUE_SOFT)
+    metric(c, margin + (metric_w + 10) * 2, 309, metric_w, "Acceptat în gestiune", "8 buc.", "intrare efectivă", GREEN, GREEN_SOFT)
+    metric(c, margin + (metric_w + 10) * 3, 309, metric_w, "Valoare intrare", "987,00 lei", "cost istoric", ORANGE_DARK, ORANGE_SOFT)
 
-    headers = ["Nr.", "Produs furnizor / Produs G-Trots", "U.M.", "Doc.", "Primit", "Acceptat", "Respins / Dif.", "Preț net", "Cost unitar", "Valoare intrare", "TVA"]
-    widths = [28, 254, 45, 46, 46, 49, 65, 63, 67, 74, 47]
+    headers = ["Nr.", "Produs furnizor / Produs G-Trots", "U.M.", "Doc.", "Primit", "Acceptat", "Preț net", "Cost unitar", "Valoare intrare", "TVA"]
+    widths = [28, 299, 45, 46, 46, 54, 68, 72, 79, 47]
     rows = [
-        ["01", "Cauciuc offroad tubeless 10x2.75-6.5 | Cod furnizor SE-CMM087 | SKU G-Trots SE-CMM087", "buc.", "1", "1", "1", "0", "30,00 RON", "30,00 lei", "30,00 lei", "19%"],
-        ["02", "Plăcuțe frână model X | Cod furnizor BF-4587 | SKU G-Trots GT-FR-00218", "set / buc.", "4", "4", "4", "0", "42,50 RON", "43,25 lei", "173,00 lei", "19%"],
-        ["03", "Controller KuKirin G4, 48 V, 25 A | Cod furnizor CTR-G4-48 | SKU G-Trots GT-CTR-G4", "buc.", "2", "2", "1", "1 / -1", "295,00 RON", "298,00 lei", "298,00 lei", "19%"],
-        ["04", "Display LCD KuKirin G2 | Cod furnizor DISP-G2-V3 | SKU G-Trots GT-DSP-G2-V3", "buc.", "1", "1", "1", "0", "185,00 RON", "188,00 lei", "188,00 lei", "19%"],
+        ["01", "Cauciuc offroad tubeless 10x2.75-6.5 | Cod furnizor SE-CMM087 | SKU G-Trots SE-CMM087", "buc.", "1", "1", "1", "30,00 RON", "30,00 lei", "30,00 lei", "19%"],
+        ["02", "Plăcuțe frână model X | Cod furnizor BF-4587 | SKU G-Trots GT-FR-00218", "set / buc.", "4", "4", "4", "42,50 RON", "43,25 lei", "173,00 lei", "19%"],
+        ["03", "Controller KuKirin G4, 48 V, 25 A | Cod furnizor CTR-G4-48 | SKU G-Trots GT-CTR-G4", "buc.", "2", "2", "2", "295,00 RON", "298,00 lei", "596,00 lei", "19%"],
+        ["04", "Display LCD KuKirin G2 | Cod furnizor DISP-G2-V3 | SKU G-Trots GT-DSP-G2-V3", "buc.", "1", "1", "1", "185,00 RON", "188,00 lei", "188,00 lei", "19%"],
     ]
     table_bottom = draw_table(c, margin, 296, widths, headers, rows, 34, ORANGE)
 
@@ -330,25 +333,25 @@ def entry_page_one(c: canvas.Canvas) -> None:
     c.setFillColor(MUTED)
     c.setFont(FONT_REGULAR, 6.6)
     c.drawString(margin + 14, totals_y + 21, "Valoare netă factură 975,00 lei   |   TVA 185,25 lei   |   Total furnizor 1.160,25 lei")
-    c.drawString(margin + 14, totals_y + 10, "Costuri directe alocate 6,00 lei   |   Metodă: repartizare manuală verificată")
+    c.drawString(margin + 14, totals_y + 10, "Costuri directe alocate 12,00 lei   |   Metodă: repartizare manuală verificată")
     rounded(c, margin + 480, totals_y, PAGE_W - margin * 2 - 480, 53, 11, ORANGE_SOFT, ORANGE)
     small_caps(c, "Valoare totală de intrare", margin + 494, totals_y + 36, ORANGE_DARK)
     c.setFillColor(ORANGE_DARK)
     c.setFont(FONT_BOLD, 17)
-    c.drawString(margin + 494, totals_y + 14, "689,00 lei")
+    c.drawString(margin + 494, totals_y + 14, "987,00 lei")
 
     footer(c, number, 1, 2, "FINALIZAT", "996c4f10-ec2e-4630-9de7-131a7b4ce803", GREEN, "30.08.2026, 13:40")
     c.showPage()
 
 
 def entry_page_two(c: canvas.Canvas) -> None:
-    number = "NIR-GT-2026-000154"
-    document_header(c, "CONSTATĂRI, DIFERENȚE ȘI VALIDARE", "Anexă la NIR - Cod 14-3-1A",
+    number = "NIR-2026-000154"
+    document_header(c, "VERIFICĂRI ȘI VALIDARE", "Anexă la NIR - Cod 14-3-1A",
                     number, "FINALIZAT", GREEN, GREEN_SOFT, "MODEL DE PREZENTARE")
 
     rounded(c, 28, 437, PAGE_W - 56, 62, 12, AMBER_SOFT, HexColor("#E8C88E"))
-    pill(c, 42, 466, "RECEPȚIE CU DIFERENȚĂ", AMBER, white, 10, 20, AMBER)
-    draw_wrapped(c, "În urma verificării cantitative și calitative, trei poziții au fost recepționate integral. O unitate din poziția 03 a fost izolată în carantină și nu a fost introdusă în stocul disponibil.",
+    pill(c, 42, 466, "RECEPȚIE VALIDATĂ", GREEN, white, 10, 20, GREEN)
+    draw_wrapped(c, "Toate pozițiile au fost verificate cantitativ și calitativ, asociate produselor interne și acceptate în gestiune conform documentului furnizorului.",
                  42, 453, 730, FONT_BOLD, 8.4, INK, 10.5, 2)
 
     rounded(c, 28, 345, 355, 80, 11, white, LINE)
@@ -369,32 +372,32 @@ def entry_page_two(c: canvas.Canvas) -> None:
         c.setFont(FONT_BOLD, 6.7)
         c.drawString(x + 16, y, check)
 
-    rounded(c, 393, 345, PAGE_W - 421, 80, 11, RED_SOFT, HexColor("#E9BFC4"))
-    small_caps(c, "Produs blocat / carantină", 407, 407, RED)
+    rounded(c, 393, 345, PAGE_W - 421, 80, 11, GREEN_SOFT, HexColor("#B9E1D0"))
+    small_caps(c, "Concluzia recepției", 407, 407, GREEN)
     value(c, "Controller KuKirin G4, 48 V, 25 A", 407, 389, INK, 9.2, 380)
     c.setFillColor(MUTED)
     c.setFont(FONT_REGULAR, 6.7)
-    c.drawString(407, 373, "Cantitate: 1 buc.  |  Motiv: conector deteriorat  |  Locație: C-02")
-    c.drawString(407, 360, "Măsură: retur furnizor și solicitare document de corecție")
+    c.drawString(407, 373, "Cantitate: 2 buc.  |  Stare: conformă  |  Locație: Gestiune principală")
+    c.drawString(407, 360, "Măsură: intrare în stoc la costul contabil calculat")
 
-    small_caps(c, "Constatarea diferențelor", 28, 328, AMBER)
-    headers = ["Poz.", "Produs / SKU", "Tip diferență", "Document", "Primit", "Acceptat", "Respins", "Valoare", "Măsură luată"]
-    widths = [39, 205, 100, 57, 55, 59, 56, 72, 142]
-    rows = [["03", "Controller KuKirin G4 | GT-CTR-G4", "Deteriorare fizică", "2 buc.", "2 buc.", "1 buc.", "1 buc.", "298,00 lei", "Carantină C-02; retur și solicitare storno"]]
+    small_caps(c, "Centralizarea verificării", 28, 328, GREEN)
+    headers = ["Poz.", "Produs / SKU", "Verificare", "Document", "Primit", "Acceptat", "Valoare", "Măsură luată"]
+    widths = [39, 235, 110, 65, 65, 65, 80, 125]
+    rows = [["03", "Controller KuKirin G4 | GT-CTR-G4", "Cantitativ și calitativ", "2 buc.", "2 buc.", "2 buc.", "596,00 lei", "Intrare în gestiune"]]
     draw_table(c, 28, 315, widths, headers, rows, 42, AMBER)
 
     rounded(c, 28, 196, 385, 60, 11, SURFACE, LINE)
     small_caps(c, "Documente asociate", 42, 238, BLUE)
     c.setFillColor(INK)
     c.setFont(FONT_BOLD, 7.2)
-    c.drawString(42, 221, "01  Factura SR TESTR001  |  FS-20260623-0001.pdf")
+    c.drawString(42, 221, "01  Factura KID 190  |  factura-kid-190.pdf")
     c.drawString(42, 207, "02  Fotografie poziția 03  |  controller-g4-conector.jpg")
     rounded(c, 423, 196, PAGE_W - 451, 60, 11, BLUE_SOFT, HexColor("#BFD9E8"))
     small_caps(c, "Cum se citește documentul", 437, 238, BLUE)
     c.setFillColor(MUTED)
     c.setFont(FONT_REGULAR, 6.3)
     c.drawString(437, 222, "DOC. = cantitatea furnizorului   |   PRIMIT = verificat fizic")
-    c.drawString(437, 209, "ACCEPTAT = intră în gestiune   |   RESPINS = nu intră în stoc")
+    c.drawString(437, 209, "ACCEPTAT = cantitatea care intră efectiv în gestiune")
 
     small_caps(c, "Persoane responsabile și audit", 28, 178, GREEN)
     sig_w = (PAGE_W - 56 - 20) / 3
@@ -414,45 +417,45 @@ def entry_page_two(c: canvas.Canvas) -> None:
 
 
 def reversal_page_one(c: canvas.Canvas) -> None:
-    number = "REV-GT-2026-000155"
-    document_header(c, "DOCUMENT DE REVERSARE A NOTEI DE RECEPȚIE", "NIR - Cod 14-3-1A",
-                    number, "REVERSARE", RED, RED_SOFT, "MODEL DE PREZENTARE", "REVERSARE")
+    number = "NIR-2026-000155"
+    document_header(c, "DOCUMENT DE STORNARE A NOTEI DE RECEPȚIE", "NIR - Cod 14-3-1A",
+                    number, "STORNAT", RED, RED_SOFT, "MODEL DE PREZENTARE", "STORNARE")
 
     rounded(c, 28, 431, PAGE_W - 56, 68, 12, RED_SOFT, HexColor("#E8BFC4"))
     pill(c, 42, 465, "LEGĂTURĂ OBLIGATORIE", RED, white, 10, 20, RED)
     c.setFillColor(INK)
     c.setFont(FONT_BOLD, 11)
-    c.drawString(42, 446, "Reversarea integrală a NIR-GT-2026-000154 din 30.08.2026")
+    c.drawString(42, 446, "Stornarea integrală a NIR-2026-000154 din 29.08.2026")
     c.setFillColor(MUTED)
     c.setFont(FONT_REGULAR, 6.7)
     c.drawRightString(PAGE_W - 42, 470, "Document original păstrat nemodificat în arhivă")
-    c.drawString(42, 434, "Motiv: produse returnate furnizorului  |  Solicitat și aprobat de Administrator  |  30.08.2026, 14:18")
+    c.drawString(42, 434, "Factura storno KID 191 din 30.08.2026  |  Referință: factura KID 190 din 29.08.2026  |  Motiv: retur furnizor")
 
     margin = 28
     gap = 10
     card_w = (PAGE_W - margin * 2 - gap * 2) / 3
-    info_card(c, margin, 318, card_w, 101, "01 / Document original", "NIR-GT-2026-000154",
-              [("Status original", "REVERSAT"), ("Data recepției", "29.08.2026, 15:42"),
-               ("Valoare intrare", "689,00 lei"), ("Versiune", "1")], RED)
+    info_card(c, margin, 318, card_w, 101, "01 / Document original", "NIR-2026-000154",
+              [("Status original", "CONFIRMAT"), ("Data recepției", "29.08.2026, 15:42"),
+               ("Valoare intrare", "987,00 lei"), ("Versiune", "1")], RED)
     info_card(c, margin + card_w + gap, 318, card_w, 101, "02 / Furnizor și factură", "KIDOTOYS SRL",
-              [("CUI / CIF", "RO42489094"), ("Factura", "SR TESTR001"),
-               ("Data facturii", "29.08.2026"), ("Monedă", "RON")], ORANGE)
-    info_card(c, margin + (card_w + gap) * 2, 318, card_w, 101, "03 / Reversare", "REV-GT-2026-000155",
-              [("Data", "30.08.2026, 14:18"), ("Tip", "Integrală"),
-               ("Aprobat de", "Administrator"), ("Status", "Finalizat")], RED)
+              [("CUI / CIF", "RO42489094"), ("Factura storno", "KID 191"),
+               ("Data facturii", "30.08.2026"), ("Referință", "KID 190 · 29.08.2026")], ORANGE)
+    info_card(c, margin + (card_w + gap) * 2, 318, card_w, 101, "03 / Stornare", "NIR-2026-000155",
+               [("Data", "30.08.2026, 14:18"), ("Tip", "Integrală"),
+                ("Aprobat de", "Administrator"), ("Status", "STORNAT")], RED)
 
-    metric(c, margin, 254, 145, "Poziții reversate", "4", "din NIR original", RED, RED_SOFT)
-    metric(c, margin + 153, 254, 145, "Cantitate reversată", "-7 buc.", "efect integral", RED, RED_SOFT)
-    metric(c, margin + 306, 254, 145, "Costuri anulate", "-6,00 lei", "direct atribuibile", AMBER, AMBER_SOFT)
+    metric(c, margin, 254, 145, "Poziții stornate", "4", "din NIR original", RED, RED_SOFT)
+    metric(c, margin + 153, 254, 145, "Cantitate stornată", "-8 buc.", "efect integral", RED, RED_SOFT)
+    metric(c, margin + 306, 254, 145, "Costuri anulate", "-12,00 lei", "direct atribuibile", AMBER, AMBER_SOFT)
     metric(c, margin + 459, 254, 145, "TVA aferent", "-185,25 lei", "conform facturii", RED_DARK, RED_SOFT)
-    metric(c, margin + 612, 254, PAGE_W - margin * 2 - 612, "Efect valoric", "-689,00 lei", "neutralizare", RED, RED_SOFT)
+    metric(c, margin + 612, 254, PAGE_W - margin * 2 - 612, "Efect valoric", "-987,00 lei", "neutralizare", RED, RED_SOFT)
 
-    headers = ["Poz. originală", "Produs furnizor / Produs G-Trots", "U.M.", "Acceptat inițial", "Reversat", "Cost unitar", "Valoare reversată", "TVA", "Motiv / observații"]
+    headers = ["Poz. originală", "Produs furnizor / Produs G-Trots", "U.M.", "Acceptat inițial", "Stornat", "Cost unitar", "Valoare stornată", "TVA", "Motiv / observații"]
     widths = [55, 265, 48, 74, 65, 75, 89, 48, 68]
     rows = [
         ["01", "Cauciuc offroad tubeless 10x2.75-6.5 | SE-CMM087", "buc.", "1", "-1", "30,00 lei", "-30,00 lei", "19%", "Retur"],
         ["02", "Plăcuțe frână model X | GT-FR-00218", "set / buc.", "4", "-4", "43,25 lei", "-173,00 lei", "19%", "Retur"],
-        ["03", "Controller KuKirin G4 | GT-CTR-G4", "buc.", "1", "-1", "298,00 lei", "-298,00 lei", "19%", "Retur"],
+        ["03", "Controller KuKirin G4 | GT-CTR-G4", "buc.", "2", "-2", "298,00 lei", "-596,00 lei", "19%", "Retur"],
         ["04", "Display LCD KuKirin G2 | GT-DSP-G2-V3", "buc.", "1", "-1", "188,00 lei", "-188,00 lei", "19%", "Retur"],
     ]
     draw_table(c, margin, 241, widths, headers, rows, 28, RED, {4, 6})
@@ -462,40 +465,40 @@ def reversal_page_one(c: canvas.Canvas) -> None:
     small_caps(c, "Document original", margin + 14, totals_y + 36, MUTED)
     c.setFillColor(INK)
     c.setFont(FONT_BOLD, 7.1)
-    c.drawString(margin + 14, totals_y + 20, "NIR-GT-2026-000154  |  Valoare intrare 689,00 lei  |  Status: REVERSAT")
+    c.drawString(margin + 14, totals_y + 20, "NIR-2026-000154  |  Valoare intrare 987,00 lei  |  Status: CONFIRMAT")
     c.setFillColor(MUTED)
     c.setFont(FONT_REGULAR, 6.1)
     c.drawString(margin + 14, totals_y + 9, "Acest document nu șterge și nu suprascrie documentul original.")
     rounded(c, margin + 480, totals_y, PAGE_W - margin * 2 - 480, 53, 11, RED_SOFT, RED)
-    small_caps(c, "Efectul total al reversării", margin + 494, totals_y + 36, RED)
+    small_caps(c, "Efectul total al stornării", margin + 494, totals_y + 36, RED)
     c.setFillColor(RED)
     c.setFont(FONT_BOLD, 17)
-    c.drawString(margin + 494, totals_y + 14, "-689,00 lei")
+    c.drawString(margin + 494, totals_y + 14, "-987,00 lei")
 
-    footer(c, number, 1, 2, "FINALIZAT - REVERSARE", "3a8a602d-a168-4d1b-a55a-b076bd771245", RED, "30.08.2026, 14:18")
+    footer(c, number, 1, 2, "FINALIZAT - STORNARE", "3a8a602d-a168-4d1b-a55a-b076bd771245", RED, "30.08.2026, 14:18")
     c.showPage()
 
 
 def reversal_page_two(c: canvas.Canvas) -> None:
-    number = "REV-GT-2026-000155"
-    document_header(c, "JUSTIFICARE, RESPONSABILITĂȚI ȘI AUDIT", "Anexă document reversare - Cod 14-3-1A",
-                    number, "REVERSARE", RED, RED_SOFT, "MODEL DE PREZENTARE", "REVERSARE")
+    number = "NIR-2026-000155"
+    document_header(c, "JUSTIFICARE, RESPONSABILITĂȚI ȘI AUDIT", "Anexă document stornare - Cod 14-3-1A",
+                    number, "STORNAT", RED, RED_SOFT, "MODEL DE PREZENTARE", "STORNARE")
 
     rounded(c, 28, 425, PAGE_W - 56, 74, 12, RED_SOFT, HexColor("#E7BBC1"))
-    small_caps(c, "Motivul reversării", 43, 480, RED)
+    small_caps(c, "Motivul stornării", 43, 480, RED)
     c.setFillColor(INK)
     c.setFont(FONT_BOLD, 11)
     c.drawString(43, 461, "Produsele recepționate au fost returnate integral furnizorului.")
-    draw_wrapped(c, "Reversarea neutralizează efectul recepției și păstrează legătura completă dintre documentul inițial și documentul corectiv. NIR-ul original rămâne arhivat, cu numărul și conținutul său istoric.",
+    draw_wrapped(c, "Stornarea neutralizează efectul recepției și păstrează legătura completă dintre documentul inițial și documentul corectiv. NIR-ul original rămâne arhivat, cu numărul și conținutul său istoric.",
                  43, 446, 740, FONT_REGULAR, 7.2, MUTED, 9.1, 2)
 
     small_caps(c, "Cronologia operațiunii", 28, 405, RED)
     timeline_y = 337
     steps = [
-        ("01", "NIR finalizat", "30.08.2026, 09:15", GREEN),
-        ("02", "Reversare solicitată", "30.08.2026, 14:12", AMBER),
+        ("01", "NIR confirmat", "30.08.2026, 09:15", GREEN),
+        ("02", "Stornare solicitată", "30.08.2026, 14:12", AMBER),
         ("03", "Verificare efectuată", "30.08.2026, 14:16", BLUE),
-        ("04", "Reversare aprobată", "30.08.2026, 14:18", RED),
+        ("04", "Stornare aprobată", "30.08.2026, 14:18", RED),
     ]
     step_w = (PAGE_W - 56 - 30) / 4
     for index, (nr, title, timestamp, color) in enumerate(steps):
@@ -518,10 +521,10 @@ def reversal_page_two(c: canvas.Canvas) -> None:
     rounded(c, 28, 244, 383, 98, 11, white, LINE)
     small_caps(c, "Documente justificative", 42, 322, BLUE)
     document_rows = [
-        ("01", "NIR-GT-2026-000154", "Document original"),
-        ("02", "Factura SR TESTR001", "Document furnizor"),
-        ("03", "Proces-verbal retur 2026-118", "Document corectiv"),
-        ("04", "Fotografii recepție", "2 fișiere asociate"),
+        ("01", "NIR-2026-000154", "Document original"),
+        ("02", "Factura KID 190 · 29.08.2026", "Factura originală"),
+        ("03", "Factura KID 191 · 30.08.2026", "Factura de storno"),
+        ("04", "Proces-verbal retur 2026-118", "Document justificativ"),
     ]
     for index, (nr, title, meta) in enumerate(document_rows):
         row_y = 300 - index * 18
@@ -539,10 +542,10 @@ def reversal_page_two(c: canvas.Canvas) -> None:
 
     rounded(c, 421, 244, PAGE_W - 449, 98, 11, SURFACE, LINE)
     small_caps(c, "Comparație documente", 435, 322, RED)
-    label_value(c, "Document original", "NIR-GT-2026-000154", 435, 302, 165)
-    label_value(c, "Status original", "REVERSAT", 620, 302, 150, RED)
-    label_value(c, "Document corectiv", "REV-GT-2026-000155", 435, 269, 165)
-    label_value(c, "Efect valoric", "-689,00 lei", 620, 269, 150, RED)
+    label_value(c, "Document original", "NIR-2026-000154", 435, 302, 165)
+    label_value(c, "Status original", "CONFIRMAT", 620, 302, 150, GREEN)
+    label_value(c, "Document corectiv", "NIR-2026-000155", 435, 269, 165)
+    label_value(c, "Efect valoric", "-987,00 lei", 620, 269, 150, RED)
 
     small_caps(c, "Persoane responsabile", 28, 226, RED)
     sig_w = (PAGE_W - 56 - 20) / 3
@@ -563,7 +566,7 @@ def reversal_page_two(c: canvas.Canvas) -> None:
     c.setFont(FONT_REGULAR, 6.1)
     c.drawString(42, 58, f"Jurnal audit: versiune 1  |  Hash model {hash_value[:28]}  |  Sursă: G-Trots Management  |  Fișiere asociate: 4")
 
-    footer(c, number, 2, 2, "FINALIZAT - REVERSARE", "3a8a602d-a168-4d1b-a55a-b076bd771245", RED, "30.08.2026, 14:18")
+    footer(c, number, 2, 2, "FINALIZAT - STORNARE", "3a8a602d-a168-4d1b-a55a-b076bd771245", RED, "30.08.2026, 14:18")
     c.showPage()
 
 
@@ -579,9 +582,9 @@ def build_entry(path: Path) -> None:
 
 def build_reversal(path: Path) -> None:
     pdf = canvas.Canvas(str(path), pagesize=landscape(A4), pageCompression=1)
-    pdf.setTitle("Model NIR de reversare G-Trots")
+    pdf.setTitle("Model NIR de stornare G-Trots")
     pdf.setAuthor("G-Trots Management")
-    pdf.setSubject("Document de reversare a notei de recepție")
+    pdf.setSubject("Document de stornare a notei de recepție")
     reversal_page_one(pdf)
     reversal_page_two(pdf)
     pdf.save()
@@ -591,7 +594,7 @@ def main() -> None:
     register_fonts()
     OUTPUT.mkdir(parents=True, exist_ok=True)
     entry = OUTPUT / "model-nir-intrare-g-trots.pdf"
-    reversal = OUTPUT / "model-nir-reversare-g-trots.pdf"
+    reversal = OUTPUT / "model-nir-stornare-g-trots.pdf"
     build_entry(entry)
     build_reversal(reversal)
     print(entry)

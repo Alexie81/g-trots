@@ -142,6 +142,9 @@ export type ShopNirLine = {
   rejected_quantity: string;
   conversion_factor: string;
   stock_quantity?: string;
+  storned_quantity?: string;
+  stornable_quantity?: string;
+  is_fully_storned?: boolean;
   unit_price: string;
   discount_percent: string;
   vat_rate: string;
@@ -207,6 +210,19 @@ export type ShopNirDocument = {
   exchange_rate_date: string | null;
   notes: string | null;
   source_type: string;
+  document_kind?: 'nir' | 'storno';
+  public_status?: string;
+  can_storno?: boolean;
+  storno_state?: 'none' | 'partial' | 'full';
+  fully_storned?: boolean;
+  partially_storned?: boolean;
+  storned_quantity?: string | null;
+  stornable_quantity?: string;
+  storno?: {
+    state?: 'none' | 'partial' | 'full';
+    storned_quantity?: string;
+    stornable_quantity?: string;
+  };
   subtotal?: string;
   vat_total?: string;
   grand_total?: string;
@@ -240,6 +256,17 @@ export type ShopNirPage = {
 };
 
 export type ShopNirValidation = { valid: boolean; errors: string[]; warnings: string[]; duplicate: null | { id: string; nir_number: string }; line_count: number };
+
+export type ShopNirStornoLine = {
+  line_id: string;
+  quantity: string;
+};
+
+export type ShopNirStornoInvoice = {
+  supplier_invoice_series: string;
+  supplier_invoice_number: string;
+  supplier_invoice_date: string;
+};
 
 export type ShopFifoLayer = {
   id: string;
@@ -874,7 +901,7 @@ export const shopApi = {
   validateNir: (token: string, id: string) => shopCall<ShopNirValidation>('validateNir', token, { method: 'POST', body: '{}' }, id),
   confirmNir: (token: string, id: string, rowVersion: number, idempotencyKey: string) => shopCall<ShopNirDocument>('confirmNir', token, { method: 'POST', body: JSON.stringify({ row_version: rowVersion, idempotency_key: idempotencyKey }), headers: { 'Idempotency-Key': idempotencyKey } }, id),
   reopenNir: (token: string, id: string, rowVersion: number) => shopCall<ShopNirDocument>('reopenNir', token, { method: 'POST', body: JSON.stringify({ row_version: rowVersion }) }, id),
-  reverseNir: (token: string, id: string, rowVersion: number, reason: string) => shopCall<{ original: ShopNirDocument; reversal: ShopNirDocument }>('reverseNir', token, { method: 'POST', body: JSON.stringify({ row_version: rowVersion, reason }) }, id),
+  reverseNir: (token: string, id: string, rowVersion: number, reason: string, lines: ShopNirStornoLine[], invoice: ShopNirStornoInvoice) => shopCall<{ original: ShopNirDocument; reversal: ShopNirDocument }>('reverseNir', token, { method: 'POST', body: JSON.stringify({ row_version: rowVersion, reason, lines, ...invoice }) }, id),
   uploadNirAttachment: (token: string, id: string, payload: { file_name: string; mime_type: string; content_base64: string }) => shopCall<ShopNirAttachment>('uploadNirAttachment', token, { method: 'POST', body: JSON.stringify(payload) }, id),
   extractNirAttachment: (token: string, id: string, attachmentId: string) => shopCall<{ status: string; message: string; lines: ShopNirLine[] }>('extractNirAttachment', token, { method: 'POST', body: JSON.stringify({ attachment_id: attachmentId }) }, id),
   downloadNirAttachment: (token: string, id: string, attachmentId: string) => shopCall<{ file_name: string; mime_type: string; content_base64: string }>('downloadNirAttachment', token, undefined, id, 0, { attachment_id: attachmentId }),

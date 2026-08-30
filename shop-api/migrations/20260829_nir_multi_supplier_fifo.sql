@@ -98,6 +98,18 @@ CREATE TABLE IF NOT EXISTS shop_nir_documents (
   INDEX idx_shop_nir_invoice (supplier_invoice_number, supplier_invoice_date), INDEX idx_shop_nir_reversal (reversal_of_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+UPDATE shop_nir_documents
+SET status = 'confirmed', reversed_at = NULL, reversed_by = NULL
+WHERE status = 'reversed' AND reversal_of_id IS NULL;
+
+UPDATE shop_nir_documents d
+LEFT JOIN shop_nir_documents conflict
+  ON conflict.nir_number = CONCAT('NIR-', SUBSTRING(d.nir_number, 5)) AND conflict.id <> d.id
+SET d.nir_number = CONCAT('NIR-', SUBSTRING(d.nir_number, 5))
+WHERE d.reversal_of_id IS NOT NULL
+  AND (d.nir_number LIKE 'REV-%' OR d.nir_number LIKE 'STO-%')
+  AND conflict.id IS NULL;
+
 CREATE TABLE IF NOT EXISTS shop_nir_lines (
   id CHAR(36) NOT NULL PRIMARY KEY, nir_document_id CHAR(36) NOT NULL, line_number INT UNSIGNED NOT NULL,
   product_id CHAR(36) NULL, supplier_product_reference_id CHAR(36) NULL,
@@ -121,15 +133,24 @@ CREATE TABLE IF NOT EXISTS shop_nir_lines (
   match_confidence DECIMAL(5,4) NOT NULL DEFAULT 0, is_stock_item TINYINT(1) NOT NULL DEFAULT 1,
   difference_reason VARCHAR(40) NULL, difference_notes VARCHAR(500) NULL,
   mismatch_reason VARCHAR(500) NULL,
+  storno_of_line_id CHAR(36) NULL,
   row_version INT UNSIGNED NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE INDEX uq_shop_nir_line_number (nir_document_id, line_number), INDEX idx_shop_nir_line_product (product_id),
-  INDEX idx_shop_nir_line_reference (supplier_product_reference_id), INDEX idx_shop_nir_line_code (supplier_product_code)
+  INDEX idx_shop_nir_line_reference (supplier_product_reference_id), INDEX idx_shop_nir_line_code (supplier_product_code),
+  INDEX idx_shop_nir_line_storno_source (storno_of_line_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 ALTER TABLE shop_nir_lines
   ADD COLUMN IF NOT EXISTS difference_reason VARCHAR(40) NULL AFTER is_stock_item,
-  ADD COLUMN IF NOT EXISTS difference_notes VARCHAR(500) NULL AFTER difference_reason;
+  ADD COLUMN IF NOT EXISTS difference_notes VARCHAR(500) NULL AFTER difference_reason,
+  ADD COLUMN IF NOT EXISTS storno_of_line_id CHAR(36) NULL AFTER mismatch_reason;
+
+UPDATE shop_nir_lines sl
+INNER JOIN shop_nir_documents sd ON sd.id = sl.nir_document_id AND sd.reversal_of_id IS NOT NULL
+INNER JOIN shop_nir_lines ol ON ol.nir_document_id = sd.reversal_of_id AND ol.line_number = sl.line_number
+SET sl.storno_of_line_id = ol.id
+WHERE sl.storno_of_line_id IS NULL;
 
 CREATE TABLE IF NOT EXISTS shop_nir_attachments (
   id CHAR(36) NOT NULL PRIMARY KEY, nir_document_id CHAR(36) NOT NULL,

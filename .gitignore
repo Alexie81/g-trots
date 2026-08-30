@@ -111,6 +111,8 @@ __pycache__/
 *.log
 tmp/
 output/
+outputs/
+shop-api/lib/dompdf-runtime.phar
 eas-build-*-status.json
 eas-build-*-monitor.log
 mobile-latest*.json

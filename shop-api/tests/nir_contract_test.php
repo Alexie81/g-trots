@@ -70,15 +70,15 @@ $reversalEnd = strpos((string)$service, 'function shopNirProductReferences');
 $reversalContract = $reversalStart !== false && $reversalEnd !== false
     ? substr((string)$service, $reversalStart, $reversalEnd - $reversalStart)
     : '';
-foreach (['NIR_REVERSAL', 'reversal_of_id', 'shop_inventory_layer_consumptions', 'cost_price', 'NirReversed'] as $needle) {
+foreach (['NIR_REVERSAL', 'reversal_of_id', 'shop_inventory_layer_consumptions', 'cost_price', 'NirStornoCreated'] as $needle) {
     if (!str_contains($reversalContract, $needle)) {
-        fwrite(STDERR, "FAIL contract reversare server: {$needle}\n");
+        fwrite(STDERR, "FAIL contract stornare server: {$needle}\n");
         $failed++;
     }
 }
-foreach (['reverseNir', 'NIR_REVERSE', 'reversării'] as $needle) {
-    if (!str_contains((string)$mobile, $needle) || !str_contains((string)$desktop, $needle)) {
-        fwrite(STDERR, "FAIL contract reversare mobil+desktop: {$needle}\n");
+foreach (['reverseNir', 'NIR_REVERSE', 'storn'] as $needle) {
+    if (!str_contains(mb_strtolower((string)$mobile), mb_strtolower($needle)) || !str_contains(mb_strtolower((string)$desktop), mb_strtolower($needle))) {
+        fwrite(STDERR, "FAIL contract stornare mobil+desktop: {$needle}\n");
         $failed++;
     }
 }
@@ -89,7 +89,13 @@ $movementContract = $movementStart !== false && $movementEnd !== false
     : '';
 foreach (['status', 'reversal_of_id', 'movement_document_number', 'movement_document_source'] as $needle) {
     if (!str_contains($movementContract, $needle)) {
-        fwrite(STDERR, "FAIL jurnal mișcări NIR reversat: {$needle}\n");
+        fwrite(STDERR, "FAIL jurnal mișcări NIR stornat: {$needle}\n");
+        $failed++;
+    }
+}
+foreach (['Reversează NIR', 'REVERSAT', 'Motivul reversării'] as $legacyVisibleLabel) {
+    if (str_contains((string)$mobile, $legacyVisibleLabel) || str_contains((string)$desktop, $legacyVisibleLabel)) {
+        fwrite(STDERR, "FAIL etichetă legacy vizibilă în UI: {$legacyVisibleLabel}\n");
         $failed++;
     }
 }

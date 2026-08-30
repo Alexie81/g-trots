@@ -192,7 +192,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026083001;
+    $schemaVersion = 2026083002;
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_schema_meta (
             meta_key VARCHAR(80) NOT NULL PRIMARY KEY,
@@ -695,6 +695,39 @@ function ensureShopSchema(PDO $db): void {
         }
     }
     $db->exec("UPDATE shop_nir_documents SET temporary_number = CONCAT('DRAFT-', LEFT(id, 8)) WHERE temporary_number = ''");
+    // Un NIR de intrare rămâne confirmat chiar dacă toate cantitățile sale au
+    // documente de storno. Roșu/STORNAT este doar documentul negativ legat.
+    $db->exec("UPDATE shop_nir_documents SET status = 'confirmed', reversed_at = NULL, reversed_by = NULL WHERE status = 'reversed' AND reversal_of_id IS NULL");
+    // Migrare idempotentă a numerelor istorice REV/STO în seria unică NIR.
+    // Verificăm atât coliziunile cu NIR-uri existente, cât și între două
+    // documente legacy care ar produce aceeași serie normalizată.
+    $legacyNumberCollision = $db->query(
+        "SELECT normalized_number
+         FROM (
+             SELECT CASE
+                 WHEN reversal_of_id IS NOT NULL AND (nir_number LIKE 'REV-%' OR nir_number LIKE 'STO-%')
+                     THEN CONCAT('NIR-', SUBSTRING(nir_number, 5))
+                 ELSE nir_number
+             END AS normalized_number
+             FROM shop_nir_documents
+             WHERE nir_number IS NOT NULL
+         ) normalized
+         GROUP BY normalized_number
+         HAVING COUNT(*) > 1
+         LIMIT 1"
+    )->fetchColumn();
+    if ($legacyNumberCollision !== false) {
+        throw new RuntimeException('Seria legacy nu poate fi normalizată automat deoarece numărul ' . (string)$legacyNumberCollision . ' există deja.');
+    }
+    $db->exec(
+        "UPDATE shop_nir_documents d
+         LEFT JOIN shop_nir_documents conflict
+           ON conflict.nir_number = CONCAT('NIR-', SUBSTRING(d.nir_number, 5)) AND conflict.id <> d.id
+         SET d.nir_number = CONCAT('NIR-', SUBSTRING(d.nir_number, 5))
+         WHERE d.reversal_of_id IS NOT NULL
+           AND (d.nir_number LIKE 'REV-%' OR d.nir_number LIKE 'STO-%')
+           AND conflict.id IS NULL"
+    );
     if (!$db->query("SHOW INDEX FROM shop_nir_documents WHERE Key_name = 'uq_shop_nir_temporary_number'")->fetch()) {
         $db->exec('ALTER TABLE shop_nir_documents ADD UNIQUE INDEX uq_shop_nir_temporary_number (temporary_number)');
     }
@@ -742,13 +775,15 @@ function ensureShopSchema(PDO $db): void {
             difference_reason VARCHAR(40) NULL,
             difference_notes VARCHAR(500) NULL,
             mismatch_reason VARCHAR(500) NULL,
+            storno_of_line_id CHAR(36) NULL,
             row_version INT UNSIGNED NOT NULL DEFAULT 1,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             UNIQUE INDEX uq_shop_nir_line_number (nir_document_id, line_number),
             INDEX idx_shop_nir_line_product (product_id),
             INDEX idx_shop_nir_line_reference (supplier_product_reference_id),
-            INDEX idx_shop_nir_line_code (supplier_product_code)
+            INDEX idx_shop_nir_line_code (supplier_product_code),
+            INDEX idx_shop_nir_line_storno_source (storno_of_line_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     $nirLineColumns = [
@@ -765,12 +800,25 @@ function ensureShopSchema(PDO $db): void {
         'is_stock_item' => 'TINYINT(1) NOT NULL DEFAULT 1 AFTER match_confidence',
         'difference_reason' => 'VARCHAR(40) NULL AFTER is_stock_item',
         'difference_notes' => 'VARCHAR(500) NULL AFTER difference_reason',
+        'storno_of_line_id' => 'CHAR(36) NULL AFTER mismatch_reason',
     ];
     foreach ($nirLineColumns as $column => $definition) {
         if (!$db->query("SHOW COLUMNS FROM shop_nir_lines LIKE " . $db->quote($column))->fetch()) {
             $db->exec("ALTER TABLE shop_nir_lines ADD COLUMN {$column} {$definition}");
         }
     }
+    if (!$db->query("SHOW INDEX FROM shop_nir_lines WHERE Key_name = 'idx_shop_nir_line_storno_source'")->fetch()) {
+        $db->exec('ALTER TABLE shop_nir_lines ADD INDEX idx_shop_nir_line_storno_source (storno_of_line_id)');
+    }
+    // Documentele REV create înainte de stornarea parțială copiau numărul liniei
+    // sursă. Legătura explicită le păstrează în calculul anti-dublu-storno.
+    $db->exec(
+        "UPDATE shop_nir_lines sl
+         INNER JOIN shop_nir_documents sd ON sd.id = sl.nir_document_id AND sd.reversal_of_id IS NOT NULL
+         INNER JOIN shop_nir_lines ol ON ol.nir_document_id = sd.reversal_of_id AND ol.line_number = sl.line_number
+         SET sl.storno_of_line_id = ol.id
+         WHERE sl.storno_of_line_id IS NULL"
+    );
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_nir_attachments (
             id CHAR(36) NOT NULL PRIMARY KEY,
@@ -4684,8 +4732,8 @@ try {
         jsonResponse(shopNirReopenConfirmed($db, trim((string)($_GET['id'] ?? $body['id'] ?? '')), $body, $currentUser));
     }
 
-    if ($action === 'reverseNir' && $method === 'POST') {
-        shopNirRequire($currentUser, 'NIR_REVERSE');
+    if (in_array($action, ['reverseNir', 'stornoNir'], true) && $method === 'POST') {
+        shopNirRequire($currentUser, $action === 'stornoNir' ? 'NIR_STORNO' : 'NIR_REVERSE');
         jsonResponse(shopNirReverse($db, trim((string)($_GET['id'] ?? $body['id'] ?? '')), $body, $currentUser));
     }
 

@@ -142,7 +142,16 @@
     validateNir: (id) => call('validateNir', json('POST', {}), id),
     confirmNir: (id, rowVersion, idempotencyKey) => call('confirmNir', { ...json('POST', { row_version: rowVersion, idempotency_key: idempotencyKey }), headers: { 'Idempotency-Key': idempotencyKey } }, id),
     reopenNir: (id, rowVersion) => call('reopenNir', json('POST', { row_version: rowVersion }), id),
-    reverseNir: (id, rowVersion, reason) => call('reverseNir', json('POST', { row_version: rowVersion, reason }), id),
+    reverseNir: (id, rowVersion, reason, lines, details = {}) => call('reverseNir', json('POST', {
+      row_version: rowVersion,
+      reason,
+      ...(Array.isArray(lines) ? { lines } : {}),
+      ...(details && typeof details === 'object' ? {
+        supplier_invoice_series: details.supplier_invoice_series ?? null,
+        supplier_invoice_number: details.supplier_invoice_number,
+        supplier_invoice_date: details.supplier_invoice_date,
+      } : {}),
+    }), id),
     uploadNirAttachment: (id, payload) => call('uploadNirAttachment', json('POST', payload), id),
     extractNirAttachment: (id, attachmentId) => call('extractNirAttachment', json('POST', { attachment_id: attachmentId }), id),
     downloadNirAttachment: (id, attachmentId) => call('downloadNirAttachment', {}, id, 0, { attachment_id: attachmentId }),

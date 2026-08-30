@@ -22,7 +22,7 @@ function shopNirActor(array $user): array {
 function shopNirPermissions(array $user): array {
     $role = shopNirActor($user)['role'];
     $all = [
-        'NIR_VIEW', 'NIR_CREATE', 'NIR_EDIT_DRAFT', 'NIR_CONFIRM', 'NIR_REVERSE',
+        'NIR_VIEW', 'NIR_CREATE', 'NIR_EDIT_DRAFT', 'NIR_CONFIRM', 'NIR_REVERSE', 'NIR_STORNO',
         'NIR_EXPORT', 'NIR_VIEW_COSTS', 'SUPPLIER_CREATE',
         'SUPPLIER_PRODUCT_REFERENCE_MANAGE', 'FIFO_VIEW', 'FIFO_OPENING_BALANCE_MANAGE',
     ];
@@ -173,6 +173,146 @@ function shopNirDocumentRow(array $row, bool $canViewCosts = true): array {
     return $row;
 }
 
+/**
+ * Builds the public storno progress for one or more original NIR documents.
+ * Legacy `reversed` values are still understood while bootstrap normalizes
+ * original NIRs back to `confirmed`. Clients receive the independent business
+ * progress through `public_status` and `storno_state`.
+ */
+function shopNirStornoProgressMap(PDO $db, array $documentRows): array {
+    $originalIds = [];
+    foreach ($documentRows as $row) {
+        $id = trim((string)($row['id'] ?? ''));
+        $sourceId = trim((string)($row['reversal_of_id'] ?? ''));
+        if ($sourceId !== '') $originalIds[$sourceId] = true;
+        elseif ($id !== '') $originalIds[$id] = true;
+    }
+    $ids = array_keys($originalIds);
+    if (!$ids) return [];
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $progress = [];
+    foreach ($ids as $id) {
+        $progress[$id] = [
+            'original_quantity' => 0,
+            'storned_quantity' => 0,
+            'line_count' => 0,
+            'fully_storned_line_count' => 0,
+            'by_line' => [],
+        ];
+    }
+
+    $originalStmt = $db->prepare(
+        "SELECT nir_document_id, id AS line_id, accepted_quantity
+         FROM shop_nir_lines
+         WHERE nir_document_id IN ({$placeholders})"
+    );
+    $originalStmt->execute($ids);
+    foreach ($originalStmt->fetchAll() as $line) {
+        $documentId = (string)$line['nir_document_id'];
+        $lineId = (string)$line['line_id'];
+        $quantity = max(0, shopNirDecimalToScaled($line['accepted_quantity'] ?? 0, 4));
+        $progress[$documentId]['original_quantity'] += $quantity;
+        $progress[$documentId]['line_count']++;
+        $progress[$documentId]['by_line'][$lineId] = [
+            'original_quantity' => $quantity,
+            'storned_quantity' => 0,
+        ];
+    }
+
+    $stornoStmt = $db->prepare(
+        "SELECT sd.reversal_of_id AS original_id, sl.storno_of_line_id AS source_line_id,
+                SUM(ABS(sl.accepted_quantity)) AS storned_quantity
+         FROM shop_nir_lines sl
+         INNER JOIN shop_nir_documents sd ON sd.id = sl.nir_document_id
+         WHERE sd.reversal_of_id IN ({$placeholders})
+           AND sl.storno_of_line_id IS NOT NULL
+         GROUP BY sd.reversal_of_id, sl.storno_of_line_id"
+    );
+    $stornoStmt->execute($ids);
+    foreach ($stornoStmt->fetchAll() as $row) {
+        $documentId = (string)$row['original_id'];
+        $lineId = (string)$row['source_line_id'];
+        if (!isset($progress[$documentId]['by_line'][$lineId])) continue;
+        $quantity = max(0, shopNirDecimalToScaled($row['storned_quantity'] ?? 0, 4));
+        $original = $progress[$documentId]['by_line'][$lineId]['original_quantity'];
+        $quantity = min($quantity, $original);
+        $progress[$documentId]['by_line'][$lineId]['storned_quantity'] = $quantity;
+        $progress[$documentId]['storned_quantity'] += $quantity;
+    }
+
+    foreach ($progress as &$item) {
+        foreach ($item['by_line'] as &$line) {
+            $line['stornable_quantity'] = max(0, $line['original_quantity'] - $line['storned_quantity']);
+            $line['is_fully_storned'] = $line['original_quantity'] > 0 && $line['stornable_quantity'] === 0;
+            if ($line['is_fully_storned']) $item['fully_storned_line_count']++;
+            foreach (['original_quantity', 'storned_quantity', 'stornable_quantity'] as $field) {
+                $line[$field] = shopNirScaledToDecimal($line[$field], 4);
+            }
+        }
+        unset($line);
+        $total = $item['original_quantity'];
+        $storned = min($item['storned_quantity'], $total);
+        $item['state'] = $storned <= 0 ? 'none' : ($total > 0 && $storned >= $total ? 'full' : 'partial');
+        $item['progress_percent'] = $total > 0 ? number_format(min(100, $storned * 100 / $total), 2, '.', '') : '0.00';
+        $item['original_quantity'] = shopNirScaledToDecimal($total, 4);
+        $item['storned_quantity'] = shopNirScaledToDecimal($storned, 4);
+        $item['stornable_quantity'] = shopNirScaledToDecimal(max(0, $total - $storned), 4);
+    }
+    unset($item);
+    return $progress;
+}
+
+function shopNirAttachStornoState(PDO $db, array $documents): array {
+    if (!$documents) return [];
+    $progressMap = shopNirStornoProgressMap($db, $documents);
+    foreach ($documents as &$document) {
+        $id = (string)($document['id'] ?? '');
+        $originalId = trim((string)($document['reversal_of_id'] ?? ''));
+        $isStornoDocument = $originalId !== '' || mb_strtolower(trim((string)($document['source_type'] ?? ''))) === 'reversal';
+        if ($isStornoDocument) {
+            $document['document_kind'] = 'storno';
+            $document['public_status'] = 'stornat';
+            $document['status_label'] = 'STORNAT';
+            $document['storno_of_id'] = $originalId ?: null;
+            $document['original_invoice'] = [
+                'series' => $document['original_invoice_series'] ?? null,
+                'number' => $document['original_invoice_number'] ?? null,
+                'date' => $document['original_invoice_date'] ?? null,
+            ];
+            $document['storned_at'] = $document['confirmed_at'] ?? $document['created_at'] ?? null;
+            $document['storned_by'] = $document['confirmed_by'] ?? $document['created_by'] ?? null;
+            $document['can_storno'] = false;
+            $document['fully_storned'] = true;
+            $document['storned_quantity'] = null;
+            $document['stornable_quantity'] = '0.0000';
+            continue;
+        }
+        $item = $progressMap[$id] ?? [
+            'state' => (string)($document['status'] ?? '') === 'reversed' ? 'full' : 'none',
+            'progress_percent' => (string)($document['status'] ?? '') === 'reversed' ? '100.00' : '0.00',
+            'original_quantity' => '0.0000', 'storned_quantity' => '0.0000', 'stornable_quantity' => '0.0000',
+            'line_count' => (int)($document['line_count'] ?? 0), 'fully_storned_line_count' => 0, 'by_line' => [],
+        ];
+        if ((string)($document['status'] ?? '') === 'reversed') $item['state'] = 'full';
+        $document['document_kind'] = 'nir';
+        $document['storno'] = $item;
+        $document['storno_state'] = $item['state'];
+        $document['fully_storned'] = $item['state'] === 'full';
+        $document['partially_storned'] = $item['state'] === 'partial';
+        $document['storned_quantity'] = $item['storned_quantity'];
+        $document['stornable_quantity'] = $item['stornable_quantity'];
+        $document['can_storno'] = (string)($document['status'] ?? '') === 'confirmed'
+            && $item['state'] !== 'full'
+            && shopNirDecimalToScaled($item['stornable_quantity'] ?? 0, 4) > 0;
+        // Documentul de intrare rămâne verde/confirmat; progresul storno este
+        // expus separat și nu îi schimbă statutul contabil de origine.
+        $document['public_status'] = (string)($document['status'] ?? '');
+        $document['status_label'] = (string)($document['status'] ?? '') === 'confirmed' ? 'CONFIRMAT' : strtoupper((string)($document['status'] ?? ''));
+    }
+    unset($document);
+    return $documents;
+}
+
 function shopNirLineRow(array $row, bool $canViewCosts = true): array {
     $row['line_number'] = (int)$row['line_number'];
     $row['row_version'] = (int)$row['row_version'];
@@ -256,8 +396,12 @@ function shopNirAttachPriceComparisons(PDO $db, array $lines, array $document): 
 function shopNirFetchDocument(PDO $db, string $id, array $user, bool $withDetails = true): array {
     $stmt = $db->prepare(
         'SELECT n.*, s.name AS supplier_name, s.cui AS supplier_cui, w.name AS warehouse_name,
+                original.supplier_invoice_series AS original_invoice_series,
+                original.supplier_invoice_number AS original_invoice_number,
+                original.supplier_invoice_date AS original_invoice_date,
                 (SELECT COUNT(*) FROM shop_nir_lines l WHERE l.nir_document_id = n.id) AS line_count
          FROM shop_nir_documents n
+         LEFT JOIN shop_nir_documents original ON original.id = n.reversal_of_id
          LEFT JOIN shop_suppliers s ON s.id = n.supplier_id
          LEFT JOIN shop_warehouses w ON w.id = n.warehouse_id
          WHERE n.id = ? LIMIT 1'
@@ -266,7 +410,7 @@ function shopNirFetchDocument(PDO $db, string $id, array $user, bool $withDetail
     $document = $stmt->fetch();
     if (!$document) throw new ShopNirHttpException('NIR-ul nu există.', 404);
     $canViewCosts = shopNirCan($user, 'NIR_VIEW_COSTS');
-    $result = shopNirDocumentRow($document, $canViewCosts);
+    $result = shopNirAttachStornoState($db, [shopNirDocumentRow($document, $canViewCosts)])[0];
     $result['permissions'] = shopNirPermissions($user);
     if (!$withDetails) return $result;
 
@@ -275,14 +419,40 @@ function shopNirFetchDocument(PDO $db, string $id, array $user, bool $withDetail
                 COALESCE(l.sku_snapshot, p.sku) AS product_sku,
                 COALESCE(l.ean_snapshot, p.ean) AS product_ean,
                 (SELECT pi.image_path FROM shop_product_images pi WHERE pi.product_id = p.id ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS product_image_url,
+                (SELECT pi.image_path FROM shop_product_images pi WHERE pi.product_id = p.id ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS product_image_storage_path,
+                COALESCE(pc.name, c.name) AS product_category_name,
+                CASE WHEN c.parent_id IS NOT NULL THEN c.name ELSE NULL END AS product_subcategory_name,
+                m.name AS product_manufacturer_name,
+                (SELECT GROUP_CONCAT(DISTINCT b.name ORDER BY b.name SEPARATOR ", ")
+                 FROM shop_product_brands pb INNER JOIN shop_brands b ON b.id = pb.brand_id
+                 WHERE pb.product_id = p.id) AS product_brand_names,
                 r.supplier_product_code_original AS reference_code
          FROM shop_nir_lines l
          LEFT JOIN shop_products p ON p.id = l.product_id
+         LEFT JOIN shop_categories c ON c.id = p.category_id
+         LEFT JOIN shop_categories pc ON pc.id = c.parent_id
+         LEFT JOIN shop_manufacturers m ON m.id = p.manufacturer_id
          LEFT JOIN shop_supplier_product_references r ON r.id = l.supplier_product_reference_id
          WHERE l.nir_document_id = ? ORDER BY l.line_number ASC'
     );
     $lines->execute([$id]);
     $result['lines'] = array_map(static fn(array $row): array => shopNirLineRow($row, $canViewCosts), $lines->fetchAll());
+    if (($result['document_kind'] ?? 'nir') === 'nir') {
+        $byLine = is_array($result['storno']['by_line'] ?? null) ? $result['storno']['by_line'] : [];
+        foreach ($result['lines'] as &$line) {
+            $lineProgress = $byLine[(string)($line['id'] ?? '')] ?? [
+                'original_quantity' => (string)($line['accepted_quantity'] ?? '0.0000'),
+                'storned_quantity' => '0.0000',
+                'stornable_quantity' => (string)($line['accepted_quantity'] ?? '0.0000'),
+                'is_fully_storned' => false,
+            ];
+            $line['storno'] = $lineProgress;
+            $line['storned_quantity'] = $lineProgress['storned_quantity'];
+            $line['stornable_quantity'] = $lineProgress['stornable_quantity'];
+            $line['is_fully_storned'] = (bool)$lineProgress['is_fully_storned'];
+        }
+        unset($line);
+    }
     if ($canViewCosts) $result['lines'] = shopNirAttachPriceComparisons($db, $result['lines'], $document);
     $attachments = $db->prepare('SELECT id, original_name, mime_type, extension, file_size, sha256, extraction_status, extraction_message, created_at FROM shop_nir_attachments WHERE nir_document_id = ? ORDER BY created_at ASC');
     $attachments->execute([$id]);
@@ -295,8 +465,15 @@ function shopNirList(PDO $db, array $query, array $user): array {
     $pageSize = max(5, min(100, (int)($query['page_size'] ?? 20)));
     $conditions = ['1=1'];
     $params = [];
-    $status = trim((string)($query['status'] ?? ''));
-    if ($status !== '') { $conditions[] = 'n.status = ?'; $params[] = $status; }
+    $status = mb_strtolower(trim((string)($query['status'] ?? '')));
+    if (in_array($status, ['storno', 'stornat', 'reversed'], true)) {
+        $conditions[] = '(n.source_type = "reversal" OR n.reversal_of_id IS NOT NULL)';
+    } elseif ($status === 'confirmed') {
+        $conditions[] = 'n.status = "confirmed" AND n.reversal_of_id IS NULL AND n.source_type <> "reversal"';
+    } elseif ($status !== '') {
+        $conditions[] = 'n.status = ?';
+        $params[] = $status;
+    }
     $supplierId = trim((string)($query['supplier_id'] ?? ''));
     if ($supplierId !== '') { $conditions[] = 'n.supplier_id = ?'; $params[] = $supplierId; }
     $from = trim((string)($query['from'] ?? ''));
@@ -316,8 +493,12 @@ function shopNirList(PDO $db, array $query, array $user): array {
     $offset = ($page - 1) * $pageSize;
     $stmt = $db->prepare(
         "SELECT n.*, s.name AS supplier_name, s.cui AS supplier_cui, w.name AS warehouse_name,
+                original.supplier_invoice_series AS original_invoice_series,
+                original.supplier_invoice_number AS original_invoice_number,
+                original.supplier_invoice_date AS original_invoice_date,
                 (SELECT COUNT(*) FROM shop_nir_lines l WHERE l.nir_document_id = n.id) AS line_count
          FROM shop_nir_documents n
+         LEFT JOIN shop_nir_documents original ON original.id = n.reversal_of_id
          LEFT JOIN shop_suppliers s ON s.id = n.supplier_id
          LEFT JOIN shop_warehouses w ON w.id = n.warehouse_id
          WHERE {$where}
@@ -326,8 +507,10 @@ function shopNirList(PDO $db, array $query, array $user): array {
     );
     $stmt->execute($params);
     $canViewCosts = shopNirCan($user, 'NIR_VIEW_COSTS');
+    $items = array_map(static fn(array $row): array => shopNirDocumentRow($row, $canViewCosts), $stmt->fetchAll());
+    $items = shopNirAttachStornoState($db, $items);
     return [
-        'items' => array_map(static fn(array $row): array => shopNirDocumentRow($row, $canViewCosts), $stmt->fetchAll()),
+        'items' => $items,
         'page' => $page,
         'page_size' => $pageSize,
         'total' => $total,
@@ -1021,7 +1204,7 @@ function shopNirUpdateDraft(PDO $db, string $id, array $body, array $user): arra
         $stmt->execute([$id]);
         $current = $stmt->fetch();
         if (!$current) throw new ShopNirHttpException('NIR-ul nu există.', 404);
-        if ((string)$current['status'] !== 'draft') throw new ShopNirHttpException('Un NIR confirmat sau reversat este imuabil. Creează un document de corecție.', 409);
+        if ((string)$current['status'] !== 'draft') throw new ShopNirHttpException('Un NIR confirmat este protejat. Folosește modul de corectare sau creează un document de storno.', 409);
         $expectedVersion = (int)($body['row_version'] ?? 0);
         if ($expectedVersion !== (int)$current['row_version']) {
             $db->rollBack();
@@ -1368,8 +1551,16 @@ function shopNirReopenConfirmed(PDO $db, string $id, array $body, array $user): 
         $documentStmt->execute([$id]);
         $document = $documentStmt->fetch();
         if (!$document) throw new ShopNirHttpException('NIR-ul nu există.', 404);
+        if (trim((string)($document['reversal_of_id'] ?? '')) !== '' || mb_strtolower((string)($document['source_type'] ?? '')) === 'reversal') {
+            throw new ShopNirHttpException('Documentul de storno este definitiv și nu poate fi redeschis pentru corectare.', 409);
+        }
         if ((string)$document['status'] !== 'confirmed') throw new ShopNirHttpException('Doar un NIR confirmat poate fi redeschis pentru corectare.', 409);
         if ((int)$document['row_version'] !== $expectedVersion) throw new ShopNirHttpException('NIR-ul a fost modificat pe alt dispozitiv. Reîncarcă documentul.', 409, ['conflict' => true]);
+        $stornoCount = $db->prepare('SELECT COUNT(*) FROM shop_nir_documents WHERE reversal_of_id = ?');
+        $stornoCount->execute([$id]);
+        if ((int)$stornoCount->fetchColumn() > 0) {
+            throw new ShopNirHttpException('NIR-ul are deja documente de storno și nu mai poate fi redeschis pentru corectare.', 409);
+        }
 
         $layerStmt = $db->prepare('SELECT * FROM shop_inventory_cost_layers WHERE nir_document_id = ? ORDER BY created_at FOR UPDATE');
         $layerStmt->execute([$id]);
@@ -1422,10 +1613,109 @@ function shopNirReopenConfirmed(PDO $db, string $id, array $body, array $user): 
     }
 }
 
+/**
+ * Normalizes both the new partial-storno payload and the legacy full reversal
+ * request. Quantities are expressed in the purchase unit of the source line.
+ */
+function shopNirNormalizeStornoSelection(array $body, array $originalLines, array $alreadyStorned = []): array {
+    $lineById = [];
+    foreach ($originalLines as $line) $lineById[(string)($line['id'] ?? '')] = $line;
+
+    $hasExplicitSelection = array_key_exists('lines', $body) || array_key_exists('line_id', $body) || array_key_exists('line_ids', $body);
+    if (array_key_exists('lines', $body)) {
+        if (!is_array($body['lines'])) throw new InvalidArgumentException('Selecția pentru stornare nu este validă.');
+        $requested = $body['lines'];
+    } elseif (array_key_exists('line_ids', $body)) {
+        if (!is_array($body['line_ids'])) throw new InvalidArgumentException('Lista produselor pentru stornare nu este validă.');
+        $requested = array_map(static fn($lineId): array => ['line_id' => $lineId], $body['line_ids']);
+    } elseif (array_key_exists('line_id', $body)) {
+        $requested = [['line_id' => $body['line_id'], 'quantity' => $body['quantity'] ?? null]];
+    } else {
+        // Backwards compatibility: the old endpoint sent only reason + row_version.
+        $requested = array_map(static fn(array $line): array => ['line_id' => $line['id']], $originalLines);
+    }
+    if ($hasExplicitSelection && !$requested) throw new InvalidArgumentException('Selectează cel puțin un produs pentru stornare.');
+
+    $selected = [];
+    foreach ($requested as $request) {
+        if (is_string($request)) $request = ['line_id' => $request];
+        if (!is_array($request)) throw new InvalidArgumentException('O poziție selectată pentru stornare nu este validă.');
+        $lineId = trim((string)($request['line_id'] ?? $request['id'] ?? ''));
+        if ($lineId === '' || !isset($lineById[$lineId])) {
+            throw new ShopNirHttpException('Produsul selectat nu aparține acestui NIR.', 422, ['line_id' => $lineId ?: null]);
+        }
+        if (isset($selected[$lineId])) throw new InvalidArgumentException('Același produs a fost selectat de două ori pentru stornare.');
+        $line = $lineById[$lineId];
+        $original = max(0, shopNirDecimalToScaled($line['accepted_quantity'] ?? 0, 4));
+        $storned = max(0, (int)($alreadyStorned[$lineId]['accepted_quantity'] ?? $alreadyStorned[$lineId] ?? 0));
+        $remaining = max(0, $original - $storned);
+        if ($remaining === 0) {
+            if (!$hasExplicitSelection) continue;
+            throw new ShopNirHttpException('Produsul selectat este deja stornat integral.', 409, ['line_id' => $lineId]);
+        }
+        $rawQuantity = $request['quantity'] ?? null;
+        $quantity = $rawQuantity === null || trim((string)$rawQuantity) === ''
+            ? $remaining
+            : shopNirDecimalToScaled($rawQuantity, 4, 'Cantitatea de stornat');
+        if ($quantity <= 0) throw new InvalidArgumentException('Cantitatea de stornat trebuie să fie mai mare decât zero.');
+        if ($quantity > $remaining) {
+            throw new ShopNirHttpException('Cantitatea de stornat depășește cantitatea disponibilă pe NIR.', 409, [
+                'line_id' => $lineId,
+                'requested_quantity' => shopNirScaledToDecimal($quantity, 4),
+                'stornable_quantity' => shopNirScaledToDecimal($remaining, 4),
+            ]);
+        }
+        $selected[$lineId] = [
+            'line' => $line,
+            'quantity_scaled' => $quantity,
+            'quantity' => shopNirScaledToDecimal($quantity, 4),
+            'remaining_before_scaled' => $remaining,
+            'is_final_for_line' => $quantity === $remaining,
+        ];
+    }
+    if (!$selected) throw new ShopNirHttpException('NIR-ul este deja stornat integral.', 409);
+    return array_values($selected);
+}
+
+/** Supplier-issued invoice/credit-note metadata for the negative document. */
+function shopNirStornoInvoicePayload(array $body, array $originalDocument): array {
+    $isNewUiRequest = array_key_exists('lines', $body) || array_key_exists('line_id', $body) || array_key_exists('line_ids', $body);
+    $hasInvoicePatch = array_key_exists('supplier_invoice_series', $body)
+        || array_key_exists('supplier_invoice_number', $body)
+        || array_key_exists('supplier_invoice_date', $body);
+    if (!$isNewUiRequest && !$hasInvoicePatch) {
+        return [
+            'supplier_invoice_series' => mb_substr(trim((string)($originalDocument['supplier_invoice_series'] ?? '')), 0, 60),
+            'supplier_invoice_number' => mb_substr(trim((string)($originalDocument['supplier_invoice_number'] ?? '')), 0, 120),
+            'supplier_invoice_date' => shopNirDate($originalDocument['supplier_invoice_date'] ?? $originalDocument['nir_date'] ?? '', 'Data facturii furnizorului pentru storno'),
+            'legacy_fallback' => true,
+        ];
+    }
+
+    if (!array_key_exists('supplier_invoice_series', $body)) {
+        throw new InvalidArgumentException('Câmpul seriei facturii furnizorului pentru storno trebuie trimis; valoarea poate fi goală.');
+    }
+    $series = mb_substr(trim((string)$body['supplier_invoice_series']), 0, 60);
+    $number = mb_substr(trim((string)($body['supplier_invoice_number'] ?? '')), 0, 120);
+    if ($number === '') throw new InvalidArgumentException('Numărul facturii furnizorului pentru storno este obligatoriu.');
+    $date = shopNirDate($body['supplier_invoice_date'] ?? '', 'Data facturii furnizorului pentru storno');
+    return [
+        'supplier_invoice_series' => $series,
+        'supplier_invoice_number' => $number,
+        'supplier_invoice_date' => $date,
+        'legacy_fallback' => false,
+    ];
+}
+
+function shopNirStornoNegativeDecimal($value, int $scale): string {
+    return shopNirScaledToDecimal(-shopNirDecimalToScaled($value, $scale), $scale);
+}
+
 function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
     $reason = mb_substr(trim((string)($body['reason'] ?? '')), 0, 500);
-    if ($reason === '') throw new InvalidArgumentException('Motivul reversării este obligatoriu.');
+    if ($reason === '') throw new InvalidArgumentException('Motivul stornării este obligatoriu.');
     $expectedVersion = (int)($body['row_version'] ?? 0);
+    if ($expectedVersion <= 0) throw new InvalidArgumentException('Versiunea NIR-ului este obligatorie pentru stornare.');
     $actor = shopNirActor($user);
     $db->beginTransaction();
     try {
@@ -1433,28 +1723,132 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
         $docStmt->execute([$id]);
         $document = $docStmt->fetch();
         if (!$document) throw new ShopNirHttpException('NIR-ul nu există.', 404);
-        if ((string)$document['status'] !== 'confirmed') throw new ShopNirHttpException('Doar un NIR confirmat poate fi reversat.', 409);
+        if (trim((string)($document['reversal_of_id'] ?? '')) !== '' || mb_strtolower((string)($document['source_type'] ?? '')) === 'reversal') {
+            throw new ShopNirHttpException('Un document de storno nu poate fi stornat din nou.', 409);
+        }
+        if ((string)$document['status'] !== 'confirmed') throw new ShopNirHttpException('Doar un NIR confirmat, nestornat integral, poate fi stornat.', 409);
         if ($expectedVersion !== (int)$document['row_version']) throw new ShopNirHttpException('NIR-ul a fost modificat pe alt dispozitiv.', 409, ['conflict' => true]);
+        $stornoInvoice = shopNirStornoInvoicePayload($body, $document);
+        $duplicateInvoice = $db->prepare(
+            'SELECT id, nir_number
+             FROM shop_nir_documents
+             WHERE supplier_id <=> ? AND UPPER(TRIM(COALESCE(supplier_invoice_series, ""))) = UPPER(?)
+               AND TRIM(COALESCE(supplier_invoice_number, "")) = ? AND supplier_invoice_date = ?
+             LIMIT 1 FOR UPDATE'
+        );
+        $duplicateInvoice->execute([
+            $document['supplier_id'], $stornoInvoice['supplier_invoice_series'],
+            $stornoInvoice['supplier_invoice_number'], $stornoInvoice['supplier_invoice_date'],
+        ]);
+        if ($duplicate = $duplicateInvoice->fetch()) {
+            // The legacy endpoint historically copied the original invoice onto
+            // the reversal document; keep only that old behavior compatible.
+            $isOriginalInvoice = (string)$duplicate['id'] === $id;
+            if (!$stornoInvoice['legacy_fallback'] || !$isOriginalInvoice) {
+                throw new ShopNirHttpException('Factura furnizorului pentru storno este deja folosită într-un alt document.', 409, [
+                    'duplicate_document_id' => $duplicate['id'],
+                    'duplicate_document_number' => $duplicate['nir_number'] ?? null,
+                ]);
+            }
+        }
+
+        $lineStmt = $db->prepare('SELECT * FROM shop_nir_lines WHERE nir_document_id = ? ORDER BY line_number FOR UPDATE');
+        $lineStmt->execute([$id]);
+        $originalLines = $lineStmt->fetchAll();
+        if (!$originalLines) throw new ShopNirHttpException('NIR-ul nu are poziții care pot fi stornate.', 409);
+        $lineById = [];
+        foreach ($originalLines as $line) $lineById[(string)$line['id']] = $line;
+
+        $priorStmt = $db->prepare(
+            'SELECT sl.storno_of_line_id,
+                    SUM(ABS(sl.accepted_quantity)) AS accepted_quantity,
+                    SUM(ABS(sl.stock_quantity)) AS stock_quantity,
+                    SUM(ABS(sl.line_net)) AS line_net, SUM(ABS(sl.line_vat)) AS line_vat,
+                    SUM(ABS(sl.line_total)) AS line_total, SUM(ABS(sl.line_net_ron)) AS line_net_ron,
+                    SUM(ABS(sl.line_vat_ron)) AS line_vat_ron, SUM(ABS(sl.line_total_ron)) AS line_total_ron,
+                    SUM(ABS(sl.allocated_cost_ron)) AS allocated_cost_ron,
+                    SUM(ABS(sl.inventory_cost_total_ron)) AS inventory_cost_total_ron
+             FROM shop_nir_lines sl
+             INNER JOIN shop_nir_documents sd ON sd.id = sl.nir_document_id
+             WHERE sd.reversal_of_id = ? AND sl.storno_of_line_id IS NOT NULL
+             GROUP BY sl.storno_of_line_id'
+        );
+        $priorStmt->execute([$id]);
+        $alreadyStorned = [];
+        foreach ($priorStmt->fetchAll() as $row) {
+            $lineId = (string)$row['storno_of_line_id'];
+            foreach ($row as $field => $value) {
+                if ($field === 'storno_of_line_id') continue;
+                $scale = in_array($field, ['accepted_quantity', 'stock_quantity'], true) ? 4 : (in_array($field, ['line_net', 'line_vat', 'line_total'], true) ? 6 : 2);
+                $alreadyStorned[$lineId][$field] = max(0, shopNirDecimalToScaled($value ?? 0, $scale));
+            }
+        }
+        $selection = shopNirNormalizeStornoSelection($body, $originalLines, $alreadyStorned);
+
         $layerStmt = $db->prepare('SELECT * FROM shop_inventory_cost_layers WHERE nir_document_id = ? ORDER BY created_at FOR UPDATE');
         $layerStmt->execute([$id]);
         $layers = $layerStmt->fetchAll();
+        $layerByLine = [];
+        foreach ($layers as $layer) $layerByLine[(string)$layer['nir_line_id']] = $layer;
         $consumptionStmt = $db->prepare('SELECT COUNT(*) FROM shop_inventory_layer_consumptions WHERE inventory_cost_layer_id = ? AND reversed_at IS NULL');
-        foreach ($layers as $layer) {
+        foreach ($selection as $selected) {
+            $line = $selected['line'];
+            if (empty($line['is_stock_item'])) continue;
+            $layer = $layerByLine[(string)$line['id']] ?? null;
+            if (!$layer) throw new ShopNirHttpException('Produsul selectat nu mai are lotul contabil asociat.', 409, ['line_id' => $line['id']]);
             $consumptionStmt->execute([(string)$layer['id']]);
-            if (shopNirDecimalToScaled($layer['remaining_quantity'], 4) !== shopNirDecimalToScaled($layer['original_quantity'], 4)) {
-                throw new ShopNirHttpException('O parte din marfa acestui NIR a fost deja consumată. Anulează mai întâi documentele de ieșire legate, apoi încearcă din nou.', 409, ['layer_id' => $layer['id']]);
-            }
             if ((int)$consumptionStmt->fetchColumn() > 0) {
-                throw new ShopNirHttpException('Acest NIR este folosit de un document de ieșire. Anulează mai întâi ieșirea, apoi reversează NIR-ul.', 409, ['layer_id' => $layer['id']]);
+                throw new ShopNirHttpException('Produsul selectat este folosit de un document de ieșire. Anulează mai întâi ieșirea, apoi stornează produsul.', 409, ['layer_id' => $layer['id']]);
+            }
+            $priorStock = (int)($alreadyStorned[(string)$line['id']]['stock_quantity'] ?? 0);
+            $expectedRemaining = shopNirDecimalToScaled($layer['original_quantity'], 4) - $priorStock;
+            $actualRemaining = shopNirDecimalToScaled($layer['remaining_quantity'], 4);
+            if ($actualRemaining !== $expectedRemaining) {
+                throw new ShopNirHttpException('O parte din produsul selectat a fost deja consumată. Anulează mai întâi documentele de ieșire legate, apoi încearcă din nou.', 409, ['layer_id' => $layer['id']]);
             }
         }
 
         $settings = shopNirSettings($db, true);
         $sequence = (int)$settings['next_sequence'];
-        $reversalNumber = 'REV-' . substr((string)$document['nir_date'], 0, 4) . '-' . str_pad((string)$sequence, 6, '0', STR_PAD_LEFT);
+        $stornoDocumentDate = (string)$stornoInvoice['supplier_invoice_date'];
+        $reversalNumber = trim((string)($settings['number_prefix'] ?? 'NIR')) . '-' . substr($stornoDocumentDate, 0, 4) . '-' . str_pad((string)$sequence, 6, '0', STR_PAD_LEFT);
         $db->prepare('UPDATE shop_nir_settings SET next_sequence = next_sequence + 1 WHERE id = 1')->execute();
         $reversalId = uuidV4();
-        $temporaryNumber = 'DRAFT-REV-' . strtoupper(substr(str_replace('-', '', $reversalId), 0, 8));
+        $temporaryNumber = 'DRAFT-NIR-' . strtoupper(substr(str_replace('-', '', $reversalId), 0, 8));
+
+        $negative = 'shopNirStornoNegativeDecimal';
+        $positiveLineData = [];
+        $documentTotals = ['subtotal' => 0, 'vat_total' => 0, 'grand_total' => 0, 'subtotal_ron' => 0, 'vat_total_ron' => 0, 'grand_total_ron' => 0, 'inventory_cost_total_ron' => 0];
+        foreach ($selection as $selected) {
+            $line = $selected['line'];
+            $lineId = (string)$line['id'];
+            $quantityScaled = (int)$selected['quantity_scaled'];
+            $originalQuantityScaled = max(1, shopNirDecimalToScaled($line['accepted_quantity'], 4));
+            $allocated = shopNirDivideRounded(shopNirDecimalToScaled($line['allocated_cost_ron'] ?? 0, 2) * $quantityScaled, $originalQuantityScaled);
+            $calculated = shopNirCalculateLine([
+                'accepted_quantity' => shopNirScaledToDecimal($quantityScaled, 4),
+                'conversion_factor' => $line['conversion_factor'],
+                'unit_price' => $line['unit_price'],
+                'discount_percent' => $line['discount_percent'],
+                'vat_rate' => $line['vat_rate'],
+                'exchange_rate' => $document['exchange_rate'],
+                'allocated_cost_ron' => shopNirScaledToDecimal($allocated, 2),
+            ], (bool)($settings['include_vat_in_inventory_cost'] ?? false));
+            $data = $calculated + ['allocated_cost_ron' => shopNirScaledToDecimal($allocated, 2)];
+            // The final chunk absorbs prior rounding so all storno documents add
+            // up exactly to the values of the original NIR line.
+            if ($selected['is_final_for_line']) {
+                foreach (['line_net' => 6, 'line_vat' => 6, 'line_total' => 6, 'line_net_ron' => 2, 'line_vat_ron' => 2, 'line_total_ron' => 2, 'allocated_cost_ron' => 2, 'inventory_cost_total_ron' => 2] as $field => $scale) {
+                    $originalValue = max(0, shopNirDecimalToScaled($line[$field] ?? 0, $scale));
+                    $priorValue = (int)($alreadyStorned[$lineId][$field] ?? 0);
+                    $data[$field] = shopNirScaledToDecimal(max(0, $originalValue - $priorValue), $scale);
+                }
+            }
+            $positiveLineData[$lineId] = $data;
+            foreach (['line_net' => ['subtotal', 6], 'line_vat' => ['vat_total', 6], 'line_total' => ['grand_total', 6], 'line_net_ron' => ['subtotal_ron', 2], 'line_vat_ron' => ['vat_total_ron', 2], 'line_total_ron' => ['grand_total_ron', 2], 'inventory_cost_total_ron' => ['inventory_cost_total_ron', 2]] as $field => [$totalField, $scale]) {
+                $documentTotals[$totalField] += shopNirDecimalToScaled($data[$field] ?? 0, $scale);
+            }
+        }
         $insertDoc = $db->prepare(
             'INSERT INTO shop_nir_documents
              (id, temporary_number, nir_number, status, supplier_id, warehouse_id, supplier_invoice_series, supplier_invoice_number,
@@ -1464,35 +1858,37 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
              VALUES (?, ?, ?, "confirmed", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "reversal", ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)'
         );
         $insertDoc->execute([
-            $reversalId, $temporaryNumber, $reversalNumber, $document['supplier_id'], $document['warehouse_id'], $document['supplier_invoice_series'], $document['supplier_invoice_number'],
-            $document['supplier_invoice_date'], $document['nir_date'], $document['nir_time'] ?? null, (new DateTimeImmutable('today'))->format('Y-m-d'), (new DateTimeImmutable())->format('H:i:s'), $document['currency'], $document['exchange_rate'], $document['exchange_rate_date'],
-            'Reversare ' . ($document['nir_number'] ?? $document['temporary_number']) . ': ' . $reason,
-            '-' . $document['subtotal'], '-' . $document['vat_total'], '-' . $document['grand_total'], '-' . $document['subtotal_ron'], '-' . $document['vat_total_ron'], '-' . $document['grand_total_ron'], '-' . $document['inventory_cost_total_ron'],
+            $reversalId, $temporaryNumber, $reversalNumber, $document['supplier_id'], $document['warehouse_id'], $stornoInvoice['supplier_invoice_series'], $stornoInvoice['supplier_invoice_number'],
+            $stornoInvoice['supplier_invoice_date'], $stornoDocumentDate, (new DateTimeImmutable())->format('H:i:s'), $stornoDocumentDate, (new DateTimeImmutable())->format('H:i:s'), $document['currency'], $document['exchange_rate'], $document['exchange_rate_date'],
+            'Stornare ' . ($document['nir_number'] ?? $document['temporary_number'])
+                . ' — factura originală ' . trim((string)($document['supplier_invoice_series'] ?? '') . ' ' . (string)($document['supplier_invoice_number'] ?? ''))
+                . ' din ' . (string)($document['supplier_invoice_date'] ?? '') . ': ' . $reason,
+            shopNirStornoNegativeDecimal(shopNirScaledToDecimal($documentTotals['subtotal'], 6), 6),
+            shopNirStornoNegativeDecimal(shopNirScaledToDecimal($documentTotals['vat_total'], 6), 6),
+            shopNirStornoNegativeDecimal(shopNirScaledToDecimal($documentTotals['grand_total'], 6), 6),
+            shopNirStornoNegativeDecimal(shopNirScaledToDecimal($documentTotals['subtotal_ron'], 2), 2),
+            shopNirStornoNegativeDecimal(shopNirScaledToDecimal($documentTotals['vat_total_ron'], 2), 2),
+            shopNirStornoNegativeDecimal(shopNirScaledToDecimal($documentTotals['grand_total_ron'], 2), 2),
+            shopNirStornoNegativeDecimal(shopNirScaledToDecimal($documentTotals['inventory_cost_total_ron'], 2), 2),
             $actor['name'], $id, $actor['name'], $actor['name'],
         ]);
-        $lineStmt = $db->prepare('SELECT * FROM shop_nir_lines WHERE nir_document_id = ? ORDER BY line_number');
-        $lineStmt->execute([$id]);
-        $originalLines = $lineStmt->fetchAll();
-        if (!$originalLines) throw new ShopNirHttpException('NIR-ul nu are poziții care pot fi reversate.', 409);
-        $lineById = [];
-        foreach ($originalLines as $line) $lineById[(string)$line['id']] = $line;
         $insertReverseLine = $db->prepare(
             'INSERT INTO shop_nir_lines
              (id, nir_document_id, line_number, product_id, supplier_product_reference_id, supplier_product_code, supplier_product_name,
               supplier_ean, purchase_unit, stock_unit, invoiced_quantity, received_quantity, accepted_quantity, rejected_quantity, conversion_factor,
               stock_quantity, unit_price, discount_percent, vat_rate, line_net, line_vat, line_total, line_net_ron, line_vat_ron,
-              line_total_ron, allocated_cost_ron, inventory_unit_cost_ron, inventory_cost_total_ron, resolution_status, is_stock_item, mismatch_reason)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "reversal", ?, ?)'
+              line_total_ron, allocated_cost_ron, inventory_unit_cost_ron, inventory_cost_total_ron, resolution_status, is_stock_item, mismatch_reason, storno_of_line_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "reversal", ?, ?, ?)'
         );
-        $negative = static fn($value, int $scale): string => shopNirScaledToDecimal(-shopNirDecimalToScaled($value, $scale), $scale);
-        $insertReversalLine = static function (array $line, string $reverseLineId) use ($insertReverseLine, $reversalId, $negative, $reason): void {
+        $insertReversalLine = static function (array $line, array $selected, array $data, string $reverseLineId) use ($insertReverseLine, $reversalId, $negative, $reason): void {
+            $quantity = $selected['quantity'];
             $insertReverseLine->execute([
                 $reverseLineId, $reversalId, (int)$line['line_number'], $line['product_id'], $line['supplier_product_reference_id'], $line['supplier_product_code'], $line['supplier_product_name'],
-                $line['supplier_ean'], $line['purchase_unit'], $line['stock_unit'], $negative($line['invoiced_quantity'], 4), $negative($line['received_quantity'] ?? $line['accepted_quantity'], 4), $negative($line['accepted_quantity'], 4),
-                $line['conversion_factor'], $negative($line['stock_quantity'], 4), $line['unit_price'], $line['discount_percent'], $line['vat_rate'],
-                $negative($line['line_net'], 6), $negative($line['line_vat'], 6), $negative($line['line_total'], 6), $negative($line['line_net_ron'], 2),
-                $negative($line['line_vat_ron'], 2), $negative($line['line_total_ron'], 2), $negative($line['allocated_cost_ron'], 2),
-                $line['inventory_unit_cost_ron'], $negative($line['inventory_cost_total_ron'], 2), (int)($line['is_stock_item'] ?? 1), $reason,
+                $line['supplier_ean'], $line['purchase_unit'], $line['stock_unit'], $negative($quantity, 4), $negative($quantity, 4), $negative($quantity, 4),
+                $line['conversion_factor'], $negative($data['stock_quantity'], 4), $line['unit_price'], $line['discount_percent'], $line['vat_rate'],
+                $negative($data['line_net'], 6), $negative($data['line_vat'], 6), $negative($data['line_total'], 6), $negative($data['line_net_ron'], 2),
+                $negative($data['line_vat_ron'], 2), $negative($data['line_total_ron'], 2), $negative($data['allocated_cost_ron'], 2),
+                $line['inventory_unit_cost_ron'], $negative($data['inventory_cost_total_ron'], 2), (int)($line['is_stock_item'] ?? 1), $reason, $line['id'],
             ]);
         };
         $productLock = $db->prepare('SELECT accounting_stock_quantity FROM shop_products WHERE id = ? FOR UPDATE');
@@ -1507,39 +1903,42 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
         );
         $originalMovement = $db->prepare('SELECT id FROM shop_inventory_movements WHERE inventory_cost_layer_id = ? AND movement_type = "NIR_IN" LIMIT 1');
         $affectedProducts = [];
-        $reversedLineIds = [];
-        foreach ($layers as $layer) {
-            $line = $lineById[(string)$layer['nir_line_id']] ?? null;
-            if (!$line) throw new RuntimeException('Linia sursă a lotului nu mai există.');
+        $stornedLineIds = [];
+        foreach ($selection as $selected) {
+            $line = $selected['line'];
+            $data = $positiveLineData[(string)$line['id']];
             $reverseLineId = uuidV4();
-            $insertReversalLine($line, $reverseLineId);
-            $reversedLineIds[(string)$line['id']] = true;
+            $insertReversalLine($line, $selected, $data, $reverseLineId);
+            $stornedLineIds[(string)$line['id']] = true;
+            if (empty($line['is_stock_item'])) continue;
+            $layer = $layerByLine[(string)$line['id']];
             $productId = (string)$layer['product_id'];
             $affectedProducts[$productId] = true;
             $productLock->execute([$productId]);
             $productLock->fetch();
-            $updateProduct->execute([$layer['original_quantity'], $productId, $layer['original_quantity']]);
-            if ($updateProduct->rowCount() !== 1) throw new ShopNirHttpException('Stocul contabil nu permite reversarea integrală a NIR-ului.', 409, ['product_id' => $productId]);
+            $stornoStockQuantity = (string)$data['stock_quantity'];
+            $updateProduct->execute([$stornoStockQuantity, $productId, $stornoStockQuantity]);
+            if ($updateProduct->rowCount() !== 1) throw new ShopNirHttpException('Stocul contabil nu permite stornarea cantității selectate.', 409, ['product_id' => $productId]);
             $readStock->execute([$productId]);
             $after = (string)$readStock->fetchColumn();
             $originalMovement->execute([(string)$layer['id']]);
             $originalMovementId = $originalMovement->fetchColumn() ?: null;
-            $negativeQuantity = $negative($layer['original_quantity'], 4);
-            $negativeTotal = $negative($layer['total_cost_ron'], 2);
+            $negativeQuantity = $negative($stornoStockQuantity, 4);
+            $negativeTotal = $negative($data['inventory_cost_total_ron'], 2);
             $insertMovement->execute([
                 uuidV4(), $productId, $layer['warehouse_id'], $reversalId, $reverseLineId, $layer['id'],
                 shopNirDecimalToScaled($negativeQuantity, 0), shopNirDecimalToScaled($after, 0), $negativeQuantity, $after,
                 $layer['unit_cost_ron'], $negativeTotal, (new DateTimeImmutable('today'))->format('Y-m-d'), $originalMovementId,
-                'Reversare ' . $reversalNumber . ': ' . $reason, $actor['name'],
+                'Stornare ' . $reversalNumber . ': ' . $reason, $actor['name'],
             ]);
-            $db->prepare('UPDATE shop_inventory_cost_layers SET remaining_quantity = 0, status = "reversed", is_reversed = 1, reversed_at = NOW(), row_version = row_version + 1 WHERE id = ?')->execute([(string)$layer['id']]);
-        }
-        foreach ($originalLines as $line) {
-            if (isset($reversedLineIds[(string)$line['id']])) continue;
-            if (!empty($line['is_stock_item'])) {
-                throw new ShopNirHttpException('O poziție de stoc nu mai are lotul FIFO asociat. Reversarea a fost oprită fără să modifice datele.', 409, ['nir_line_id' => $line['id']]);
-            }
-            $insertReversalLine($line, uuidV4());
+            $newRemaining = shopNirDecimalToScaled($layer['remaining_quantity'], 4) - shopNirDecimalToScaled($stornoStockQuantity, 4);
+            if ($newRemaining < 0) throw new ShopNirHttpException('Cantitatea selectată depășește lotul disponibil.', 409, ['layer_id' => $layer['id']]);
+            $layerUpdate = $db->prepare('UPDATE shop_inventory_cost_layers SET remaining_quantity = ?, status = ?, is_reversed = ?, reversed_at = ?, row_version = row_version + 1 WHERE id = ? AND remaining_quantity = ?');
+            $layerUpdate->execute([
+                shopNirScaledToDecimal($newRemaining, 4), $newRemaining === 0 ? 'reversed' : 'open', $newRemaining === 0 ? 1 : 0,
+                $newRemaining === 0 ? (new DateTimeImmutable())->format('Y-m-d H:i:s') : null, $layer['id'], $layer['remaining_quantity'],
+            ]);
+            if ($layerUpdate->rowCount() !== 1) throw new ShopNirHttpException('Lotul contabil a fost modificat simultan.', 409, ['conflict' => true, 'layer_id' => $layer['id']]);
         }
         $latestCost = $db->prepare('SELECT unit_cost_ron FROM shop_inventory_cost_layers WHERE product_id = ? AND is_reversed = 0 AND remaining_quantity > 0 ORDER BY reception_date DESC, confirmed_at DESC, created_at DESC LIMIT 1');
         $updateCost = $db->prepare('UPDATE shop_products SET cost_price = ? WHERE id = ?');
@@ -1547,14 +1946,53 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
             $latestCost->execute([$productId]);
             $updateCost->execute([(string)($latestCost->fetchColumn() ?: '0'), $productId]);
         }
-        $updateOriginal = $db->prepare('UPDATE shop_nir_documents SET status = "reversed", reversed_at = NOW(), reversed_by = ?, updated_by = ?, row_version = row_version + 1 WHERE id = ? AND row_version = ? AND status = "confirmed"');
-        $updateOriginal->execute([$actor['name'], $actor['name'], $id, $expectedVersion]);
+        $selectedQuantityByLine = [];
+        foreach ($selection as $selected) $selectedQuantityByLine[(string)$selected['line']['id']] = (int)$selected['quantity_scaled'];
+        $fullyStorned = true;
+        foreach ($originalLines as $line) {
+            $lineId = (string)$line['id'];
+            $originalQuantity = max(0, shopNirDecimalToScaled($line['accepted_quantity'] ?? 0, 4));
+            if ($originalQuantity === 0) continue;
+            $prior = (int)($alreadyStorned[$lineId]['accepted_quantity'] ?? 0);
+            $now = (int)($selectedQuantityByLine[$lineId] ?? 0);
+            if ($prior + $now < $originalQuantity) { $fullyStorned = false; break; }
+        }
+        $updateOriginal = $db->prepare('UPDATE shop_nir_documents SET updated_by = ?, row_version = row_version + 1 WHERE id = ? AND row_version = ? AND status = "confirmed"');
+        $updateOriginal->execute([$actor['name'], $id, $expectedVersion]);
         if ($updateOriginal->rowCount() !== 1) throw new ShopNirHttpException('NIR-ul a fost modificat simultan.', 409, ['conflict' => true]);
-        shopNirAudit($db, $user, 'NIR_REVERSED', 'NirDocument', $id, ['status' => 'confirmed'], ['status' => 'reversed', 'reversal_document_id' => $reversalId, 'reason' => $reason]);
-        $db->prepare('INSERT INTO shop_domain_outbox (id, event_type, aggregate_type, aggregate_id, payload_json) VALUES (?, "NirReversed", "NirDocument", ?, ?)')
-            ->execute([uuidV4(), $id, json_encode(['nir_id' => $id, 'reversal_id' => $reversalId], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+        $stornoState = $fullyStorned ? 'full' : 'partial';
+        shopNirAudit($db, $user, 'NIR_STORNO_CREATED', 'NirDocument', $id, ['status' => 'confirmed'], [
+            'status' => 'confirmed', 'public_status' => 'confirmed',
+            'storno_document_id' => $reversalId, 'reversal_document_id' => $reversalId, 'reason' => $reason,
+            'line_ids' => array_keys($stornedLineIds), 'storno_state' => $stornoState,
+            'supplier_invoice' => $stornoInvoice,
+            'original_supplier_invoice' => [
+                'series' => $document['supplier_invoice_series'] ?? null,
+                'number' => $document['supplier_invoice_number'] ?? null,
+                'date' => $document['supplier_invoice_date'] ?? null,
+            ],
+        ]);
+        $db->prepare('INSERT INTO shop_domain_outbox (id, event_type, aggregate_type, aggregate_id, payload_json) VALUES (?, "NirStornoCreated", "NirDocument", ?, ?)')
+            ->execute([uuidV4(), $id, json_encode([
+                'nir_id' => $id, 'storno_id' => $reversalId, 'reversal_id' => $reversalId,
+                'fully_storned' => $fullyStorned, 'line_ids' => array_keys($stornedLineIds),
+                'supplier_invoice' => $stornoInvoice,
+                'original_supplier_invoice' => [
+                    'series' => $document['supplier_invoice_series'] ?? null,
+                    'number' => $document['supplier_invoice_number'] ?? null,
+                    'date' => $document['supplier_invoice_date'] ?? null,
+                ],
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
         $db->commit();
-        return ['original' => shopNirFetchDocument($db, $id, $user), 'reversal' => shopNirFetchDocument($db, $reversalId, $user)];
+        $original = shopNirFetchDocument($db, $id, $user);
+        $storno = shopNirFetchDocument($db, $reversalId, $user);
+        return [
+            'original' => $original,
+            'reversal' => $storno,
+            'storno' => $storno,
+            'fully_storned' => $fullyStorned,
+            'storno_state' => $stornoState,
+        ];
     } catch (Throwable $error) {
         if ($db->inTransaction()) $db->rollBack();
         throw $error;
@@ -2190,12 +2628,11 @@ function shopNirDocumentMovements(PDO $db, string $id): array {
     $documentStmt->execute([$id]);
     $document = $documentStmt->fetch();
     if (!$document) throw new ShopNirHttpException('NIR-ul nu există.', 404);
-    $documentIds = [$id];
-    if ((string)$document['status'] === 'reversed') {
-        $reversalStmt = $db->prepare('SELECT id FROM shop_nir_documents WHERE reversal_of_id = ? ORDER BY confirmed_at, id');
-        $reversalStmt->execute([$id]);
-        $documentIds = array_merge($documentIds, array_map('strval', $reversalStmt->fetchAll(PDO::FETCH_COLUMN)));
-    }
+    $originalId = trim((string)($document['reversal_of_id'] ?? '')) ?: $id;
+    $documentIds = [$originalId];
+    $reversalStmt = $db->prepare('SELECT id FROM shop_nir_documents WHERE reversal_of_id = ? ORDER BY confirmed_at, id');
+    $reversalStmt->execute([$originalId]);
+    $documentIds = array_merge($documentIds, array_map('strval', $reversalStmt->fetchAll(PDO::FETCH_COLUMN)));
     $placeholders = implode(',', array_fill(0, count($documentIds), '?'));
     $stmt = $db->prepare(
         "SELECT m.*, p.name AS product_name, p.sku AS product_sku,
@@ -2217,9 +2654,248 @@ function shopNirDocumentLayers(PDO $db, string $id): array {
     return $stmt->fetchAll();
 }
 
+function shopNirPdfTemplate(array $document): string {
+    if (trim((string)($document['reversal_of_id'] ?? '')) !== '' || mb_strtolower(trim((string)($document['source_type'] ?? ''))) === 'reversal') {
+        return 'reversal';
+    }
+    return mb_strtolower(trim((string)($document['status'] ?? ''))) === 'reversed' ? 'entry_reversed' : 'entry';
+}
+
+function shopNirPdfJson($value): array {
+    if (!is_string($value) || trim($value) === '') return [];
+    $decoded = json_decode($value, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+function shopNirPdfRelatedDocumentRow(array $row): array {
+    return [
+        'id' => (string)($row['id'] ?? ''),
+        'number' => (string)($row['nir_number'] ?? $row['temporary_number'] ?? ''),
+        'nir_number' => (string)($row['nir_number'] ?? ''),
+        'temporary_number' => (string)($row['temporary_number'] ?? ''),
+        'status' => (string)($row['status'] ?? ''),
+        'source_type' => (string)($row['source_type'] ?? ''),
+        'supplier_invoice_series' => $row['supplier_invoice_series'] ?? null,
+        'supplier_invoice_number' => $row['supplier_invoice_number'] ?? null,
+        'supplier_invoice_date' => $row['supplier_invoice_date'] ?? null,
+        'nir_date' => $row['nir_date'] ?? null,
+        'reception_date' => $row['reception_date'] ?? null,
+        'confirmed_at' => $row['confirmed_at'] ?? null,
+        'confirmed_by' => $row['confirmed_by'] ?? null,
+        'reversed_at' => $row['reversed_at'] ?? null,
+        'reversed_by' => $row['reversed_by'] ?? null,
+        'reversal_of_id' => $row['reversal_of_id'] ?? null,
+        'grand_total_ron' => $row['grand_total_ron'] ?? null,
+    ];
+}
+
+function shopNirPdfQuantitySummary(array $lines, string $field): array {
+    $byUnit = [];
+    foreach ($lines as $line) {
+        $unit = trim((string)($line['purchase_unit'] ?? '')) ?: 'unități';
+        $byUnit[$unit] = ($byUnit[$unit] ?? 0.0) + (float)($line[$field] ?? 0);
+    }
+    ksort($byUnit, SORT_NATURAL | SORT_FLAG_CASE);
+    return $byUnit;
+}
+
+function shopNirBuildPdfSummaryData(array $document): array {
+    $lines = is_array($document['lines'] ?? null) ? $document['lines'] : [];
+    $differenceCount = 0;
+    $unmatchedCount = 0;
+    $invoiceNet = 0.0;
+    $invoiceVat = 0.0;
+    $vatBreakdown = [];
+    foreach ($lines as $line) {
+        $invoiced = (float)($line['invoiced_quantity'] ?? 0);
+        $accepted = (float)($line['accepted_quantity'] ?? 0);
+        $received = (float)($line['received_quantity'] ?? 0);
+        if (abs($invoiced - $accepted) > 0.00005 || abs($received - $accepted) > 0.00005 || trim((string)($line['difference_reason'] ?? $line['difference_notes'] ?? '')) !== '') {
+            $differenceCount++;
+        }
+        if (str_starts_with(mb_strtolower((string)($line['resolution_status'] ?? '')), 'unmatched') || trim((string)($line['product_id'] ?? '')) === '') {
+            $unmatchedCount++;
+        }
+        $gross = $invoiced * (float)($line['unit_price'] ?? 0);
+        $discount = $gross * (float)($line['discount_percent'] ?? 0) / 100;
+        $net = $gross - $discount;
+        $vat = $net * (float)($line['vat_rate'] ?? 0) / 100;
+        $invoiceNet += $net;
+        $invoiceVat += $vat;
+
+        $rate = number_format((float)($line['vat_rate'] ?? 0), 2, '.', '');
+        if (!isset($vatBreakdown[$rate])) $vatBreakdown[$rate] = ['rate' => $rate, 'net' => 0.0, 'vat' => 0.0, 'net_ron' => 0.0, 'vat_ron' => 0.0];
+        $vatBreakdown[$rate]['net'] += (float)($line['line_net'] ?? 0);
+        $vatBreakdown[$rate]['vat'] += (float)($line['line_vat'] ?? 0);
+        $vatBreakdown[$rate]['net_ron'] += (float)($line['line_net_ron'] ?? 0);
+        $vatBreakdown[$rate]['vat_ron'] += (float)($line['line_vat_ron'] ?? 0);
+    }
+    ksort($vatBreakdown, SORT_NUMERIC);
+    foreach ($vatBreakdown as &$group) {
+        foreach (['net', 'vat', 'net_ron', 'vat_ron'] as $field) $group[$field] = number_format((float)$group[$field], 2, '.', '');
+    }
+    unset($group);
+    return [
+        'line_count' => count($lines),
+        'difference_line_count' => $differenceCount,
+        'unmatched_line_count' => $unmatchedCount,
+        'invoiced_quantities' => shopNirPdfQuantitySummary($lines, 'invoiced_quantity'),
+        'received_quantities' => shopNirPdfQuantitySummary($lines, 'received_quantity'),
+        'accepted_quantities' => shopNirPdfQuantitySummary($lines, 'accepted_quantity'),
+        'invoice_totals' => [
+            'subtotal' => number_format($invoiceNet, 2, '.', ''),
+            'vat_total' => number_format($invoiceVat, 2, '.', ''),
+            'grand_total' => number_format($invoiceNet + $invoiceVat, 2, '.', ''),
+        ],
+        'accepted_totals' => [
+            'subtotal' => (string)($document['subtotal'] ?? '0.00'),
+            'vat_total' => (string)($document['vat_total'] ?? '0.00'),
+            'grand_total' => (string)($document['grand_total'] ?? '0.00'),
+            'subtotal_ron' => (string)($document['subtotal_ron'] ?? '0.00'),
+            'vat_total_ron' => (string)($document['vat_total_ron'] ?? '0.00'),
+            'grand_total_ron' => (string)($document['grand_total_ron'] ?? '0.00'),
+        ],
+        'inventory_cost_total_ron' => (string)($document['inventory_cost_total_ron'] ?? '0.00'),
+        'total_difference_ron' => (string)($document['total_difference_ron'] ?? '0.00'),
+        'vat_breakdown' => array_values($vatBreakdown),
+    ];
+}
+
 function shopNirExportRows(PDO $db, string $id, array $user): array {
     $document = shopNirFetchDocument($db, $id, $user);
     if (!shopNirCan($user, 'NIR_VIEW_COSTS')) throw new ShopNirHttpException('Nu ai permisiunea de a exporta costurile NIR.', 403);
+
+    foreach ($document['lines'] as &$line) unset($line['price_comparison']);
+    unset($line);
+
+    $company = $db->query('SELECT * FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
+    $companyDefaults = [
+        'legal_name' => 'CAB IT EXPERT SRL',
+        'trade_name' => 'G-Trots România',
+        'cui' => '49972605',
+        'registration_number' => 'J2024008303400',
+        'country' => 'România',
+        'email' => 'contact@g-trots.ro',
+        'website' => 'https://g-trots.ro',
+    ];
+    foreach ($companyDefaults as $field => $fallback) {
+        if (trim((string)($company[$field] ?? '')) === '') $company[$field] = $fallback;
+    }
+
+    $supplier = [];
+    if (trim((string)($document['supplier_id'] ?? '')) !== '') {
+        $supplierStmt = $db->prepare('SELECT * FROM shop_suppliers WHERE id = ? LIMIT 1');
+        $supplierStmt->execute([(string)$document['supplier_id']]);
+        $supplier = $supplierStmt->fetch() ?: [];
+    }
+    $warehouse = [];
+    if (trim((string)($document['warehouse_id'] ?? '')) !== '') {
+        $warehouseStmt = $db->prepare('SELECT * FROM shop_warehouses WHERE id = ? LIMIT 1');
+        $warehouseStmt->execute([(string)$document['warehouse_id']]);
+        $warehouse = $warehouseStmt->fetch() ?: [];
+    }
+
+    $template = shopNirPdfTemplate($document);
+    $relationship = ['original' => null, 'reversal' => null, 'original_invoice' => null, 'reason' => null];
+    $relatedRows = [];
+    if ($template === 'reversal') {
+        $relatedStmt = $db->prepare('SELECT * FROM shop_nir_documents WHERE id = ? LIMIT 1');
+        $relatedStmt->execute([(string)$document['reversal_of_id']]);
+        if ($row = $relatedStmt->fetch()) {
+            $relatedRows[(string)$row['id']] = $row;
+            $relationship['original'] = shopNirPdfRelatedDocumentRow($row);
+            $relationship['original_invoice'] = [
+                'series' => $row['supplier_invoice_series'] ?? null,
+                'number' => $row['supplier_invoice_number'] ?? null,
+                'date' => $row['supplier_invoice_date'] ?? null,
+            ];
+        }
+        $relationship['reversal'] = shopNirPdfRelatedDocumentRow($document);
+    } elseif ($template === 'entry_reversed') {
+        $relatedStmt = $db->prepare('SELECT * FROM shop_nir_documents WHERE reversal_of_id = ? ORDER BY confirmed_at DESC, created_at DESC LIMIT 1');
+        $relatedStmt->execute([$id]);
+        if ($row = $relatedStmt->fetch()) {
+            $relatedRows[(string)$row['id']] = $row;
+            $relationship['reversal'] = shopNirPdfRelatedDocumentRow($row);
+        }
+        $relationship['original'] = shopNirPdfRelatedDocumentRow($document);
+    }
+
+    $documentIds = array_values(array_unique(array_filter(array_merge([$id], array_keys($relatedRows)))));
+    $placeholders = implode(',', array_fill(0, count($documentIds), '?'));
+    $attachmentsStmt = $db->prepare(
+        "SELECT a.nir_document_id, a.id, a.original_name, a.mime_type, a.extension, a.file_size, a.sha256,
+                a.extraction_status, a.created_by, a.created_at, n.nir_number, n.temporary_number, n.reversal_of_id
+         FROM shop_nir_attachments a
+         INNER JOIN shop_nir_documents n ON n.id = a.nir_document_id
+         WHERE a.nir_document_id IN ({$placeholders}) ORDER BY a.created_at, a.id"
+    );
+    $attachmentsStmt->execute($documentIds);
+    $attachments = [];
+    foreach ($attachmentsStmt->fetchAll() as $attachment) {
+        $attachment['document_number'] = (string)($attachment['nir_number'] ?? $attachment['temporary_number'] ?? '');
+        $attachment['relation'] = (string)$attachment['nir_document_id'] === $id ? 'current' : ((string)($attachment['reversal_of_id'] ?? '') !== '' ? 'reversal' : 'original');
+        unset($attachment['nir_number'], $attachment['temporary_number'], $attachment['reversal_of_id']);
+        $attachments[] = $attachment;
+    }
+
+    $auditStmt = $db->prepare(
+        "SELECT id, action_type, entity_id, actor_id, actor_name, old_values_json, new_values_json, context_json, created_at
+         FROM shop_domain_audit
+         WHERE entity_type = 'NirDocument' AND entity_id IN ({$placeholders}) AND action_type NOT LIKE 'FIFO_%'
+         ORDER BY created_at, id"
+    );
+    $auditStmt->execute($documentIds);
+    $audit = [];
+    foreach ($auditStmt->fetchAll() as $event) {
+        $oldValues = shopNirPdfJson($event['old_values_json'] ?? null);
+        $newValues = shopNirPdfJson($event['new_values_json'] ?? null);
+        $context = shopNirPdfJson($event['context_json'] ?? null);
+        if (in_array((string)$event['action_type'], ['NIR_STORNO_CREATED', 'NIR_REVERSED'], true) && $relationship['reason'] === null) {
+            $reason = trim((string)($newValues['reason'] ?? $context['reason'] ?? ''));
+            if ($reason !== '') $relationship['reason'] = $reason;
+        }
+        $audit[] = [
+            'id' => (string)$event['id'],
+            'action_type' => (string)$event['action_type'],
+            'entity_id' => (string)$event['entity_id'],
+            'actor_id' => $event['actor_id'] ?? null,
+            'actor_name' => $event['actor_name'] ?? null,
+            'created_at' => $event['created_at'] ?? null,
+            'old_values' => $oldValues,
+            'new_values' => $newValues,
+            'context' => $context,
+        ];
+    }
+    if ($relationship['reason'] === null && $template !== 'entry') {
+        $notes = trim((string)($template === 'reversal' ? ($document['notes'] ?? '') : ($relatedRows ? (reset($relatedRows)['notes'] ?? '') : '')));
+        $notes = preg_replace('/^(?:Stornare|Reversare)\s+[^:]+:\s*/iu', '', $notes) ?? $notes;
+        if ($notes !== '') $relationship['reason'] = $notes;
+    }
+
+    $summary = shopNirBuildPdfSummaryData($document);
+    $fingerprintPayload = $document;
+    unset($fingerprintPayload['permissions'], $fingerprintPayload['pdf_context']);
+    $fingerprint = hash('sha256', json_encode($fingerprintPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
+    $document['pdf_context'] = [
+        'template' => $template,
+        'company' => $company,
+        'supplier' => $supplier,
+        'warehouse' => $warehouse,
+        'relationship' => $relationship,
+        'original_invoice_series' => $document['original_invoice_series'] ?? ($relationship['original_invoice']['series'] ?? null),
+        'original_invoice_number' => $document['original_invoice_number'] ?? ($relationship['original_invoice']['number'] ?? null),
+        'original_invoice_date' => $document['original_invoice_date'] ?? ($relationship['original_invoice']['date'] ?? null),
+        'attachments' => $attachments,
+        'audit' => $audit,
+        'summary' => $summary,
+        'generation' => [
+            'generated_at' => date('c'),
+            'generated_by' => shopNirActor($user)['name'],
+            'app' => 'G-Trots Management',
+            'data_fingerprint' => $fingerprint,
+        ],
+    ];
     return $document;
 }
 
@@ -2228,7 +2904,7 @@ function shopNirXmlEscape($value): string {
 }
 
 function shopNirBuildSpreadsheetXml(array $document): string {
-    $headers = ['Nr.', 'Cod furnizor', 'Produs', 'Cantitate', 'UM', 'Preț unitar', 'TVA %', 'Total RON', 'Cost FIFO/unitate'];
+    $headers = ['Nr.', 'Cod furnizor', 'Produs', 'Cantitate', 'UM', 'Preț unitar', 'TVA %', 'Total RON', 'Cost contabil/unitate'];
     $rows = [$headers];
     foreach ($document['lines'] as $line) $rows[] = [
         $line['line_number'], $line['supplier_product_code'], $line['supplier_product_name'], $line['accepted_quantity'], $line['purchase_unit'],
@@ -2287,85 +2963,35 @@ function shopNirBuildZip(array $files): string {
     return $local . $central . pack('VvvvvVVv', 0x06054b50, 0, 0, $count, $count, strlen($central), strlen($local), 0);
 }
 
-/** Build a real OOXML .xlsx package without adding a heavyweight runtime dependency. */
+/** Build the complete premium OOXML workbook used by both applications. */
 function shopNirBuildXlsx(array $document): string {
-    $headers = ['Nr.', 'Cod furnizor', 'Produs', 'Cantitate', 'UM', 'Preț unitar', 'TVA %', 'Total RON', 'Cost FIFO/unitate'];
-    $rows = [
-        ['NOTĂ DE INTRARE RECEPȚIE', $document['nir_number'] ?? $document['temporary_number']],
-        ['Data și ora NIR', $document['nir_date'] . ' ' . substr((string)($document['nir_time'] ?? ''), 0, 5), 'Data și ora recepției', $document['reception_date'] . ' ' . substr((string)($document['reception_time'] ?? ''), 0, 5)],
-        ['Furnizor', $document['supplier_name'] ?? ''],
-        ['Factură', trim(($document['supplier_invoice_series'] ?? '') . ' ' . ($document['supplier_invoice_number'] ?? '')), 'Data facturii', $document['supplier_invoice_date'] ?? ''],
-        ['Monedă', $document['currency'], 'Curs valutar', $document['exchange_rate'], 'Data cursului', $document['exchange_rate_date'] ?? ''],
-        [],
-        $headers,
-    ];
-    foreach ($document['lines'] as $line) $rows[] = [
-        $line['line_number'], $line['supplier_product_code'], $line['supplier_product_name'], $line['accepted_quantity'], $line['purchase_unit'],
-        $line['unit_price'], $line['vat_rate'], $line['line_total_ron'], $line['inventory_unit_cost_ron'],
-    ];
-    $rows[] = [];
-    $rows[] = ['Total fără TVA RON', $document['subtotal_ron'], 'TVA RON', $document['vat_total_ron'], 'Total RON', $document['grand_total_ron']];
-
-    $sheetRows = '';
-    foreach ($rows as $rowIndex => $row) {
-        $cells = '';
-        foreach ($row as $columnIndex => $cell) {
-            $ref = shopNirXlsxColumn($columnIndex + 1) . ($rowIndex + 1);
-            $numeric = $rowIndex >= 7 && is_numeric((string)$cell);
-            $style = $rowIndex === 0 ? ' s="2"' : ($rowIndex === 6 ? ' s="1"' : '');
-            if ($numeric) $cells .= '<c r="' . $ref . '"' . $style . '><v>' . shopNirXmlEscape($cell) . '</v></c>';
-            else $cells .= '<c r="' . $ref . '" t="inlineStr"' . $style . '><is><t>' . shopNirXmlEscape($cell) . '</t></is></c>';
-        }
-        $sheetRows .= '<row r="' . ($rowIndex + 1) . '">' . $cells . '</row>';
-    }
-    $sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="1" width="10" customWidth="1"/><col min="2" max="2" width="24" customWidth="1"/><col min="3" max="3" width="44" customWidth="1"/><col min="4" max="9" width="18" customWidth="1"/></cols><sheetData>' . $sheetRows . '</sheetData></worksheet>';
-    $styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Calibri"/></font><font><b/><color rgb="FFFF7A00"/><sz val="16"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF242126"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>';
-    return shopNirBuildZip([
-        '[Content_Types].xml' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>',
-        '_rels/.rels' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
-        'xl/workbook.xml' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="NIR" sheetId="1" r:id="rId1"/></sheets></workbook>',
-        'xl/_rels/workbook.xml.rels' => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>',
-        'xl/worksheets/sheet1.xml' => $sheet,
-        'xl/styles.xml' => $styles,
-    ]);
-}
-
-function shopNirPdfEscape(string $text): string {
-    $ascii = iconv('UTF-8', 'ISO-8859-1//TRANSLIT//IGNORE', $text);
-    return str_replace(['\\', '(', ')', "\r", "\n"], ['\\\\', '\\(', '\\)', '', ' '], $ascii === false ? $text : $ascii);
+    require_once __DIR__ . '/nir-xlsx.php';
+    return shopNirRenderPremiumXlsx($document);
 }
 
 function shopNirBuildPdf(array $document): string {
-    $lines = [
-        'G-TROTS - NOTA DE INTRARE RECEPTIE',
-        'Numar: ' . ($document['nir_number'] ?? $document['temporary_number']),
-        'Data NIR: ' . $document['nir_date'] . ' ' . substr((string)($document['nir_time'] ?? ''), 0, 5) . ' | Receptie: ' . $document['reception_date'] . ' ' . substr((string)($document['reception_time'] ?? ''), 0, 5),
-        'Furnizor: ' . ($document['supplier_name'] ?? '-'),
-        'Factura: ' . trim(($document['supplier_invoice_series'] ?? '') . ' ' . ($document['supplier_invoice_number'] ?? '')) . ' / ' . ($document['supplier_invoice_date'] ?? '-'),
-        'Moneda: ' . $document['currency'] . ' | Curs: ' . $document['exchange_rate'] . ' / ' . ($document['exchange_rate_date'] ?? '-'),
-        str_repeat('-', 95),
-    ];
-    foreach ($document['lines'] as $line) {
-        $lines[] = sprintf('%02d  %s  %s x %s  total RON %s', $line['line_number'], mb_substr((string)$line['supplier_product_name'], 0, 45), $line['accepted_quantity'], $line['purchase_unit'], $line['line_total_ron']);
+    require_once __DIR__ . '/nir-pdf.php';
+    return shopNirRenderPremiumPdf($document);
+}
+
+/** Build the audit-friendly filename requested by accounting exports. */
+function shopNirXlsxFileName(array $document): string {
+    $documentNumber = trim((string)($document['nir_number'] ?? $document['temporary_number'] ?? 'NIR'));
+    $series = trim((string)($document['nir_series'] ?? ''));
+    $number = trim((string)($document['nir_sequence_number'] ?? ''));
+    if ($series === '' || $number === '') {
+        $parts = array_values(array_filter(explode('-', $documentNumber), static fn($part) => $part !== ''));
+        if ($number === '' && count($parts) > 1) $number = (string)array_pop($parts);
+        if ($series === '') $series = $parts ? implode('-', $parts) : $documentNumber;
     }
-    $lines[] = str_repeat('-', 95);
-    $lines[] = 'Total fara TVA RON: ' . $document['subtotal_ron'] . ' | TVA RON: ' . $document['vat_total_ron'] . ' | Total RON: ' . $document['grand_total_ron'];
-    $stream = "BT\n/F1 10 Tf\n50 790 Td\n";
-    foreach ($lines as $index => $line) $stream .= ($index ? "0 -16 Td\n" : '') . '(' . shopNirPdfEscape($line) . ") Tj\n";
-    $stream .= "ET";
-    $objects = [];
-    $objects[] = '<< /Type /Catalog /Pages 2 0 R >>';
-    $objects[] = '<< /Type /Pages /Kids [3 0 R] /Count 1 >>';
-    $objects[] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>';
-    $objects[] = '<< /Length ' . strlen($stream) . ">>\nstream\n" . $stream . "\nendstream";
-    $objects[] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
-    $pdf = "%PDF-1.4\n";
-    $offsets = [0];
-    foreach ($objects as $index => $object) { $offsets[] = strlen($pdf); $pdf .= ($index + 1) . " 0 obj\n" . $object . "\nendobj\n"; }
-    $xref = strlen($pdf);
-    $pdf .= "xref\n0 " . (count($objects) + 1) . "\n0000000000 65535 f \n";
-    for ($i = 1; $i <= count($objects); $i++) $pdf .= str_pad((string)$offsets[$i], 10, '0', STR_PAD_LEFT) . " 00000 n \n";
-    return $pdf . 'trailer << /Size ' . (count($objects) + 1) . " /Root 1 0 R >>\nstartxref\n{$xref}\n%%EOF";
+    $date = trim((string)($document['nir_date'] ?? $document['confirmed_at'] ?? $document['created_at'] ?? date('Y-m-d')));
+    $date = substr($date, 0, 10);
+    $safe = static function (string $value, string $fallback): string {
+        $value = preg_replace('/[^A-Za-z0-9_-]+/u', '-', trim($value)) ?? '';
+        $value = trim($value, '-_');
+        return $value !== '' ? $value : $fallback;
+    };
+    return 'NIR_G-Trots_' . $safe($series, 'NIR') . '_' . $safe($number, 'document') . '_' . $safe($date, date('Y-m-d')) . '.xlsx';
 }
 
 function shopNirExport(PDO $db, string $id, string $format, array $user): array {
@@ -2377,7 +3003,7 @@ function shopNirExport(PDO $db, string $id, string $format, array $user): array 
     }
     if ($format === 'xlsx') {
         $bytes = shopNirBuildXlsx($document);
-        return ['file_name' => $base . '.xlsx', 'mime_type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'content_base64' => base64_encode($bytes)];
+        return ['file_name' => shopNirXlsxFileName($document), 'mime_type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'content_base64' => base64_encode($bytes)];
     }
     throw new InvalidArgumentException('Formatul de export nu este acceptat.');
 }

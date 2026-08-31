@@ -280,8 +280,8 @@ function shopNirReferenceXlsxStyles(string $currency = 'RON'): string
     $xfs[9] = $xf(3, 2, 1, ' horizontal="center" wrapText="1"');
     $xfs[10] = $xf(0, 0, 1, ' wrapText="1"');
     $xfs[11] = $xf(0, 0, 1, ' horizontal="center"');
-    $xfs[13] = $xf(0, 0, 1, ' horizontal="right"', 166);
-    $xfs[17] = $xf(1, 4, 1, ' horizontal="right"', 166);
+    $xfs[13] = $xf(0, 0, 1, ' horizontal="right" shrinkToFit="1"', 166);
+    $xfs[17] = $xf(1, 4, 1, ' horizontal="right" shrinkToFit="1"', 166);
     $xfs[19] = $xf(5, 0, 1, ' horizontal="center" wrapText="1"');
     $xfs[23] = $xf(1, 3, 1, ' wrapText="1"');
     $xfs[28] = $xf(6, 5, 1, ' horizontal="center"');
@@ -292,7 +292,7 @@ function shopNirReferenceXlsxStyles(string $currency = 'RON'): string
     $xfs[33] = $xf(6, 0, 0, ' horizontal="center"');
     $xfs[34] = $xf(3, 2, 0, ' wrapText="1"');
     $xfs[35] = $xf(3, 2, 0, ' horizontal="center" wrapText="1"');
-    $xfs[36] = $xf(3, 6, 1, ' horizontal="right"', 166);
+    $xfs[36] = $xf(3, 6, 1, ' horizontal="right" shrinkToFit="1"', 166);
     $xfs[37] = $xf(0, 7, 1, ' wrapText="1"');
     $xfs[38] = $xf(1, 0, 1, ' horizontal="center" wrapText="1"');
     $xfs[39] = $xf(7, 8, 1, ' horizontal="center"');
@@ -1329,7 +1329,17 @@ function shopNirRenderStrictXlsx(array $document): string
         $dataRow++;
     }
     $lastDataRow = $dataRow - 1;
-    $rows .= shopNirPremiumXlsxRow($dataRow, [1 => shopNirPremiumXlsxCellSpec('TOTAL', 'string', 6), 10 => shopNirPremiumXlsxCellSpec(array_sum(array_map(static fn(array $line): float => (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0) * (float)($line['unit_price'] ?? 0) * (1 - (float)($line['discount_percent'] ?? 0) / 100), array_filter($lines, 'is_array'))), 'number', 17, 'SUM(J' . $firstDataRow . ':J' . $lastDataRow . ')'), 12 => shopNirPremiumXlsxCellSpec(array_sum(array_map(static fn(array $line): float => (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0) * (float)($line['unit_price'] ?? 0) * (1 - (float)($line['discount_percent'] ?? 0) / 100) * (float)($line['vat_rate'] ?? 0) / 100, array_filter($lines, 'is_array'))), 'number', 17, 'SUM(L' . $firstDataRow . ':L' . $lastDataRow . ')'), 13 => shopNirPremiumXlsxCellSpec(array_sum(array_map(static fn(array $line): float => (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0) * (float)($line['unit_price'] ?? 0) * (1 - (float)($line['discount_percent'] ?? 0) / 100) * (1 + (float)($line['vat_rate'] ?? 0) / 100), array_filter($lines, 'is_array'))), 'number', 36, 'SUM(M' . $firstDataRow . ':M' . $lastDataRow . ')')], 30);
+    $vatRates = [];
+    foreach (array_filter($lines, 'is_array') as $line) {
+        $rate = (float)($line['vat_rate'] ?? 0);
+        $vatRates[sprintf('%.4F', $rate)] = $rate;
+    }
+    ksort($vatRates, SORT_NATURAL);
+    $vatRateLabel = implode(' / ', array_map(static function (float $rate): string {
+        $formatted = rtrim(rtrim(number_format($rate, 4, '.', ''), '0'), '.');
+        return str_replace('.', ',', $formatted) . '%';
+    }, array_values($vatRates)));
+    $rows .= shopNirPremiumXlsxRow($dataRow, [1 => shopNirPremiumXlsxCellSpec('TOTAL', 'string', 6), 10 => shopNirPremiumXlsxCellSpec(array_sum(array_map(static fn(array $line): float => (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0) * (float)($line['unit_price'] ?? 0) * (1 - (float)($line['discount_percent'] ?? 0) / 100), array_filter($lines, 'is_array'))), 'number', 17, 'SUM(J' . $firstDataRow . ':J' . $lastDataRow . ')'), 11 => shopNirPremiumXlsxCellSpec($vatRateLabel, 'string', 11), 12 => shopNirPremiumXlsxCellSpec(array_sum(array_map(static fn(array $line): float => (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0) * (float)($line['unit_price'] ?? 0) * (1 - (float)($line['discount_percent'] ?? 0) / 100) * (float)($line['vat_rate'] ?? 0) / 100, array_filter($lines, 'is_array'))), 'number', 17, 'SUM(L' . $firstDataRow . ':L' . $lastDataRow . ')'), 13 => shopNirPremiumXlsxCellSpec(array_sum(array_map(static fn(array $line): float => (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0) * (float)($line['unit_price'] ?? 0) * (1 - (float)($line['discount_percent'] ?? 0) / 100) * (1 + (float)($line['vat_rate'] ?? 0) / 100), array_filter($lines, 'is_array'))), 'number', 36, 'SUM(M' . $firstDataRow . ':M' . $lastDataRow . ')')], 30);
     $merges[] = 'A' . $dataRow . ':I' . $dataRow;
     $dataRow += 2;
     $rows .= shopNirPremiumXlsxRow($dataRow, [1 => shopNirPremiumXlsxCellSpec('Constatări privind recepția / diferențe calitative sau cantitative:', 'string', 4)], 24);
@@ -1384,7 +1394,7 @@ function shopNirRenderStrictXlsx(array $document): string
     $files['xl/workbook.xml'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView windowWidth="24000" windowHeight="14000"/></bookViews><sheets><sheet name="NIR" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">NIR!$A$1:$M$' . $lastRow . '</definedName><definedName name="_xlnm.Print_Titles" localSheetId="0">NIR!$12:$12</definedName></definedNames><calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/></workbook>';
     $files['xl/_rels/workbook.xml.rels'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
     $files['xl/styles.xml'] = shopNirReferenceXlsxStyles((string)($document['currency'] ?? 'RON'));
-    $files['xl/worksheets/sheet1.xml'] = shopNirPremiumXlsxSheet($rows, [6, 13, 11, 25, 8, 13, 14, 13, 13, 14, 9, 13, 14], $lastRow, 13, ['merges' => $merges, 'drawing' => !empty($pictures), 'orientation' => 'landscape', 'paper_size' => 9, 'fit_to_height' => count($lines) <= 4 ? 1 : 0, 'header' => '', 'footer' => '&RPagina &P / &N']);
+    $files['xl/worksheets/sheet1.xml'] = shopNirPremiumXlsxSheet($rows, [6, 13, 11, 23, 8, 13, 14, 13, 13, 14, 9, 13, 16], $lastRow, 13, ['merges' => $merges, 'drawing' => !empty($pictures), 'orientation' => 'landscape', 'paper_size' => 9, 'fit_to_height' => count($lines) <= 4 ? 1 : 0, 'header' => '', 'footer' => '&RPagina &P / &N']);
     $creator = trim((string)($context['generation']['generated_by'] ?? 'G-Trots Management')) ?: 'G-Trots Management';
     $created = gmdate('Y-m-d\TH:i:s\Z');
     $files['docProps/core.xml'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>' . shopNirPremiumXlsxXml('NIR ' . $documentNumber) . '</dc:title><dc:creator>' . shopNirPremiumXlsxXml($creator) . '</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">' . $created . '</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">' . $created . '</dcterms:modified></cp:coreProperties>';

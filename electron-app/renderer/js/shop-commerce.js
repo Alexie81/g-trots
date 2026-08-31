@@ -3208,8 +3208,12 @@
     $('shop-nir-storno-lines').innerHTML = availableLines.map((line, index) => {
       const maximum = String(line.stornable_quantity || '0');
       const unit = String(line.stock_unit || line.purchase_unit || 'buc');
-      return `<label class="active"><input type="checkbox" data-nir-storno-line="${esc(line.id)}" checked /><i>${String(index + 1).padStart(2, '0')}</i><span><strong>${esc(line.product_name || line.product_snapshot_name || line.supplier_product_name || `Produs ${index + 1}`)}</strong><small>${esc(line.supplier_product_code || line.sku_snapshot || 'Fara cod furnizor')} · maxim ${esc(quantity(maximum))} ${esc(unit)}</small></span><span class="shop-nir-storno-quantity"><small>CANTITATE STORNATĂ</small><span><input type="number" data-nir-storno-quantity-input min="0.0001" max="${esc(maximum)}" step="0.0001" value="${esc(String(Number(maximum)))}" inputmode="decimal" /><b>${esc(unit)}</b></span></span></label>`;
+      const name = String(line.product_name || line.product_snapshot_name || line.supplier_product_name || `Produs ${index + 1}`);
+      const imageUrl = String(line.product_image_url || line.product_snapshot_image_url || line.image_url || '');
+      const productImage = `<span class="shop-nir-summary-image shop-nir-storno-product-image" role="img" aria-label="${esc(imageUrl ? name : 'Produs fără fotografie')}"><span class="shop-nir-summary-image-fallback" aria-hidden="true">${nirUiIcon('product')}</span>${imageUrl ? `<img data-nir-product-image src="${esc(imageUrl)}" alt="${esc(name)}" width="58" height="58" loading="lazy" decoding="async" />` : ''}</span>`;
+      return `<label class="active"><input type="checkbox" data-nir-storno-line="${esc(line.id)}" checked /><i>${String(index + 1).padStart(2, '0')}</i>${productImage}<span class="shop-nir-storno-product-copy"><strong title="${esc(name)}">${esc(name)}</strong><small>${esc(line.supplier_product_code || line.sku_snapshot || 'Fără cod furnizor')} · maxim ${esc(quantity(maximum))} ${esc(unit)}</small></span><span class="shop-nir-storno-quantity"><small>CANTITATE STORNATĂ</small><span><input type="number" data-nir-storno-quantity-input min="0.0001" max="${esc(maximum)}" step="0.0001" value="${esc(String(Number(maximum)))}" inputmode="decimal" /><b>${esc(unit)}</b></span></span></label>`;
     }).join('') || '<p>Acest NIR nu mai are poziții disponibile pentru stornare.</p>';
+    wireNirSummaryImages();
     $('shop-nir-storno-lines').querySelectorAll('[data-nir-storno-line]').forEach(input => input.addEventListener('change', updateNirStornoSelection));
     $('shop-nir-storno-lines').querySelectorAll('[data-nir-storno-quantity-input]').forEach(input => {
       input.addEventListener('click', event => event.stopPropagation());
@@ -3231,7 +3235,17 @@
   function updateNirStornoSelection() {
     const inputs = [...($('shop-nir-storno-lines')?.querySelectorAll('[data-nir-storno-line]') || [])];
     const selected = inputs.filter(input => input.checked);
-    inputs.forEach(input => input.closest('label')?.classList.toggle('active', input.checked));
+    inputs.forEach(input => {
+      const line = input.closest('label');
+      const quantityField = line?.querySelector('[data-nir-storno-quantity-input]');
+      line?.classList.toggle('active', input.checked);
+      line?.classList.toggle('inactive', !input.checked);
+      if (quantityField) {
+        quantityField.disabled = !input.checked || state.nirReversing;
+        quantityField.setAttribute('aria-disabled', quantityField.disabled ? 'true' : 'false');
+        if (quantityField.disabled) quantityField.classList.remove('invalid');
+      }
+    });
     const allButton = $('shop-nir-storno-all');
     const allSelected = inputs.length > 0 && selected.length === inputs.length;
     if (allButton) {

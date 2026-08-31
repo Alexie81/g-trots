@@ -14911,3 +14911,80 @@ body::after {
 .shop-nir-storno-original{position:relative;margin-top:10px;padding:13px 15px;border:1px solid rgba(245,158,11,.24);border-radius:17px;background:linear-gradient(120deg,rgba(245,158,11,.09),rgba(255,255,255,.018) 58%);display:grid;gap:5px;overflow:hidden}.shop-nir-storno-original:after{content:"";position:absolute;top:-42px;right:-25px;width:120px;height:120px;border:1px solid rgba(245,158,11,.12);border-radius:50%}.shop-nir-storno-original>small{color:#fbbf24;font-size:7px;font-weight:950;letter-spacing:1px}.shop-nir-storno-original>strong{position:relative;color:#fff6e7;font-size:14px;letter-spacing:.15px}.shop-nir-storno-original>span{position:relative;display:flex;align-items:center;gap:13px;color:#93877d}.shop-nir-storno-original>span b{font-size:8px;font-weight:800}.shop-nir-storno-original>span b+b{padding-left:13px;border-left:1px solid rgba(245,158,11,.18);color:#f0b97b}
 .shop-nir-storno-invoice{margin-top:10px;padding:13px;border:1px solid rgba(56,189,248,.18);border-radius:18px;background:linear-gradient(135deg,rgba(14,165,233,.055),rgba(17,15,19,.72) 58%)}.shop-nir-storno-invoice>header{margin-bottom:10px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.shop-nir-storno-invoice>header>span{display:grid;gap:3px}.shop-nir-storno-invoice>header small{color:#38bdf8;font-size:7px;font-weight:950;letter-spacing:.9px}.shop-nir-storno-invoice>header strong{color:#f2edf0;font-size:11px}.shop-nir-storno-invoice>header em{padding:5px 7px;border:1px solid rgba(56,189,248,.18);border-radius:999px;background:rgba(14,165,233,.06);color:#7dd3fc;font-size:6.5px;font-style:normal;font-weight:950;letter-spacing:.6px;white-space:nowrap}.shop-nir-storno-invoice>div{display:grid;grid-template-columns:.7fr 1fr 1fr;gap:8px}.shop-nir-storno-invoice label{min-width:0;display:grid;gap:6px}.shop-nir-storno-invoice label>span{color:#91888e;font-size:7px;font-weight:900;letter-spacing:.55px;text-transform:uppercase}.shop-nir-storno-invoice input{width:100%;height:42px;min-width:0;padding:0 11px;border:1px solid #423b41;border-radius:12px;outline:0;background:#151316;color:#f6f0f3;font:inherit;font-size:10px;font-weight:800;color-scheme:dark;transition:border-color .16s ease,box-shadow .16s ease,background .16s ease}.shop-nir-storno-invoice input:focus{border-color:rgba(56,189,248,.68);box-shadow:0 0 0 3px rgba(14,165,233,.09);background:#17171b}.shop-nir-storno-invoice input.invalid{border-color:#fb7185;background:rgba(251,113,133,.055);box-shadow:0 0 0 3px rgba(244,63,94,.06)}.shop-nir-storno-invoice>small{display:block;margin-top:8px;color:#fda4af;font-size:8px;font-weight:850}.shop-nir-storno-invoice>small[hidden]{display:none}
 @media(max-width:620px){.shop-nir-storno-invoice>header{flex-direction:column}.shop-nir-storno-invoice>div{grid-template-columns:1fr}.shop-nir-storno-original>span{align-items:flex-start;flex-direction:column;gap:4px}.shop-nir-storno-original>span b+b{padding-left:0;border-left:0}}
+
+/* Stornare NIR: suprafețe Material 3, tipografie lizibilă și o singură paletă cromatică. */
+.shop-nir-reverse-overlay{background:rgba(10,8,12,.82)!important;backdrop-filter:blur(18px)!important}
+.shop-nir-reverse-dialog{width:min(860px,calc(100vw - 40px));max-height:calc(100vh - 40px);padding:30px;border:1px solid #5d5360;border-radius:32px;background:radial-gradient(circle at 100% 0,rgba(255,178,188,.1),transparent 28%),#211f26;box-shadow:0 32px 90px rgba(0,0,0,.62)}
+.shop-nir-reverse-dialog:before{width:5px;background:#ffb2bc}
+.shop-nir-reverse-dialog>.shop-nir-reverse-orb{width:54px;height:54px;margin-bottom:18px;border-color:#7a5a65;border-radius:18px;background:#4b252f;color:#ffb2bc;box-shadow:none}
+.shop-nir-reverse-dialog>.shop-nir-reverse-orb>i{display:none}
+.shop-nir-reverse-dialog>small{color:#ffb2bc;font-size:10px;letter-spacing:1.35px}
+.shop-nir-reverse-dialog>h2{max-width:720px;margin:8px 0 8px;color:#fff7f8;font-size:30px;line-height:1.13;letter-spacing:-.55px}
+.shop-nir-reverse-dialog>p{max-width:720px;color:#cfc4c8;font-size:14px;line-height:1.55}
+.shop-nir-reverse-dialog .shop-nir-delete-document{margin-top:22px;padding:16px 18px;border-color:#4a444d;border-radius:20px;background:#2b2930}
+.shop-nir-reverse-dialog .shop-nir-delete-document small{color:#aaa0a8;font-size:9px;letter-spacing:.85px}
+.shop-nir-reverse-dialog .shop-nir-delete-document strong{color:#fff7f8;font-size:13px}
+.shop-nir-reverse-dialog .shop-nir-delete-document>span+span{border-color:#4a444d}
+.shop-nir-storno-original,.shop-nir-storno-invoice,.shop-nir-storno-documents,.shop-nir-storno-selection{margin-top:16px;padding:18px;border:1px solid #4a444d;border-radius:24px;background:#2b2930}
+.shop-nir-storno-original:after{border-color:rgba(255,178,188,.12)}
+.shop-nir-storno-original>small,.shop-nir-storno-invoice>header small,.shop-nir-storno-documents>header small,.shop-nir-storno-selection>header small{color:#ffb2bc;font-size:9px;letter-spacing:1px}
+.shop-nir-storno-original>strong{color:#fff7f8;font-size:17px}
+.shop-nir-storno-original>span{color:#bcb1b8;gap:16px}
+.shop-nir-storno-original>span b{font-size:11px}
+.shop-nir-storno-original>span b+b{border-color:#514850;color:#ffced4}
+.shop-nir-storno-invoice>header,.shop-nir-storno-documents>header,.shop-nir-storno-selection>header{margin-bottom:14px}
+.shop-nir-storno-invoice>header strong,.shop-nir-storno-documents>header strong,.shop-nir-storno-selection>header strong{color:#fff7f8;font-size:14px;line-height:1.4}
+.shop-nir-storno-invoice>header em{padding:7px 10px;border-color:#70515b;background:#4b252f;color:#ffb2bc;font-size:8px}
+.shop-nir-storno-invoice>div{grid-template-columns:.72fr 1fr 1fr;gap:12px}
+.shop-nir-storno-invoice label{gap:8px}
+.shop-nir-storno-invoice label>span{color:#b9afb5;font-size:9px;letter-spacing:.65px}
+.shop-nir-storno-invoice input{height:52px;padding:0 14px;border-color:#5a525c;border-radius:16px;background:#1d1b20;color:#fff7f8;font-size:13px}
+.shop-nir-storno-invoice input:focus{border-color:#ffb2bc;background:#211f26;box-shadow:0 0 0 4px rgba(255,178,188,.1)}
+.shop-nir-storno-invoice>small,.shop-nir-storno-selection>small{margin-top:10px;color:#ffb2bc;font-size:11px}
+.shop-nir-storno-documents>header button,.shop-nir-storno-selection>header button{min-height:42px;padding:0 15px;border-color:#765965;border-radius:999px;background:#4b252f;color:#ffd9de;font-size:10px}
+.shop-nir-storno-documents>header button:hover,.shop-nir-storno-selection>header button:hover{border-color:#ffb2bc;background:#5f2f3c}
+.shop-nir-storno-file-list{min-height:68px;margin-top:12px;padding:9px;border-color:#655d66;border-radius:18px;background:#242229}
+.shop-nir-storno-file-list>p{color:#b8aeb5;font-size:10px}
+.shop-nir-storno-file-list article{min-height:54px;padding:8px 10px;border-radius:15px;background:#1d1b20}
+.shop-nir-storno-file-list article>span{color:#ffb2bc}
+.shop-nir-storno-file-list article strong{color:#fff7f8;font-size:11px}
+.shop-nir-storno-file-list article small{color:#aaa0a8;font-size:9px}
+#shop-nir-storno-lines{max-height:340px;gap:9px;scrollbar-color:#786a73 transparent}
+#shop-nir-storno-lines>label{min-height:78px;padding:11px 13px;border-color:#4a444d;border-radius:20px;background:#242229;grid-template-columns:22px 40px minmax(0,1fr) 190px;gap:12px}
+#shop-nir-storno-lines>label:hover{border-color:#79636b;background:#29262d}
+#shop-nir-storno-lines>label.active{border-color:#8a6571;background:#34272d;box-shadow:inset 4px 0 #ffb2bc}
+#shop-nir-storno-lines>label.inactive{border-color:#403b43;background:#211f26}
+#shop-nir-storno-lines input[data-nir-storno-line]{width:20px;height:20px;accent-color:#ffb2bc}
+#shop-nir-storno-lines label>i{width:40px;height:40px;border-radius:13px;background:#3a343d;color:#e7d7e2;font-size:10px}
+#shop-nir-storno-lines label>span strong{color:#fff7f8;font-size:12px;line-height:1.35}
+#shop-nir-storno-lines label>span small{color:#aaa0a8;font-size:10px;line-height:1.35}
+.shop-nir-storno-quantity{gap:6px!important}
+.shop-nir-storno-quantity>small{color:#b9afb5!important;font-size:8px!important;letter-spacing:.7px}
+.shop-nir-storno-quantity>span{min-height:48px;padding:0 11px;border-color:#5a525c;border-radius:15px;background:#1d1b20}
+.shop-nir-storno-quantity input{width:112px!important;height:44px!important;color:#fff7f8!important;font-size:15px!important}
+.shop-nir-storno-quantity b{color:#ffb2bc;font-size:10px}
+#shop-nir-storno-lines>label.inactive .shop-nir-storno-quantity{opacity:.5}
+#shop-nir-storno-lines>label.inactive .shop-nir-storno-quantity>span{border-color:#3f3a42;background:#1a181d}
+#shop-nir-storno-lines>label.inactive .shop-nir-storno-quantity input{color:#857b82!important;cursor:not-allowed}
+.shop-nir-reverse-reason{margin-top:20px;gap:9px}
+.shop-nir-reverse-reason>span{color:#c5bbc1;font-size:10px;letter-spacing:.8px}
+.shop-nir-reverse-reason textarea{min-height:112px;padding:15px 16px;border-color:#5a525c;border-radius:18px;background:#1d1b20;color:#fff7f8;font-size:13px;line-height:1.55}
+.shop-nir-reverse-reason textarea:focus{border-color:#ffb2bc;box-shadow:0 0 0 4px rgba(255,178,188,.1)}
+.shop-nir-reverse-dialog>aside{margin-top:16px;padding:15px;border-color:#655634;border-radius:20px;background:#302a20}
+.shop-nir-reverse-dialog>aside span{color:#c8bda8;font-size:11px;line-height:1.5}
+.shop-nir-reverse-dialog>aside b{color:#ffe0a6;font-size:11px}
+.shop-nir-reverse-dialog>footer{position:sticky;z-index:3;bottom:-30px;margin:22px -30px -30px;padding:18px 30px 30px;border-top:1px solid #4a444d;background:rgba(33,31,38,.96);backdrop-filter:blur(12px);gap:12px}
+.shop-nir-reverse-dialog>footer button{min-height:56px;border-radius:999px;font-size:12px}
+.shop-nir-reverse-dialog .shop-nir-delete-cancel{border-color:#5a525c;background:#302d34;color:#f1e8ed}
+.shop-nir-reverse-dialog .shop-nir-reverse-confirm{border-color:#ffb2bc;background:#ffb2bc;color:#5f1128;box-shadow:none}
+.shop-nir-reverse-dialog .shop-nir-reverse-confirm:hover{background:#ffd9de}
+@media(max-width:760px){.shop-nir-reverse-overlay{padding:8px!important}.shop-nir-reverse-dialog{width:calc(100vw - 16px);max-height:calc(100vh - 16px);padding:22px 17px;border-radius:27px}.shop-nir-reverse-dialog>h2{font-size:24px}.shop-nir-reverse-dialog>p{font-size:13px}.shop-nir-reverse-dialog .shop-nir-delete-document{grid-template-columns:1fr}.shop-nir-reverse-dialog .shop-nir-delete-document>span+span{padding:12px 0 0;border-top:1px solid #4a444d;border-left:0}.shop-nir-storno-original,.shop-nir-storno-invoice,.shop-nir-storno-documents,.shop-nir-storno-selection{padding:15px;border-radius:21px}.shop-nir-storno-invoice>header,.shop-nir-storno-documents>header,.shop-nir-storno-selection>header{align-items:flex-start;flex-direction:column}.shop-nir-storno-invoice>div{grid-template-columns:1fr}.shop-nir-storno-documents>header button,.shop-nir-storno-selection>header button{width:100%}#shop-nir-storno-lines>label{grid-template-columns:22px 40px minmax(0,1fr);padding:11px}.shop-nir-storno-quantity{grid-column:2/4;width:100%}.shop-nir-storno-quantity input{width:auto!important;flex:1}.shop-nir-reverse-dialog>footer{bottom:-22px;margin:20px -17px -22px;padding:15px 17px 22px;grid-template-columns:1fr}.shop-nir-storno-original>span{gap:7px}.shop-nir-storno-original>span b{font-size:10px}}
+.shop-nir-reverse-dialog #shop-nir-storno-lines>label{grid-template-columns:22px 40px 58px minmax(0,1fr) 142px;align-items:center}
+.shop-nir-storno-product-image{width:58px;height:58px;min-width:58px;min-height:58px;border-radius:16px;background:#f7f6f3}
+.shop-nir-storno-product-image>img{padding:4px}
+.shop-nir-storno-product-copy{align-self:stretch;justify-content:center}
+.shop-nir-reverse-dialog #shop-nir-storno-lines .shop-nir-storno-product-copy>strong{overflow:visible;white-space:normal;text-overflow:clip;word-break:break-word;font-size:12.5px;line-height:1.4}
+.shop-nir-reverse-dialog #shop-nir-storno-lines .shop-nir-storno-product-copy>small{margin-top:3px;font-size:10px;line-height:1.35;white-space:normal}
+.shop-nir-reverse-dialog .shop-nir-storno-quantity>span{min-height:42px}
+.shop-nir-reverse-dialog .shop-nir-storno-quantity input{width:78px!important;height:38px!important;font-size:14px!important}
+@media(max-width:760px){.shop-nir-reverse-dialog #shop-nir-storno-lines>label{grid-template-columns:22px 50px minmax(0,1fr);align-items:start}.shop-nir-reverse-dialog #shop-nir-storno-lines>label>i{display:none}.shop-nir-storno-product-image{width:50px;height:50px;min-width:50px;min-height:50px;grid-column:2}.shop-nir-storno-product-copy{grid-column:3}.shop-nir-storno-quantity{grid-column:2/4!important;width:142px!important;justify-self:end}.shop-nir-reverse-dialog .shop-nir-storno-quantity input{width:auto!important;min-width:0}.shop-nir-reverse-dialog #shop-nir-storno-lines .shop-nir-storno-product-copy>strong{font-size:12px}}

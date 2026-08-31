@@ -5,209 +5,91 @@ require_once __DIR__ . '/../nir-domain.php';
 require_once __DIR__ . '/../nir-service.php';
 require_once __DIR__ . '/../nir-pdf.php';
 
+$imageDirectory = dirname(__DIR__) . '/uploads/products';
+if (!is_dir($imageDirectory)) mkdir($imageDirectory, 0775, true);
+$imagePath = $imageDirectory . '/nir-strict-contract-thumbnail.png';
+$imageBytes = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAC0lEQVR42u3BAQ0AAADCoPdPbQ43oAAAAAAAAAAAAAAAfg0wQAABzFhnAAAAAElFTkSuQmCC', true);
+if (is_string($imageBytes)) file_put_contents($imagePath, $imageBytes);
+$companyImageDirectory = dirname(__DIR__) . '/uploads/company';
+if (!is_dir($companyImageDirectory)) mkdir($companyImageDirectory, 0775, true);
+$stampPath = $companyImageDirectory . '/nir-strict-contract-stamp.png';
+if (is_string($imageBytes)) file_put_contents($stampPath, $imageBytes);
+
 $document = [
-    'id' => '00000000-0000-4000-8000-000000000099',
-    'nir_number' => 'NIR-2026-000001',
-    'temporary_number' => 'TEMP-1',
-    'nir_date' => '2026-08-29',
-    'reception_date' => '2026-08-29',
-    'supplier_name' => 'Furnizor test',
-    'warehouse_name' => 'Gestiune principală',
-    'supplier_invoice_series' => 'INV',
-    'supplier_invoice_number' => '190',
-    'supplier_invoice_date' => '2026-08-29',
-    'currency' => 'EUR',
-    'exchange_rate' => '5.100000',
-    'exchange_rate_date' => '2026-08-28',
-    'subtotal_ron' => '127.50',
-    'vat_total_ron' => '26.27',
-    'grand_total_ron' => '153.77',
-    'subtotal' => '25.00',
-    'vat_total' => '5.15',
-    'grand_total' => '30.15',
-    'inventory_cost_total_ron' => '127.50',
-    'total_difference_ron' => '0.00',
-    'status' => 'confirmed',
-    'source_type' => 'manual',
-    'row_version' => 3,
-    'confirmed_at' => '2026-08-29 14:30:00',
-    'confirmed_by' => 'Administrator',
+    'id' => '00000000-0000-4000-8000-000000000099', 'nir_number' => 'NIR-2026-000001',
+    'nir_date' => '2026-08-31', 'reception_date' => '2026-08-31', 'status' => 'confirmed',
+    'supplier_name' => 'Furnizor test', 'supplier_cui' => 'RO1234567', 'warehouse_name' => 'Gestiune principală',
+    'supplier_invoice_series' => 'INV', 'supplier_invoice_number' => '190', 'supplier_invoice_date' => '2026-08-30',
+    'currency' => 'RON', 'confirmed_by' => 'Administrator', 'notes' => 'Ambalaj verificat; recepție conformă.',
     'lines' => [[
-        'line_number' => 1,
-        'supplier_product_code' => 'ABC-1',
-        'supplier_product_name' => 'Produs test',
-        'product_name' => 'Produs intern cu diacritice Șină și Țeavă',
-        'product_sku' => 'SKU-ABC-1',
-        'invoiced_quantity' => '2',
-        'received_quantity' => '2',
-        'accepted_quantity' => '2',
-        'rejected_quantity' => '0',
-        'purchase_unit' => 'buc',
-        'stock_unit' => 'buc',
-        'conversion_factor' => '1',
-        'unit_price' => '10.00',
-        'discount_percent' => '0',
-        'vat_rate' => '21.00',
-        'line_net' => '20.00',
-        'line_vat' => '4.20',
-        'line_net_ron' => '102.00',
-        'line_vat_ron' => '21.42',
-        'line_total_ron' => '123.42',
-        'inventory_unit_cost_ron' => '51.00',
-        'inventory_cost_total_ron' => '102.00',
-        'resolution_status' => 'matched_code',
-    ], [
-        'line_number' => 2,
-        'supplier_product_code' => 'XYZ-2',
-        'supplier_product_name' => 'Produs care nu este selectat la storno',
-        'product_name' => 'Produs intern păstrat integral',
-        'product_sku' => 'SKU-NESELECTAT-2',
-        'invoiced_quantity' => '1',
-        'received_quantity' => '1',
-        'accepted_quantity' => '1',
-        'rejected_quantity' => '0',
-        'purchase_unit' => 'buc',
-        'stock_unit' => 'buc',
-        'conversion_factor' => '1',
-        'unit_price' => '5.00',
-        'discount_percent' => '0',
-        'vat_rate' => '19.00',
-        'line_net' => '5.00',
-        'line_vat' => '0.95',
-        'line_net_ron' => '25.50',
-        'line_vat_ron' => '4.85',
-        'line_total_ron' => '30.35',
-        'inventory_unit_cost_ron' => '25.50',
-        'inventory_cost_total_ron' => '25.50',
-        'resolution_status' => 'matched_name',
+        'line_number' => 1, 'supplier_product_code' => 'ABC-1', 'supplier_product_name' => 'Produs furnizor',
+        'product_name' => 'Produs intern cu miniatură', 'product_sku' => 'SKU-ABC-1', 'purchase_unit' => 'buc',
+        'invoiced_quantity' => '2', 'received_quantity' => '2', 'accepted_quantity' => '2',
+        'unit_price' => '10.00', 'discount_percent' => '0', 'vat_rate' => '21.00',
+        'product_image_url' => 'uploads/products/nir-strict-contract-thumbnail.png',
     ]],
     'pdf_context' => [
-        'template' => 'entry',
-        'company' => ['legal_name' => 'CAB IT EXPERT SRL', 'trade_name' => 'G-Trots România', 'cui' => '49972605', 'registration_number' => 'J2024008303400', 'email' => 'contact@g-trots.ro'],
-        'supplier' => ['name' => 'Furnizor test', 'cui' => 'RO1234567', 'country' => 'România'],
-        'warehouse' => ['name' => 'Gestiune principală', 'code' => 'MAIN'],
-        'relationship' => ['original' => null, 'reversal' => null, 'reason' => null],
-        'attachments' => [['id' => 'attachment-1', 'original_name' => 'factură-test.pdf', 'mime_type' => 'application/pdf', 'file_size' => 2048, 'sha256' => str_repeat('a', 64), 'created_at' => '2026-08-29 12:00:00']],
-        'audit' => [['action_type' => 'NIR_CONFIRMED', 'actor_name' => 'Administrator', 'created_at' => '2026-08-29 14:30:00']],
-        'summary' => ['line_count' => 2],
-        'generation' => ['generated_at' => '2026-08-30 15:00:00', 'generated_by' => 'Administrator', 'app' => 'G-Trots Management', 'data_fingerprint' => str_repeat('b', 64)],
+        'company' => ['legal_name' => 'CAB IT EXPERT SRL', 'trade_name' => 'G-Trots România', 'cui' => '49972605', 'registration_number' => 'J2024008303400', 'stamp_path' => 'uploads/company/nir-strict-contract-stamp.png'],
+        'supplier' => ['name' => 'Furnizor test', 'cui' => 'RO1234567'],
+        'warehouse' => ['name' => 'Gestiune principală', 'address' => 'Str. Exemplu 1', 'city' => 'București'],
+        'relationship' => ['original_invoice' => null, 'reason' => null],
+        'generation' => ['generated_by' => 'Administrator'],
     ],
 ];
 
 $failures = [];
-$expect = static function (bool $condition, string $message) use (&$failures): void {
-    if (!$condition) $failures[] = $message;
-};
+$expect = static function (bool $condition, string $message) use (&$failures): void { if (!$condition) $failures[] = $message; };
+$headers = ['Nr. crt.', 'Cod / SKU', 'Imagine', 'Denumirea bunurilor recepționate', 'U.M.', 'Cantitate document', 'Cantitate recepționată', 'Diferență cantitativă', 'Preț unitar fără TVA', 'Valoare fără TVA', 'TVA %', 'Valoare TVA', 'Valoare totală'];
 
 $xlsx = shopNirBuildXlsx($document);
-$expect(str_starts_with($xlsx, "PK\x03\x04"), 'XLSX nu începe cu antet ZIP.');
-$expect(str_contains($xlsx, '[Content_Types].xml'), 'Lipsește manifestul OOXML.');
-$expect(str_contains($xlsx, 'xl/worksheets/sheet5.xml'), 'Lipsesc foile premium ale registrului de lucru.');
-$expect(str_contains($xlsx, 'NIR-2026-000001'), 'Lipsește numărul NIR complet, în formatul cu șase cifre.');
-$expect(str_contains($xlsx, 'Cost unitar de intrare fără TVA'), 'Antetul costului contabil lipsește din XLSX.');
-$expect(str_contains($xlsx, 'Dicționar câmpuri'), 'Lipsește dicționarul câmpurilor XLSX.');
-$expect(str_contains($xlsx, 'state="frozen"'), 'Antetul pozițiilor nu este înghețat.');
-$expect(!str_contains($xlsx, 'FIFO'), 'XLSX nu trebuie să afișeze terminologia FIFO.');
-$expect(!str_contains(mb_strtolower($xlsx, 'UTF-8'), 'respins'), 'XLSX nu trebuie să afișeze câmpuri sau etichete de respingere.');
-$expect(!str_contains(mb_strtolower($xlsx, 'UTF-8'), 'rejected'), 'XLSX nu trebuie să afișeze denumirile tehnice vechi ale câmpurilor de respingere.');
-$expect(str_ends_with($xlsx, "\x00\x00"), 'Arhiva XLSX nu are închiderea așteptată.');
-$expect(shopNirXlsxFileName($document) === 'NIR_G-Trots_NIR-2026_000001_2026-08-29.xlsx', 'Numele fișierului XLSX nu respectă convenția contabilă.');
+$expect(str_starts_with($xlsx, "PK\x03\x04"), 'XLSX nu are antet ZIP valid.');
+$expect(str_contains($xlsx, '<sheet name="NIR" sheetId="1"'), 'XLSX trebuie să conțină o singură foaie NIR.');
+$expect(!str_contains($xlsx, 'sheet2.xml'), 'XLSX nu poate conține foi suplimentare.');
+foreach ($headers as $header) $expect(str_contains($xlsx, $header), "Lipsește antetul strict: {$header}.");
+foreach (['Dicționar câmpuri', 'Documente &amp; Audit', 'Cost unitar de intrare fără TVA', 'ID NIR intern'] as $forbidden) {
+    $expect(!str_contains($xlsx, $forbidden), "XLSX conține rubrica suplimentară: {$forbidden}.");
+}
+$expect(str_contains($xlsx, 'drawing1.xml'), 'XLSX trebuie să includă logo-ul și miniatura prin desen OOXML.');
+$expect(str_contains($xlsx, '_xlnm.Print_Titles') && str_contains($xlsx, 'NIR!$12:$12'), 'XLSX trebuie să repete doar antetul tabelului la tipărirea pe mai multe pagini.');
 
-$legacyOriginal = $document;
-$legacyOriginal['status'] = 'reversed';
-$legacyOriginal['pdf_context']['template'] = 'reversal';
-$legacyOriginalXlsx = shopNirBuildXlsx($legacyOriginal);
-$expect(str_contains($legacyOriginalXlsx, 'CONFIRMAT'), 'Originalul legacy trebuie afișat în continuare ca NIR confirmat.');
-$expect(shopNirPremiumXlsxDocumentType($legacyOriginal) === 'INTRARE NIR', 'Template-ul legacy nu trebuie să transforme originalul în document de storno.');
-$expect(shopNirPremiumXlsxStatus($legacyOriginal) === 'CONFIRMAT', 'Statusul legacy reversed trebuie prezentat drept CONFIRMAT pe original.');
-$legacyMode = shopNirPdfMode($legacyOriginal, $legacyOriginal['pdf_context']);
-$legacyPdfStatus = shopNirPdfStatus($legacyOriginal, $legacyMode);
-$expect($legacyMode === 'entry_reversed' && $legacyPdfStatus[0] === 'CONFIRMAT' && $legacyPdfStatus[1] === 'green', 'PDF-ul original legacy trebuie să rămână CONFIRMAT verde.');
-
+$html = shopNirStrictPdfHtml($document);
+$expect(substr_count($html, '<th>') === 13, 'PDF trebuie să aibă exact cele 13 antete de poziții din model.');
+foreach ($headers as $header) $expect(str_contains(str_replace('<br>', ' ', $html), $header), "PDF nu conține antetul strict: {$header}.");
+foreach (['JURNAL DE AUDIT', 'CENTRALIZARE TVA', 'COST UNITAR DE INTRARE', 'DOCUMENTE ASOCIATE'] as $forbidden) {
+    $expect(!str_contains($html, $forbidden), "PDF conține secțiunea suplimentară: {$forbidden}.");
+}
+$expect(str_contains($html, 'class="product-image"') && str_contains($html, '<th>Imagine</th>'), 'PDF nu include miniatura în coloana separată Imagine.');
+$expect(str_contains($html, 'class="company-stamp"'), 'PDF nu include ștampila firmei în locul aprobării.');
+$expect(substr_count($html, 'class="inline-icon"') >= 8, 'PDF nu include toate pictogramele din model.');
+$expect(substr_count($html, ' lei') >= 7, 'PDF trebuie să afișeze moneda în toate celulele valorice.');
 $pdf = shopNirBuildPdf($document);
-$expect(str_starts_with($pdf, '%PDF-'), 'Exportul PDF nu are antet valid.');
-$expect(strlen($pdf) > 20000, 'Exportul PDF premium este neașteptat de mic.');
-$expect((bool)preg_match('/\/Type\s*\/Page\b/', $pdf), 'Exportul PDF nu conține pagini valide.');
-$expect(str_ends_with(rtrim($pdf), '%%EOF'), 'Exportul PDF nu este închis corect.');
+$expect(str_starts_with($pdf, '%PDF-') && str_ends_with(rtrim($pdf), '%%EOF'), 'PDF-ul rezultat nu este valid.');
 
-$reversal = $document;
-$reversal['id'] = '00000000-0000-4000-8000-000000000100';
-$reversal['nir_number'] = 'NIR-2026-000002';
-$reversal['source_type'] = 'reversal';
-$reversal['reversal_of_id'] = $document['id'];
-$reversal['supplier_invoice_number'] = '191';
-$reversal['supplier_invoice_date'] = '2026-08-30';
-$reversal['nir_date'] = '2026-08-30';
-$reversal['subtotal'] = '-10.00';
-$reversal['vat_total'] = '-2.10';
-$reversal['grand_total'] = '-12.10';
-$reversal['subtotal_ron'] = '-51.00';
-$reversal['vat_total_ron'] = '-10.71';
-$reversal['grand_total_ron'] = '-61.71';
-$reversal['inventory_cost_total_ron'] = '-51.00';
-$reversal['lines'] = [$document['lines'][0]];
-$reversal['lines'][0]['invoiced_quantity'] = '-1';
-$reversal['lines'][0]['received_quantity'] = '-1';
-$reversal['lines'][0]['accepted_quantity'] = '-1';
-$reversal['lines'][0]['line_net'] = '-10.00';
-$reversal['lines'][0]['line_vat'] = '-2.10';
-$reversal['lines'][0]['line_net_ron'] = '-51.00';
-$reversal['lines'][0]['line_vat_ron'] = '-10.71';
-$reversal['lines'][0]['line_total_ron'] = '-61.71';
-$reversal['lines'][0]['inventory_cost_total_ron'] = '-51.00';
-$reversal['pdf_context']['template'] = 'reversal';
-$reversal['pdf_context']['summary'] = ['line_count' => 2]; // context vechi intenționat: exportul trebuie să folosească numai linia curentă.
-$reversal['pdf_context']['relationship'] = [
-    'original' => [
-        'nir_number' => $document['nir_number'],
-        'nir_date' => $document['nir_date'],
-        'supplier_invoice_series' => $document['supplier_invoice_series'],
-        'supplier_invoice_number' => $document['supplier_invoice_number'],
-        'supplier_invoice_date' => $document['supplier_invoice_date'],
-        'confirmed_at' => $document['confirmed_at'],
-    ],
-    'original_invoice' => ['series' => 'INV', 'number' => '190', 'date' => '2026-08-29'],
-    'reversal' => ['nir_number' => $reversal['nir_number']],
-    'reason' => 'Produse returnate furnizorului prin reversare legacy',
-];
-$stornoXlsx = shopNirBuildXlsx($reversal);
-$expect(str_contains($stornoXlsx, 'STORNARE NIR'), 'XLSX-ul documentului negativ nu este etichetat drept stornare.');
-$expect(str_contains($stornoXlsx, 'STORNAT'), 'XLSX-ul documentului negativ nu are statusul STORNAT.');
-$expect(str_contains($stornoXlsx, 'INV 191') && str_contains($stornoXlsx, '2026-08-30'), 'XLSX-ul de storno trebuie să folosească factura nouă 191 și data ei ca document sursă.');
-$expect(str_contains($stornoXlsx, 'Stornează factura INV 190 din data 29.08.2026, NIR original NIR-2026-000001'), 'XLSX-ul nu separă trasabilitatea facturii originale 190 de factura storno 191.');
-$expect(str_contains($stornoXlsx, 'SKU-ABC-1') && !str_contains($stornoXlsx, 'SKU-NESELECTAT-2'), 'Storno parțial trebuie să exporte numai poziția selectată.');
-$stornoVisible = mb_strtoupper($stornoXlsx, 'UTF-8');
-foreach (['REVERSARE', 'REVERSAT', 'REVERSAL', 'REVERSED', 'STORNO', 'RESPINS', 'REJECTED', 'REV-2026-'] as $forbidden) {
-    $expect(!str_contains($stornoVisible, $forbidden), "XLSX-ul de storno conține termenul vizibil interzis: {$forbidden}.");
-}
-$expect(shopNirPremiumXlsxDocumentType($reversal) === 'STORNARE NIR' && shopNirPremiumXlsxStatus($reversal) === 'STORNAT', 'Numai documentul negativ structural trebuie identificat ca STORNAT.');
-$stornoMode = shopNirPdfMode($reversal, $reversal['pdf_context']);
-$stornoRelationship = shopNirPdfRelationship($reversal, $reversal['pdf_context'], $stornoMode);
-$stornoCards = shopNirPdfCardsHtml($reversal, $reversal['pdf_context']);
-$stornoBanner = shopNirPdfRelationshipBanner($stornoRelationship, $stornoMode);
-$expect($stornoMode === 'reversal' && shopNirPdfStatus($reversal, $stornoMode)[0] === 'STORNAT', 'PDF-ul negativ structural trebuie identificat ca STORNAT.');
-$expect(str_contains($stornoCards, 'Factura INV 191') && str_contains($stornoCards, '30.08.2026'), 'Cardul Document sursă din PDF trebuie să afișeze factura nouă 191/data nouă.');
-$expect(str_contains($stornoBanner, 'Stornează factura INV 190 din data 29.08.2026, NIR original NIR-2026-000001'), 'Trasabilitatea PDF trebuie să indice distinct factura originală 190 și NIR-ul original.');
-$expect(shopNirPdfSummary($reversal, $reversal['pdf_context'])['line_count'] === 1, 'Rezumatul PDF pentru storno parțial trebuie să numere numai pozițiile selectate.');
-$expect(str_contains(shopNirPdfMetricsHtml($reversal, shopNirPdfSummary($reversal, $reversal['pdf_context']), $stornoMode), 'CANT. STORNATĂ'), 'Indicatorii PDF trebuie adaptați semantic la cantitatea stornată.');
-$expect(str_contains(shopNirPdfTotalsHtml($reversal, $stornoMode), 'Valoare stornată din gestiune'), 'Centralizarea PDF trebuie să explice valoarea stornată, nu o intrare în gestiune.');
-$expect(str_contains(shopNirPdfAnnexHtml($reversal, $reversal['pdf_context'], $stornoRelationship, shopNirPdfSummary($reversal, $reversal['pdf_context']), $stornoMode), 'CUM SE INTERPRETEAZĂ DOCUMENTUL DE STORNARE'), 'Anexa PDF trebuie să explice explicit documentul de stornare.');
-$reversalPdf = shopNirBuildPdf($reversal);
-$expect(str_starts_with($reversalPdf, '%PDF-'), 'PDF-ul de stornare nu are antet valid.');
-$expect(strlen($reversalPdf) > 20000 && $reversalPdf !== $pdf, 'PDF-ul de stornare nu este un document premium distinct.');
-$expect(str_ends_with(rtrim($reversalPdf), '%%EOF'), 'PDF-ul de stornare nu este închis corect.');
-
-$rendererSource = file_get_contents(__DIR__ . '/../nir-pdf.php');
-foreach (['FIFO', 'profit', 'adaos', 'stoc curent', 'MODEL DE PREZENTARE', 'RESPINS', 'Respins', 'respins', 'rejected'] as $forbidden) {
-    $expect(!str_contains((string)$rendererSource, $forbidden), "Rendererul PDF conține termenul interzis: {$forbidden}.");
-}
-foreach (['POZIȚII STORNATE ȘI VALORI CORECTIVE', 'Cant. corectată', 'Cant. stornată', 'Cost unitar stornat RON', 'Valoare stornată RON'] as $expectedStornoLabel) {
-    $expect(str_contains((string)$rendererSource, $expectedStornoLabel), "Rendererul PDF nu conține eticheta semantică de stornare: {$expectedStornoLabel}.");
+$storno = $document;
+$storno['nir_number'] = 'NIR-2026-000002'; $storno['source_type'] = 'reversal'; $storno['reversal_of_id'] = $document['id'];
+$storno['supplier_invoice_number'] = '191'; $storno['supplier_invoice_date'] = '2026-08-31';
+$storno['lines'][0]['invoiced_quantity'] = '-1'; $storno['lines'][0]['received_quantity'] = '-1'; $storno['lines'][0]['accepted_quantity'] = '-1';
+$storno['pdf_context']['relationship'] = ['original_invoice' => ['series' => 'INV', 'number' => '190', 'date' => '2026-08-30'], 'reason' => 'Retur către furnizor'];
+$stornoXlsx = shopNirBuildXlsx($storno);
+$stornoHtml = shopNirStrictPdfHtml($storno);
+foreach ([$stornoXlsx, $stornoHtml] as $output) {
+    $expect(str_contains($output, 'Stornare'), 'Exportul STORNO nu indică tipul operațiunii.');
+    $expect(str_contains($output, 'INV 191') && str_contains($output, 'INV 190'), 'Exportul STORNO nu separă factura curentă de factura inițială.');
 }
 
-if ($failures) {
-    fwrite(STDERR, "NIR export: " . count($failures) . " verificări eșuate:\n- " . implode("\n- ", $failures) . "\n");
-    exit(1);
+$multiPage = $document;
+$multiPage['lines'] = [];
+for ($index = 1; $index <= 28; $index++) {
+    $line = $document['lines'][0];
+    $line['line_number'] = $index;
+    $line['product_sku'] = 'SKU-' . $index;
+    $multiPage['lines'][] = $line;
 }
+$multiPageHtml = shopNirStrictPdfHtml($multiPage);
+$expect(substr_count($multiPageHtml, 'NOTĂ DE RECEPȚIE ȘI') === 1, 'PDF multipagină nu trebuie să repete antetul mare al documentului.');
+$expect(substr_count($multiPageHtml, '<table class="items">') === 1, 'PDF multipagină trebuie să continue într-un singur tabel.');
 
-echo "NIR export: PDF premium intrare/stornare și XLSX validate.\n";
+if (is_file($imagePath)) unlink($imagePath);
+if (is_file($stampPath)) unlink($stampPath);
+if ($failures) { fwrite(STDERR, "NIR strict: " . count($failures) . " verificări eșuate:\n- " . implode("\n- ", $failures) . "\n"); exit(1); }
+echo "NIR strict validat: aceleași rubrici și 13 coloane în PDF/XLSX, inclusiv STORNO, iconițe, ștampilă și miniaturi.\n";

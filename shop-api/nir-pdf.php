@@ -140,6 +140,120 @@ function shopNirPdfLogoDataUri(): ?string {
     return null;
 }
 
+/** Resolve only product images stored by this API and embed them in the PDF. */
+function shopNirPdfProductImageDataUri(array $line): ?string {
+    $raw = trim((string)($line['product_image_storage_path'] ?? $line['product_image_url'] ?? ''));
+    if ($raw === '' || str_contains($raw, "\0")) return null;
+    $path = parse_url($raw, PHP_URL_PATH);
+    if (!is_string($path) || $path === '') $path = $raw;
+    $path = rawurldecode(str_replace('\\', '/', $path));
+    $marker = 'uploads/products/';
+    $position = strpos(ltrim($path, '/'), $marker);
+    if ($position === false) return null;
+    $relative = substr(ltrim($path, '/'), $position);
+    if (!preg_match('#^uploads/products/[A-Za-z0-9._-]+\.(?:jpe?g|png|webp)$#i', $relative)) return null;
+
+    $base = realpath(__DIR__ . '/uploads/products');
+    $candidate = realpath(__DIR__ . '/' . $relative);
+    if ($base === false || $candidate === false || !is_file($candidate)) return null;
+    $prefix = rtrim($base, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+    if (!str_starts_with($candidate, $prefix)) return null;
+    $size = filesize($candidate);
+    if ($size === false || $size < 32 || $size > 6 * 1024 * 1024) return null;
+    $info = @getimagesize($candidate);
+    $mime = strtolower((string)($info['mime'] ?? ''));
+    if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) return null;
+    $bytes = file_get_contents($candidate);
+    return is_string($bytes) && $bytes !== '' ? 'data:' . $mime . ';base64,' . base64_encode($bytes) : null;
+}
+
+/** Resolve only the company stamp stored by this API. */
+function shopNirPdfCompanyStampDataUri(array $company): ?string {
+    $raw = trim((string)($company['stamp_path'] ?? ''));
+    if ($raw === '' || str_contains($raw, "\0")) return null;
+    $path = parse_url($raw, PHP_URL_PATH);
+    if (!is_string($path) || $path === '') $path = $raw;
+    $path = rawurldecode(str_replace('\\', '/', $path));
+    $marker = 'uploads/company/';
+    $position = strpos(ltrim($path, '/'), $marker);
+    if ($position === false) return null;
+    $relative = substr(ltrim($path, '/'), $position);
+    if (!preg_match('#^uploads/company/[A-Za-z0-9._-]+\.(?:jpe?g|png|webp)$#i', $relative)) return null;
+    $base = realpath(__DIR__ . '/uploads/company');
+    $candidate = realpath(__DIR__ . '/' . $relative);
+    if ($base === false || $candidate === false || !is_file($candidate)) return null;
+    if (!str_starts_with($candidate, rtrim($base, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR)) return null;
+    $size = filesize($candidate);
+    if ($size === false || $size < 32 || $size > 6 * 1024 * 1024) return null;
+    $info = @getimagesize($candidate);
+    $mime = strtolower((string)($info['mime'] ?? ''));
+    if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) return null;
+    $bytes = file_get_contents($candidate);
+    if (!is_string($bytes) || $bytes === '') return null;
+    $trimmed = shopNirPdfPrepareCompanyStamp($bytes);
+    return $trimmed !== null
+        ? 'data:image/png;base64,' . base64_encode($trimmed)
+        : 'data:' . $mime . ';base64,' . base64_encode($bytes);
+}
+
+/** Crop empty stamp margins, remove white paper and strengthen faint ink without changing proportions. */
+function shopNirPdfPrepareCompanyStamp(string $bytes): ?string {
+    if (!function_exists('imagecreatefromstring') || !function_exists('imagepng')) return null;
+    $source = @imagecreatefromstring($bytes);
+    if ($source === false) return null;
+    $width = imagesx($source); $height = imagesy($source);
+    if ($width < 1 || $height < 1 || $width * $height > 30000000) { imagedestroy($source); return null; }
+    $left = $width; $top = $height; $right = -1; $bottom = -1;
+    for ($y = 0; $y < $height; $y++) {
+        for ($x = 0; $x < $width; $x++) {
+            $rgba = imagecolorat($source, $x, $y);
+            $alpha = ($rgba >> 24) & 0x7f; $red = ($rgba >> 16) & 0xff; $green = ($rgba >> 8) & 0xff; $blue = $rgba & 0xff;
+            if ($alpha < 118 && min($red, $green, $blue) < 246) {
+                $left = min($left, $x); $right = max($right, $x); $top = min($top, $y); $bottom = max($bottom, $y);
+            }
+        }
+    }
+    if ($right < $left || $bottom < $top) { imagedestroy($source); return null; }
+    $pad = max(4, (int)round(max($right - $left, $bottom - $top) * .025));
+    $left = max(0, $left - $pad); $top = max(0, $top - $pad);
+    $right = min($width - 1, $right + $pad); $bottom = min($height - 1, $bottom + $pad);
+    $cropWidth = $right - $left + 1; $cropHeight = $bottom - $top + 1;
+    $canvas = imagecreatetruecolor($cropWidth, $cropHeight);
+    imagealphablending($canvas, false); imagesavealpha($canvas, true);
+    $transparent = imagecolorallocatealpha($canvas, 255, 255, 255, 127);
+    imagefilledrectangle($canvas, 0, 0, $cropWidth, $cropHeight, $transparent);
+    for ($y = 0; $y < $cropHeight; $y++) {
+        for ($x = 0; $x < $cropWidth; $x++) {
+            $rgba = imagecolorat($source, $left + $x, $top + $y);
+            $alpha = ($rgba >> 24) & 0x7f; $red = ($rgba >> 16) & 0xff; $green = ($rgba >> 8) & 0xff; $blue = $rgba & 0xff;
+            if ($alpha >= 118 || min($red, $green, $blue) >= 246) continue;
+            $red = max(0, (int)round($red * .72)); $green = max(0, (int)round($green * .72)); $blue = max(0, (int)round($blue * .72));
+            imagesetpixel($canvas, $x, $y, imagecolorallocatealpha($canvas, $red, $green, $blue, min(110, $alpha)));
+        }
+    }
+    ob_start(); imagepng($canvas, null, 6); $result = ob_get_clean();
+    imagedestroy($canvas); imagedestroy($source);
+    return is_string($result) && $result !== '' ? $result : null;
+}
+
+function shopNirPdfIconDataUri(string $type, string $color = '#071b3e'): string {
+    $paths = [
+        'document' => '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m9 15 2 2 4-4"/>',
+        'calendar' => '<path d="M8 2v4M16 2v4"/><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>',
+        'user' => '<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
+        'id' => '<rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="11" r="2.5"/><path d="M5 16c1-2 5-2 6 0M14 10h5M14 14h5"/>',
+        'warehouse' => '<path d="M18 21V10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1v11"/><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 1.132-1.803l7.95-3.974a2 2 0 0 1 1.837 0l7.948 3.974A2 2 0 0 1 22 8z"/><path d="M6 13h12M6 17h12"/>',
+        'pin' => '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
+        'invoice' => '<path d="m18 5-2.414-2.414A2 2 0 0 0 14.172 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2"/><path d="M21.378 12.626a1 1 0 0 0-3.004-3.004l-4.01 4.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/><path d="M8 18h1"/>',
+        'operation' => '<path d="M12 12h.01M16 6V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2M22 13a18.15 18.15 0 0 1-20 0"/><rect x="2" y="6" width="20" height="14" rx="2"/>',
+        'info' => '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+        'clipboard' => '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"/>',
+    ];
+    $body = $paths[$type] ?? $paths['info'];
+    $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="' . htmlspecialchars($color, ENT_QUOTES) . '" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' . $body . '</svg>';
+    return 'data:image/svg+xml;base64,' . base64_encode($svg);
+}
+
 function shopNirPdfDifferenceLabel($value): string {
     $labels = [
         'shortage' => 'Lipsă cantitativă',
@@ -300,8 +414,12 @@ function shopNirPdfProductRows(array $document, string $mode): string {
         $difference = shopNirPdfJoin([$reason, $notes], ': ');
         if ($mode === 'reversal' && $difference === '') $difference = 'Stornare pentru poziția selectată din documentul original';
         $rowClass = $mode === 'reversal' ? 'negative-row' : ($difference !== '' ? 'difference-row' : '');
+        $thumbnail = shopNirPdfProductImageDataUri($line);
         $html .= '<tr class="' . $rowClass . '">';
         $html .= '<td class="center line-number">' . shopNirPdfEscape($line['line_number'] ?? ($index + 1)) . '</td>';
+        $html .= '<td class="center thumbnail-cell">' . ($thumbnail !== null
+            ? '<img class="product-thumbnail" src="' . shopNirPdfEscape($thumbnail) . '" alt="Produs">'
+            : '<span class="thumbnail-empty">Fără<br>imagine</span>') . '</td>';
         $html .= '<td><b>' . shopNirPdfEscape($supplierName ?: '—') . '</b>' . ($supplierMeta !== '' ? '<small>' . shopNirPdfEscape($supplierMeta) . '</small>' : '') . '</td>';
         $html .= '<td><b>' . shopNirPdfEscape($internalName ?: '—') . '</b>' . ($internalMeta !== '' ? '<small>' . shopNirPdfEscape($internalMeta) . '</small>' : '') . '</td>';
         $html .= '<td class="center">' . shopNirPdfEscape($unit ?: '—') . '</td>';
@@ -317,7 +435,7 @@ function shopNirPdfProductRows(array $document, string $mode): string {
         $html .= '<td class="reason">' . shopNirPdfEscape($difference ?: '—') . '</td>';
         $html .= '</tr>';
     }
-    if ($html === '') $html = '<tr><td colspan="12" class="empty">Documentul nu conține poziții.</td></tr>';
+    if ($html === '') $html = '<tr><td colspan="13" class="empty">Documentul nu conține poziții.</td></tr>';
     return $html;
 }
 
@@ -602,6 +720,9 @@ body { border-top: 4px solid __ACCENT__; }
 .product-table td b { display: block; font-size: 5.5pt; }
 .product-table td small { display: block; color: #68717c; font-size: 4.6pt; margin-top: 2px; }
 .product-table .center { text-align: center; }
+.product-table .thumbnail-cell { padding: 3px; vertical-align: middle; }
+.product-thumbnail { display: block; width: 34px; height: 34px; margin: 0 auto; object-fit: contain; border: 1px solid #dce2e7; border-radius: 5px; background: white; }
+.thumbnail-empty { display: inline-block; color: #9aa2aa; font-size: 4.1pt; line-height: 1.15; }
 .product-table .number { text-align: right; white-space: nowrap; }
 .product-table .reason { font-size: 4.8pt; }
 .product-table .cost, .product-table .total { font-weight: 700; }
@@ -659,8 +780,127 @@ body { border-top: 4px solid __ACCENT__; }
 CSS;
 }
 
+function shopNirPdfStrictInvoice(array $document, bool $original = false): string {
+    $context = is_array($document['pdf_context'] ?? null) ? $document['pdf_context'] : [];
+    $relationship = is_array($context['relationship'] ?? null) ? $context['relationship'] : [];
+    if ($original && !is_array($relationship['original_invoice'] ?? null)) return '';
+    $source = $original ? $relationship['original_invoice'] : $document;
+    $series = shopNirPdfFirst($source, $original ? ['series', 'supplier_invoice_series'] : ['supplier_invoice_series'], '');
+    $number = shopNirPdfFirst($source, $original ? ['number', 'supplier_invoice_number'] : ['supplier_invoice_number'], '');
+    $date = shopNirPdfDate(shopNirPdfFirst($source, $original ? ['date', 'supplier_invoice_date'] : ['supplier_invoice_date'], ''));
+    $identity = shopNirPdfJoin([$series, $number], ' ');
+    return shopNirPdfJoin([$identity, $date], ' / ');
+}
+
+function shopNirPdfStrictRows(array $document, ?array $pageLines = null): string {
+    $rows = '';
+    $currency = strtoupper(trim((string)($document['currency'] ?? 'RON'))) ?: 'RON';
+    $currencyLabel = $currency === 'RON' ? 'lei' : $currency;
+    $allLines = array_values(is_array($document['lines'] ?? null) ? $document['lines'] : []);
+    $renderLines = $pageLines ?? $allLines;
+    foreach ($renderLines as $index => $line) {
+        if (!is_array($line)) continue;
+        $invoiced = (float)($line['invoiced_quantity'] ?? 0);
+        $received = (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0);
+        $discount = (float)($line['discount_percent'] ?? 0);
+        $unitPrice = (float)($line['unit_price'] ?? 0) * (1 - $discount / 100);
+        $net = $received * $unitPrice;
+        $vatRate = (float)($line['vat_rate'] ?? 0);
+        $vat = $net * $vatRate / 100;
+        $difference = $received - $invoiced;
+        $differenceClass = $difference < -0.000001 ? ' diff-negative' : ($difference > 0.000001 ? ' diff-positive' : ' diff-zero');
+        $name = shopNirPdfFirst($line, ['product_name', 'product_snapshot_name', 'supplier_product_name'], '—');
+        $thumbnail = shopNirPdfProductImageDataUri($line);
+        $imageHtml = $thumbnail !== null ? '<img class="product-image" src="' . shopNirPdfEscape($thumbnail) . '" alt="Produs">' : '<span class="image-placeholder">GT</span>';
+        $rows .= '<tr><td class="c row-number">' . shopNirPdfEscape($line['line_number'] ?? ($index + 1)) . '</td>'
+            . '<td>' . shopNirPdfEscape($line['product_sku'] ?? $line['sku_snapshot'] ?? $line['supplier_product_code'] ?? '') . '</td>'
+            . '<td class="c image-cell">' . $imageHtml . '</td>'
+            . '<td class="product-name">' . shopNirPdfEscape($name) . '</td>'
+            . '<td class="c">' . shopNirPdfEscape($line['purchase_unit'] ?? $line['stock_unit'] ?? '') . '</td>'
+            . '<td class="n">' . shopNirPdfEscape(shopNirPdfDecimal($invoiced, 4)) . '</td>'
+            . '<td class="n">' . shopNirPdfEscape(shopNirPdfDecimal($received, 4)) . '</td>'
+            . '<td class="n' . $differenceClass . '">' . shopNirPdfEscape(shopNirPdfDecimal($difference, 4, true)) . '</td>'
+            . '<td class="n">' . shopNirPdfEscape(shopNirPdfDecimal($unitPrice, 4) . ' ' . $currencyLabel) . '</td>'
+            . '<td class="n">' . shopNirPdfEscape(shopNirPdfDecimal($net, 2) . ' ' . $currencyLabel) . '</td>'
+            . '<td class="n">' . shopNirPdfEscape(shopNirPdfDecimal($vatRate, 2)) . '%</td>'
+            . '<td class="n">' . shopNirPdfEscape(shopNirPdfDecimal($vat, 2) . ' ' . $currencyLabel) . '</td>'
+            . '<td class="n">' . shopNirPdfEscape(shopNirPdfDecimal($net + $vat, 2) . ' ' . $currencyLabel) . '</td></tr>';
+    }
+    return $rows !== '' ? $rows : '<tr><td colspan="13" class="empty">Nu există poziții.</td></tr>';
+}
+
+function shopNirStrictPdfHtml(array $document): string {
+    $context = is_array($document['pdf_context'] ?? null) ? $document['pdf_context'] : [];
+    $company = is_array($context['company'] ?? null) ? $context['company'] : [];
+    $supplier = is_array($context['supplier'] ?? null) ? $context['supplier'] : [];
+    $warehouse = is_array($context['warehouse'] ?? null) ? $context['warehouse'] : [];
+    $relationship = is_array($context['relationship'] ?? null) ? $context['relationship'] : [];
+    $isStorno = shopNirPdfIsStornoDocument($document);
+    $companyName = shopNirPdfFirst($company, ['legal_name', 'trade_name'], 'G-Trots România');
+    $companyIdentity = shopNirPdfJoin([
+        $companyName,
+        trim((string)($company['cui'] ?? '')) !== '' ? 'CUI ' . $company['cui'] : '',
+        trim((string)($company['registration_number'] ?? '')) !== '' ? 'Reg. Com. ' . $company['registration_number'] : '',
+    ], ' | ');
+    $logo = shopNirPdfLogoDataUri();
+    $logoHtml = $logo !== null ? '<img class="strict-logo" src="' . shopNirPdfEscape($logo) . '" alt="G-Trots">' : '';
+    $number = shopNirPdfDocumentNumber(shopNirPdfFirst($document, ['nir_number', 'temporary_number'], 'NIR'), $document['nir_date'] ?? null);
+    $date = shopNirPdfDate($document['nir_date'] ?? $document['created_at'] ?? '');
+    $supplierName = shopNirPdfFirst($supplier, ['name'], $document['supplier_name'] ?? '');
+    $supplierCui = shopNirPdfFirst($supplier, ['cui', 'vat_number'], $document['supplier_cui'] ?? '');
+    $warehouseName = shopNirPdfFirst($warehouse, ['name'], $document['warehouse_name'] ?? '');
+    $receiptLocation = shopNirPdfFirst($document, ['reception_location', 'receipt_location'], shopNirPdfJoin([$warehouseName, $warehouse['address'] ?? '', $warehouse['city'] ?? ''], ', '));
+    $reason = shopNirPdfPresentationText(shopNirPdfFirst($relationship, ['reason'], shopNirPdfFirst($document, ['difference_notes', 'notes'], '')));
+    $observations = trim((string)($document['notes'] ?? ''));
+    $stamp = shopNirPdfCompanyStampDataUri($company);
+    $stampHtml = $stamp !== null
+        ? '<img class="company-stamp" src="' . shopNirPdfEscape($stamp) . '" alt="Ștampila firmei">'
+        : '<div class="stamp-placeholder">ȘTAMPILA FIRMEI</div>';
+    $icons = [];
+    foreach (['document', 'calendar', 'user', 'id', 'warehouse', 'pin', 'invoice', 'operation', 'info', 'clipboard'] as $iconName) {
+        $icons[$iconName] = shopNirPdfIconDataUri($iconName, in_array($iconName, ['document', 'calendar'], true) ? '#ff7900' : '#071b3e');
+    }
+    $headers = ['Nr.<br>crt.', 'Cod / SKU', 'Imagine', 'Denumirea bunurilor<br>recepționate', 'U.M.', 'Cantitate<br>document', 'Cantitate<br>recepționată', 'Diferență<br>cantitativă', 'Preț unitar<br>fără TVA', 'Valoare<br>fără TVA', 'TVA<br>%', 'Valoare<br>TVA', 'Valoare<br>totală'];
+    $headerHtml = implode('', array_map(static fn(string $header): string => '<th>' . $header . '</th>', $headers));
+    $css = '@page{size:A4 landscape;margin:5mm}*{box-sizing:border-box}body{margin:0;font-family:"DejaVu Sans",sans-serif;color:#071b3e;background:#fff;font-size:6.8pt}.page{height:198mm;position:relative;page-break-after:always;padding:1mm 1mm 0}.page:last-child{page-break-after:auto}.header{width:100%;border-collapse:collapse;height:23mm}.header td{vertical-align:top}.brand{width:30%}.brand-wrap{display:table}.brand-wrap>*{display:table-cell;vertical-align:middle}.strict-logo{width:15mm;height:15mm;object-fit:contain;margin-right:4mm}.brand-name{font-size:16pt;font-weight:900;line-height:1}.company-name{font-size:7pt;font-weight:700;margin-top:2mm}.company-id{font-size:6.4pt;margin-top:3mm}.doc-title{width:50%;text-align:center;font-size:15pt;font-weight:900;line-height:1.05;padding-top:1mm}.doc-title em{display:block;color:#ff7900;font-style:normal;font-size:13pt;margin-top:1.5mm}.form-code{width:20%;text-align:center;background:#f4f6f9;border-radius:3mm;padding:4mm 2mm;font-size:7pt}.form-code b{display:block;font-size:8pt;margin-top:1mm}.meta{height:17mm;border:1px solid #d8e1ec;border-radius:2mm;margin:1mm 0 3mm;overflow:hidden}.meta-dark{width:47%;height:100%;background:#002654;color:#fff;border-radius:2mm 16mm 16mm 2mm;display:table}.meta-item{display:table-cell;width:50%;padding:3mm 5mm;vertical-align:middle;border-right:1px solid rgba(255,255,255,.2)}.meta-item:last-child{border:0}.meta-item span{display:block;font-size:6.4pt}.meta-item b{display:block;font-size:12pt;margin-top:1mm}.info{width:100%;border-collapse:separate;border-spacing:2mm 0;margin:0 -2mm 3mm}.info-card{width:50%;border:1px solid #d8e1ec;border-radius:2mm;padding:2mm 4mm}.info-row{width:100%;border-collapse:collapse}.info-row td{height:7.4mm;border-bottom:1px solid #d9e2ed}.info-row:last-child td{border:0}.info-label{font-weight:800;width:40%}.items{width:100%;border-collapse:collapse;table-layout:fixed;border:1px solid #dce3ec}.items thead{display:table-header-group}.items th{background:#002654;color:#fff;border-right:1px solid #6f86a3;padding:2mm .7mm;font-size:5.5pt;line-height:1.15;height:12mm}.items td{height:15mm;border-right:1px solid #d9e2ed;border-bottom:1px solid #d9e2ed;padding:1.2mm;vertical-align:middle}.items tr{page-break-inside:avoid}.items .c{text-align:center}.items .n{text-align:right;white-space:nowrap}.row-number{font-size:9pt;color:#ff7900;font-weight:900}.product-image{width:13mm;height:11mm;object-fit:contain}.image-placeholder{display:inline-block;width:12mm;height:10mm;line-height:10mm;border-radius:2mm;background:#ff7900;font-weight:900}.product-name{line-height:1.3}.diff-negative{color:#f11}.totals td{height:9mm;background:#f3f6fa;font-size:8pt;font-weight:900;border-top:1px solid #d8e1ec}.totals .grand{background:#ff7900;color:#fff;font-size:10pt}.observations{height:16mm;margin-top:3mm;border:1px solid #f1d59b;background:#fffaf0;border-radius:2mm;padding:3mm 6mm}.observations b{display:block;margin-bottom:2mm}.stamp-box{height:21mm;margin-top:3mm;border:1px solid #d8e1ec;border-radius:2mm;text-align:center;padding:1mm}.company-stamp{max-width:48mm;max-height:19mm;object-fit:contain}.stamp-placeholder{display:inline-block;border:1px dashed #9aa8ba;color:#6b7a92;padding:5mm 12mm;font-weight:700}.continuation{position:absolute;right:2mm;bottom:1mm;color:#6b7a92}.storno-mark{color:#c93f4b}.empty{text-align:center;color:#6b7a92;padding:8mm!important}';
+    $css .= '.header{height:18mm}.meta{height:13mm;margin-bottom:1.5mm}.meta-item{padding:2mm 4mm}.meta-item b{font-size:10pt}.info{margin-bottom:1.5mm}.info-card{padding:1mm 3mm}.info-row td{height:5.5mm}.items th{height:9mm;padding:1mm .5mm}.items td{height:10.5mm}.totals td{height:7mm}.observations{height:12mm;margin-top:1.5mm;padding:1.5mm 5mm 1.5mm 12mm;position:relative}.stamp-box{height:15mm;margin-top:1.5mm}.company-stamp{max-height:13mm}.diff-zero{color:#00a441;font-weight:800}.diff-positive{color:#ff7900;font-weight:800}.diff-negative{color:#ff1e1e;font-weight:800}.inline-icon{width:4.2mm;height:4.2mm;vertical-align:middle;margin-right:2mm}.meta-icon{width:7mm;height:7mm;vertical-align:middle;margin-right:3mm}.form-icon{width:8mm;height:8mm;display:block;margin:0 auto 1mm}.obs-icon{position:absolute;left:3mm;top:2mm;width:6mm;height:6mm}';
+    $css .= '.meta{height:15mm}.meta-item{padding:2.5mm 4mm}.meta-icon{float:left}.meta-item span,.meta-item b{margin-left:10mm}.stamp-box{height:24mm;text-align:right;padding:1mm 9mm 1mm 1mm}.company-stamp{width:auto;max-width:72mm;height:auto;max-height:22mm}';
+    $css .= '.page{height:auto;page-break-after:auto;position:static}.items{page-break-inside:auto}.items tbody{page-break-inside:auto}.items tfoot{display:table-row-group}.items tbody tr{page-break-inside:avoid}.document-header{page-break-after:avoid}.final-block{page-break-inside:avoid}.continuation{display:none}';
+    $allLines = array_values(array_filter(is_array($document['lines'] ?? null) ? $document['lines'] : [], 'is_array'));
+    $netTotal = array_sum(array_map(static fn(array $line): float => (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0) * (float)($line['unit_price'] ?? 0) * (1 - (float)($line['discount_percent'] ?? 0) / 100), $allLines));
+    $vatTotal = array_sum(array_map(static fn(array $line): float => (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0) * (float)($line['unit_price'] ?? 0) * (1 - (float)($line['discount_percent'] ?? 0) / 100) * (float)($line['vat_rate'] ?? 0) / 100, $allLines));
+    $currency = strtoupper(trim((string)($document['currency'] ?? 'RON'))) ?: 'RON';
+    $currencyLabel = $currency === 'RON' ? 'lei' : $currency;
+    $rows = shopNirPdfStrictRows($document, $allLines);
+    $content = '<section class="page ' . ($isStorno ? 'storno' : 'entry') . '"><div class="document-header"><table class="header"><tr><td class="brand"><div class="brand-wrap">' . $logoHtml . '<div><div class="brand-name">G-TROTS</div><div class="company-name">' . shopNirPdfEscape($companyName) . '</div><div class="company-id">' . shopNirPdfEscape(shopNirPdfJoin([trim((string)($company['cui'] ?? '')) !== '' ? 'CUI ' . $company['cui'] : '', trim((string)($company['registration_number'] ?? '')) !== '' ? 'Reg. Com. ' . $company['registration_number'] : ''], ' | ')) . '</div></div></div></td><td class="doc-title">NOTĂ DE RECEPȚIE ȘI<br>CONSTATARE DE DIFERENȚE<em>(NIR)</em></td><td class="form-code"><img class="form-icon" src="' . $icons['document'] . '" alt="">Cod formular:<b>NIR</b></td></tr></table>'
+            . '<div class="meta"><div class="meta-dark"><div class="meta-item"><img class="meta-icon" src="' . $icons['document'] . '" alt=""><span>Nr. NIR</span><b>' . shopNirPdfEscape($number) . '</b></div><div class="meta-item"><img class="meta-icon" src="' . $icons['calendar'] . '" alt=""><span>din data de</span><b>' . shopNirPdfEscape($date) . '</b></div></div></div>'
+            . '<table class="info"><tr><td class="info-card"><table class="info-row"><tr><td class="info-label"><img class="inline-icon" src="' . $icons['user'] . '" alt="">Furnizor:</td><td>' . shopNirPdfEscape($supplierName) . '</td></tr><tr><td class="info-label"><img class="inline-icon" src="' . $icons['id'] . '" alt="">CUI furnizor:</td><td>' . shopNirPdfEscape($supplierCui) . '</td></tr><tr><td class="info-label"><img class="inline-icon" src="' . $icons['warehouse'] . '" alt="">Gestiune:</td><td>' . shopNirPdfEscape($warehouseName) . '</td></tr><tr><td class="info-label"><img class="inline-icon" src="' . $icons['pin'] . '" alt="">Loc recepție:</td><td>' . shopNirPdfEscape($receiptLocation) . '</td></tr></table></td><td class="info-card"><table class="info-row"><tr><td class="info-label"><img class="inline-icon" src="' . $icons['invoice'] . '" alt="">Factura furnizor nr. / data:</td><td>' . shopNirPdfEscape(shopNirPdfStrictInvoice($document)) . '</td></tr><tr><td class="info-label"><img class="inline-icon" src="' . $icons['invoice'] . '" alt="">Factura inițială stornată nr. / data:</td><td>' . shopNirPdfEscape(shopNirPdfStrictInvoice($document, true)) . '</td></tr><tr><td class="info-label"><img class="inline-icon" src="' . $icons['operation'] . '" alt="">Tip operațiune:</td><td class="' . ($isStorno ? 'storno-mark' : '') . '">' . ($isStorno ? 'Stornare' : 'Recepție') . '</td></tr><tr><td class="info-label"><img class="inline-icon" src="' . $icons['info'] . '" alt="">Motiv stornare / retur / diferență:</td><td>' . shopNirPdfEscape($reason) . '</td></tr></table></td></tr></table>'
+            . '</div><table class="items"><colgroup><col style="width:4%"><col style="width:9%"><col style="width:8%"><col style="width:16%"><col style="width:5%"><col style="width:8%"><col style="width:8%"><col style="width:7%"><col style="width:8%"><col style="width:7%"><col style="width:6%"><col style="width:7%"><col style="width:7%"></colgroup><thead><tr>' . $headerHtml . '</tr></thead><tbody>' . $rows . '</tbody><tfoot><tr class="totals"><td colspan="9" class="n">TOTAL</td><td class="n">' . shopNirPdfEscape(shopNirPdfDecimal($netTotal, 2) . ' ' . $currencyLabel) . '</td><td></td><td class="n">' . shopNirPdfEscape(shopNirPdfDecimal($vatTotal, 2) . ' ' . $currencyLabel) . '</td><td class="n grand">' . shopNirPdfEscape(shopNirPdfDecimal($netTotal + $vatTotal, 2) . ' ' . $currencyLabel) . '</td></tr></tfoot></table>'
+            . '<div class="final-block"><div class="observations"><img class="obs-icon" src="' . $icons['clipboard'] . '" alt=""><b>Constatări privind recepția / diferențe calitative sau cantitative:</b>' . nl2br(shopNirPdfEscape($observations), false) . '</div><div class="stamp-box">' . $stampHtml . '</div></div></section>';
+    return '<!doctype html><html lang="ro"><head><meta charset="UTF-8"><style>' . $css . '</style></head><body>' . $content . '</body></html>';
+}
+
+function shopNirRenderStrictPdf(array $document): string {
+    $options = new Options();
+    $options->set('isRemoteEnabled', false);
+    $options->set('isHtml5ParserEnabled', true);
+    $options->set('isPhpEnabled', false);
+    $options->set('isJavascriptEnabled', false);
+    $options->set('isFontSubsettingEnabled', true);
+    $options->set('defaultFont', 'DejaVu Sans');
+    $options->setChroot([__DIR__, dirname(__DIR__)]);
+    $dompdf = new Dompdf($options);
+    $dompdf->setPaper('A4', 'landscape');
+    $dompdf->loadHtml(shopNirStrictPdfHtml($document), 'UTF-8');
+    $dompdf->render();
+    $font = $dompdf->getFontMetrics()->getFont('DejaVu Sans', 'normal');
+    $dompdf->getCanvas()->page_text(748, 575, 'Pagina {PAGE_NUM} / {PAGE_COUNT}', $font, 7, [0.42, 0.48, 0.58]);
+    return $dompdf->output();
+}
+
 /** Render a complete premium NIR PDF and return its raw bytes. */
 function shopNirRenderPremiumPdf(array $document): string {
+    return shopNirRenderStrictPdf($document);
     $context = is_array($document['pdf_context'] ?? null) ? $document['pdf_context'] : [];
     $company = is_array($context['company'] ?? null) ? $context['company'] : [];
     $mode = shopNirPdfMode($document, $context);
@@ -673,8 +913,8 @@ function shopNirRenderPremiumPdf(array $document): string {
     $isStorno = $mode === 'reversal';
     $productSectionTitle = $isStorno ? 'POZIȚII STORNATE ȘI VALORI CORECTIVE' : 'POZIȚII RECEPȚIONATE ȘI VALORI DE INTRARE';
     $productHeaders = $isStorno
-        ? '<th>Nr.</th><th>Produs furnizor / cod</th><th>Produs intern / SKU</th><th>U.M. / conversie</th><th>Cant. factură</th><th>Cant. corectată</th><th>Cant. stornată</th><th>Preț net</th><th>TVA</th><th>Cost unitar stornat RON</th><th>Valoare stornată RON</th><th>Trasabilitate / observații</th>'
-        : '<th>Nr.</th><th>Produs furnizor / cod</th><th>Produs intern / SKU</th><th>U.M. / conversie</th><th>Facturat</th><th>Primit</th><th>Acceptat</th><th>Preț net</th><th>TVA</th><th>Cost unitar intrare RON</th><th>Valoare intrare RON</th><th>Diferență / observații</th>';
+        ? '<th>Nr.</th><th>Foto</th><th>Produs furnizor / cod</th><th>Produs intern / SKU</th><th>U.M. / conversie</th><th>Cant. factură</th><th>Cant. corectată</th><th>Cant. stornată</th><th>Preț net</th><th>TVA</th><th>Cost unitar stornat RON</th><th>Valoare stornată RON</th><th>Trasabilitate / observații</th>'
+        : '<th>Nr.</th><th>Foto</th><th>Produs furnizor / cod</th><th>Produs intern / SKU</th><th>U.M. / conversie</th><th>Facturat</th><th>Primit</th><th>Acceptat</th><th>Preț net</th><th>TVA</th><th>Cost unitar intrare RON</th><th>Valoare intrare RON</th><th>Diferență / observații</th>';
     $css = str_replace(['__ACCENT__', '__SOFT__'], [$isStorno ? '#c93f4b' : '#168a57', $isStorno ? '#fcecef' : '#eaf8f1'], shopNirPdfCss($mode));
     $html = '<!doctype html><html lang="ro"><head><meta charset="UTF-8"><style>' . $css . '</style></head><body>' . $watermark
         . shopNirPdfHeaderHtml($document, $company, $status, $mode, $logo)
@@ -682,7 +922,7 @@ function shopNirRenderPremiumPdf(array $document): string {
         . shopNirPdfCardsHtml($document, $context)
         . shopNirPdfMetricsHtml($document, $summary, $mode)
         . '<section class="product-section"><h2>' . $productSectionTitle . '</h2><table class="product-table">'
-        . '<colgroup><col style="width:3%"><col style="width:15%"><col style="width:15%"><col style="width:7%"><col style="width:6%"><col style="width:6%"><col style="width:6%"><col style="width:8%"><col style="width:5%"><col style="width:9%"><col style="width:9%"><col style="width:11%"></colgroup>'
+        . '<colgroup><col style="width:3%"><col style="width:7%"><col style="width:14%"><col style="width:14%"><col style="width:6%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:7%"><col style="width:4.5%"><col style="width:8%"><col style="width:8%"><col style="width:12%"></colgroup>'
         . '<thead><tr>' . $productHeaders . '</tr></thead>'
         . '<tbody>' . shopNirPdfProductRows($document, $mode) . '</tbody></table></section>'
         . shopNirPdfTotalsHtml($document, $mode)

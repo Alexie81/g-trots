@@ -259,6 +259,54 @@ function shopNirPremiumXlsxStyles(): string
 }
 
 /** @return array<int,array<string,mixed>> */
+function shopNirReferenceXlsxStyles(string $currency = 'RON'): string
+{
+    $currency = strtoupper(trim($currency)) ?: 'RON';
+    $currencyLabel = $currency === 'RON' ? 'lei' : preg_replace('/[^A-Z0-9]/', '', $currency);
+    $moneyFormat = '#,##0.00 &quot;' . shopNirPremiumXlsxXml($currencyLabel) . '&quot;;[Red]-#,##0.00 &quot;' . shopNirPremiumXlsxXml($currencyLabel) . '&quot;';
+    $xfs = [];
+    $xf = static function (int $font, int $fill, int $border, string $align = '', int $numFmt = 0): string {
+        $attrs = ' numFmtId="' . $numFmt . '" fontId="' . $font . '" fillId="' . $fill . '" borderId="' . $border . '" xfId="0" applyFont="1" applyFill="1" applyBorder="1"';
+        if ($numFmt > 0) $attrs .= ' applyNumberFormat="1"';
+        return '<xf' . $attrs . '><alignment vertical="center"' . $align . '/></xf>';
+    };
+    $xfs[0] = $xf(0, 0, 0);
+    for ($i = 1; $i <= 41; $i++) $xfs[$i] = $xf(0, 0, 0);
+    $xfs[1] = $xf(2, 0, 0, ' horizontal="center" wrapText="1"');
+    $xfs[3] = $xf(1, 3, 1, ' horizontal="center" wrapText="1"');
+    $xfs[4] = $xf(1, 4, 1, ' wrapText="1"');
+    $xfs[6] = $xf(1, 4, 1, ' horizontal="right"');
+    $xfs[8] = $xf(1, 0, 0, ' horizontal="center"');
+    $xfs[9] = $xf(3, 2, 1, ' horizontal="center" wrapText="1"');
+    $xfs[10] = $xf(0, 0, 1, ' wrapText="1"');
+    $xfs[11] = $xf(0, 0, 1, ' horizontal="center"', 165);
+    $xfs[13] = $xf(0, 0, 1, ' horizontal="right"', 166);
+    $xfs[17] = $xf(1, 4, 1, ' horizontal="right"', 166);
+    $xfs[19] = $xf(5, 0, 1, ' horizontal="center" wrapText="1"');
+    $xfs[23] = $xf(1, 3, 1, ' wrapText="1"');
+    $xfs[28] = $xf(6, 5, 1, ' horizontal="center"');
+    $xfs[29] = $xf(4, 0, 0, ' horizontal="center"');
+    $xfs[30] = $xf(2, 0, 0);
+    $xfs[31] = $xf(1, 0, 0);
+    $xfs[32] = $xf(5, 0, 0);
+    $xfs[33] = $xf(6, 0, 0, ' horizontal="center"');
+    $xfs[34] = $xf(3, 2, 0, ' wrapText="1"');
+    $xfs[35] = $xf(3, 2, 0, ' horizontal="center" wrapText="1"');
+    $xfs[36] = $xf(3, 6, 1, ' horizontal="right"', 166);
+    $xfs[37] = $xf(0, 7, 1, ' wrapText="1"');
+    $xfs[38] = $xf(1, 0, 1, ' horizontal="center" wrapText="1"');
+    $xfs[39] = $xf(7, 8, 1, ' horizontal="center"', 165);
+    $xfs[40] = $xf(8, 0, 1, ' horizontal="center"', 165);
+    $xfs[41] = $xf(0, 0, 1, ' horizontal="center"');
+    ksort($xfs);
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        . '<numFmts count="2"><numFmt numFmtId="165" formatCode="0.####;[Red]-0.####"/><numFmt numFmtId="166" formatCode="' . $moneyFormat . '"/></numFmts>'
+        . '<fonts count="9"><font><sz val="9"/><color rgb="FF203A5F"/><name val="Aptos"/></font><font><b/><sz val="9"/><color rgb="FF071B3E"/><name val="Aptos"/></font><font><b/><sz val="18"/><color rgb="FF071B3E"/><name val="Aptos Display"/></font><font><b/><sz val="8"/><color rgb="FFFFFFFF"/><name val="Aptos"/></font><font><b/><sz val="24"/><color rgb="FFFFFFFF"/><name val="Aptos Display"/></font><font><sz val="8"/><color rgb="FF687B96"/><name val="Aptos"/></font><font><b/><sz val="13"/><color rgb="FFFF7900"/><name val="Aptos Display"/></font><font><sz val="9"/><color rgb="FFFF1E1E"/><name val="Aptos"/></font><font><sz val="9"/><color rgb="FF00A441"/><name val="Aptos"/></font></fonts>'
+        . '<fills count="9"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF002654"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEAF2FA"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF3F6FA"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFEEEE"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFF7900"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFAF0"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFECEC"/></patternFill></fill></fills>'
+        . '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFD8E1EC"/></left><right style="thin"><color rgb="FFD8E1EC"/></right><top style="thin"><color rgb="FFD8E1EC"/></top><bottom style="thin"><color rgb="FFD8E1EC"/></bottom><diagonal/></border></borders>'
+        . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="42">' . implode('', $xfs) . '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles><dxfs count="0"/><tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/></styleSheet>';
+}
+
 function shopNirPremiumXlsxPositionColumns(): array
 {
     $available = 'Disponibil';
@@ -668,6 +716,64 @@ function shopNirPremiumXlsxSafeLocalProductImage($url): ?array
     return shopNirPremiumXlsxNormaliseImage($bytes, 180, 180, false);
 }
 
+function shopNirPremiumXlsxSafeCompanyStamp($url): ?array
+{
+    $raw = trim((string)$url);
+    if ($raw === '' || str_contains($raw, "\0")) return null;
+    $path = parse_url($raw, PHP_URL_PATH);
+    if (!is_string($path) || $path === '') $path = $raw;
+    $path = rawurldecode(str_replace('\\', '/', $path));
+    $marker = 'uploads/company/';
+    $position = strpos(ltrim($path, '/'), $marker);
+    if ($position === false) return null;
+    $relative = substr(ltrim($path, '/'), $position);
+    if (!preg_match('#^uploads/company/[A-Za-z0-9._-]+\.(?:jpe?g|png|webp)$#i', $relative)) return null;
+    $base = realpath(__DIR__ . '/uploads/company');
+    $candidate = realpath(__DIR__ . '/' . $relative);
+    if ($base === false || $candidate === false || !is_file($candidate)) return null;
+    if (!str_starts_with($candidate, rtrim($base, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR)) return null;
+    $size = filesize($candidate);
+    if ($size === false || $size < 32 || $size > 6 * 1024 * 1024) return null;
+    $bytes = file_get_contents($candidate);
+    if (!is_string($bytes)) return null;
+    $bytes = shopNirPremiumXlsxPrepareCompanyStamp($bytes) ?? $bytes;
+    return shopNirPremiumXlsxNormaliseImage($bytes, 600, 300, true);
+}
+
+function shopNirPremiumXlsxPrepareCompanyStamp(string $bytes): ?string
+{
+    if (!function_exists('imagecreatefromstring') || !function_exists('imagepng')) return null;
+    $source = @imagecreatefromstring($bytes);
+    if ($source === false) return null;
+    $width = imagesx($source); $height = imagesy($source);
+    if ($width < 1 || $height < 1 || $width * $height > 30000000) { imagedestroy($source); return null; }
+    $left = $width; $top = $height; $right = -1; $bottom = -1;
+    for ($y = 0; $y < $height; $y++) for ($x = 0; $x < $width; $x++) {
+        $rgba = imagecolorat($source, $x, $y);
+        $alpha = ($rgba >> 24) & 0x7f; $red = ($rgba >> 16) & 0xff; $green = ($rgba >> 8) & 0xff; $blue = $rgba & 0xff;
+        if ($alpha < 118 && min($red, $green, $blue) < 246) {
+            $left = min($left, $x); $right = max($right, $x); $top = min($top, $y); $bottom = max($bottom, $y);
+        }
+    }
+    if ($right < $left || $bottom < $top) { imagedestroy($source); return null; }
+    $pad = max(4, (int)round(max($right - $left, $bottom - $top) * .025));
+    $left = max(0, $left - $pad); $top = max(0, $top - $pad); $right = min($width - 1, $right + $pad); $bottom = min($height - 1, $bottom + $pad);
+    $cropWidth = $right - $left + 1; $cropHeight = $bottom - $top + 1;
+    $canvas = imagecreatetruecolor($cropWidth, $cropHeight);
+    imagealphablending($canvas, false); imagesavealpha($canvas, true);
+    $transparent = imagecolorallocatealpha($canvas, 255, 255, 255, 127);
+    imagefilledrectangle($canvas, 0, 0, $cropWidth, $cropHeight, $transparent);
+    for ($y = 0; $y < $cropHeight; $y++) for ($x = 0; $x < $cropWidth; $x++) {
+        $rgba = imagecolorat($source, $left + $x, $top + $y);
+        $alpha = ($rgba >> 24) & 0x7f; $red = ($rgba >> 16) & 0xff; $green = ($rgba >> 8) & 0xff; $blue = $rgba & 0xff;
+        if ($alpha >= 118 || min($red, $green, $blue) >= 246) continue;
+        imagesetpixel($canvas, $x, $y, imagecolorallocatealpha($canvas, max(0, (int)round($red * .72)), max(0, (int)round($green * .72)), max(0, (int)round($blue * .72)), min(110, $alpha)));
+    }
+    ob_start(); imagepng($canvas, null, 6); $result = ob_get_clean();
+    imagedestroy($canvas); imagedestroy($source);
+    return is_string($result) && $result !== '' ? $result : null;
+}
+
 function shopNirPremiumXlsxNormaliseImage(string $bytes, int $maxWidth, int $maxHeight, bool $allowLargeFallback = true): ?array
 {
     $info = @getimagesizefromstring($bytes);
@@ -777,6 +883,7 @@ function shopNirPremiumXlsxSheet(string $rows, array $widths, int $lastRow, int 
     $drawingXml = !empty($options['drawing']) ? '<drawing r:id="rId1"/>' : '';
     $orientation = ($options['orientation'] ?? 'landscape') === 'portrait' ? 'portrait' : 'landscape';
     $paperSize = (int)($options['paper_size'] ?? 9);
+    $fitToHeight = max(0, (int)($options['fit_to_height'] ?? 0));
     $header = shopNirPremiumXlsxXml($options['header'] ?? '&LG-Trots Management&R&D');
     $footer = shopNirPremiumXlsxXml($options['footer'] ?? '&LDocument generat electronic&RPagina &P / &N');
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -786,7 +893,7 @@ function shopNirPremiumXlsxSheet(string $rows, array $widths, int $lastRow, int 
         . '<sheetFormatPr defaultRowHeight="18"/><cols>' . $columns . '</cols><sheetData>' . $rows . '</sheetData>'
         . $filterXml . $mergeXml
         . '<printOptions horizontalCentered="0" verticalCentered="0"/><pageMargins left="0.25" right="0.25" top="0.45" bottom="0.45" header="0.2" footer="0.2"/>'
-        . '<pageSetup paperSize="' . $paperSize . '" orientation="' . $orientation . '" fitToWidth="1" fitToHeight="0" pageOrder="overThenDown"/>'
+        . '<pageSetup paperSize="' . $paperSize . '" orientation="' . $orientation . '" fitToWidth="1" fitToHeight="' . $fitToHeight . '" pageOrder="overThenDown" usePrinterDefaults="0" horizontalDpi="300" verticalDpi="300"/>'
         . '<headerFooter><oddHeader>' . $header . '</oddHeader><oddFooter>' . $footer . '</oddFooter></headerFooter>' . $drawingXml
         . '</worksheet>';
 }
@@ -1126,8 +1233,168 @@ function shopNirPremiumXlsxWorkbook(array $sheetMeta): string
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><fileVersion appName="xl" lastEdited="7" lowestEdited="7" rupBuild="9303"/><workbookPr date1904="0"/><bookViews><workbookView xWindow="0" yWindow="0" windowWidth="24000" windowHeight="14000"/></bookViews><sheets>' . $sheetXml . '</sheets><definedNames>' . $defined . '</definedNames><calcPr calcId="191029" calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/></workbook>';
 }
 
+function shopNirRenderStrictXlsx(array $document): string
+{
+    if (!function_exists('shopNirBuildZip')) throw new RuntimeException('Serviciul NIR trebuie încărcat înaintea generatorului XLSX.');
+    $context = is_array($document['pdf_context'] ?? null) ? $document['pdf_context'] : [];
+    $company = is_array($context['company'] ?? null) ? $context['company'] : [];
+    $supplier = is_array($context['supplier'] ?? null) ? $context['supplier'] : [];
+    $warehouse = is_array($context['warehouse'] ?? null) ? $context['warehouse'] : [];
+    $relationship = is_array($context['relationship'] ?? null) ? $context['relationship'] : [];
+    $lines = array_values(is_array($document['lines'] ?? null) ? $document['lines'] : []);
+    $isStorno = shopNirPremiumXlsxIsStornoDocument($document);
+    $companyName = trim((string)($company['legal_name'] ?? $company['trade_name'] ?? 'G-Trots România'));
+    $companyIdentity = implode(' | ', array_values(array_filter([
+        trim((string)($company['cui'] ?? '')) !== '' ? 'CUI ' . $company['cui'] : '',
+        trim((string)($company['registration_number'] ?? '')) !== '' ? 'Reg. Com. ' . $company['registration_number'] : '',
+    ], static fn(string $value): bool => $value !== '')));
+    $supplierName = trim((string)($supplier['name'] ?? $document['supplier_name'] ?? ''));
+    $supplierCui = trim((string)($supplier['cui'] ?? $supplier['vat_number'] ?? $document['supplier_cui'] ?? ''));
+    $warehouseName = trim((string)($warehouse['name'] ?? $document['warehouse_name'] ?? ''));
+    $location = trim((string)($document['reception_location'] ?? $document['receipt_location'] ?? ''));
+    if ($location === '') $location = implode(', ', array_values(array_filter([$warehouseName, $warehouse['address'] ?? '', $warehouse['city'] ?? ''], static fn($value): bool => trim((string)$value) !== '')));
+    $reason = shopNirPremiumXlsxPresentationText($relationship['reason'] ?? $document['difference_notes'] ?? $document['notes'] ?? '');
+    $currentInvoice = trim((string)($document['supplier_invoice_series'] ?? '') . ' ' . (string)($document['supplier_invoice_number'] ?? ''));
+    $currentDate = trim((string)($document['supplier_invoice_date'] ?? ''));
+    if ($currentDate !== '') { try { $currentDate = (new DateTimeImmutable($currentDate))->format('d.m.Y'); } catch (Throwable $error) {} }
+    $currentInvoice = implode(' / ', array_values(array_filter([$currentInvoice, $currentDate], static fn(string $value): bool => trim($value) !== '')));
+    $originalInvoiceData = is_array($relationship['original_invoice'] ?? null) ? $relationship['original_invoice'] : [];
+    $originalInvoice = trim((string)($originalInvoiceData['series'] ?? '') . ' ' . (string)($originalInvoiceData['number'] ?? ''));
+    $originalDate = trim((string)($originalInvoiceData['date'] ?? ''));
+    if ($originalDate !== '') { try { $originalDate = (new DateTimeImmutable($originalDate))->format('d.m.Y'); } catch (Throwable $error) {} }
+    $originalInvoice = implode(' / ', array_values(array_filter([$originalInvoice, $originalDate], static fn(string $value): bool => trim($value) !== '')));
+    $documentNumber = shopNirPremiumXlsxDocumentNumber($document['nir_number'] ?? $document['temporary_number'] ?? 'NIR', $document['nir_date'] ?? null);
+    $documentDate = trim((string)($document['nir_date'] ?? $document['created_at'] ?? ''));
+    if ($documentDate !== '') { try { $documentDate = (new DateTimeImmutable($documentDate))->format('d.m.Y'); } catch (Throwable $error) {} }
+
+    $rows = '';
+    $merges = ['A1:B3', 'C1:F1', 'C2:F2', 'C3:F3', 'G1:L2', 'G3:L3', 'M1:M3', 'A5:F6', 'G5:H6', 'I5:M6'];
+    $rows .= shopNirPremiumXlsxRow(1, [1 => shopNirPremiumXlsxCellSpec('', 'string', 29), 3 => shopNirPremiumXlsxCellSpec('G-TROTS', 'string', 30), 7 => shopNirPremiumXlsxCellSpec('NOTĂ DE RECEPȚIE ȘI CONSTATARE DE DIFERENȚE', 'string', 1), 13 => shopNirPremiumXlsxCellSpec("Cod formular:\nNIR", 'string', 3)], 32);
+    $rows .= shopNirPremiumXlsxRow(2, [3 => shopNirPremiumXlsxCellSpec($companyName, 'string', 31)], 24);
+    $rows .= shopNirPremiumXlsxRow(3, [3 => shopNirPremiumXlsxCellSpec($companyIdentity, 'string', 32), 7 => shopNirPremiumXlsxCellSpec('(NIR)', 'string', 33)], 20);
+    $rows .= shopNirPremiumXlsxRow(4, [], 8);
+    $rows .= shopNirPremiumXlsxRow(5, [1 => shopNirPremiumXlsxCellSpec("Nr. NIR\n" . $documentNumber, 'string', 34), 7 => shopNirPremiumXlsxCellSpec("din data de\n" . $documentDate, 'string', $isStorno ? 28 : 35)], 24);
+    $rows .= shopNirPremiumXlsxRow(6, [], 24);
+    $fieldRows = [
+        ['Furnizor:', $supplierName, 'Factura furnizor nr. / data:', $currentInvoice],
+        ['CUI furnizor:', $supplierCui, 'Factura inițială stornată nr. / data:', $originalInvoice],
+        ['Gestiune:', $warehouseName, 'Tip operațiune:', $isStorno ? 'Stornare' : 'Recepție'],
+        ['Loc recepție:', $location, 'Motiv stornare / retur / diferență:', $reason],
+    ];
+    $rowNumber = 7;
+    foreach ($fieldRows as $fields) {
+        $merges[] = 'A' . $rowNumber . ':B' . $rowNumber;
+        $merges[] = 'C' . $rowNumber . ':F' . $rowNumber;
+        $merges[] = 'G' . $rowNumber . ':I' . $rowNumber;
+        $merges[] = 'J' . $rowNumber . ':M' . $rowNumber;
+        $rows .= shopNirPremiumXlsxRow($rowNumber, [
+            1 => shopNirPremiumXlsxCellSpec($fields[0], 'string', 23), 3 => shopNirPremiumXlsxCellSpec($fields[1], 'string', 10),
+            7 => shopNirPremiumXlsxCellSpec($fields[2], 'string', 23), 10 => shopNirPremiumXlsxCellSpec($fields[3], 'string', 10),
+        ], 26);
+        $rowNumber++;
+    }
+    $rows .= shopNirPremiumXlsxRow(11, [], 8);
+    $headers = ['Nr. crt.', 'Cod / SKU', 'Imagine', 'Denumirea bunurilor recepționate', 'U.M.', 'Cantitate document', 'Cantitate recepționată', 'Diferență cantitativă', 'Preț unitar fără TVA', 'Valoare fără TVA', 'TVA %', 'Valoare TVA', 'Valoare totală'];
+    $headerCells = [];
+    foreach ($headers as $index => $header) $headerCells[$index + 1] = shopNirPremiumXlsxCellSpec($header, 'string', 9);
+    $rows .= shopNirPremiumXlsxRow(12, $headerCells, 48);
+    $firstDataRow = 13;
+    $dataRow = $firstDataRow;
+    foreach ($lines as $index => $line) {
+        if (!is_array($line)) continue;
+        $invoiced = (float)($line['invoiced_quantity'] ?? 0);
+        $received = (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0);
+        $discount = (float)($line['discount_percent'] ?? 0);
+        $price = (float)($line['unit_price'] ?? 0) * (1 - $discount / 100);
+        $net = $received * $price;
+        $vatRate = (float)($line['vat_rate'] ?? 0);
+        $vat = $net * $vatRate / 100;
+        $name = trim((string)($line['product_name'] ?? $line['product_snapshot_name'] ?? $line['supplier_product_name'] ?? ''));
+        $rows .= shopNirPremiumXlsxRow($dataRow, [
+            1 => shopNirPremiumXlsxCellSpec($line['line_number'] ?? ($index + 1), 'number', 11),
+            2 => shopNirPremiumXlsxCellSpec($line['product_sku'] ?? $line['sku_snapshot'] ?? $line['supplier_product_code'] ?? '', 'string', 10),
+            3 => shopNirPremiumXlsxCellSpec('', 'string', 41),
+            4 => shopNirPremiumXlsxCellSpec($name, 'string', 10), 5 => shopNirPremiumXlsxCellSpec($line['purchase_unit'] ?? $line['stock_unit'] ?? '', 'string', 41),
+            6 => shopNirPremiumXlsxCellSpec($invoiced, 'number', 11), 7 => shopNirPremiumXlsxCellSpec($received, 'number', 11),
+            8 => shopNirPremiumXlsxCellSpec($received - $invoiced, 'number', abs($received - $invoiced) < 0.000001 ? 40 : 39, 'G' . $dataRow . '-F' . $dataRow),
+            9 => shopNirPremiumXlsxCellSpec($price, 'number', 13), 10 => shopNirPremiumXlsxCellSpec($net, 'number', 13, 'G' . $dataRow . '*I' . $dataRow),
+            11 => shopNirPremiumXlsxCellSpec($vatRate, 'number', 11), 12 => shopNirPremiumXlsxCellSpec($vat, 'number', 13, 'J' . $dataRow . '*K' . $dataRow . '/100'),
+            13 => shopNirPremiumXlsxCellSpec($net + $vat, 'number', 13, 'J' . $dataRow . '+L' . $dataRow),
+        ], 50);
+        $dataRow++;
+    }
+    if ($dataRow === $firstDataRow) {
+        $rows .= shopNirPremiumXlsxRow($dataRow, [1 => shopNirPremiumXlsxCellSpec('Nu există poziții.', 'string', 19)], 36);
+        $merges[] = 'A' . $dataRow . ':M' . $dataRow;
+        $dataRow++;
+    }
+    $lastDataRow = $dataRow - 1;
+    $rows .= shopNirPremiumXlsxRow($dataRow, [1 => shopNirPremiumXlsxCellSpec('TOTAL', 'string', 6), 10 => shopNirPremiumXlsxCellSpec(array_sum(array_map(static fn(array $line): float => (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0) * (float)($line['unit_price'] ?? 0) * (1 - (float)($line['discount_percent'] ?? 0) / 100), array_filter($lines, 'is_array'))), 'number', 17, 'SUM(J' . $firstDataRow . ':J' . $lastDataRow . ')'), 12 => shopNirPremiumXlsxCellSpec(array_sum(array_map(static fn(array $line): float => (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0) * (float)($line['unit_price'] ?? 0) * (1 - (float)($line['discount_percent'] ?? 0) / 100) * (float)($line['vat_rate'] ?? 0) / 100, array_filter($lines, 'is_array'))), 'number', 17, 'SUM(L' . $firstDataRow . ':L' . $lastDataRow . ')'), 13 => shopNirPremiumXlsxCellSpec(array_sum(array_map(static fn(array $line): float => (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0) * (float)($line['unit_price'] ?? 0) * (1 - (float)($line['discount_percent'] ?? 0) / 100) * (1 + (float)($line['vat_rate'] ?? 0) / 100), array_filter($lines, 'is_array'))), 'number', 36, 'SUM(M' . $firstDataRow . ':M' . $lastDataRow . ')')], 30);
+    $merges[] = 'A' . $dataRow . ':I' . $dataRow;
+    $dataRow += 2;
+    $rows .= shopNirPremiumXlsxRow($dataRow, [1 => shopNirPremiumXlsxCellSpec('Constatări privind recepția / diferențe calitative sau cantitative:', 'string', 4)], 24);
+    $merges[] = 'A' . $dataRow . ':M' . $dataRow;
+    $dataRow++;
+    $rows .= shopNirPremiumXlsxRow($dataRow, [1 => shopNirPremiumXlsxCellSpec($document['notes'] ?? '', 'string', 37)], 48);
+    $merges[] = 'A' . $dataRow . ':M' . $dataRow;
+    $dataRow += 2;
+    $stampRow = $dataRow;
+    $rows .= shopNirPremiumXlsxRow($dataRow, [1 => shopNirPremiumXlsxCellSpec(trim((string)($company['stamp_path'] ?? '')) === '' ? 'ȘTAMPILA FIRMEI' : '', 'string', 38)], 88);
+    $merges[] = 'A' . $dataRow . ':M' . $dataRow;
+    $lastRow = $dataRow;
+
+    $media = []; $mediaIndex = []; $pictures = [];
+    foreach ([__DIR__ . '/pdf-assets/logo.jpg', dirname(__DIR__) . '/assets/images/logo.png'] as $logoPath) {
+        if (!is_file($logoPath)) continue;
+        $bytes = file_get_contents($logoPath);
+        if (!is_string($bytes)) continue;
+        $image = shopNirPremiumXlsxNormaliseImage($bytes, 180, 180, true);
+        if ($image === null) continue;
+        $mediaName = shopNirPremiumXlsxRegisterMedia($media, $mediaIndex, $image, 'gtrots-logo');
+        $scale = min(72 / max(1, (int)$image['width']), 72 / max(1, (int)$image['height']));
+        $pictures[] = ['media' => $mediaName, 'name' => 'Logo G-Trots', 'description' => 'Logo G-Trots', 'col' => 0, 'row' => 0, 'colOff' => 90000, 'rowOff' => 40000, 'cx' => (int)round((int)$image['width'] * $scale * 9525), 'cy' => (int)round((int)$image['height'] * $scale * 9525)];
+        break;
+    }
+    foreach ($lines as $index => $line) {
+        if (!is_array($line)) continue;
+        $image = shopNirPremiumXlsxSafeLocalProductImage($line['product_image_storage_path'] ?? $line['product_image_url'] ?? null);
+        if ($image === null) continue;
+        $mediaName = shopNirPremiumXlsxRegisterMedia($media, $mediaIndex, $image, 'produs');
+        $scale = min(48 / max(1, (int)$image['width']), 42 / max(1, (int)$image['height']));
+        $pictures[] = ['media' => $mediaName, 'name' => 'Produs NIR ' . ($index + 1), 'description' => $line['product_name'] ?? $line['supplier_product_name'] ?? 'Produs', 'col' => 2, 'row' => $firstDataRow + $index - 1, 'colOff' => 4 * 9525, 'rowOff' => 4 * 9525, 'cx' => (int)round((int)$image['width'] * $scale * 9525), 'cy' => (int)round((int)$image['height'] * $scale * 9525)];
+    }
+    $stampImage = shopNirPremiumXlsxSafeCompanyStamp($company['stamp_path'] ?? null);
+    if ($stampImage !== null) {
+        $mediaName = shopNirPremiumXlsxRegisterMedia($media, $mediaIndex, $stampImage, 'stampila');
+        $scale = min(190 / max(1, (int)$stampImage['width']), 78 / max(1, (int)$stampImage['height']));
+        $pictures[] = ['media' => $mediaName, 'name' => 'Ștampila firmei', 'description' => 'Ștampila firmei', 'col' => 10, 'row' => $stampRow - 1, 'colOff' => 8 * 9525, 'rowOff' => 5 * 9525, 'cx' => (int)round((int)$stampImage['width'] * $scale * 9525), 'cy' => (int)round((int)$stampImage['height'] * $scale * 9525)];
+    }
+    $files = [];
+    $drawingOverride = '';
+    if ($pictures) {
+        $drawing = shopNirPremiumXlsxDrawing($pictures);
+        $files['xl/drawings/drawing1.xml'] = $drawing['xml'];
+        $files['xl/drawings/_rels/drawing1.xml.rels'] = $drawing['rels'];
+        $files['xl/worksheets/_rels/sheet1.xml.rels'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>';
+        $drawingOverride = '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>';
+    }
+    foreach ($media as $name => $bytes) $files['xl/media/' . $name] = $bytes;
+    $files['[Content_Types].xml'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="png" ContentType="image/png"/><Default Extension="webp" ContentType="image/webp"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' . $drawingOverride . '</Types>';
+    $files['_rels/.rels'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>';
+    $files['xl/workbook.xml'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView windowWidth="24000" windowHeight="14000"/></bookViews><sheets><sheet name="NIR" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">NIR!$A$1:$M$' . $lastRow . '</definedName><definedName name="_xlnm.Print_Titles" localSheetId="0">NIR!$12:$12</definedName></definedNames><calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/></workbook>';
+    $files['xl/_rels/workbook.xml.rels'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
+    $files['xl/styles.xml'] = shopNirReferenceXlsxStyles((string)($document['currency'] ?? 'RON'));
+    $files['xl/worksheets/sheet1.xml'] = shopNirPremiumXlsxSheet($rows, [6, 13, 11, 25, 8, 13, 14, 13, 13, 14, 9, 13, 14], $lastRow, 13, ['merges' => $merges, 'drawing' => !empty($pictures), 'orientation' => 'landscape', 'paper_size' => 9, 'fit_to_height' => count($lines) <= 4 ? 1 : 0, 'header' => '', 'footer' => '&RPagina &P / &N']);
+    $creator = trim((string)($context['generation']['generated_by'] ?? 'G-Trots Management')) ?: 'G-Trots Management';
+    $created = gmdate('Y-m-d\TH:i:s\Z');
+    $files['docProps/core.xml'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>' . shopNirPremiumXlsxXml('NIR ' . $documentNumber) . '</dc:title><dc:creator>' . shopNirPremiumXlsxXml($creator) . '</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">' . $created . '</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">' . $created . '</dcterms:modified></cp:coreProperties>';
+    $files['docProps/app.xml'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>G-Trots Management</Application><HeadingPairs><vt:vector size="2" baseType="variant"><vt:variant><vt:lpstr>Worksheets</vt:lpstr></vt:variant><vt:variant><vt:i4>1</vt:i4></vt:variant></vt:vector></HeadingPairs><TitlesOfParts><vt:vector size="1" baseType="lpstr"><vt:lpstr>NIR</vt:lpstr></vt:vector></TitlesOfParts><Company>' . shopNirPremiumXlsxXml($companyName) . '</Company></Properties>';
+    return shopNirBuildZip($files);
+}
+
 function shopNirRenderPremiumXlsx(array $document): string
 {
+    return shopNirRenderStrictXlsx($document);
     if (!function_exists('shopNirBuildZip')) throw new RuntimeException('Serviciul NIR trebuie încărcat înaintea generatorului XLSX.');
     $lines = array_values(is_array($document['lines'] ?? null) ? $document['lines'] : []);
     $columns = shopNirPremiumXlsxPositionColumns();

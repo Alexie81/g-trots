@@ -279,7 +279,7 @@ function shopNirReferenceXlsxStyles(string $currency = 'RON'): string
     $xfs[8] = $xf(1, 0, 0, ' horizontal="center"');
     $xfs[9] = $xf(3, 2, 1, ' horizontal="center" wrapText="1"');
     $xfs[10] = $xf(0, 0, 1, ' wrapText="1"');
-    $xfs[11] = $xf(0, 0, 1, ' horizontal="center"', 165);
+    $xfs[11] = $xf(0, 0, 1, ' horizontal="center"');
     $xfs[13] = $xf(0, 0, 1, ' horizontal="right"', 166);
     $xfs[17] = $xf(1, 4, 1, ' horizontal="right"', 166);
     $xfs[19] = $xf(5, 0, 1, ' horizontal="center" wrapText="1"');
@@ -295,8 +295,8 @@ function shopNirReferenceXlsxStyles(string $currency = 'RON'): string
     $xfs[36] = $xf(3, 6, 1, ' horizontal="right"', 166);
     $xfs[37] = $xf(0, 7, 1, ' wrapText="1"');
     $xfs[38] = $xf(1, 0, 1, ' horizontal="center" wrapText="1"');
-    $xfs[39] = $xf(7, 8, 1, ' horizontal="center"', 165);
-    $xfs[40] = $xf(8, 0, 1, ' horizontal="center"', 165);
+    $xfs[39] = $xf(7, 8, 1, ' horizontal="center"');
+    $xfs[40] = $xf(8, 0, 1, ' horizontal="center"');
     $xfs[41] = $xf(0, 0, 1, ' horizontal="center"');
     ksort($xfs);
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'

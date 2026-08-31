@@ -4,7 +4,7 @@
     products: [], orders: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], promotions: [], companies: [], nirs: [], nirPermissions: [], nirWarehouses: [],
     editingProduct: null, editingOrder: null, editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
     productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, productTotal: 0, productSearchTimer: null, productLoadRequestId: 0, slugTouched: false, productQuery: '', orderQuery: '', orderSearchTimer: null, orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
-    customerQuery: '', inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirRateLoading: '', nirReversing: false,
+    customerQuery: '', inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false,
     pages: { products: 1, orders: 1, inventory: 1, stockFlow: 1, stockMovements: 1, productSales: 1, productReviews: 1, productPurchases: 1, customers: 1, customerOrders: 1, nirs: 1 },
     pageSizes: { products: 10, orders: 10, inventory: 10, stockFlow: 5, stockMovements: 5, productSales: 5, productReviews: 5, productPurchases: 5, customers: 10, customerOrders: 5, nirs: 15 },
   };
@@ -13,6 +13,7 @@
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
   const money = value => `${new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0))} lei`;
+  const quantity = value => new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 0, maximumFractionDigits: 4 }).format(Number(value || 0));
   const slugify = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 200);
   const normalizeSemanticSearch = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
   function searchEditDistance(left, right) {
@@ -196,7 +197,7 @@
   function nirModal() {
     return `<div class="shop-commerce-overlay shop-nir-overlay" id="shop-nir-modal" hidden><section class="shop-commerce-modal shop-nir-modal"><header><div><small>ACHIZITII / NOTA DE INTRARE RECEPTIE</small><h2 id="shop-nir-title">NIR nou</h2></div><span id="shop-nir-status" class="shop-nir-status draft">CIORNA</span><button type="button" data-commerce-close="shop-nir-modal">×</button></header><div class="shop-commerce-modal-scroll" id="shop-nir-editor"><div class="shop-commerce-loading">Se pregateste editorul...</div></div><footer id="shop-nir-footer"><button type="button" class="shop-nir-delete-trigger" id="shop-nir-delete" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg><span>Șterge NIR-ul</span></button><button type="button" class="btn-ghost shop-nir-reverse-trigger" id="shop-nir-reverse-trigger" hidden>${nirUiIcon('reverse')} <span>Stornare factură</span></button><button type="button" class="btn-ghost shop-nir-correct" id="shop-nir-correct" hidden>${nirUiIcon('edit')} <span>Editeaza NIR</span></button><button type="button" class="btn-ghost" id="shop-nir-export-pdf" hidden>Export PDF</button><button type="button" class="btn-ghost" id="shop-nir-export-xlsx" hidden>Export Excel</button><button type="button" class="btn-ghost" id="shop-nir-save">Salveaza ciorna</button><button type="button" class="btn-primary" id="shop-nir-confirm">Verifica si confirma</button></footer></section><input type="file" id="shop-nir-files" accept="application/pdf,image/jpeg,image/png,image/webp,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/xml,text/xml" multiple hidden /></div>
     <div class="shop-commerce-overlay shop-nir-delete-overlay" id="shop-nir-delete-dialog" hidden><section class="shop-nir-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="shop-nir-delete-title" aria-describedby="shop-nir-delete-message"><div class="shop-nir-delete-orb" aria-hidden="true"><i></i><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg></div><small>ȘTERGERE DEFINITIVĂ</small><h2 id="shop-nir-delete-title">Ștergi această notă de intrare-recepție?</h2><p id="shop-nir-delete-message">Ești sigur că vrei să ștergi această notă de intrare-recepție marfă?</p><div class="shop-nir-delete-document"><span><small>DOCUMENT</small><strong id="shop-nir-delete-number">NIR</strong></span><span><small>FURNIZOR</small><strong id="shop-nir-delete-supplier">Necompletat</strong></span></div><aside><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.7 20h18.6L12 3Zm0 6v5m0 3h.01"/></svg><span><b>Acțiunea nu poate fi anulată.</b>Pozițiile, documentele atașate și toate datele acestei ciorne vor fi eliminate definitiv.</span></aside><footer><button type="button" class="shop-nir-delete-cancel" id="shop-nir-delete-cancel">Nu, păstrează NIR-ul</button><button type="button" class="shop-nir-delete-confirm" id="shop-nir-delete-confirm"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg><span>Da, șterge definitiv</span></button></footer></section></div>
-    <div class="shop-commerce-overlay shop-nir-delete-overlay shop-nir-reverse-overlay" id="shop-nir-reverse-dialog" hidden><section class="shop-nir-delete-dialog shop-nir-reverse-dialog" role="dialog" aria-modal="true" aria-labelledby="shop-nir-reverse-title" aria-describedby="shop-nir-reverse-message"><div class="shop-nir-delete-orb shop-nir-reverse-orb" aria-hidden="true"><i></i>${nirUiIcon('reverse')}</div><small>STORNARE CONTABILĂ</small><h2 id="shop-nir-reverse-title">Ce poziții stornezi din această factură?</h2><p id="shop-nir-reverse-message">Alege un produs, mai multe produse sau toate pozițiile. Se va crea automat documentul contabil aferent selecției.</p><div class="shop-nir-delete-document"><span><small>DOCUMENT</small><strong id="shop-nir-reverse-number">NIR</strong></span><span><small>FURNIZOR</small><strong id="shop-nir-reverse-supplier">Necompletat</strong></span></div><section class="shop-nir-storno-selection" aria-labelledby="shop-nir-storno-selection-title"><header><span><small>POZIȚII DIN NIR</small><strong id="shop-nir-storno-selection-title">Alege produsele stornate</strong></span><button type="button" id="shop-nir-storno-all">Deselectează toate</button></header><div id="shop-nir-storno-lines"></div><small id="shop-nir-storno-selection-error" hidden>Alege cel puțin un produs pentru stornare.</small></section><label class="shop-nir-reverse-reason"><span>Motivul stornării *</span><textarea id="shop-nir-reverse-reason" rows="3" maxlength="500" placeholder="Ex: factură corectată de furnizor sau recepție anulată"></textarea><small id="shop-nir-reverse-error" hidden>Scrie motivul stornării.</small></label><aside><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.7 20h18.6L12 3Zm0 6v5m0 3h.01"/></svg><span><b>Stocul selectat trebuie să fie încă disponibil.</b>Dacă marfa a fost deja consumată într-un document de ieșire, stornarea poziției este blocată pentru protejarea stocului contabil.</span></aside><footer><button type="button" class="shop-nir-delete-cancel" id="shop-nir-reverse-cancel">Renunță</button><button type="button" class="shop-nir-delete-confirm shop-nir-reverse-confirm" id="shop-nir-reverse-confirm">${nirUiIcon('reverse')}<span>Stornare factură</span></button></footer></section></div>
+    <div class="shop-commerce-overlay shop-nir-delete-overlay shop-nir-reverse-overlay" id="shop-nir-reverse-dialog" hidden><section class="shop-nir-delete-dialog shop-nir-reverse-dialog" role="dialog" aria-modal="true" aria-labelledby="shop-nir-reverse-title" aria-describedby="shop-nir-reverse-message"><div class="shop-nir-delete-orb shop-nir-reverse-orb" aria-hidden="true"><i></i>${nirUiIcon('reverse')}</div><small>STORNARE CONTABILĂ</small><h2 id="shop-nir-reverse-title">Ce poziții stornezi din această factură?</h2><p id="shop-nir-reverse-message">Alege produsele și completează separat cantitatea stornată pentru fiecare poziție.</p><div class="shop-nir-delete-document"><span><small>DOCUMENT</small><strong id="shop-nir-reverse-number">NIR</strong></span><span><small>FURNIZOR</small><strong id="shop-nir-reverse-supplier">Necompletat</strong></span></div><section class="shop-nir-storno-selection" aria-labelledby="shop-nir-storno-selection-title"><header><span><small>POZIȚII DIN NIR</small><strong id="shop-nir-storno-selection-title">Alege produsele stornate</strong></span><button type="button" id="shop-nir-storno-all">Deselectează toate</button></header><div id="shop-nir-storno-lines"></div><small id="shop-nir-storno-selection-error" hidden>Alege cel puțin un produs și introdu o cantitate validă.</small></section><label class="shop-nir-reverse-reason"><span>Motivul stornării *</span><textarea id="shop-nir-reverse-reason" rows="3" maxlength="500" placeholder="Ex: factură corectată de furnizor sau recepție anulată"></textarea><small id="shop-nir-reverse-error" hidden>Scrie motivul stornării.</small></label><aside><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.7 20h18.6L12 3Zm0 6v5m0 3h.01"/></svg><span><b>Stocul selectat trebuie să fie încă disponibil.</b>Dacă marfa a fost deja consumată într-un document de ieșire, stornarea poziției este blocată pentru protejarea stocului contabil.</span></aside><footer><button type="button" class="shop-nir-delete-cancel" id="shop-nir-reverse-cancel">Renunță</button><button type="button" class="shop-nir-delete-confirm shop-nir-reverse-confirm" id="shop-nir-reverse-confirm">${nirUiIcon('reverse')}<span>Stornare factură</span></button></footer></section><input type="file" id="shop-nir-storno-files" accept="application/pdf,image/jpeg,image/png,image/webp,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/xml,text/xml" multiple hidden /></div>
     <div class="shop-commerce-overlay shop-nir-picker-overlay" id="shop-nir-product-picker" hidden><section class="shop-commerce-modal mini"><header><div><small>ASOCIERE FURNIZOR–PRODUS</small><h2>Selecteaza produsul intern</h2></div><button type="button" data-commerce-close="shop-nir-product-picker">×</button></header><div class="shop-commerce-modal-scroll"><label class="shop-nir-picker-search">Cauta dupa denumire, SKU sau cod<input id="shop-nir-product-search" type="search" autocomplete="off" placeholder="Scrie cel putin 2 caractere" /></label><div id="shop-nir-product-results" class="shop-nir-product-results"><p>Scrie pentru a cauta in catalog.</p></div></div></section></div>`;
   }
   function shippingModal() {
@@ -254,7 +255,7 @@
   function mountNirStornoInvoiceFields() {
     const documentCard = document.querySelector('#shop-nir-reverse-dialog .shop-nir-delete-document');
     if (!documentCard || $('shop-nir-storno-original-invoice')) return;
-    documentCard.insertAdjacentHTML('afterend', `<section class="shop-nir-storno-original" aria-label="Factura originală"><small>FACTURĂ ORIGINALĂ</small><strong id="shop-nir-storno-original-invoice">—</strong><span><b id="shop-nir-storno-original-date">Data —</b><b id="shop-nir-storno-original-value">Valoare —</b></span></section><section class="shop-nir-storno-invoice" aria-labelledby="shop-nir-storno-invoice-title"><header><span><small>FACTURĂ NOUĂ DE STORNO</small><strong id="shop-nir-storno-invoice-title">Completează documentul primit de la furnizor</strong></span><em>DATE OBLIGATORII</em></header><div><label><span id="shop-nir-storno-invoice-series-label">Serie factură storno</span><input id="shop-nir-storno-invoice-series" maxlength="80" autocomplete="off" placeholder="Ex: FT" /></label><label><span>Număr factură storno *</span><input id="shop-nir-storno-invoice-number" maxlength="120" autocomplete="off" placeholder="Ex: 191" /></label><label><span>Data facturii storno *</span><input id="shop-nir-storno-invoice-date" type="date" /></label></div><small id="shop-nir-storno-invoice-error" hidden>Completează datele obligatorii ale facturii de storno.</small></section>`);
+    documentCard.insertAdjacentHTML('afterend', `<section class="shop-nir-storno-original" aria-label="Factura originală"><small>FACTURĂ ORIGINALĂ</small><strong id="shop-nir-storno-original-invoice">—</strong><span><b id="shop-nir-storno-original-date">Data —</b><b id="shop-nir-storno-original-value">Valoare —</b></span></section><section class="shop-nir-storno-invoice" aria-labelledby="shop-nir-storno-invoice-title"><header><span><small>FACTURĂ NOUĂ DE STORNO</small><strong id="shop-nir-storno-invoice-title">Completează documentul primit de la furnizor</strong></span><em>DATE OBLIGATORII</em></header><div><label><span id="shop-nir-storno-invoice-series-label">Serie factură storno</span><input id="shop-nir-storno-invoice-series" maxlength="80" autocomplete="off" placeholder="Ex: FT" /></label><label><span>Număr factură storno *</span><input id="shop-nir-storno-invoice-number" maxlength="120" autocomplete="off" placeholder="Ex: 191" /></label><label><span>Data facturii storno *</span><input id="shop-nir-storno-invoice-date" type="date" /></label></div><small id="shop-nir-storno-invoice-error" hidden>Completează datele obligatorii ale facturii de storno.</small></section><section class="shop-nir-storno-documents"><header><span><small>DOCUMENTELE FACTURII</small><strong>Atașează factura de storno și fișierele primite</strong></span><button type="button" id="shop-nir-storno-files-pick">Alege documente</button></header><div id="shop-nir-storno-file-list" class="shop-nir-storno-file-list"><p>PDF · JPG · PNG · WEBP · XLSX · XML</p></div></section>`);
   }
 
   function wire() {
@@ -294,6 +295,13 @@
     $('shop-nir-reverse-cancel').addEventListener('click', () => closeModal('shop-nir-reverse-dialog'));
     $('shop-nir-reverse-confirm').addEventListener('click', () => void reverseNir());
     $('shop-nir-storno-all').addEventListener('click', toggleAllNirStornoLines);
+    $('shop-nir-storno-files-pick').addEventListener('click', () => $('shop-nir-storno-files').click());
+    $('shop-nir-storno-files').addEventListener('change', importNirStornoFiles);
+    const stornoDropzone = $('shop-nir-storno-file-list');
+    stornoDropzone.addEventListener('click', event => { if (!event.target.closest('button')) $('shop-nir-storno-files').click(); });
+    stornoDropzone.addEventListener('dragover', event => { event.preventDefault(); stornoDropzone.classList.add('dragging'); });
+    stornoDropzone.addEventListener('dragleave', event => { if (!stornoDropzone.contains(event.relatedTarget)) stornoDropzone.classList.remove('dragging'); });
+    stornoDropzone.addEventListener('drop', event => { event.preventDefault(); stornoDropzone.classList.remove('dragging'); importNirStornoFiles({ target: { files: event.dataTransfer?.files || [], value: '' } }); });
     $('shop-nir-reverse-reason').addEventListener('input', () => {
       $('shop-nir-reverse-reason').classList.remove('invalid');
       $('shop-nir-reverse-error').hidden = true;
@@ -678,6 +686,8 @@
       });
       if ($('shop-nir-storno-invoice-error')) $('shop-nir-storno-invoice-error').hidden = true;
       if ($('shop-nir-storno-lines')) $('shop-nir-storno-lines').innerHTML = '';
+      state.nirStornoPendingFiles = [];
+      renderNirStornoFiles();
     }
     if (id === 'shop-nir-modal' && state.nirCorrectionOriginal) {
       if (state.nirSaving || state.nirSavePromise) return toast('Așteaptă finalizarea corectării înainte să închizi.', 'error');
@@ -3190,14 +3200,21 @@
     $('shop-nir-storno-invoice-series-label').textContent = 'Serie factură storno (opțional)';
     $('shop-nir-storno-invoice-number').value = nextSupplierInvoiceNumber(originalNumber);
     $('shop-nir-storno-invoice-date').value = nirToday();
+    state.nirStornoPendingFiles = [];
+    renderNirStornoFiles();
     ['shop-nir-storno-invoice-series', 'shop-nir-storno-invoice-number', 'shop-nir-storno-invoice-date'].forEach(fieldId => $(fieldId).classList.remove('invalid'));
     $('shop-nir-storno-invoice-error').hidden = true;
     const availableLines = nirStornableLines(document);
     $('shop-nir-storno-lines').innerHTML = availableLines.map((line, index) => {
-      const quantity = String(line.stornable_quantity || '0');
-      return `<label class="active"><input type="checkbox" data-nir-storno-line="${esc(line.id)}" data-nir-storno-quantity="${esc(quantity)}" checked /><i>${String(index + 1).padStart(2, '0')}</i><span><strong>${esc(line.product_name || line.product_snapshot_name || line.supplier_product_name || `Produs ${index + 1}`)}</strong><small>${esc(line.supplier_product_code || line.sku_snapshot || 'Fara cod furnizor')}</small></span><b>${esc(quantity)} ${esc(line.stock_unit || line.purchase_unit || 'buc')}</b></label>`;
+      const maximum = String(line.stornable_quantity || '0');
+      const unit = String(line.stock_unit || line.purchase_unit || 'buc');
+      return `<label class="active"><input type="checkbox" data-nir-storno-line="${esc(line.id)}" checked /><i>${String(index + 1).padStart(2, '0')}</i><span><strong>${esc(line.product_name || line.product_snapshot_name || line.supplier_product_name || `Produs ${index + 1}`)}</strong><small>${esc(line.supplier_product_code || line.sku_snapshot || 'Fara cod furnizor')} · maxim ${esc(quantity(maximum))} ${esc(unit)}</small></span><span class="shop-nir-storno-quantity"><small>CANTITATE STORNATĂ</small><span><input type="number" data-nir-storno-quantity-input min="0.0001" max="${esc(maximum)}" step="0.0001" value="${esc(String(Number(maximum)))}" inputmode="decimal" /><b>${esc(unit)}</b></span></span></label>`;
     }).join('') || '<p>Acest NIR nu mai are poziții disponibile pentru stornare.</p>';
     $('shop-nir-storno-lines').querySelectorAll('[data-nir-storno-line]').forEach(input => input.addEventListener('change', updateNirStornoSelection));
+    $('shop-nir-storno-lines').querySelectorAll('[data-nir-storno-quantity-input]').forEach(input => {
+      input.addEventListener('click', event => event.stopPropagation());
+      input.addEventListener('input', () => { input.classList.remove('invalid'); $('shop-nir-storno-selection-error').hidden = true; });
+    });
     $('shop-nir-storno-selection-error').hidden = true;
     updateNirStornoSelection();
     $('shop-nir-reverse-reason').value = '';
@@ -3234,6 +3251,37 @@
     updateNirStornoSelection();
   }
 
+  function renderNirStornoFiles() {
+    const list = $('shop-nir-storno-file-list');
+    if (!list) return;
+    list.innerHTML = state.nirStornoPendingFiles.length
+      ? state.nirStornoPendingFiles.map((file, index) => `<article><span>${nirUiIcon('document')}</span><div><strong>${esc(file.name)}</strong><small>${(Number(file.size || 0) / 1024).toFixed(0)} KB · pregătit pentru încărcare</small></div><button type="button" data-nir-storno-file-remove="${index}" aria-label="Elimină documentul">${nirUiIcon('close')}</button></article>`).join('')
+      : '<p>Trage sau alege factura: PDF · JPG · PNG · WEBP · XLSX · XML</p>';
+    list.querySelectorAll('[data-nir-storno-file-remove]').forEach(button => button.addEventListener('click', () => {
+      state.nirStornoPendingFiles.splice(Number(button.dataset.nirStornoFileRemove), 1);
+      renderNirStornoFiles();
+    }));
+  }
+
+  function importNirStornoFiles(event) {
+    const files = [...(event.target.files || [])]; event.target.value = '';
+    for (const file of files) {
+      if (file.size > 15 * 1024 * 1024) { toast(`${file.name}: fișierul depășește limita de 15 MB.`, 'error'); continue; }
+      const duplicate = state.nirStornoPendingFiles.some(item => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified);
+      if (!duplicate) state.nirStornoPendingFiles.push(file);
+    }
+    renderNirStornoFiles();
+  }
+
+  async function uploadNirStornoFiles(documentId) {
+    for (const file of [...state.nirStornoPendingFiles]) {
+      const base64 = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result || '').split(',').pop()); reader.onerror = reject; reader.readAsDataURL(file); });
+      const attachment = await window.SHOP_API.uploadNirAttachment(documentId, { file_name: file.name, mime_type: file.type || 'application/octet-stream', content_base64: base64 });
+      await window.SHOP_API.extractNirAttachment(documentId, attachment.id);
+      state.nirStornoPendingFiles = state.nirStornoPendingFiles.filter(item => item !== file);
+    }
+  }
+
   async function reverseNir() {
     const document = state.nirEditor;
     const reasonField = $('shop-nir-reverse-reason');
@@ -3247,7 +3295,8 @@
       supplier_invoice_number: String(numberField?.value || '').trim(),
       supplier_invoice_date: String(dateField?.value || '').trim(),
     };
-    const selectedLines = [...($('shop-nir-storno-lines')?.querySelectorAll('[data-nir-storno-line]:checked') || [])].map(input => ({ line_id: input.dataset.nirStornoLine, quantity: input.dataset.nirStornoQuantity }));
+    const selectedInputs = [...($('shop-nir-storno-lines')?.querySelectorAll('[data-nir-storno-line]:checked') || [])];
+    const selectedLines = selectedInputs.map(input => ({ line_id: input.dataset.nirStornoLine, quantity: input.closest('label')?.querySelector('[data-nir-storno-quantity-input]')?.value || '' }));
     let firstInvalid = null;
     const invalidInvoiceFields = [
       ...(!invoiceDetails.supplier_invoice_number ? [numberField] : []),
@@ -3262,6 +3311,15 @@
       $('shop-nir-storno-selection-error').hidden = false;
       firstInvalid ||= $('shop-nir-storno-lines').querySelector('input');
     }
+    selectedInputs.forEach(input => {
+      const field = input.closest('label')?.querySelector('[data-nir-storno-quantity-input]');
+      const numeric = Number(field?.value || 0); const maximum = Number(field?.max || 0);
+      if (!field || !Number.isFinite(numeric) || numeric <= 0 || numeric > maximum) {
+        field?.classList.add('invalid');
+        $('shop-nir-storno-selection-error').hidden = false;
+        firstInvalid ||= field || input;
+      }
+    });
     if (!reason) {
       reasonField?.classList.add('invalid');
       $('shop-nir-reverse-error').hidden = false;
@@ -3278,6 +3336,12 @@
     if (label) label.textContent = 'Se stornează...';
     try {
       const result = await window.SHOP_API.reverseNir(document.id, document.row_version, reason, selectedLines, invoiceDetails);
+      const stornoDocument = result?.reversal || result?.storno?.document || (result?.storno && typeof result.storno === 'object' ? result.storno : null);
+      let attachmentWarning = '';
+      if (state.nirStornoPendingFiles.length && stornoDocument?.id) {
+        try { await uploadNirStornoFiles(stornoDocument.id); }
+        catch (uploadError) { attachmentWarning = ` Stornarea a fost creată, dar documentele nu s-au putut încărca: ${uploadError.message || 'eroare necunoscută'}`; }
+      }
       const updatedOriginal = result?.original || result?.document || result?.storno?.original || await window.SHOP_API.getNir(document.id);
       state.nirEditor = { ...updatedOriginal, ...(result?.fully_storned ? { fully_storned: true, can_storno: false } : {}) };
       state.nirReversing = false;
@@ -3285,8 +3349,7 @@
       renderNirEditor();
       void loadNirAccountingDetails();
       await loadNirs(state.pages.nirs);
-      const stornoDocument = result?.reversal || result?.storno?.document || (result?.storno && typeof result.storno === 'object' ? result.storno : null);
-      toast(`${result?.fully_storned || state.nirEditor.status === 'reversed' ? 'Factura a fost stornată integral.' : `${selectedLines.length} ${selectedLines.length === 1 ? 'poziție a fost stornată' : 'poziții au fost stornate'}.`} Document creat: ${stornoDocument?.nir_number || 'document de stornare'}.`);
+      toast(`${result?.fully_storned || state.nirEditor.status === 'reversed' ? 'Factura a fost stornată integral.' : `${selectedLines.length} ${selectedLines.length === 1 ? 'poziție a fost stornată' : 'poziții au fost stornate'}.`} Document creat: ${stornoDocument?.nir_number || 'document de stornare'}.${attachmentWarning}`, attachmentWarning ? 'error' : 'success');
     } catch (error) {
       toast(error.message || 'Factura nu poate fi stornată.', 'error');
     } finally {

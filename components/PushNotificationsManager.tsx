@@ -1,22 +1,12 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
-import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { registerPushToken } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 
-const isExpoGo = Constants.appOwnership === 'expo';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
+let notificationHandlerConfigured = false;
 
 export default function PushNotificationsManager() {
   const { token, user } = useAuth();
@@ -27,6 +17,8 @@ export default function PushNotificationsManager() {
 
     let active = true;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let tokenSub: { remove: () => void } | null = null;
+    let responseSub: { remove: () => void } | null = null;
 
     const savePushToken = async (pushToken: string) => {
       if (!active || !pushToken) return;
@@ -35,6 +27,35 @@ export default function PushNotificationsManager() {
 
     const setup = async () => {
       try {
+        const Notifications = await import('expo-notifications');
+        if (!active) return;
+
+        if (!notificationHandlerConfigured) {
+          Notifications.setNotificationHandler({
+            handleNotification: async () => ({
+              shouldShowAlert: true,
+              shouldShowBanner: true,
+              shouldShowList: true,
+              shouldPlaySound: true,
+              shouldSetBadge: false,
+            }),
+          });
+          notificationHandlerConfigured = true;
+        }
+
+        if (!tokenSub) {
+          tokenSub = Notifications.addPushTokenListener((nextToken) => {
+            savePushToken(nextToken.data).catch(() => {});
+          });
+        }
+
+        if (!responseSub) {
+          responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+            const screen = response.notification.request.content.data?.screen;
+            if (screen === 'chat') router.push('/');
+          });
+        }
+
         if (Platform.OS === 'android') {
           const channel = {
             name: 'Chat',
@@ -71,22 +92,11 @@ export default function PushNotificationsManager() {
 
     setup();
 
-    const tokenSub = Notifications.addPushTokenListener((nextToken) => {
-      savePushToken(nextToken.data).catch(() => {});
-    });
-
-    const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const screen = response.notification.request.content.data?.screen;
-      if (screen === 'chat') {
-        router.push('/');
-      }
-    });
-
     return () => {
       active = false;
       if (retryTimer) clearTimeout(retryTimer);
-      tokenSub.remove();
-      responseSub.remove();
+      tokenSub?.remove();
+      responseSub?.remove();
     };
   }, [router, token, user?.id]);
 

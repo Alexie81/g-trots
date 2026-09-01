@@ -1268,7 +1268,7 @@ function shopNirRenderStrictXlsx(array $document): string
     if ($documentDate !== '') { try { $documentDate = (new DateTimeImmutable($documentDate))->format('d.m.Y'); } catch (Throwable $error) {} }
 
     $rows = '';
-    $merges = ['A1:B3', 'C1:F1', 'C2:F2', 'C3:F3', 'G1:L2', 'G3:L3', 'M1:M3', 'A5:F6', 'G5:H6', 'I5:M6'];
+    $merges = ['A1:B3', 'C1:F1', 'C2:F2', 'C3:F3', 'G1:L2', 'G3:L3', 'M1:M3', 'A5:F6', 'G5:M6'];
     $rows .= shopNirPremiumXlsxRow(1, [1 => shopNirPremiumXlsxCellSpec('', 'string', 29), 3 => shopNirPremiumXlsxCellSpec('G-TROTS', 'string', 30), 7 => shopNirPremiumXlsxCellSpec('NOTĂ DE RECEPȚIE ȘI CONSTATARE DE DIFERENȚE', 'string', 1), 13 => shopNirPremiumXlsxCellSpec("Cod formular:\nNIR", 'string', 3)], 32);
     $rows .= shopNirPremiumXlsxRow(2, [3 => shopNirPremiumXlsxCellSpec($companyName, 'string', 31)], 24);
     $rows .= shopNirPremiumXlsxRow(3, [3 => shopNirPremiumXlsxCellSpec($companyIdentity, 'string', 32), 7 => shopNirPremiumXlsxCellSpec('(NIR)', 'string', 33)], 20);
@@ -1347,11 +1347,18 @@ function shopNirRenderStrictXlsx(array $document): string
     $dataRow++;
     $rows .= shopNirPremiumXlsxRow($dataRow, [1 => shopNirPremiumXlsxCellSpec($document['notes'] ?? '', 'string', 37)], 48);
     $merges[] = 'A' . $dataRow . ':M' . $dataRow;
-    $dataRow += 2;
-    $stampRow = $dataRow;
-    $rows .= shopNirPremiumXlsxRow($dataRow, [1 => shopNirPremiumXlsxCellSpec(trim((string)($company['stamp_path'] ?? '')) === '' ? 'ȘTAMPILA FIRMEI' : '', 'string', 38)], 88);
-    $merges[] = 'A' . $dataRow . ':M' . $dataRow;
-    $lastRow = $dataRow;
+    $compactStamp = count($lines) > 4;
+    if ($compactStamp) {
+        // Keep multipage exports from creating a final page that contains only the repeated table header and stamp.
+        $stampRow = $dataRow;
+        $lastRow = $dataRow;
+    } else {
+        $dataRow += 2;
+        $stampRow = $dataRow;
+        $rows .= shopNirPremiumXlsxRow($dataRow, [1 => shopNirPremiumXlsxCellSpec(trim((string)($company['stamp_path'] ?? '')) === '' ? 'ȘTAMPILA FIRMEI' : '', 'string', 38)], 88);
+        $merges[] = 'A' . $dataRow . ':M' . $dataRow;
+        $lastRow = $dataRow;
+    }
 
     $media = []; $mediaIndex = []; $pictures = [];
     foreach ([__DIR__ . '/pdf-assets/logo.jpg', dirname(__DIR__) . '/assets/images/logo.png'] as $logoPath) {
@@ -1376,7 +1383,9 @@ function shopNirRenderStrictXlsx(array $document): string
     $stampImage = shopNirPremiumXlsxSafeCompanyStamp($company['stamp_path'] ?? null);
     if ($stampImage !== null) {
         $mediaName = shopNirPremiumXlsxRegisterMedia($media, $mediaIndex, $stampImage, 'stampila');
-        $scale = min(190 / max(1, (int)$stampImage['width']), 78 / max(1, (int)$stampImage['height']));
+        $stampMaxWidth = $compactStamp ? 110 : 190;
+        $stampMaxHeight = $compactStamp ? 38 : 78;
+        $scale = min($stampMaxWidth / max(1, (int)$stampImage['width']), $stampMaxHeight / max(1, (int)$stampImage['height']));
         $pictures[] = ['media' => $mediaName, 'name' => 'Ștampila firmei', 'description' => 'Ștampila firmei', 'col' => 10, 'row' => $stampRow - 1, 'colOff' => 8 * 9525, 'rowOff' => 5 * 9525, 'cx' => (int)round((int)$stampImage['width'] * $scale * 9525), 'cy' => (int)round((int)$stampImage['height'] * $scale * 9525)];
     }
     $files = [];

@@ -196,7 +196,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026090201;
+    $schemaVersion = 2026090202;
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_schema_meta (
             meta_key VARCHAR(80) NOT NULL PRIMARY KEY,
@@ -524,6 +524,7 @@ function ensureShopSchema(PDO $db): void {
         "CREATE TABLE IF NOT EXISTS shop_suppliers (
             id CHAR(36) NOT NULL PRIMARY KEY,
             name VARCHAR(180) NOT NULL,
+            alias VARCHAR(180) NOT NULL,
             contact_person VARCHAR(180) NULL,
             email VARCHAR(180) NULL,
             phone VARCHAR(50) NULL,
@@ -536,11 +537,16 @@ function ensureShopSchema(PDO $db): void {
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_shop_suppliers_active (is_active, name),
-            INDEX idx_shop_suppliers_name (name)
+            INDEX idx_shop_suppliers_name (name),
+            INDEX idx_shop_suppliers_alias (alias)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     if (!$db->query("SHOW COLUMNS FROM shop_suppliers LIKE 'registration_number'")->fetch()) {
         $db->exec("ALTER TABLE shop_suppliers ADD COLUMN registration_number VARCHAR(80) NULL AFTER cui");
+    }
+    if (!$db->query("SHOW COLUMNS FROM shop_suppliers LIKE 'alias'")->fetch()) {
+        $db->exec("ALTER TABLE shop_suppliers ADD COLUMN alias VARCHAR(180) NULL AFTER name");
+        $db->exec("UPDATE shop_suppliers SET alias = name WHERE alias IS NULL OR TRIM(alias) = ''");
     }
     $supplierDetailColumns = [
         'vat_number' => 'VARCHAR(60) NULL AFTER registration_number',
@@ -3022,6 +3028,8 @@ function shippingRow(array $row): array {
 }
 
 function supplierRow(array $row): array {
+    $row['alias'] = trim((string)($row['alias'] ?? '')) ?: (string)($row['name'] ?? '');
+    $row['display_name'] = $row['alias'];
     $row['is_active'] = (bool)$row['is_active'];
     $row['is_vat_payer'] = (bool)($row['is_vat_payer'] ?? true);
     $row['row_version'] = (int)($row['row_version'] ?? 1);
@@ -3031,12 +3039,15 @@ function supplierRow(array $row): array {
 function supplierPayload(array $body): array {
     $name = mb_substr(trim((string)($body['name'] ?? '')), 0, 180);
     if ($name === '') throw new InvalidArgumentException('Numele furnizorului este obligatoriu.');
+    $alias = mb_substr(trim((string)($body['alias'] ?? '')), 0, 180);
+    if ($alias === '') $alias = $name;
     $email = mb_substr(strtolower(trim((string)($body['email'] ?? ''))), 0, 180);
     if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         throw new InvalidArgumentException('Adresa de e-mail a furnizorului nu este valida.');
     }
     return [
         'name' => $name,
+        'alias' => $alias,
         'contact_person' => mb_substr(trim((string)($body['contact_person'] ?? '')), 0, 180),
         'email' => $email,
         'phone' => mb_substr(trim((string)($body['phone'] ?? '')), 0, 50),
@@ -4664,8 +4675,8 @@ try {
         $search = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 120);
         $limit = max(1, min(50, (int)($_GET['limit'] ?? 20)));
         $like = '%' . $search . '%';
-        $stmt = $db->prepare("SELECT * FROM shop_suppliers WHERE is_active = 1 AND (? = '' OR name LIKE ? OR cui LIKE ? OR contact_person LIKE ?) ORDER BY name ASC LIMIT {$limit}");
-        $stmt->execute([$search, $like, $like, $like]);
+        $stmt = $db->prepare("SELECT * FROM shop_suppliers WHERE is_active = 1 AND (? = '' OR alias LIKE ? OR name LIKE ? OR cui LIKE ? OR contact_person LIKE ?) ORDER BY COALESCE(NULLIF(alias, ''), name) ASC LIMIT {$limit}");
+        $stmt->execute([$search, $like, $like, $like, $like]);
         jsonResponse(array_map('supplierRow', $stmt->fetchAll()));
     }
 
@@ -5549,13 +5560,13 @@ try {
             $productId = trim((string)($row['product_id'] ?? ''));
             if ($productId === '') return;
             if (!isset($searchTerms[$productId])) $searchTerms[$productId] = [];
-            foreach (['supplier_name', 'supplier_cui', 'supplier_code', 'supplier_product_name', 'supplier_ean'] as $field) {
+            foreach (['supplier_alias', 'supplier_name', 'supplier_cui', 'supplier_code', 'supplier_product_name', 'supplier_ean'] as $field) {
                 $value = trim((string)($row[$field] ?? ''));
                 if ($value !== '') $searchTerms[$productId][mb_strtolower($value, 'UTF-8')] = $value;
             }
         };
         $referenceSearch = $db->query(
-            'SELECT r.product_id, s.name AS supplier_name, s.cui AS supplier_cui,
+            'SELECT r.product_id, s.alias AS supplier_alias, s.name AS supplier_name, s.cui AS supplier_cui,
                     r.supplier_product_code_original AS supplier_code, r.supplier_product_name, r.supplier_ean
              FROM shop_supplier_product_references r
              INNER JOIN shop_suppliers s ON s.id = r.supplier_id
@@ -5563,7 +5574,7 @@ try {
         )->fetchAll();
         foreach ($referenceSearch as $row) $appendInventorySearchTerms($row);
         $purchaseSearch = $db->query(
-            'SELECT l.product_id, s.name AS supplier_name, s.cui AS supplier_cui,
+            'SELECT l.product_id, s.alias AS supplier_alias, s.name AS supplier_name, s.cui AS supplier_cui,
                     l.supplier_product_code AS supplier_code, l.supplier_product_name, l.supplier_ean
              FROM shop_nir_lines l
              INNER JOIN shop_nir_documents n ON n.id = l.nir_document_id AND n.status = "confirmed"
@@ -5840,15 +5851,15 @@ try {
     }
 
     if ($action === 'listSuppliers' && $method === 'GET') {
-        jsonResponse(array_map('supplierRow', $db->query('SELECT * FROM shop_suppliers ORDER BY is_active DESC, name ASC')->fetchAll()));
+        jsonResponse(array_map('supplierRow', $db->query("SELECT * FROM shop_suppliers ORDER BY is_active DESC, COALESCE(NULLIF(alias, ''), name) ASC")->fetchAll()));
     }
 
     if ($action === 'createSupplier' && $method === 'POST') {
         shopNirRequire($currentUser, 'SUPPLIER_CREATE');
         $payload = supplierPayload($body);
         $id = uuidV4();
-        $stmt = $db->prepare('INSERT INTO shop_suppliers (id, name, contact_person, email, phone, website, cui, registration_number, vat_number, is_vat_payer, default_vat_rate, address, address_line2, city, county, postal_code, country, default_currency, payment_terms, notes, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([$id, $payload['name'], $payload['contact_person'] ?: null, $payload['email'] ?: null, $payload['phone'] ?: null, $payload['website'] ?: null, $payload['cui'] ?: null, $payload['registration_number'] ?: null, $payload['vat_number'] ?: null, $payload['is_vat_payer'] ? 1 : 0, $payload['default_vat_rate'], $payload['address'] ?: null, $payload['address_line2'] ?: null, $payload['city'] ?: null, $payload['county'] ?: null, $payload['postal_code'] ?: null, $payload['country'] ?: 'România', $payload['default_currency'], $payload['payment_terms'] ?: null, $payload['notes'] ?: null, $payload['is_active'] ? 1 : 0]);
+        $stmt = $db->prepare('INSERT INTO shop_suppliers (id, name, alias, contact_person, email, phone, website, cui, registration_number, vat_number, is_vat_payer, default_vat_rate, address, address_line2, city, county, postal_code, country, default_currency, payment_terms, notes, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt->execute([$id, $payload['name'], $payload['alias'], $payload['contact_person'] ?: null, $payload['email'] ?: null, $payload['phone'] ?: null, $payload['website'] ?: null, $payload['cui'] ?: null, $payload['registration_number'] ?: null, $payload['vat_number'] ?: null, $payload['is_vat_payer'] ? 1 : 0, $payload['default_vat_rate'], $payload['address'] ?: null, $payload['address_line2'] ?: null, $payload['city'] ?: null, $payload['county'] ?: null, $payload['postal_code'] ?: null, $payload['country'] ?: 'România', $payload['default_currency'], $payload['payment_terms'] ?: null, $payload['notes'] ?: null, $payload['is_active'] ? 1 : 0]);
         $stmt = $db->prepare('SELECT * FROM shop_suppliers WHERE id = ?');
         $stmt->execute([$id]);
         jsonResponse(supplierRow($stmt->fetch()), 201);
@@ -5858,8 +5869,8 @@ try {
         shopNirRequire($currentUser, 'SUPPLIER_CREATE');
         $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
         $payload = supplierPayload($body);
-        $stmt = $db->prepare('UPDATE shop_suppliers SET name = ?, contact_person = ?, email = ?, phone = ?, website = ?, cui = ?, registration_number = ?, vat_number = ?, is_vat_payer = ?, default_vat_rate = ?, address = ?, address_line2 = ?, city = ?, county = ?, postal_code = ?, country = ?, default_currency = ?, payment_terms = ?, notes = ?, is_active = ?, row_version = row_version + 1 WHERE id = ?');
-        $stmt->execute([$payload['name'], $payload['contact_person'] ?: null, $payload['email'] ?: null, $payload['phone'] ?: null, $payload['website'] ?: null, $payload['cui'] ?: null, $payload['registration_number'] ?: null, $payload['vat_number'] ?: null, $payload['is_vat_payer'] ? 1 : 0, $payload['default_vat_rate'], $payload['address'] ?: null, $payload['address_line2'] ?: null, $payload['city'] ?: null, $payload['county'] ?: null, $payload['postal_code'] ?: null, $payload['country'] ?: 'România', $payload['default_currency'], $payload['payment_terms'] ?: null, $payload['notes'] ?: null, $payload['is_active'] ? 1 : 0, $id]);
+        $stmt = $db->prepare('UPDATE shop_suppliers SET name = ?, alias = ?, contact_person = ?, email = ?, phone = ?, website = ?, cui = ?, registration_number = ?, vat_number = ?, is_vat_payer = ?, default_vat_rate = ?, address = ?, address_line2 = ?, city = ?, county = ?, postal_code = ?, country = ?, default_currency = ?, payment_terms = ?, notes = ?, is_active = ?, row_version = row_version + 1 WHERE id = ?');
+        $stmt->execute([$payload['name'], $payload['alias'], $payload['contact_person'] ?: null, $payload['email'] ?: null, $payload['phone'] ?: null, $payload['website'] ?: null, $payload['cui'] ?: null, $payload['registration_number'] ?: null, $payload['vat_number'] ?: null, $payload['is_vat_payer'] ? 1 : 0, $payload['default_vat_rate'], $payload['address'] ?: null, $payload['address_line2'] ?: null, $payload['city'] ?: null, $payload['county'] ?: null, $payload['postal_code'] ?: null, $payload['country'] ?: 'România', $payload['default_currency'], $payload['payment_terms'] ?: null, $payload['notes'] ?: null, $payload['is_active'] ? 1 : 0, $id]);
         if ($stmt->rowCount() === 0) {
             $exists = $db->prepare('SELECT id FROM shop_suppliers WHERE id = ?');
             $exists->execute([$id]);

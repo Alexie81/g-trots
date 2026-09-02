@@ -141,7 +141,18 @@ function shopNirBnrExchangeRate(string $currency, ?string $requestedDate = null)
     throw new InvalidArgumentException("BNR nu publică un curs pentru moneda {$currency}. Completează cursul manual.");
 }
 
+function shopNirSupplierDisplayName(array $row, string $fallback = ''): string {
+    foreach (['supplier_alias', 'alias', 'supplier_display_name', 'display_name', 'supplier_name', 'name'] as $field) {
+        $value = trim((string)($row[$field] ?? ''));
+        if ($value !== '') return $value;
+    }
+    return $fallback;
+}
+
 function shopNirReferenceRow(array $row): array {
+    if (array_key_exists('supplier_name', $row) || array_key_exists('supplier_alias', $row)) {
+        $row['supplier_display_name'] = shopNirSupplierDisplayName($row, 'Furnizor');
+    }
     $row['is_primary_for_supplier'] = (bool)$row['is_primary_for_supplier'];
     $row['is_active'] = (bool)$row['is_active'];
     $row['row_version'] = (int)$row['row_version'];
@@ -162,6 +173,7 @@ function shopNirProductImageUrl($value): ?string {
 }
 
 function shopNirDocumentRow(array $row, bool $canViewCosts = true): array {
+    $row['supplier_display_name'] = shopNirSupplierDisplayName($row, '');
     $row['row_version'] = (int)$row['row_version'];
     $row['line_count'] = isset($row['line_count']) ? (int)$row['line_count'] : null;
     $row['permissions'] = null;
@@ -395,7 +407,7 @@ function shopNirAttachPriceComparisons(PDO $db, array $lines, array $document): 
 
 function shopNirFetchDocument(PDO $db, string $id, array $user, bool $withDetails = true, bool $withPriceComparisons = true): array {
     $stmt = $db->prepare(
-        'SELECT n.*, s.name AS supplier_name, s.cui AS supplier_cui, w.name AS warehouse_name,
+        'SELECT n.*, s.name AS supplier_name, s.alias AS supplier_alias, s.cui AS supplier_cui, w.name AS warehouse_name,
                 original.supplier_invoice_series AS original_invoice_series,
                 original.supplier_invoice_number AS original_invoice_number,
                 original.supplier_invoice_date AS original_invoice_date,
@@ -482,9 +494,9 @@ function shopNirList(PDO $db, array $query, array $user): array {
     if ($to !== '') { $conditions[] = 'n.reception_date <= ?'; $params[] = shopNirDate($to, 'Data de sfârșit'); }
     $search = mb_substr(trim((string)($query['search'] ?? '')), 0, 120);
     if ($search !== '') {
-        $conditions[] = '(n.nir_number LIKE ? OR n.temporary_number LIKE ? OR n.supplier_invoice_number LIKE ? OR s.name LIKE ? OR s.cui LIKE ?)';
+        $conditions[] = '(n.nir_number LIKE ? OR n.temporary_number LIKE ? OR n.supplier_invoice_number LIKE ? OR s.alias LIKE ? OR s.name LIKE ? OR s.cui LIKE ?)';
         $like = '%' . $search . '%';
-        array_push($params, $like, $like, $like, $like, $like);
+        array_push($params, $like, $like, $like, $like, $like, $like);
     }
     $where = implode(' AND ', $conditions);
     $countStmt = $db->prepare("SELECT COUNT(*) FROM shop_nir_documents n LEFT JOIN shop_suppliers s ON s.id = n.supplier_id WHERE {$where}");
@@ -492,7 +504,7 @@ function shopNirList(PDO $db, array $query, array $user): array {
     $total = (int)$countStmt->fetchColumn();
     $offset = ($page - 1) * $pageSize;
     $stmt = $db->prepare(
-        "SELECT n.*, s.name AS supplier_name, s.cui AS supplier_cui, w.name AS warehouse_name,
+        "SELECT n.*, s.name AS supplier_name, s.alias AS supplier_alias, s.cui AS supplier_cui, w.name AS warehouse_name,
                 original.supplier_invoice_series AS original_invoice_series,
                 original.supplier_invoice_number AS original_invoice_number,
                 original.supplier_invoice_date AS original_invoice_date,
@@ -757,7 +769,7 @@ function shopNirCreateReference(PDO $db, array $body, array $user): array {
         ]);
         shopNirAudit($db, $user, 'SUPPLIER_REFERENCE_CREATED', 'SupplierProductReference', $id, null, $body, ['second_supplier_supported' => true]);
     }
-    $stmt = $db->prepare('SELECT r.*, p.name AS product_name, p.sku AS product_sku, s.name AS supplier_name FROM shop_supplier_product_references r INNER JOIN shop_products p ON p.id = r.product_id INNER JOIN shop_suppliers s ON s.id = r.supplier_id WHERE r.id = ?');
+    $stmt = $db->prepare('SELECT r.*, p.name AS product_name, p.sku AS product_sku, s.name AS supplier_name, s.alias AS supplier_alias FROM shop_supplier_product_references r INNER JOIN shop_products p ON p.id = r.product_id INNER JOIN shop_suppliers s ON s.id = r.supplier_id WHERE r.id = ?');
     $stmt->execute([$id]);
     $result = shopNirReferenceRow($stmt->fetch());
     $eventType = $row ? 'SupplierProductReferenceUpdated' : 'SupplierProductReferenceCreated';
@@ -2001,7 +2013,7 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
 
 function shopNirProductReferences(PDO $db, string $productId): array {
     $stmt = $db->prepare(
-        'SELECT r.*, s.name AS supplier_name, s.cui AS supplier_cui
+        'SELECT r.*, s.name AS supplier_name, s.alias AS supplier_alias, s.cui AS supplier_cui
          FROM shop_supplier_product_references r INNER JOIN shop_suppliers s ON s.id = r.supplier_id
          WHERE r.product_id = ? ORDER BY r.is_active DESC, r.is_primary_for_supplier DESC, s.name ASC, r.last_used_at DESC'
     );
@@ -2032,7 +2044,7 @@ function shopNirProductReferences(PDO $db, string $productId): array {
     // because that supplier's invoice did not contain a product code.  Confirmed
     // NIR lines are the accounting source of truth for suppliers we bought from.
     $purchases = $db->prepare(
-        'SELECT n.id AS nir_id, n.supplier_id, s.name AS supplier_name, s.cui AS supplier_cui, s.is_active AS supplier_is_active,
+        'SELECT n.id AS nir_id, n.supplier_id, s.name AS supplier_name, s.alias AS supplier_alias, s.cui AS supplier_cui, s.is_active AS supplier_is_active,
                 l.supplier_product_code, l.supplier_product_name, l.supplier_ean,
                 l.unit_price AS last_confirmed_purchase_price, n.currency AS last_confirmed_currency,
                 CASE WHEN l.stock_quantity > 0
@@ -2074,6 +2086,7 @@ function shopNirProductReferences(PDO $db, string $productId): array {
                 'match_type' => 'name_exact',
             ];
             $reference['supplier_name'] = $purchase['supplier_name'];
+            $reference['supplier_alias'] = $purchase['supplier_alias'] ?? null;
             $reference['supplier_cui'] = $purchase['supplier_cui'] ?? null;
             $reference['is_active'] = (bool)($purchase['supplier_is_active'] ?? true);
             $reference['last_used_at'] = $purchase['last_confirmed_at'] ?? $reference['last_used_at'] ?? null;
@@ -2101,7 +2114,7 @@ function shopNirProductReferences(PDO $db, string $productId): array {
         $reference['purchase_count'] = count($group['nir_ids']);
         $result[] = shopNirReferenceRow($reference);
     }
-    usort($result, static fn(array $left, array $right): int => strcasecmp((string)($left['supplier_name'] ?? ''), (string)($right['supplier_name'] ?? '')));
+    usort($result, static fn(array $left, array $right): int => strcasecmp(shopNirSupplierDisplayName($left), shopNirSupplierDisplayName($right)));
     return $result;
 }
 
@@ -2124,7 +2137,7 @@ function shopNirPurchaseHistory(PDO $db, string $productId, array $user): array 
                 l.allocated_cost_ron,
                 n.id AS nir_id, n.nir_number, n.supplier_invoice_series, n.supplier_invoice_number, n.supplier_invoice_date,
                 n.reception_date, n.currency, n.exchange_rate, n.confirmed_by,
-                s.id AS supplier_id, s.name AS supplier_name,
+                s.id AS supplier_id, s.name AS supplier_name, s.alias AS supplier_alias,
                 COALESCE(NULLIF(l.supplier_product_code, ""), r.supplier_product_code_original) AS supplier_code,
                 COALESCE(NULLIF(l.supplier_product_name, ""), r.supplier_product_name) AS supplier_product_name,
                 COALESCE(NULLIF(l.supplier_ean, ""), r.supplier_ean) AS supplier_ean
@@ -2140,6 +2153,7 @@ function shopNirPurchaseHistory(PDO $db, string $productId, array $user): array 
     $stmt->execute([$productId]);
     $items = $stmt->fetchAll();
     foreach ($items as &$item) {
+        $item['supplier_display_name'] = shopNirSupplierDisplayName($item, 'Furnizor');
         $grossTotal = shopNirDecimalToScaled($item['line_total_ron'], 2) + shopNirDecimalToScaled($item['allocated_cost_ron'], 2);
         $item['gross_cost_total_ron'] = shopNirScaledToDecimal($grossTotal, 2);
         $item['gross_unit_cost_ron'] = shopNirGrossUnitCostRon($item['line_total_ron'], $item['allocated_cost_ron'], $item['stock_quantity']);
@@ -2160,7 +2174,8 @@ function shopNirPurchaseHistory(PDO $db, string $productId, array $user): array 
         $weightedGrossCost += shopNirMultiplyScaled($quantity, 4, $grossCost, 6, 6);
         $supplierKey = (string)($item['supplier_id'] ?? 'unknown');
         if (!isset($supplierStats[$supplierKey])) $supplierStats[$supplierKey] = [
-            'supplier_id' => $item['supplier_id'], 'supplier_name' => $item['supplier_name'], 'purchase_count' => 0,
+            'supplier_id' => $item['supplier_id'], 'supplier_name' => $item['supplier_name'],
+            'supplier_alias' => $item['supplier_alias'] ?? null, 'supplier_display_name' => $item['supplier_display_name'], 'purchase_count' => 0,
             'last_unit_cost_ron' => $item['inventory_unit_cost_ron'], 'last_original_price' => $item['unit_price'],
             'last_gross_unit_cost_ron' => $item['gross_unit_cost_ron'],
             'last_currency' => $item['currency'], 'last_purchase_at' => $item['reception_date'], 'last_quantity' => $item['stock_quantity'],
@@ -2179,7 +2194,8 @@ function shopNirPurchaseHistory(PDO $db, string $productId, array $user): array 
     $supplierRows = [];
     foreach ($supplierStats as $stat) {
         $supplierRows[] = [
-            'supplier_id' => $stat['supplier_id'], 'supplier_name' => $stat['supplier_name'], 'purchase_count' => $stat['purchase_count'],
+            'supplier_id' => $stat['supplier_id'], 'supplier_name' => $stat['supplier_name'],
+            'supplier_alias' => $stat['supplier_alias'], 'supplier_display_name' => $stat['supplier_display_name'], 'purchase_count' => $stat['purchase_count'],
             'last_unit_cost_ron' => $stat['last_unit_cost_ron'], 'last_original_price' => $stat['last_original_price'],
             'last_gross_unit_cost_ron' => $stat['last_gross_unit_cost_ron'],
             'last_currency' => $stat['last_currency'], 'last_purchase_at' => $stat['last_purchase_at'], 'last_quantity' => $stat['last_quantity'],
@@ -2214,7 +2230,7 @@ function shopNirFifoLayers(PDO $db, string $productId, array $query, array $user
     $warehouseFilter = '';
     if ($warehouseId !== '') { $warehouseFilter = ' AND l.warehouse_id = ?'; $params[] = $warehouseId; }
     $stmt = $db->prepare(
-        'SELECT l.*, n.nir_number, s.name AS supplier_name, w.name AS warehouse_name
+        'SELECT l.*, n.nir_number, s.name AS supplier_name, s.alias AS supplier_alias, w.name AS warehouse_name
          FROM shop_inventory_cost_layers l
          LEFT JOIN shop_nir_documents n ON n.id = l.nir_document_id
          LEFT JOIN shop_suppliers s ON s.id = l.supplier_id
@@ -2223,7 +2239,10 @@ function shopNirFifoLayers(PDO $db, string $productId, array $query, array $user
          ORDER BY l.reception_date ASC, l.created_at ASC, l.id ASC'
     );
     $stmt->execute($params);
-    return $stmt->fetchAll();
+    $rows = $stmt->fetchAll();
+    foreach ($rows as &$row) $row['supplier_display_name'] = shopNirSupplierDisplayName($row, 'Furnizor');
+    unset($row);
+    return $rows;
 }
 
 function shopNirFifoPreviewForProduct(PDO $db, string $productId, array $body, array $user): array {
@@ -2374,7 +2393,7 @@ function shopNirAttachmentUpload(PDO $db, string $documentId, array $body, array
     $existingRow = $existing->fetch();
     if ($existingRow) return $existingRow + ['duplicate' => true];
     $duplicateFile = $db->prepare(
-        'SELECT n.id, n.nir_number, n.temporary_number, n.status, n.reception_date, n.grand_total, n.currency, s.name AS supplier_name
+        'SELECT n.id, n.nir_number, n.temporary_number, n.status, n.reception_date, n.grand_total, n.currency, s.name AS supplier_name, s.alias AS supplier_alias
          FROM shop_nir_attachments a
          INNER JOIN shop_nir_documents n ON n.id = a.nir_document_id
          LEFT JOIN shop_suppliers s ON s.id = n.supplier_id

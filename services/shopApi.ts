@@ -56,6 +56,8 @@ export type ShopProductSource = {
 export type ShopSupplier = {
   id: string;
   name: string;
+  alias: string | null;
+  display_name?: string;
   contact_person: string | null;
   email: string | null;
   phone: string | null;
@@ -94,6 +96,8 @@ export type ShopSupplierProductReference = {
   id: string;
   supplier_id: string;
   supplier_name?: string;
+  supplier_alias?: string | null;
+  supplier_display_name?: string;
   supplier_cui?: string | null;
   product_id: string;
   product_name?: string;
@@ -195,6 +199,8 @@ export type ShopNirDocument = {
   status: 'draft' | 'confirmed' | 'reversed';
   supplier_id: string | null;
   supplier_name?: string | null;
+  supplier_alias?: string | null;
+  supplier_display_name?: string | null;
   supplier_cui?: string | null;
   warehouse_id: string;
   warehouse_name?: string;
@@ -283,7 +289,26 @@ export type ShopFifoLayer = {
   total_cost_ron: string;
   nir_number?: string | null;
   supplier_name?: string | null;
+  supplier_alias?: string | null;
+  supplier_display_name?: string | null;
 };
+
+type SupplierDisplaySource = {
+  alias?: unknown;
+  display_name?: unknown;
+  name?: unknown;
+  supplier_alias?: unknown;
+  supplier_display_name?: unknown;
+  supplier_name?: unknown;
+};
+
+export function shopSupplierDisplayName(source: SupplierDisplaySource | null | undefined, fallback = 'Furnizor') {
+  for (const value of [source?.supplier_alias, source?.alias, source?.supplier_display_name, source?.display_name, source?.supplier_name, source?.name]) {
+    const label = String(value ?? '').trim();
+    if (label) return label;
+  }
+  return fallback;
+}
 
 export type ShopTaxonomySyncResult = {
   success: boolean;

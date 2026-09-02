@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/invoice-theme.php';
+
 $shopRequestStartedAt = microtime(true);
 
 date_default_timezone_set('Europe/Bucharest');
@@ -192,7 +194,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026083002;
+    $schemaVersion = 2026090201;
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_schema_meta (
             meta_key VARCHAR(80) NOT NULL PRIMARY KEY,
@@ -977,6 +979,30 @@ function ensureShopSchema(PDO $db): void {
             card_label VARCHAR(120) NOT NULL DEFAULT 'Card online',
             cash_on_delivery_label VARCHAR(120) NOT NULL DEFAULT 'Ramburs la curier',
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_invoice_settings (
+            id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+            default_theme VARCHAR(20) NOT NULL DEFAULT 'orange',
+            updated_by VARCHAR(180) NULL,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec("INSERT IGNORE INTO shop_invoice_settings (id, default_theme) VALUES (1, 'orange')");
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_invoice_theme_assignments (
+            document_key VARCHAR(80) NOT NULL PRIMARY KEY,
+            document_id VARCHAR(64) NULL,
+            invoice_series VARCHAR(60) NOT NULL,
+            invoice_number VARCHAR(120) NOT NULL,
+            theme VARCHAR(20) NOT NULL,
+            assigned_by VARCHAR(180) NULL,
+            assigned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_rendered_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE INDEX uq_shop_invoice_theme_number (invoice_series, invoice_number),
+            INDEX idx_shop_invoice_theme_document (document_id),
+            INDEX idx_shop_invoice_theme_assigned (assigned_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     $db->exec(
@@ -4591,6 +4617,20 @@ try {
     }
 
     $currentUser = validateAuthToken($config, $body);
+
+    if ($action === 'getInvoiceThemeSettings' && $method === 'GET') {
+        jsonResponse(GtrotsInvoiceThemeStore::settings($db));
+    }
+
+    if ($action === 'updateInvoiceThemeSettings' && in_array($method, ['PUT', 'PATCH'], true)) {
+        $actor = (string)($currentUser['display_name'] ?? $currentUser['username'] ?? 'Administrator');
+        jsonResponse(GtrotsInvoiceThemeStore::update($db, (string)($body['theme'] ?? ''), $actor));
+    }
+
+    if ($action === 'assignInvoiceTheme' && $method === 'POST') {
+        $actor = (string)($currentUser['display_name'] ?? $currentUser['username'] ?? 'Administrator');
+        jsonResponse(GtrotsInvoiceThemeStore::pin($db, $body, $actor), 201);
+    }
 
     if ($action === 'nirPermissions' && $method === 'GET') {
         jsonResponse(['permissions' => shopNirPermissions($currentUser)]);

@@ -26,6 +26,7 @@ import {
   CircleEllipsis,
   CreditCard,
   FileText,
+  FileCog,
   Factory,
   FolderTree,
   Globe2,
@@ -57,6 +58,7 @@ import ShopDiscountsManager from '@/components/ShopDiscountsManager';
 import ShopCompanySettingsManager from '@/components/ShopCompanySettingsManager';
 import ShopSuppliersManager from '@/components/ShopSuppliersManager';
 import ShopNirManager from '@/components/ShopNirManager';
+import ShopInvoiceConfigurator from '@/components/ShopInvoiceConfigurator';
 import { ShopPaymentMethodsManager, ShopProductSourcesManager, ShopShippingManager } from '@/components/ShopMoreManagers';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -72,7 +74,7 @@ import {
 } from '@/services/shopApi';
 
 type CatalogView = 'categories' | 'brands' | 'manufacturers';
-type SettingsView = 'sources' | 'suppliers' | 'nirs' | 'payments' | 'shipping' | 'customers' | 'discounts' | 'company';
+type SettingsView = 'sources' | 'suppliers' | 'nirs' | 'invoice-configurator' | 'payments' | 'shipping' | 'customers' | 'discounts' | 'company';
 type PrimaryTab = 'home' | 'orders' | 'products' | 'inventory' | 'more';
 type ShopView = PrimaryTab | CatalogView | SettingsView;
 type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; item: ShopBrand } | { type: 'manufacturer'; item: ShopManufacturer };
@@ -81,7 +83,7 @@ type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; 
 // SHOP activa, astfel incat utilizatorul sa nu fie trimis inapoi pe Acasa.
 let persistedShopView: ShopView = 'home';
 const SHOP_VIEW_STORAGE_KEY = 'gtrots.shopView.v2';
-const shopViews = new Set<ShopView>(['home', 'orders', 'products', 'inventory', 'more', 'categories', 'brands', 'manufacturers', 'sources', 'suppliers', 'nirs', 'payments', 'shipping', 'customers', 'discounts', 'company']);
+const shopViews = new Set<ShopView>(['home', 'orders', 'products', 'inventory', 'more', 'categories', 'brands', 'manufacturers', 'sources', 'suppliers', 'nirs', 'invoice-configurator', 'payments', 'shipping', 'customers', 'discounts', 'company']);
 
 const orderStatusLabels: Record<string, string> = {
   new: 'NOUĂ',
@@ -157,6 +159,7 @@ const moreAreas = [
   { key: 'sources', title: 'Surse produse', description: 'Magazinele si furnizorii din care provin produsele.', Icon: Globe2, color: '#38BDF8' },
   { key: 'suppliers', title: 'Furnizori', description: 'Firme partenere, contacte și date comerciale pentru achiziții.', Icon: Handshake, color: '#5EEAD4' },
   { key: 'nirs', title: 'NIR-uri', description: 'Recepții, facturi de achiziție și costuri istorice.', Icon: FileText, color: '#14B8A6' },
+  { key: 'invoice-configurator', title: 'Configurator factură', description: 'Spațiu separat pentru structura și aspectul facturilor.', Icon: FileCog, color: '#FB923C' },
   { key: 'categories', title: 'Categorii', description: 'Categorii, subcategorii si imagini.', Icon: FolderTree, color: '#FB7185' },
   { key: 'brands', title: 'Compatibilitati branduri', description: 'Marcile cu care sunt compatibile produsele.', Icon: Tags, color: '#2DD4BF' },
   { key: 'manufacturers', title: 'Producatori', description: 'Companiile care fabrica produsele.', Icon: Factory, color: '#818CF8' },
@@ -546,6 +549,16 @@ export default function ShopModuleScreen() {
       <View style={styles.container}>
         <Header title="NIR-uri" showBack onBack={() => setView('more')} />
         <ShopNirManager initialNirId={initialNirId} onInitialNirHandled={() => setInitialNirId(null)} />
+      </View>
+    );
+  }
+
+  if (view === 'invoice-configurator') {
+    return (
+      <View style={styles.container}>
+        <Header title="Configurator factură" showBack onBack={() => setView('more')} />
+        <ShopInvoiceConfigurator bottomInset={insets.bottom} />
+        <ShopBottomNavigation activeTab="more" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
       </View>
     );
   }

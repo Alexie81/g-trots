@@ -21,6 +21,7 @@ require_once __DIR__ . '/stripe.php';
 require_once __DIR__ . '/gomag.php';
 require_once __DIR__ . '/nir-domain.php';
 require_once __DIR__ . '/nir-service.php';
+require_once __DIR__ . '/nir-bundle.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(204);
@@ -4795,6 +4796,22 @@ try {
     if ($action === 'downloadAllNirAttachments' && $method === 'GET') {
         shopNirRequire($currentUser, 'NIR_VIEW');
         jsonResponse(shopNirDownloadAllAttachments($db, trim((string)($_GET['id'] ?? ''))));
+    }
+
+    if ($action === 'downloadNirBundle' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_EXPORT');
+        jsonResponse(shopNirDownloadBundle($db, trim((string)($_GET['id'] ?? '')), $currentUser));
+    }
+
+    if ($action === 'downloadNirRegistryBundle' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_EXPORT');
+        jsonResponse(shopNirDownloadRegistryBundle(
+            $db,
+            trim((string)($_GET['from'] ?? '')),
+            trim((string)($_GET['to'] ?? '')),
+            ((int)($_GET['include_documents'] ?? 0)) === 1,
+            $currentUser
+        ));
     }
 
     if ($action === 'getNirMovements' && $method === 'GET') {

@@ -3028,3 +3028,72 @@ function shopNirExport(PDO $db, string $id, string $format, array $user): array 
     }
     throw new InvalidArgumentException('Formatul de export nu este acceptat.');
 }
+
+/**
+ * Generate a disposable archive containing both NIR exports and every source
+ * document. Nothing is persisted after the response is built.
+ */
+function shopNirDownloadBundle(PDO $db, string $id, array $user): array {
+    if ($id === '') throw new InvalidArgumentException('NIR-ul este obligatoriu.');
+    if (!class_exists('ZipArchive')) throw new RuntimeException('Arhivarea documentelor nu este disponibilă pe server.');
+
+    $document = shopNirExportRows($db, $id, $user);
+    $documentNumber = trim((string)($document['nir_number'] ?? $document['temporary_number'] ?? 'NIR'));
+    $safeNumber = preg_replace('/[^A-Za-z0-9._-]+/u', '-', $documentNumber) ?: 'NIR';
+    $pdfName = $safeNumber . '.pdf';
+    $xlsxName = shopNirXlsxFileName($document);
+
+    $attachmentStmt = $db->prepare('SELECT original_name, storage_name FROM shop_nir_attachments WHERE nir_document_id = ? ORDER BY created_at ASC, id ASC');
+    $attachmentStmt->execute([$id]);
+    $attachments = $attachmentStmt->fetchAll();
+
+    $temporaryPath = tempnam(sys_get_temp_dir(), 'nir_bundle_');
+    if ($temporaryPath === false) throw new RuntimeException('Arhiva temporară nu a putut fi creată.');
+    $zip = new ZipArchive();
+    if ($zip->open($temporaryPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        @unlink($temporaryPath);
+        throw new RuntimeException('Arhiva NIR nu a putut fi deschisă.');
+    }
+
+    $closed = false;
+    try {
+        if (!$zip->addFromString($pdfName, shopNirBuildPdf($document))) throw new RuntimeException('PDF-ul NIR nu a putut fi adăugat în arhivă.');
+        if (!$zip->addFromString($xlsxName, shopNirBuildXlsx($document))) throw new RuntimeException('Excelul NIR nu a putut fi adăugat în arhivă.');
+        if (!$zip->addEmptyDir('documente')) throw new RuntimeException('Folderul documentelor nu a putut fi creat în arhivă.');
+
+        $usedNames = [];
+        foreach ($attachments as $index => $attachment) {
+            $originalName = basename(str_replace('\\', '/', trim((string)$attachment['original_name'])));
+            $archiveName = preg_replace('/[\\x00-\\x1F\\x7F\\/:*?"<>|]+/u', '-', $originalName) ?? '';
+            $archiveName = trim($archiveName, '. -');
+            if ($archiveName === '') $archiveName = 'document-' . ($index + 1);
+            $baseName = pathinfo($archiveName, PATHINFO_FILENAME);
+            $extension = pathinfo($archiveName, PATHINFO_EXTENSION);
+            $candidate = $archiveName;
+            $suffix = 2;
+            while (isset($usedNames[mb_strtolower($candidate)])) {
+                $candidate = $baseName . '-' . $suffix++ . ($extension !== '' ? '.' . $extension : '');
+            }
+            $usedNames[mb_strtolower($candidate)] = true;
+            if (!$zip->addFile(shopNirAttachmentStoredPath((string)$attachment['storage_name']), 'documente/' . $candidate)) {
+                throw new RuntimeException('Un document aferent NIR-ului nu a putut fi adăugat în arhivă.');
+            }
+        }
+
+        if (!$zip->close()) throw new RuntimeException('Arhiva NIR nu a putut fi finalizată.');
+        $closed = true;
+        $bytes = file_get_contents($temporaryPath);
+        if ($bytes === false) throw new RuntimeException('Arhiva NIR nu a putut fi citită.');
+    } catch (Throwable $error) {
+        if (!$closed) @$zip->close();
+        throw $error;
+    } finally {
+        if (is_file($temporaryPath)) @unlink($temporaryPath);
+    }
+
+    return [
+        'file_name' => $safeNumber . '-complet.zip',
+        'mime_type' => 'application/zip',
+        'content_base64' => base64_encode($bytes),
+    ];
+}

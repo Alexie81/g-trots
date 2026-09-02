@@ -168,6 +168,38 @@ function localToday() {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
 }
 
+type NirRegistryPeriod = 'all' | 'year' | 'six_months' | 'three_months' | 'last_month' | 'current_month' | 'custom';
+type NirRegistryContent = 'registry' | 'complete';
+
+function localIsoDate(value: Date) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+}
+
+function nirRegistryPeriodRange(period: NirRegistryPeriod, customFrom = '', customTo = '') {
+  const now = new Date();
+  const to = localIsoDate(now);
+  if (period === 'all') return { from: '', to: '', label: 'toată perioada' };
+  if (period === 'year') return { from: `${now.getFullYear()}-01-01`, to, label: `anul ${now.getFullYear()}` };
+  if (period === 'six_months' || period === 'three_months') {
+    const fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    fromDate.setMonth(fromDate.getMonth() - (period === 'six_months' ? 6 : 3));
+    return { from: localIsoDate(fromDate), to, label: period === 'six_months' ? 'ultimele 6 luni' : 'ultimele 3 luni' };
+  }
+  if (period === 'last_month') return { from: localIsoDate(new Date(now.getFullYear(), now.getMonth() - 1, 1)), to: localIsoDate(new Date(now.getFullYear(), now.getMonth(), 0)), label: 'luna trecută' };
+  if (period === 'custom') return { from: customFrom, to: customTo, label: 'perioada aleasă' };
+  return { from: localIsoDate(new Date(now.getFullYear(), now.getMonth(), 1)), to, label: 'luna curentă' };
+}
+
+function NirRegistryPeriodIcon({ period, active }: { period: NirRegistryPeriod; active: boolean }) {
+  const color = active ? '#FED7AA' : '#7DD3FC';
+  if (period === 'all') return <Boxes size={15} color={color} />;
+  if (period === 'six_months') return <Clock3 size={15} color={color} />;
+  if (period === 'three_months') return <RotateCcw size={15} color={color} />;
+  if (period === 'last_month') return <ArrowLeft size={15} color={color} />;
+  if (period === 'custom') return <PencilLine size={15} color={color} />;
+  return <CalendarDays size={15} color={color} />;
+}
+
 function suggestNextInvoiceNumber(value: string | null | undefined) {
   const normalized = String(value || '').trim();
   const match = normalized.match(/^(.*?)(\d+)$/);
@@ -241,6 +273,13 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
   const [currencySearch, setCurrencySearch] = useState('');
   const [rateLoading, setRateLoading] = useState(false);
   const [attachmentDownload, setAttachmentDownload] = useState<string | null>(null);
+  const [bundleDownloading, setBundleDownloading] = useState(false);
+  const [registryDownloadVisible, setRegistryDownloadVisible] = useState(false);
+  const [registryDownloadPeriod, setRegistryDownloadPeriod] = useState<NirRegistryPeriod>('current_month');
+  const [registryDownloadContent, setRegistryDownloadContent] = useState<NirRegistryContent>('complete');
+  const [registryDownloadFrom, setRegistryDownloadFrom] = useState(nirRegistryPeriodRange('current_month').from);
+  const [registryDownloadTo, setRegistryDownloadTo] = useState(nirRegistryPeriodRange('current_month').to);
+  const [registryDownloading, setRegistryDownloading] = useState(false);
   const syncedDraftSignature = useRef('');
   const createDraftInFlight = useRef(false);
   const registryRequestId = useRef(0);
@@ -942,6 +981,35 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     await Sharing.shareAsync(uri, { mimeType: file.mime_type, dialogTitle: title });
   };
 
+  const downloadNirBundle = async () => {
+    if (!token || !editor || bundleDownloading) return;
+    setBundleDownloading(true);
+    try {
+      const file = await shopApi.downloadNirBundle(token, editor.id);
+      await shareDownloadedFile(file, `Descarcă toate fișierele ${editor.nir_number || editor.temporary_number}`);
+    } catch (error) {
+      Alert.alert('Arhiva NIR nu s-a descărcat', error instanceof Error ? error.message : 'Încearcă din nou.');
+    } finally { setBundleDownloading(false); }
+  };
+
+  const downloadNirRegistry = async () => {
+    if (!token || registryDownloading) return;
+    const range = nirRegistryPeriodRange(registryDownloadPeriod, registryDownloadFrom, registryDownloadTo);
+    if (registryDownloadPeriod === 'custom' && (!isValidIsoDate(range.from) || !isValidIsoDate(range.to) || range.from > range.to)) {
+      Alert.alert('Perioadă incompletă', 'Alege o dată de început și o dată de sfârșit valide.');
+      return;
+    }
+    setRegistryDownloading(true);
+    try {
+      const complete = registryDownloadContent === 'complete';
+      const file = await shopApi.downloadNirRegistryBundle(token, range.from, range.to, complete);
+      setRegistryDownloadVisible(false);
+      await shareDownloadedFile(file, complete ? 'Descarcă registrul și toate NIR-urile' : 'Descarcă registrul NIR');
+    } catch (error) {
+      Alert.alert('Registrul nu s-a descărcat', error instanceof Error ? error.message : 'Încearcă din nou.');
+    } finally { setRegistryDownloading(false); }
+  };
+
   const shareLegacyAttachment = async (attachment: ShopNirAttachment) => {
     const remoteUrl = legacyNirAttachmentUrl(attachment);
     if (!remoteUrl) throw new Error('Adresa documentului salvat nu poate fi reconstruită.');
@@ -1048,13 +1116,14 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
             {editable && <TouchableOpacity style={styles.addLine} onPress={() => patchEditor({ lines: [...(editor.lines || []), makeLine()] })}><Plus size={18} color={Colors.orange} /><Text style={styles.addLineText}>Adaugă încă un produs</Text></TouchableOpacity>}
             {editable && <TouchableOpacity style={styles.importButton} onPress={chooseImportSource}><ImagePlus size={18} color="#38BDF8" /><View><Text style={styles.importTitle}>Importă documentul furnizorului</Text><Text style={styles.importText}>Alege-l acum; încărcarea începe doar când apeși Salvează.</Text></View></TouchableOpacity>}
             {!!pendingAttachments.length && <View style={styles.attachmentList}>{pendingAttachments.map((attachment) => <View style={[styles.attachmentCard, styles.attachmentPending]} key={attachment.key}><View style={styles.attachmentIcon}><FileDown size={16} color="#FBBF24" /></View><View style={{ flex: 1 }}><Text style={styles.attachmentName} numberOfLines={1}>{attachment.name}</Text><Text style={styles.attachmentMeta}>Pregătit local · se încarcă la salvare</Text></View><TouchableOpacity style={styles.attachmentRemove} onPress={() => setPendingAttachments((current) => current.filter((item) => item.key !== attachment.key))}><X size={15} color="#FDA4AF" /></TouchableOpacity></View>)}</View>}
-            {!!editor.attachments?.length && <View style={styles.savedAttachments}><View style={styles.attachmentSectionHeader}><View style={{ flex: 1 }}><Text style={styles.attachmentSectionKicker}>DOCUMENTELE FURNIZORULUI</Text><Text style={styles.attachmentSectionTitle}>{editor.attachments.length} {editor.attachments.length === 1 ? 'document salvat' : 'documente salvate'}</Text></View>{!editable && <TouchableOpacity disabled={Boolean(attachmentDownload)} style={[styles.downloadAll, attachmentDownload && styles.downloadDisabled]} onPress={() => void downloadAllAttachments()}>{attachmentDownload === 'all' ? <ActivityIndicator size="small" color="#7DD3FC" /> : <FileDown size={16} color="#7DD3FC" />}<Text style={styles.downloadAllText}>Descarcă toate</Text></TouchableOpacity>}</View><View style={styles.attachmentList}>{editor.attachments.map((attachment) => <View style={styles.attachmentCard} key={attachment.id}><View style={styles.attachmentIcon}><FileDown size={16} color="#38BDF8" /></View><View style={{ flex: 1 }}><Text style={styles.attachmentName} numberOfLines={1}>{attachment.original_name}</Text><Text style={styles.attachmentMeta}>{attachment.extraction_status} · {Math.max(1, Math.round(attachment.file_size / 1024))} KB</Text></View><TouchableOpacity disabled={Boolean(attachmentDownload)} style={styles.attachmentDownload} onPress={() => void downloadAttachment(attachment.id)}>{attachmentDownload === attachment.id ? <ActivityIndicator size="small" color="#7DD3FC" /> : <FileDown size={16} color="#7DD3FC" />}</TouchableOpacity></View>)}</View></View>}
+            {!!editor.attachments?.length && <View style={styles.savedAttachments}><View style={styles.attachmentSectionHeader}><View style={{ flex: 1 }}><Text style={styles.attachmentSectionKicker}>DOCUMENTELE FURNIZORULUI</Text><Text style={styles.attachmentSectionTitle}>{editor.attachments.length} {editor.attachments.length === 1 ? 'document salvat' : 'documente salvate'}</Text></View>{!editable && <TouchableOpacity disabled={Boolean(attachmentDownload)} style={[styles.downloadAll, attachmentDownload && styles.downloadDisabled]} onPress={() => void downloadAllAttachments()}>{attachmentDownload === 'all' ? <ActivityIndicator size="small" color="#7DD3FC" /> : <FileDown size={16} color="#7DD3FC" />}<Text style={styles.downloadAllText}>Doar atașamentele</Text></TouchableOpacity>}</View><View style={styles.attachmentList}>{editor.attachments.map((attachment) => <View style={styles.attachmentCard} key={attachment.id}><View style={styles.attachmentIcon}><FileDown size={16} color="#38BDF8" /></View><View style={{ flex: 1 }}><Text style={styles.attachmentName} numberOfLines={1}>{attachment.original_name}</Text><Text style={styles.attachmentMeta}>{attachment.extraction_status} · {Math.max(1, Math.round(attachment.file_size / 1024))} KB</Text></View><TouchableOpacity disabled={Boolean(attachmentDownload)} style={styles.attachmentDownload} onPress={() => void downloadAttachment(attachment.id)}>{attachmentDownload === attachment.id ? <ActivityIndicator size="small" color="#7DD3FC" /> : <FileDown size={16} color="#7DD3FC" />}</TouchableOpacity></View>)}</View></View>}
           </View></Reveal>
 
           {!editable && <>
             <View style={styles.detailTabs}><Tab label="Poziții" active={detailsTab === 'lines'} onPress={() => void loadDetailTab('lines')} /><Tab label="Mișcări de stoc" active={detailsTab === 'movements'} onPress={() => void loadDetailTab('movements')} /></View>
             {detailsTab === 'movements' && <View style={styles.movementBoard}><View style={styles.movementBoardHeader}><View style={styles.movementBoardIcon}><Boxes size={20} color="#5EEAD4" /></View><View style={{ flex: 1 }}><Text style={styles.movementBoardEyebrow}>JURNAL CONTABIL</Text><Text style={styles.movementBoardTitle}>Traseul stocului</Text><Text style={styles.movementBoardText}>{isNirReversalDocument(editor) ? 'Vezi pozițiile anulate prin acest document de stornare.' : 'Fiecare mișcare produsă de acest NIR, în ordine cronologică.'}</Text></View><View style={styles.movementCount}><Text style={styles.movementCountValue}>{detailRows.length}</Text><Text style={styles.movementCountLabel}>MIȘCĂRI</Text></View></View><View style={styles.movementSummary}><View><Text style={styles.movementSummaryLabel}>INTRĂRI</Text><Text style={[styles.movementSummaryValue, styles.movementPositive]}>+{movementQuantity(movementSummary.entries)}</Text></View><View><Text style={styles.movementSummaryLabel}>IEȘIRI</Text><Text style={[styles.movementSummaryValue, styles.movementNegative]}>−{movementQuantity(movementSummary.exits)}</Text></View><View><Text style={styles.movementSummaryLabel}>EFECT NET</Text><Text style={styles.movementSummaryValue}>{movementSummary.net > 0 ? '+' : ''}{movementQuantity(movementSummary.net)}</Text></View></View>{detailRows.length ? <View style={styles.movementList}>{detailRows.map((row, index) => { const delta = Number(row.accounting_quantity_delta ?? row.quantity_delta ?? 0); const incoming = delta >= 0; return <View style={[styles.movementCard, incoming ? styles.movementCardIn : styles.movementCardOut]} key={String(row.id || index)}><View style={[styles.movementDirection, incoming ? styles.movementDirectionIn : styles.movementDirectionOut]}>{incoming ? <ArrowDownToLine size={18} color="#5EEAA4" /> : <ArrowUpFromLine size={18} color="#FDA4AF" />}</View><View style={styles.movementMain}><View style={styles.movementCardTop}><Text style={[styles.movementType, incoming ? styles.movementPositive : styles.movementNegative]}>{movementLabel(row.movement_type)}</Text><Text style={styles.movementDate}>{movementDate(row.created_at)}</Text></View><Text numberOfLines={2} style={styles.movementProduct}>{row.product_name || `Mișcare ${index + 1}`}</Text><Text numberOfLines={2} style={styles.movementNote}>{row.movement_document_number || row.note || 'Document de stoc'}</Text><View style={styles.movementFacts}><View><Text style={styles.movementFactLabel}>CANTITATE</Text><Text style={[styles.movementFactValue, incoming ? styles.movementPositive : styles.movementNegative]}>{delta > 0 ? '+' : '−'}{movementQuantity(Math.abs(delta))} buc</Text></View><View><Text style={styles.movementFactLabel}>STOC DUPĂ</Text><Text style={styles.movementFactValue}>{movementQuantity(row.accounting_quantity_after ?? row.quantity_after)} buc</Text></View><View><Text style={styles.movementFactLabel}>OPERATOR</Text><Text numberOfLines={1} style={styles.movementFactValue}>{row.created_by || 'Sistem'}</Text></View></View></View></View>; })}</View> : <View style={styles.movementEmpty}><Boxes size={23} color={Colors.textMuted} /><Text style={styles.movementEmptyTitle}>Nu există mișcări de stoc</Text><Text style={styles.movementEmptyText}>Acest document nu a produs încă o intrare sau ieșire contabilă.</Text></View>}</View>}
-            <View style={styles.exportRow}><TouchableOpacity style={styles.exportButton} onPress={() => void exportDocument('pdf')}><FileDown size={17} color={Colors.textPrimary} /><Text style={styles.exportText}>PDF</Text></TouchableOpacity><TouchableOpacity style={styles.exportButton} onPress={() => void exportDocument('xlsx')}><FileDown size={17} color={Colors.textPrimary} /><Text style={styles.exportText}>Excel</Text></TouchableOpacity></View>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Descarcă toate documentele NIR" disabled={bundleDownloading} style={[styles.bundleDownloadButton, bundleDownloading && styles.downloadDisabled]} onPress={() => void downloadNirBundle()}>{bundleDownloading ? <ActivityIndicator color="#071513" /> : <View style={styles.bundleDownloadIcon}><FileDown size={20} color="#071513" /></View>}<View style={{ flex: 1 }}><Text style={styles.bundleDownloadTitle}>Descarcă toate documentele</Text><Text style={styles.bundleDownloadText}>NIR PDF, NIR Excel și folderul cu documentele furnizorului</Text></View><ChevronRight size={19} color="#0F766E" /></TouchableOpacity>
+            <View style={styles.exportRow}><TouchableOpacity style={styles.exportButton} onPress={() => void exportDocument('pdf')}><FileDown size={17} color={Colors.textPrimary} /><Text style={styles.exportText}>Doar PDF</Text></TouchableOpacity><TouchableOpacity style={styles.exportButton} onPress={() => void exportDocument('xlsx')}><FileDown size={17} color={Colors.textPrimary} /><Text style={styles.exportText}>Doar Excel</Text></TouchableOpacity></View>
           </>}
 
           <Reveal delay={220}><View style={styles.editorStepCard}>
@@ -1118,6 +1187,17 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     );
   }
 
+  const registryDownloadRange = nirRegistryPeriodRange(registryDownloadPeriod, registryDownloadFrom, registryDownloadTo);
+  const registryPeriods: { value: NirRegistryPeriod; label: string }[] = [
+    { value: 'all', label: 'Toată perioada' },
+    { value: 'year', label: 'Tot anul' },
+    { value: 'six_months', label: '6 luni' },
+    { value: 'three_months', label: '3 luni' },
+    { value: 'last_month', label: 'Luna trecută' },
+    { value: 'current_month', label: 'Luna curentă' },
+    { value: 'custom', label: 'Custom' },
+  ];
+
   return (
     <View key={`nir-registry-${registryEpoch}`} style={styles.screen}>
       <ScrollView
@@ -1135,6 +1215,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
               <View><Text style={styles.heroEyebrow}>RECEPȚII · STOC · COSTURI</Text><Text style={styles.heroTitle}>NIR-uri</Text></View>
             </View>
             <View style={styles.heroActions}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Exportă registrul NIR" style={styles.registryDownloadOpen} onPress={() => setRegistryDownloadVisible(true)}><FileDown size={18} color="#071513" /><Text style={styles.registryDownloadOpenText}>Export</Text></TouchableOpacity>
               <TouchableOpacity style={styles.iconButton} onPress={() => void loadRegistry(page)}><RefreshCw size={18} color={Colors.textSecondary} /></TouchableOpacity>
             </View>
           </View>
@@ -1164,6 +1245,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
           </View>
         )}
       </ScrollView>
+      <Modal visible={registryDownloadVisible} transparent animationType="slide" statusBarTranslucent onRequestClose={() => !registryDownloading && setRegistryDownloadVisible(false)}><Pressable style={styles.registryDownloadBackdrop} onPress={() => !registryDownloading && setRegistryDownloadVisible(false)}><Pressable accessibilityViewIsModal style={[styles.registryDownloadSheet, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}><View style={styles.registryDownloadHandle} /><View style={styles.registryDownloadHeader}><View style={styles.registryDownloadHeaderIcon}><FileDown size={24} color="#7DD3FC" /></View><View style={{ flex: 1 }}><Text style={styles.registryDownloadEyebrow}>EXPORT CONTABIL</Text><Text style={styles.registryDownloadTitle}>Descarcă registrul NIR</Text><Text style={styles.registryDownloadIntro}>Fișierele sunt generate acum și nu ocupă spațiul hostingului.</Text></View><TouchableOpacity accessibilityLabel="Închide" disabled={registryDownloading} style={styles.registryDownloadClose} onPress={() => setRegistryDownloadVisible(false)}><X size={19} color={Colors.textSecondary} /></TouchableOpacity></View><ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.registryDownloadBody}><View style={styles.registryDownloadSectionTitle}><Text style={styles.registryDownloadStep}>01</Text><View><Text style={styles.registryDownloadSectionHeading}>Ce vrei să descarci?</Text><Text style={styles.registryDownloadSectionHint}>Alege fișierul simplu sau arhiva completă.</Text></View></View><View style={styles.registryContentOptions}>{([{ value: 'registry', title: 'Doar registrul', hint: 'Un fișier XLSX foarte detaliat' }, { value: 'complete', title: 'Registru + toate NIR-urile', hint: 'ZIP cu fiecare PDF, Excel și documentele sale' }] as const).map((option) => <TouchableOpacity key={option.value} style={[styles.registryContentOption, registryDownloadContent === option.value && styles.registryContentOptionActive]} onPress={() => setRegistryDownloadContent(option.value)}><View style={[styles.registryContentIcon, registryDownloadContent === option.value && styles.registryContentIconActive]}><FileDown size={19} color={registryDownloadContent === option.value ? '#071513' : '#7DD3FC'} /></View><View style={{ flex: 1 }}><Text style={styles.registryContentTitle}>{option.title}</Text><Text style={styles.registryContentHint}>{option.hint}</Text></View><View style={[styles.registryRadio, registryDownloadContent === option.value && styles.registryRadioActive]} /></TouchableOpacity>)}</View><View style={styles.registryDownloadSectionTitle}><Text style={styles.registryDownloadStep}>02</Text><View><Text style={styles.registryDownloadSectionHeading}>Pentru ce perioadă?</Text><Text style={styles.registryDownloadSectionHint}>Selectează rapid sau alege un interval.</Text></View></View><View style={styles.registryPeriodGrid}>{registryPeriods.map((option) => { const active = registryDownloadPeriod === option.value; return <TouchableOpacity key={option.value} style={[styles.registryPeriodChip, active && styles.registryPeriodChipActive]} onPress={() => setRegistryDownloadPeriod(option.value)}><NirRegistryPeriodIcon period={option.value} active={active} /><Text style={[styles.registryPeriodText, active && styles.registryPeriodTextActive]}>{option.label}</Text></TouchableOpacity>; })}</View>{registryDownloadPeriod === 'custom' && <View style={styles.registryCustomRange}><View style={{ flex: 1 }}><Text style={styles.registryCustomLabel}>DE LA</Text><TextInput value={registryDownloadFrom} onChangeText={setRegistryDownloadFrom} placeholder="AAAA-LL-ZZ" placeholderTextColor={Colors.textMuted} keyboardType="numbers-and-punctuation" style={styles.registryCustomInput} /></View><View style={{ flex: 1 }}><Text style={styles.registryCustomLabel}>PÂNĂ LA</Text><TextInput value={registryDownloadTo} onChangeText={setRegistryDownloadTo} placeholder="AAAA-LL-ZZ" placeholderTextColor={Colors.textMuted} keyboardType="numbers-and-punctuation" style={styles.registryCustomInput} /></View></View>}<View style={styles.registryDownloadSummary}><CheckCircle2 size={20} color="#5EEAD4" /><View style={{ flex: 1 }}><Text style={styles.registryDownloadSummaryLabel}>SE VA GENERA</Text><Text style={styles.registryDownloadSummaryTitle}>{registryDownloadContent === 'complete' ? 'Arhivă completă' : 'Registru Excel'} pentru {registryDownloadRange.label}</Text><Text style={styles.registryDownloadSummaryText}>{registryDownloadRange.from && registryDownloadRange.to ? `${registryDownloadRange.from.split('-').reverse().join('.')} — ${registryDownloadRange.to.split('-').reverse().join('.')}` : registryDownloadPeriod === 'custom' ? 'Completează ambele date.' : 'Toate NIR-urile din registru.'}</Text></View></View><TouchableOpacity accessibilityRole="button" accessibilityLabel="Descarcă registrul selectat" disabled={registryDownloading} style={[styles.registryDownloadConfirm, registryDownloading && styles.downloadDisabled]} onPress={() => void downloadNirRegistry()}>{registryDownloading ? <ActivityIndicator color="#071513" /> : <FileDown size={20} color="#071513" />}<Text style={styles.registryDownloadConfirmText}>{registryDownloading ? 'Se pregătește…' : 'Descarcă acum'}</Text></TouchableOpacity></ScrollView></Pressable></Pressable></Modal>
     </View>
   );
 }
@@ -1513,4 +1595,14 @@ const styles = StyleSheet.create({
   stornoM3CancelText: { color: '#F1E8ED', fontSize: 12 },
   stornoM3Confirm: { minHeight: 56, borderRadius: 999, borderColor: '#FFB2BC', backgroundColor: '#FFB2BC' },
   stornoM3ConfirmText: { color: '#5F1128', fontSize: 12 },
+  bundleDownloadButton: { minHeight: 76, padding: 12, borderRadius: 20, borderWidth: 1, borderColor: '#2DD4BF55', backgroundColor: '#5EEAD4', flexDirection: 'row', alignItems: 'center', gap: 11, shadowColor: '#2DD4BF', shadowOpacity: 0.22, shadowRadius: 14, shadowOffset: { width: 0, height: 7 }, elevation: 4 },
+  bundleDownloadIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF55' },
+  bundleDownloadTitle: { color: '#071513', fontSize: 13, fontWeight: '900' }, bundleDownloadText: { marginTop: 3, color: '#0F5952', fontSize: 9, lineHeight: 13, fontWeight: '700' },
+  registryDownloadOpen: { minHeight: 44, paddingHorizontal: 14, borderRadius: 15, borderWidth: 1, borderColor: '#99F6E4', backgroundColor: '#5EEAD4', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, shadowColor: '#2DD4BF', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4 }, registryDownloadOpenText: { color: '#071513', fontSize: 10, fontWeight: '900' },
+  registryDownloadBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: '#050609E8' }, registryDownloadSheet: { maxHeight: '92%', borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, borderColor: '#38BDF83D', backgroundColor: '#1D1B20', overflow: 'hidden' }, registryDownloadHandle: { width: 42, height: 4, marginTop: 9, marginBottom: 5, alignSelf: 'center', borderRadius: 99, backgroundColor: '#625D65' },
+  registryDownloadHeader: { paddingHorizontal: 17, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#FFFFFF0D', flexDirection: 'row', alignItems: 'center', gap: 12 }, registryDownloadHeaderIcon: { width: 52, height: 52, borderRadius: 18, borderWidth: 1, borderColor: '#38BDF843', backgroundColor: '#38BDF812', alignItems: 'center', justifyContent: 'center' }, registryDownloadEyebrow: { color: '#5EEAD4', fontSize: 7, fontWeight: '900', letterSpacing: 1 }, registryDownloadTitle: { marginTop: 3, color: '#F8F5F2', fontSize: 19, lineHeight: 24, fontWeight: '900' }, registryDownloadIntro: { marginTop: 3, color: '#A29BA4', fontSize: 9, lineHeight: 13 }, registryDownloadClose: { width: 38, height: 38, borderRadius: 13, borderWidth: 1, borderColor: '#FFFFFF12', backgroundColor: '#FFFFFF08', alignItems: 'center', justifyContent: 'center' },
+  registryDownloadBody: { padding: 17, paddingBottom: 6, gap: 14 }, registryDownloadSectionTitle: { flexDirection: 'row', alignItems: 'center', gap: 10 }, registryDownloadStep: { width: 30, height: 30, borderRadius: 10, overflow: 'hidden', backgroundColor: '#38BDF814', color: '#7DD3FC', textAlign: 'center', lineHeight: 30, fontSize: 8, fontWeight: '900' }, registryDownloadSectionHeading: { color: '#EEE9ED', fontSize: 13, fontWeight: '900' }, registryDownloadSectionHint: { marginTop: 2, color: '#807981', fontSize: 9 },
+  registryContentOptions: { gap: 8 }, registryContentOption: { minHeight: 72, padding: 11, borderRadius: 18, borderWidth: 1, borderColor: '#403C43', backgroundColor: '#242228', flexDirection: 'row', alignItems: 'center', gap: 10 }, registryContentOptionActive: { borderColor: '#2DD4BF66', backgroundColor: '#2DD4BF0E' }, registryContentIcon: { width: 40, height: 40, borderRadius: 13, borderWidth: 1, borderColor: '#38BDF835', backgroundColor: '#38BDF80D', alignItems: 'center', justifyContent: 'center' }, registryContentIconActive: { borderColor: '#99F6E4', backgroundColor: '#5EEAD4' }, registryContentTitle: { color: '#F2EDF0', fontSize: 12, fontWeight: '900' }, registryContentHint: { marginTop: 3, color: '#918A93', fontSize: 8.5, lineHeight: 12 }, registryRadio: { width: 17, height: 17, borderRadius: 9, borderWidth: 2, borderColor: '#69636C' }, registryRadioActive: { borderWidth: 5, borderColor: '#5EEAD4', backgroundColor: '#0C211F' },
+  registryPeriodGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, registryPeriodChip: { minHeight: 44, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1, borderColor: '#403C43', backgroundColor: '#242228', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }, registryPeriodChipActive: { borderColor: '#FB923C77', backgroundColor: '#F9731617' }, registryPeriodText: { color: '#D0C9D1', fontSize: 10, fontWeight: '900' }, registryPeriodTextActive: { color: '#FED7AA' }, registryCustomRange: { flexDirection: 'row', gap: 8, padding: 11, borderRadius: 17, borderWidth: 1, borderColor: '#F9731638', backgroundColor: '#F973160A' }, registryCustomLabel: { marginLeft: 3, marginBottom: 5, color: '#C29B7C', fontSize: 7, fontWeight: '900', letterSpacing: 0.6 }, registryCustomInput: { minHeight: 45, paddingHorizontal: 11, borderRadius: 13, borderWidth: 1, borderColor: '#54474A', backgroundColor: '#171519', color: '#FFF7F2', fontSize: 12, fontWeight: '800' },
+  registryDownloadSummary: { padding: 12, borderRadius: 17, borderWidth: 1, borderColor: '#2DD4BF3D', backgroundColor: '#2DD4BF0C', flexDirection: 'row', alignItems: 'center', gap: 10 }, registryDownloadSummaryLabel: { color: '#5EEAD4', fontSize: 7, fontWeight: '900', letterSpacing: 0.7 }, registryDownloadSummaryTitle: { marginTop: 3, color: '#DDFBF6', fontSize: 11, fontWeight: '900' }, registryDownloadSummaryText: { marginTop: 3, color: '#84AAA4', fontSize: 8.5 }, registryDownloadConfirm: { minHeight: 54, marginTop: 2, borderRadius: 18, borderWidth: 1, borderColor: '#99F6E4', backgroundColor: '#5EEAD4', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 }, registryDownloadConfirmText: { color: '#071513', fontSize: 12, fontWeight: '900' },
 });

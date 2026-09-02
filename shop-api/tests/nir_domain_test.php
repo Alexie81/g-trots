@@ -74,6 +74,8 @@ $vatInCost = shopNirCalculateLine([
     'vat_rate' => '19', 'exchange_rate' => '1',
 ], true);
 nirAssertSame('119.000000', $vatInCost['inventory_unit_cost_ron'], 'TVA nedeductibil inclus în cost');
+nirAssertSame('59.500000', shopNirGrossUnitCostRon('119.00', '0.00', '2'), 'cost comercial unitar cu TVA inclus');
+nirAssertSame('64.500000', shopNirGrossUnitCostRon('119.00', '10.00', '2'), 'cost comercial unitar cu TVA și cost alocat');
 
 $layers = [
     ['id' => 'L2', 'nir_number' => 'NIR-2', 'reception_date' => '2026-02-02', 'created_at' => '2026-02-02 10:00:00', 'remaining_quantity' => '5', 'unit_cost_ron' => '60'],

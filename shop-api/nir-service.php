@@ -2035,7 +2035,9 @@ function shopNirProductReferences(PDO $db, string $productId): array {
         'SELECT n.id AS nir_id, n.supplier_id, s.name AS supplier_name, s.cui AS supplier_cui, s.is_active AS supplier_is_active,
                 l.supplier_product_code, l.supplier_product_name, l.supplier_ean,
                 l.unit_price AS last_confirmed_purchase_price, n.currency AS last_confirmed_currency,
-                l.inventory_unit_cost_ron AS last_confirmed_price_ron,
+                CASE WHEN l.stock_quantity > 0
+                     THEN (l.line_total_ron + l.allocated_cost_ron) / l.stock_quantity
+                     ELSE 0 END AS last_confirmed_price_ron,
                 COALESCE(n.confirmed_at, n.updated_at) AS last_confirmed_at
          FROM shop_nir_lines l
          INNER JOIN shop_nir_documents n ON n.id = l.nir_document_id AND n.status = "confirmed"
@@ -2119,6 +2121,7 @@ function shopNirPurchaseHistory(PDO $db, string $productId, array $user): array 
     $stmt = $db->prepare(
         'SELECT l.id AS nir_line_id, l.unit_price, l.discount_percent, l.vat_rate, l.accepted_quantity, l.stock_quantity, l.purchase_unit, l.conversion_factor,
                 l.inventory_unit_cost_ron, l.inventory_cost_total_ron, l.line_net_ron, l.line_vat_ron, l.line_total_ron,
+                l.allocated_cost_ron,
                 n.id AS nir_id, n.nir_number, n.supplier_invoice_series, n.supplier_invoice_number, n.supplier_invoice_date,
                 n.reception_date, n.currency, n.exchange_rate, n.confirmed_by,
                 s.id AS supplier_id, s.name AS supplier_name,
@@ -2136,27 +2139,39 @@ function shopNirPurchaseHistory(PDO $db, string $productId, array $user): array 
     );
     $stmt->execute([$productId]);
     $items = $stmt->fetchAll();
+    foreach ($items as &$item) {
+        $grossTotal = shopNirDecimalToScaled($item['line_total_ron'], 2) + shopNirDecimalToScaled($item['allocated_cost_ron'], 2);
+        $item['gross_cost_total_ron'] = shopNirScaledToDecimal($grossTotal, 2);
+        $item['gross_unit_cost_ron'] = shopNirGrossUnitCostRon($item['line_total_ron'], $item['allocated_cost_ron'], $item['stock_quantity']);
+    }
+    unset($item);
     $prices = array_map(static fn(array $row): int => shopNirDecimalToScaled($row['inventory_unit_cost_ron'], 6), $items);
+    $grossPrices = array_map(static fn(array $row): int => shopNirDecimalToScaled($row['gross_unit_cost_ron'], 6), $items);
     $weightedQuantity = 0;
     $weightedCost = 0;
+    $weightedGrossCost = 0;
     $supplierStats = [];
     foreach ($items as $item) {
         $quantity = shopNirDecimalToScaled($item['stock_quantity'], 4);
         $cost = shopNirDecimalToScaled($item['inventory_unit_cost_ron'], 6);
+        $grossCost = shopNirDecimalToScaled($item['gross_unit_cost_ron'], 6);
         $weightedQuantity += $quantity;
         $weightedCost += shopNirMultiplyScaled($quantity, 4, $cost, 6, 6);
+        $weightedGrossCost += shopNirMultiplyScaled($quantity, 4, $grossCost, 6, 6);
         $supplierKey = (string)($item['supplier_id'] ?? 'unknown');
         if (!isset($supplierStats[$supplierKey])) $supplierStats[$supplierKey] = [
             'supplier_id' => $item['supplier_id'], 'supplier_name' => $item['supplier_name'], 'purchase_count' => 0,
             'last_unit_cost_ron' => $item['inventory_unit_cost_ron'], 'last_original_price' => $item['unit_price'],
+            'last_gross_unit_cost_ron' => $item['gross_unit_cost_ron'],
             'last_currency' => $item['currency'], 'last_purchase_at' => $item['reception_date'], 'last_quantity' => $item['stock_quantity'],
-            'minimum_scaled' => $cost, 'maximum_scaled' => $cost, 'weighted_quantity' => 0, 'weighted_cost' => 0, 'codes' => [], 'names' => [], 'eans' => [],
+            'minimum_scaled' => $cost, 'maximum_scaled' => $cost, 'weighted_quantity' => 0, 'weighted_cost' => 0, 'weighted_gross_cost' => 0, 'codes' => [], 'names' => [], 'eans' => [],
         ];
         $supplierStats[$supplierKey]['purchase_count']++;
         $supplierStats[$supplierKey]['minimum_scaled'] = min($supplierStats[$supplierKey]['minimum_scaled'], $cost);
         $supplierStats[$supplierKey]['maximum_scaled'] = max($supplierStats[$supplierKey]['maximum_scaled'], $cost);
         $supplierStats[$supplierKey]['weighted_quantity'] += $quantity;
         $supplierStats[$supplierKey]['weighted_cost'] += shopNirMultiplyScaled($quantity, 4, $cost, 6, 6);
+        $supplierStats[$supplierKey]['weighted_gross_cost'] += shopNirMultiplyScaled($quantity, 4, $grossCost, 6, 6);
         if (!empty($item['supplier_code'])) $supplierStats[$supplierKey]['codes'][(string)$item['supplier_code']] = true;
         if (!empty($item['supplier_product_name'])) $supplierStats[$supplierKey]['names'][(string)$item['supplier_product_name']] = true;
         if (!empty($item['supplier_ean'])) $supplierStats[$supplierKey]['eans'][(string)$item['supplier_ean']] = true;
@@ -2166,10 +2181,12 @@ function shopNirPurchaseHistory(PDO $db, string $productId, array $user): array 
         $supplierRows[] = [
             'supplier_id' => $stat['supplier_id'], 'supplier_name' => $stat['supplier_name'], 'purchase_count' => $stat['purchase_count'],
             'last_unit_cost_ron' => $stat['last_unit_cost_ron'], 'last_original_price' => $stat['last_original_price'],
+            'last_gross_unit_cost_ron' => $stat['last_gross_unit_cost_ron'],
             'last_currency' => $stat['last_currency'], 'last_purchase_at' => $stat['last_purchase_at'], 'last_quantity' => $stat['last_quantity'],
             'minimum_unit_cost_ron' => shopNirScaledToDecimal($stat['minimum_scaled'], 6),
             'maximum_unit_cost_ron' => shopNirScaledToDecimal($stat['maximum_scaled'], 6),
             'weighted_average_unit_cost_ron' => $stat['weighted_quantity'] > 0 ? shopNirScaledToDecimal(shopNirDivideRounded($stat['weighted_cost'] * 10000, $stat['weighted_quantity']), 6) : null,
+            'weighted_average_gross_unit_cost_ron' => $stat['weighted_quantity'] > 0 ? shopNirScaledToDecimal(shopNirDivideRounded($stat['weighted_gross_cost'] * 10000, $stat['weighted_quantity']), 6) : null,
             'codes' => array_keys($stat['codes']), 'names' => array_keys($stat['names']), 'eans' => array_keys($stat['eans']),
         ];
     }
@@ -2182,6 +2199,10 @@ function shopNirPurchaseHistory(PDO $db, string $productId, array $user): array 
             'maximum_unit_cost_ron' => $prices ? shopNirScaledToDecimal(max($prices), 6) : null,
             'last_unit_cost_ron' => $prices ? shopNirScaledToDecimal($prices[0], 6) : null,
             'weighted_average_unit_cost_ron' => $weightedQuantity > 0 ? shopNirScaledToDecimal(shopNirDivideRounded($weightedCost * 10000, $weightedQuantity), 6) : null,
+            'minimum_gross_unit_cost_ron' => $grossPrices ? shopNirScaledToDecimal(min($grossPrices), 6) : null,
+            'maximum_gross_unit_cost_ron' => $grossPrices ? shopNirScaledToDecimal(max($grossPrices), 6) : null,
+            'last_gross_unit_cost_ron' => $grossPrices ? shopNirScaledToDecimal($grossPrices[0], 6) : null,
+            'weighted_average_gross_unit_cost_ron' => $weightedQuantity > 0 ? shopNirScaledToDecimal(shopNirDivideRounded($weightedGrossCost * 10000, $weightedQuantity), 6) : null,
         ],
     ];
 }

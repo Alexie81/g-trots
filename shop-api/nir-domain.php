@@ -147,6 +147,15 @@ function shopNirCalculateLine(array $line, bool $includeVatInInventoryCost = fal
     ];
 }
 
+/** Costul comercial unitar afișat în fișa produsului: TVA și costuri alocate incluse. */
+function shopNirGrossUnitCostRon($lineTotalRon, $allocatedCostRon, $stockQuantity): string {
+    $quantity = shopNirDecimalToScaled($stockQuantity, 4, 'Cantitatea de stoc');
+    if ($quantity <= 0) return '0.000000';
+    $grossTotal = shopNirDecimalToScaled($lineTotalRon, 2, 'Totalul cu TVA')
+        + shopNirDecimalToScaled($allocatedCostRon, 2, 'Costul alocat');
+    return shopNirScaledToDecimal(shopNirDivideRounded($grossTotal * (10 ** 8), $quantity), 6);
+}
+
 function shopNirFifoPreview(array $layers, $requestedQuantity): array {
     $requested = shopNirDecimalToScaled($requestedQuantity, 4, 'Cantitatea solicitată');
     if ($requested <= 0) throw new InvalidArgumentException('Cantitatea solicitată trebuie să fie mai mare decât zero.');

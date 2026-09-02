@@ -170,6 +170,7 @@ function localToday() {
 
 type NirRegistryPeriod = 'all' | 'year' | 'six_months' | 'three_months' | 'last_month' | 'current_month' | 'custom';
 type NirRegistryContent = 'registry' | 'complete';
+type NirExportProgress = { title: string; detail: string; percent: number; etaSeconds: number; documents: number; lines: number; attachments: number };
 
 function localIsoDate(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
@@ -198,6 +199,35 @@ function NirRegistryPeriodIcon({ period, active }: { period: NirRegistryPeriod; 
   if (period === 'last_month') return <ArrowLeft size={15} color={color} />;
   if (period === 'custom') return <PencilLine size={15} color={color} />;
   return <CalendarDays size={15} color={color} />;
+}
+
+function formatNirExportDuration(seconds: number) {
+  const value = Math.max(0, Math.ceil(seconds || 0));
+  if (value < 60) return `${value} sec`;
+  const minutes = Math.floor(value / 60);
+  const remainder = value % 60;
+  return remainder ? `${minutes} min ${remainder} sec` : `${minutes} min`;
+}
+
+function NirExportProgressModal({ progress }: { progress: NirExportProgress | null }) {
+  return <Modal visible={Boolean(progress)} transparent animationType="fade" statusBarTranslucent onRequestClose={() => undefined}>
+    <View style={styles.exportProgressBackdrop}>
+      <View accessibilityViewIsModal style={styles.exportProgressCard}>
+        <View style={styles.exportProgressOrb}><FileDown size={27} color="#FFB071" /><ActivityIndicator style={styles.exportProgressSpinner} size="large" color="#F97316" /></View>
+        <Text style={styles.exportProgressEyebrow}>EXPORT ÎN CURS</Text>
+        <Text style={styles.exportProgressTitle}>{progress?.title || 'Pregătim exportul'}</Text>
+        <Text style={styles.exportProgressDetail}>{progress?.detail || 'Calculăm volumul de date…'}</Text>
+        <View style={styles.exportProgressStats}>
+          <View style={styles.exportProgressStat}><Text style={styles.exportProgressStatValue}>{(progress?.documents || 0).toLocaleString('ro-RO')}</Text><Text style={styles.exportProgressStatLabel}>NIR-URI</Text></View>
+          <View style={styles.exportProgressStat}><Text style={styles.exportProgressStatValue}>{(progress?.lines || 0).toLocaleString('ro-RO')}</Text><Text style={styles.exportProgressStatLabel}>POZIȚII</Text></View>
+          <View style={styles.exportProgressStat}><Text style={styles.exportProgressStatValue}>{(progress?.attachments || 0).toLocaleString('ro-RO')}</Text><Text style={styles.exportProgressStatLabel}>FIȘIERE</Text></View>
+        </View>
+        <View style={styles.exportProgressMeta}><Text style={styles.exportProgressPercent}>{progress?.percent || 2}%</Text><Text style={styles.exportProgressEta}>{(progress?.percent || 0) >= 100 ? 'Fișier pregătit' : `Timp estimat rămas: ${formatNirExportDuration(progress?.etaSeconds || 1)}`}</Text></View>
+        <View style={styles.exportProgressTrack}><View style={[styles.exportProgressFill, { width: `${Math.min(100, Math.max(2, progress?.percent || 2))}%` }]} /></View>
+        <Text style={styles.exportProgressFooter}>Descărcarea pornește automat imediat ce fișierul este gata.</Text>
+      </View>
+    </View>
+  </Modal>;
 }
 
 function suggestNextInvoiceNumber(value: string | null | undefined) {
@@ -280,6 +310,8 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
   const [registryDownloadFrom, setRegistryDownloadFrom] = useState(nirRegistryPeriodRange('current_month').from);
   const [registryDownloadTo, setRegistryDownloadTo] = useState(nirRegistryPeriodRange('current_month').to);
   const [registryDownloading, setRegistryDownloading] = useState(false);
+  const [exportProgress, setExportProgress] = useState<NirExportProgress | null>(null);
+  const exportProgressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const syncedDraftSignature = useRef('');
   const createDraftInFlight = useRef(false);
   const registryRequestId = useRef(0);
@@ -288,6 +320,10 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
   const codeResolveTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const codeResolveRequestIds = useRef<Record<number, number>>({});
   const initialNirOpenedRef = useRef<string | null>(null);
+
+  useEffect(() => () => {
+    if (exportProgressTimer.current) clearInterval(exportProgressTimer.current);
+  }, []);
 
   const permissions = registry?.permissions || editor?.permissions || [];
   const can = (permission: string) => permissions.includes(permission);
@@ -981,13 +1017,44 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     await Sharing.shareAsync(uri, { mimeType: file.mime_type, dialogTitle: title });
   };
 
+  const startExportProgress = (estimate: Partial<{ estimated_seconds: number; document_count: number; line_count: number; attachment_count: number; bundle_type: 'registry' | 'complete' }>, title: string) => {
+    if (exportProgressTimer.current) clearInterval(exportProgressTimer.current);
+    const startedAt = Date.now();
+    const estimatedSeconds = Math.max(1, Number(estimate.estimated_seconds) || 3);
+    const base = {
+      title,
+      detail: estimate.bundle_type === 'registry' ? 'Construim registrul Excel optimizat…' : 'Generăm documentele și împachetăm arhiva ZIP…',
+      documents: Number(estimate.document_count || 0),
+      lines: Number(estimate.line_count || 0),
+      attachments: Number(estimate.attachment_count || 0),
+    };
+    setExportProgress({ ...base, percent: 2, etaSeconds: estimatedSeconds });
+    exportProgressTimer.current = setInterval(() => {
+      const elapsed = (Date.now() - startedAt) / 1000;
+      const adaptiveTotal = Math.max(estimatedSeconds, elapsed / 0.9);
+      setExportProgress({ ...base, percent: Math.min(94, Math.max(2, Math.round(2 + (elapsed / adaptiveTotal) * 92))), etaSeconds: Math.max(1, adaptiveTotal - elapsed) });
+    }, 250);
+  };
+
+  const finishExportProgress = async (success: boolean) => {
+    if (exportProgressTimer.current) clearInterval(exportProgressTimer.current);
+    exportProgressTimer.current = null;
+    if (!success) { setExportProgress(null); return; }
+    setExportProgress((current) => current ? { ...current, percent: 100, etaSeconds: 0, detail: 'Export finalizat. Descărcarea pornește acum.' } : current);
+    await new Promise<void>((resolve) => setTimeout(resolve, 320));
+    setExportProgress(null);
+  };
+
   const downloadNirBundle = async () => {
     if (!token || !editor || bundleDownloading) return;
     setBundleDownloading(true);
     try {
+      startExportProgress({ document_count: 1, line_count: editor.lines?.length || 0, attachment_count: editor.attachments?.length || 0, estimated_seconds: Math.max(2, 1.5 + (editor.lines?.length || 0) * 0.1), bundle_type: 'complete' }, `Pregătim ${editor.nir_number || editor.temporary_number || 'NIR-ul'}`);
       const file = await shopApi.downloadNirBundle(token, editor.id);
+      await finishExportProgress(true);
       await shareDownloadedFile(file, `Descarcă toate fișierele ${editor.nir_number || editor.temporary_number}`);
     } catch (error) {
+      await finishExportProgress(false);
       Alert.alert('Arhiva NIR nu s-a descărcat', error instanceof Error ? error.message : 'Încearcă din nou.');
     } finally { setBundleDownloading(false); }
   };
@@ -1002,10 +1069,19 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     setRegistryDownloading(true);
     try {
       const complete = registryDownloadContent === 'complete';
-      const file = await shopApi.downloadNirRegistryBundle(token, range.from, range.to, complete);
       setRegistryDownloadVisible(false);
+      startExportProgress({ estimated_seconds: complete ? 12 : 2, bundle_type: complete ? 'complete' : 'registry' }, complete ? 'Pregătim arhiva completă' : 'Pregătim registrul Excel');
+      try {
+        const estimate = await shopApi.getNirExportEstimate(token, range.from, range.to, complete);
+        startExportProgress(estimate, complete ? 'Pregătim arhiva completă' : 'Pregătim registrul Excel');
+      } catch {
+        // Păstrăm estimarea de rezervă pentru compatibilitate cu un API încă neactualizat.
+      }
+      const file = await shopApi.downloadNirRegistryBundle(token, range.from, range.to, complete);
+      await finishExportProgress(true);
       await shareDownloadedFile(file, complete ? 'Descarcă registrul și toate NIR-urile' : 'Descarcă registrul NIR');
     } catch (error) {
+      await finishExportProgress(false);
       Alert.alert('Registrul nu s-a descărcat', error instanceof Error ? error.message : 'Încearcă din nou.');
     } finally { setRegistryDownloading(false); }
   };
@@ -1183,6 +1259,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
         <Modal visible={supplierPicker} transparent animationType="slide" onRequestClose={() => setSupplierPicker(false)}><Pressable style={styles.backdrop} onPress={() => setSupplierPicker(false)}><Pressable style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}><SheetHeader title="Selectează furnizorul" onClose={() => setSupplierPicker(false)} /><SearchBox value={supplierSearch} onChangeText={setSupplierSearch} placeholder="Denumire sau CUI" />{newSupplier ? <View style={styles.inlineCreate}><Field label="DENUMIRE *" value={newSupplier.name} onChangeText={(name) => setNewSupplier({ ...newSupplier, name })} placeholder="Firma furnizoare" /><Field label="CUI" value={newSupplier.cui} onChangeText={(cui) => setNewSupplier({ ...newSupplier, cui })} placeholder="RO123456" /><TouchableOpacity style={styles.confirmAction} onPress={() => void addSupplier()}><Check size={18} color={Colors.white} /><Text style={styles.confirmActionText}>Creează și selectează</Text></TouchableOpacity></View> : <><ScrollView style={{ maxHeight: 430 }}>{filteredSuppliers.map((supplier) => <TouchableOpacity style={styles.pickerRow} key={supplier.id} onPress={() => { const supplierCurrency = supplier.default_currency || editor.currency; patchEditor({ supplier_id: supplier.id, supplier_name: supplier.name }); setSupplierPicker(false); if (supplierCurrency !== editor.currency) selectCurrency(supplierCurrency); }}><View style={styles.pickerIcon}><Building2 size={18} color="#5EEAD4" /></View><View style={{ flex: 1 }}><Text style={styles.pickerTitle}>{supplier.name}</Text><Text style={styles.pickerMeta}>{supplier.cui || 'CUI necompletat'}</Text></View><ChevronRight size={18} color={Colors.textMuted} /></TouchableOpacity>)}</ScrollView>{can('SUPPLIER_CREATE') && <TouchableOpacity style={styles.addLine} onPress={() => setNewSupplier({ name: supplierSearch, cui: '' })}><Plus size={18} color={Colors.orange} /><Text style={styles.addLineText}>Furnizor nou</Text></TouchableOpacity>}</>}</Pressable></Pressable></Modal>
 
         <Modal visible={productPickerLine !== null} transparent animationType="slide" onRequestClose={() => setProductPickerLine(null)}><Pressable style={styles.backdrop} onPress={() => setProductPickerLine(null)}><Pressable style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}><SheetHeader title="Asociază produsul intern" onClose={() => setProductPickerLine(null)} /><SearchBox value={productSearch} onChangeText={setProductSearch} placeholder="Denumire, SKU sau cod" />{loadingProducts ? <ActivityIndicator color={Colors.orange} style={{ margin: 28 }} /> : <ScrollView style={{ maxHeight: 520 }}>{products.map((product) => { const supplierAlias = product.supplier_reference?.supplier_product_code_original || product.supplier_reference?.supplier_product_name; return <TouchableOpacity key={product.id} style={styles.pickerRow} onPress={() => void selectProduct(product)}>{product.images?.[0]?.url ? <Image source={{ uri: product.images[0].url }} style={styles.pickerImage} resizeMode="cover" /> : <View style={styles.pickerIcon}><PackageSearch size={18} color="#A78BFA" /></View>}<View style={{ flex: 1 }}><Text style={styles.pickerTitle}>{product.name}</Text><Text style={styles.pickerMeta}>{product.sku || 'Fără SKU'} · {supplierAlias ? `asociat: ${supplierAlias}` : 'fără alias la acest furnizor'}</Text></View><Link2 size={17} color={Colors.orange} /></TouchableOpacity>; })}</ScrollView>}</Pressable></Pressable></Modal>
+        <NirExportProgressModal progress={exportProgress} />
       </View>
     );
   }
@@ -1246,6 +1323,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
         )}
       </ScrollView>
       <Modal visible={registryDownloadVisible} transparent animationType="slide" statusBarTranslucent onRequestClose={() => !registryDownloading && setRegistryDownloadVisible(false)}><Pressable style={styles.registryDownloadBackdrop} onPress={() => !registryDownloading && setRegistryDownloadVisible(false)}><Pressable accessibilityViewIsModal style={[styles.registryDownloadSheet, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}><View style={styles.registryDownloadHandle} /><View style={styles.registryDownloadHeader}><View style={styles.registryDownloadHeaderIcon}><FileDown size={24} color="#7DD3FC" /></View><View style={{ flex: 1 }}><Text style={styles.registryDownloadEyebrow}>EXPORT CONTABIL</Text><Text style={styles.registryDownloadTitle}>Descarcă registrul NIR</Text><Text style={styles.registryDownloadIntro}>Fișierele sunt generate acum și nu ocupă spațiul hostingului.</Text></View><TouchableOpacity accessibilityLabel="Închide" disabled={registryDownloading} style={styles.registryDownloadClose} onPress={() => setRegistryDownloadVisible(false)}><X size={19} color={Colors.textSecondary} /></TouchableOpacity></View><ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.registryDownloadBody}><View style={styles.registryDownloadSectionTitle}><Text style={styles.registryDownloadStep}>01</Text><View><Text style={styles.registryDownloadSectionHeading}>Ce vrei să descarci?</Text><Text style={styles.registryDownloadSectionHint}>Alege fișierul simplu sau arhiva completă.</Text></View></View><View style={styles.registryContentOptions}>{([{ value: 'registry', title: 'Doar registrul', hint: 'Un fișier XLSX foarte detaliat' }, { value: 'complete', title: 'Registru + toate NIR-urile', hint: 'ZIP cu fiecare PDF, Excel și documentele sale' }] as const).map((option) => <TouchableOpacity key={option.value} style={[styles.registryContentOption, registryDownloadContent === option.value && styles.registryContentOptionActive]} onPress={() => setRegistryDownloadContent(option.value)}><View style={[styles.registryContentIcon, registryDownloadContent === option.value && styles.registryContentIconActive]}><FileDown size={19} color={registryDownloadContent === option.value ? '#071513' : '#7DD3FC'} /></View><View style={{ flex: 1 }}><Text style={styles.registryContentTitle}>{option.title}</Text><Text style={styles.registryContentHint}>{option.hint}</Text></View><View style={[styles.registryRadio, registryDownloadContent === option.value && styles.registryRadioActive]} /></TouchableOpacity>)}</View><View style={styles.registryDownloadSectionTitle}><Text style={styles.registryDownloadStep}>02</Text><View><Text style={styles.registryDownloadSectionHeading}>Pentru ce perioadă?</Text><Text style={styles.registryDownloadSectionHint}>Selectează rapid sau alege un interval.</Text></View></View><View style={styles.registryPeriodGrid}>{registryPeriods.map((option) => { const active = registryDownloadPeriod === option.value; return <TouchableOpacity key={option.value} style={[styles.registryPeriodChip, active && styles.registryPeriodChipActive]} onPress={() => setRegistryDownloadPeriod(option.value)}><NirRegistryPeriodIcon period={option.value} active={active} /><Text style={[styles.registryPeriodText, active && styles.registryPeriodTextActive]}>{option.label}</Text></TouchableOpacity>; })}</View>{registryDownloadPeriod === 'custom' && <View style={styles.registryCustomRange}><View style={{ flex: 1 }}><Text style={styles.registryCustomLabel}>DE LA</Text><TextInput value={registryDownloadFrom} onChangeText={setRegistryDownloadFrom} placeholder="AAAA-LL-ZZ" placeholderTextColor={Colors.textMuted} keyboardType="numbers-and-punctuation" style={styles.registryCustomInput} /></View><View style={{ flex: 1 }}><Text style={styles.registryCustomLabel}>PÂNĂ LA</Text><TextInput value={registryDownloadTo} onChangeText={setRegistryDownloadTo} placeholder="AAAA-LL-ZZ" placeholderTextColor={Colors.textMuted} keyboardType="numbers-and-punctuation" style={styles.registryCustomInput} /></View></View>}<View style={styles.registryDownloadSummary}><CheckCircle2 size={20} color="#5EEAD4" /><View style={{ flex: 1 }}><Text style={styles.registryDownloadSummaryLabel}>SE VA GENERA</Text><Text style={styles.registryDownloadSummaryTitle}>{registryDownloadContent === 'complete' ? 'Arhivă completă' : 'Registru Excel'} pentru {registryDownloadRange.label}</Text><Text style={styles.registryDownloadSummaryText}>{registryDownloadRange.from && registryDownloadRange.to ? `${registryDownloadRange.from.split('-').reverse().join('.')} — ${registryDownloadRange.to.split('-').reverse().join('.')}` : registryDownloadPeriod === 'custom' ? 'Completează ambele date.' : 'Toate NIR-urile din registru.'}</Text></View></View><TouchableOpacity accessibilityRole="button" accessibilityLabel="Descarcă registrul selectat" disabled={registryDownloading} style={[styles.registryDownloadConfirm, registryDownloading && styles.downloadDisabled]} onPress={() => void downloadNirRegistry()}>{registryDownloading ? <ActivityIndicator color="#071513" /> : <FileDown size={20} color="#071513" />}<Text style={styles.registryDownloadConfirmText}>{registryDownloading ? 'Se pregătește…' : 'Descarcă acum'}</Text></TouchableOpacity></ScrollView></Pressable></Pressable></Modal>
+      <NirExportProgressModal progress={exportProgress} />
     </View>
   );
 }
@@ -1605,4 +1683,5 @@ const styles = StyleSheet.create({
   registryContentOptions: { gap: 8 }, registryContentOption: { minHeight: 72, padding: 11, borderRadius: 18, borderWidth: 1, borderColor: '#403C43', backgroundColor: '#242228', flexDirection: 'row', alignItems: 'center', gap: 10 }, registryContentOptionActive: { borderColor: '#2DD4BF66', backgroundColor: '#2DD4BF0E' }, registryContentIcon: { width: 40, height: 40, borderRadius: 13, borderWidth: 1, borderColor: '#38BDF835', backgroundColor: '#38BDF80D', alignItems: 'center', justifyContent: 'center' }, registryContentIconActive: { borderColor: '#99F6E4', backgroundColor: '#5EEAD4' }, registryContentTitle: { color: '#F2EDF0', fontSize: 12, fontWeight: '900' }, registryContentHint: { marginTop: 3, color: '#918A93', fontSize: 8.5, lineHeight: 12 }, registryRadio: { width: 17, height: 17, borderRadius: 9, borderWidth: 2, borderColor: '#69636C' }, registryRadioActive: { borderWidth: 5, borderColor: '#5EEAD4', backgroundColor: '#0C211F' },
   registryPeriodGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, registryPeriodChip: { minHeight: 44, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1, borderColor: '#403C43', backgroundColor: '#242228', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }, registryPeriodChipActive: { borderColor: '#FB923C77', backgroundColor: '#F9731617' }, registryPeriodText: { color: '#D0C9D1', fontSize: 10, fontWeight: '900' }, registryPeriodTextActive: { color: '#FED7AA' }, registryCustomRange: { flexDirection: 'row', gap: 8, padding: 11, borderRadius: 17, borderWidth: 1, borderColor: '#F9731638', backgroundColor: '#F973160A' }, registryCustomLabel: { marginLeft: 3, marginBottom: 5, color: '#C29B7C', fontSize: 7, fontWeight: '900', letterSpacing: 0.6 }, registryCustomInput: { minHeight: 45, paddingHorizontal: 11, borderRadius: 13, borderWidth: 1, borderColor: '#54474A', backgroundColor: '#171519', color: '#FFF7F2', fontSize: 12, fontWeight: '800' },
   registryDownloadSummary: { padding: 12, borderRadius: 17, borderWidth: 1, borderColor: '#2DD4BF3D', backgroundColor: '#2DD4BF0C', flexDirection: 'row', alignItems: 'center', gap: 10 }, registryDownloadSummaryLabel: { color: '#5EEAD4', fontSize: 7, fontWeight: '900', letterSpacing: 0.7 }, registryDownloadSummaryTitle: { marginTop: 3, color: '#DDFBF6', fontSize: 11, fontWeight: '900' }, registryDownloadSummaryText: { marginTop: 3, color: '#84AAA4', fontSize: 8.5 }, registryDownloadConfirm: { minHeight: 54, marginTop: 2, borderRadius: 18, borderWidth: 1, borderColor: '#99F6E4', backgroundColor: '#5EEAD4', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 }, registryDownloadConfirmText: { color: '#071513', fontSize: 12, fontWeight: '900' },
+  exportProgressBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 18, backgroundColor: '#050507F2' }, exportProgressCard: { width: '100%', maxWidth: 520, padding: 24, borderRadius: 30, borderWidth: 1, borderColor: '#FB923C55', backgroundColor: '#201D21', alignItems: 'center', shadowColor: '#000000', shadowOpacity: 0.45, shadowRadius: 30, shadowOffset: { width: 0, height: 16 }, elevation: 16 }, exportProgressOrb: { position: 'relative', width: 72, height: 72, marginBottom: 17, borderRadius: 24, borderWidth: 1, borderColor: '#FB923C55', backgroundColor: '#F973161A', alignItems: 'center', justifyContent: 'center' }, exportProgressSpinner: { position: 'absolute', transform: [{ scale: 1.45 }] }, exportProgressEyebrow: { color: '#FB923C', fontSize: 8, fontWeight: '900', letterSpacing: 1.3 }, exportProgressTitle: { marginTop: 7, color: '#FFF8F2', fontSize: 23, lineHeight: 29, fontWeight: '900', textAlign: 'center' }, exportProgressDetail: { marginTop: 6, color: '#AAA1A8', fontSize: 11, lineHeight: 17, textAlign: 'center' }, exportProgressStats: { width: '100%', marginTop: 22, flexDirection: 'row', gap: 7 }, exportProgressStat: { flex: 1, minHeight: 64, padding: 8, borderRadius: 17, borderWidth: 1, borderColor: '#FFFFFF12', backgroundColor: '#FFFFFF08', alignItems: 'center', justifyContent: 'center' }, exportProgressStatValue: { color: '#FFF2E6', fontSize: 15, fontWeight: '900' }, exportProgressStatLabel: { marginTop: 3, color: '#8F878E', fontSize: 6.5, fontWeight: '900', letterSpacing: 0.6 }, exportProgressMeta: { width: '100%', marginTop: 21, marginBottom: 9, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }, exportProgressPercent: { color: '#FB923C', fontSize: 21, fontWeight: '900' }, exportProgressEta: { flex: 1, color: '#C9C0C7', fontSize: 9, lineHeight: 13, fontWeight: '800', textAlign: 'right' }, exportProgressTrack: { width: '100%', height: 12, padding: 2, borderRadius: 99, borderWidth: 1, borderColor: '#FB923C35', backgroundColor: '#0E0D10', overflow: 'hidden' }, exportProgressFill: { height: '100%', borderRadius: 99, backgroundColor: '#F97316' }, exportProgressFooter: { marginTop: 15, color: '#777077', fontSize: 8.5, lineHeight: 13, textAlign: 'center' },
 });

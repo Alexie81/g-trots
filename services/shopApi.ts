@@ -780,7 +780,7 @@ async function shopCall<T>(action: string, token: string, init?: RequestInit, id
   const controller = new AbortController();
   // Stergerea sincronizeaza arhivarea cu Stripe inainte de eliminarea locala.
   // O lasam sa se incheie si pe conexiuni mobile mai lente.
-  const timeoutMs = ['downloadNirBundle', 'downloadNirRegistryBundle'].includes(action) ? 240000 : action === 'syncStripeCatalog' ? 90000 : ['syncBoomagTaxonomy', 'syncBoomagStock'].includes(action) ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
+  const timeoutMs = ['downloadNirBundle', 'downloadNirRegistryBundle'].includes(action) ? 1800000 : action === 'syncStripeCatalog' ? 90000 : ['syncBoomagTaxonomy', 'syncBoomagStock'].includes(action) ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const isGet = !init?.method || init.method === 'GET';
   const cacheBuster = isGet ? `&_=${Date.now()}` : '';
@@ -932,6 +932,7 @@ export const shopApi = {
   downloadAllNirAttachments: (token: string, id: string) => shopCall<{ file_name: string; mime_type: string; content_base64: string }>('downloadAllNirAttachments', token, undefined, id),
   downloadNirBundle: (token: string, id: string) => shopCall<{ file_name: string; mime_type: string; content_base64: string }>('downloadNirBundle', token, undefined, id),
   downloadNirRegistryBundle: (token: string, from: string, to: string, includeDocuments: boolean) => shopCall<{ file_name: string; mime_type: string; content_base64: string; document_count: number; bundle_type: 'registry' | 'complete' }>('downloadNirRegistryBundle', token, undefined, undefined, 0, { from, to, include_documents: includeDocuments ? 1 : 0 }),
+  getNirExportEstimate: (token: string, from: string, to: string, includeDocuments: boolean) => shopCall<{ from: string; to: string; document_count: number; line_count: number; attachment_count: number; attachment_bytes: number; estimated_seconds: number; bundle_type: 'registry' | 'complete' }>('getNirExportEstimate', token, undefined, undefined, 0, { from, to, include_documents: includeDocuments ? 1 : 0 }),
   getNirMovements: (token: string, id: string) => shopCall<ShopInventoryMovement[]>('getNirMovements', token, undefined, id),
   getNirFifoLayers: (token: string, id: string) => shopCall<ShopFifoLayer[]>('getNirFifoLayers', token, undefined, id),
   exportNir: (token: string, id: string, format: 'pdf' | 'xlsx') => shopCall<{ file_name: string; mime_type: string; content_base64: string }>('exportNir', token, undefined, id, 0, { format }),

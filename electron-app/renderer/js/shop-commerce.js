@@ -1391,10 +1391,9 @@
     return movement.created_by ? `Operat de ${movement.created_by}` : 'Operatiune interna';
   }
   function stockPager(key, total, page, pageCount, sectionId) {
-    if (!total) return '';
-    const first = (page - 1) * 5 + 1; const last = Math.min(total, page * 5);
+    const first = total ? (page - 1) * 5 + 1 : 0; const last = total ? Math.min(total, page * 5) : 0;
     const pages = customerPaginationItems(pageCount, page);
-    return `<nav class="shop-stock-pager" aria-label="Paginare"><small>${first}–${last} din ${total}</small><span><button type="button" class="direction" data-stock-page-key="${key}" data-stock-page="${page - 1}" data-stock-section="${sectionId}" ${page === 1 ? 'disabled' : ''} aria-label="Pagina anterioara">‹</button>${pages.map(item => item === '…' ? '<i>…</i>' : `<button type="button" data-stock-page-key="${key}" data-stock-page="${item}" data-stock-section="${sectionId}" class="${item === page ? 'active' : ''}" ${item === page ? 'aria-current="page"' : ''}>${item}</button>`).join('')}<button type="button" class="direction" data-stock-page-key="${key}" data-stock-page="${page + 1}" data-stock-section="${sectionId}" ${page === pageCount ? 'disabled' : ''} aria-label="Pagina urmatoare">›</button></span></nav>`;
+    return `<nav class="shop-stock-pager" aria-label="Paginare"><small><b>5 / pagină</b>${first}–${last} din ${total}</small><span><button type="button" class="direction" data-stock-page-key="${key}" data-stock-page="${page - 1}" data-stock-section="${sectionId}" ${page === 1 ? 'disabled' : ''} aria-label="Pagina anterioara">‹</button>${pages.map(item => item === '…' ? '<i>…</i>' : `<button type="button" data-stock-page-key="${key}" data-stock-page="${item}" data-stock-section="${sectionId}" class="${item === page ? 'active' : ''}" ${item === page ? 'aria-current="page"' : ''}>${item}</button>`).join('')}<button type="button" class="direction" data-stock-page-key="${key}" data-stock-page="${page + 1}" data-stock-section="${sectionId}" ${page === pageCount ? 'disabled' : ''} aria-label="Pagina urmatoare">›</button></span></nav>`;
   }
   function renderStockDetail() {
     const product = state.editingStock; if (!product) return;

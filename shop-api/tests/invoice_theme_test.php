@@ -23,6 +23,8 @@ $expect($new['theme'] === 'orange' && $new['existing'] === false, 'GT100 trebuie
 
 $regenerated = GtrotsInvoiceThemeStore::pin($db, ['series' => 'GT', 'number' => '099'], 'Test');
 $expect($regenerated['theme'] === 'purple' && $regenerated['existing'] === true, 'GT099 trebuie să rămână mov după regenerare.');
+$regeneratedWithId = GtrotsInvoiceThemeStore::pin($db, ['document_id' => 'invoice-row-099', 'series' => 'GT', 'number' => '099'], 'Test');
+$expect($regeneratedWithId['theme'] === 'purple' && $regeneratedWithId['existing'] === true, 'GT099 trebuie identificată după serie și număr chiar dacă ulterior primește un ID intern.');
 $expect((int)$db->query('SELECT COUNT(*) FROM shop_invoice_theme_assignments')->fetchColumn() === 2, 'Regenerarea nu trebuie să creeze o atribuire nouă.');
 
 if ($failures) {

@@ -70,11 +70,17 @@ final class GtrotsInvoiceThemeStore
     public static function pin(PDO $db, array $invoice, string $assignedBy = ''): array
     {
         [$documentKey, $documentId, $series, $number] = self::identity($invoice);
-        $find = $db->prepare('SELECT document_key, document_id, invoice_series, invoice_number, theme, assigned_at, last_rendered_at FROM shop_invoice_theme_assignments WHERE document_key = ? LIMIT 1');
-        $find->execute([$documentKey]);
+        $find = $db->prepare(
+            'SELECT document_key, document_id, invoice_series, invoice_number, theme, assigned_at, last_rendered_at
+             FROM shop_invoice_theme_assignments
+             WHERE document_key = ? OR (invoice_series = ? AND invoice_number = ?)
+             ORDER BY CASE WHEN document_key = ? THEN 0 ELSE 1 END
+             LIMIT 1'
+        );
+        $find->execute([$documentKey, $series, $number, $documentKey]);
         $existing = $find->fetch();
         if ($existing) {
-            $db->prepare('UPDATE shop_invoice_theme_assignments SET last_rendered_at = CURRENT_TIMESTAMP WHERE document_key = ?')->execute([$documentKey]);
+            $db->prepare('UPDATE shop_invoice_theme_assignments SET last_rendered_at = CURRENT_TIMESTAMP WHERE document_key = ?')->execute([(string)$existing['document_key']]);
             return self::assignment($existing, true);
         }
 
@@ -86,7 +92,7 @@ final class GtrotsInvoiceThemeStore
              VALUES (?, ?, ?, ?, ?, ?)'
         );
         $insert->execute([$documentKey, $documentId, $series, $number, $theme, mb_substr(trim($assignedBy), 0, 180)]);
-        $find->execute([$documentKey]);
+        $find->execute([$documentKey, $series, $number, $documentKey]);
         $saved = $find->fetch();
         if (!$saved) throw new RuntimeException('Tema facturii nu a putut fi fixată.');
         return self::assignment($saved, false);

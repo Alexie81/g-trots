@@ -7,6 +7,7 @@ $checkout = (string)file_get_contents($root . '/website/checkout.js');
 $login = (string)file_get_contents($root . '/website/login.html');
 $register = (string)file_get_contents($root . '/website/cont-nou.html');
 $account = (string)file_get_contents($root . '/website/cont.js');
+$accountStyles = (string)file_get_contents($root . '/website/cont.css');
 $failures = [];
 $expect = static function (bool $condition, string $message) use (&$failures): void {
     if (!$condition) $failures[] = $message;
@@ -23,6 +24,7 @@ foreach ([$login, $register] as $page) {
     $expect(str_contains($page, 'https://accounts.google.com'), 'Lipsește preconectarea la Google.');
 }
 $expect(str_contains($account, 'Promise.all([') && str_contains($account, 'ensureGoogleScript()'), 'Configurația și scriptul Google nu pornesc în paralel.');
+$expect(str_contains($accountStyles, '@media(min-width:621px) and (max-width:900px)') && str_contains($accountStyles, '.auth-form-panel,.auth-form-panel>*,.auth-form-grid>*{min-width:0}'), 'Formularul nu este protejat împotriva depășirii pe tabletă.');
 
 if ($failures) {
     fwrite(STDERR, "Performanță storefront: " . count($failures) . " verificări eșuate:\n- " . implode("\n- ", $failures) . "\n");

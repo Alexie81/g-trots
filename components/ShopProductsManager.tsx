@@ -42,6 +42,7 @@ import ShopPagination from '@/components/ShopPagination';
 import ShopProductPicture from '@/components/ShopProductPicture';
 import {
   shopApi,
+  shopSupplierDisplayName,
   ShopBrand,
   ShopCategory,
   ShopManufacturer,
@@ -334,7 +335,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
     });
     const purchased = new Map<string, ProductSupplierSummary>();
     purchaseHistory.forEach((purchase) => {
-      const supplierName = String(purchase.supplier_name || '').trim() || 'Furnizor';
+      const supplierName = shopSupplierDisplayName(purchase, 'Furnizor');
       const key = String(purchase.supplier_id || '').trim() || supplierName.toLocaleLowerCase('ro-RO');
       addAlias(key, 'code', purchase.supplier_code);
       addAlias(key, 'name', purchase.supplier_product_name);
@@ -355,7 +356,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
     if (purchased.size) return [...purchased.values()];
     return [...referencesBySupplier.entries()].map(([key, reference]) => ({
       key,
-      supplierName: reference.supplier_name || 'Furnizor',
+      supplierName: shopSupplierDisplayName(reference, 'Furnizor'),
       isActive: reference.is_active !== false,
       lastCostRon: reference.last_confirmed_price_ron,
       lastPurchaseAt: reference.last_confirmed_at,
@@ -735,7 +736,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
             <SectionTitle number="03" title="Furnizori" text="Firmele de la care a fost sau poate fi cumpărat acest produs." />
             {productSuppliers.length ? productSuppliers.map((supplier) => { const invoiceNames = supplier.aliases.filter((alias) => alias.type === 'name').map((alias) => alias.value); const supplierCodes = supplier.aliases.filter((alias) => alias.type === 'code').map((alias) => alias.value); const aliasSummary = [`Pe factură: ${invoiceNames.join(', ')}`, `Cod: ${supplierCodes.join(', ')}`].filter((part) => !part.endsWith(': ')).join(' · '); return <View key={supplier.key} style={[styles.referenceCard, !supplier.isActive && styles.referenceInactive]}><View style={styles.referenceIcon}><Building2 size={18} color="#2DD4BF" /></View><View style={styles.referenceCopy}><View style={styles.referenceHeading}><Text numberOfLines={1} style={styles.referenceSupplier}>{supplier.supplierName}</Text><View style={styles.referencePrimary}><Text style={styles.referencePrimaryText}>CUMPĂRAT PRIN NIR</Text></View></View><Text style={styles.referenceMeta}>{supplier.purchaseCount ? `${supplier.purchaseCount} ${supplier.purchaseCount === 1 ? 'recepție confirmată' : 'recepții confirmate'}` : 'Furnizor asociat produsului'}</Text>{aliasSummary ? <Text numberOfLines={2} style={styles.referenceAliases}>{aliasSummary}</Text> : null}<Text numberOfLines={1} style={styles.referenceCost}>{supplier.lastCostRon ? `Ultimul cost cu TVA ${money(Number(supplier.lastCostRon))}${supplier.lastPurchaseAt ? ` · ${supplier.lastPurchaseAt}` : ''}` : 'Fără cost confirmat'}</Text></View></View>; }) : <Text style={styles.detailEmpty}>Produsul nu are furnizori în istoricul NIR.</Text>}
             <SectionTitle number="04" title="Istoric preturi de achizitie" text="Fiecare NIR confirmat ramane un snapshot separat." />
-            {purchaseHistory.length ? pagedPurchaseHistory.map((item) => <View key={item.nir_line_id} style={styles.purchaseCard}><View><Text style={styles.purchaseNir}>{item.nir_number}</Text><Text style={styles.purchaseMeta}>{item.reception_date} · {item.supplier_name || 'Furnizor'} · cod {item.supplier_code || '—'}</Text></View><View style={styles.purchaseRight}><Text style={styles.purchaseCost}>{money(Number(item.gross_unit_cost_ron || 0))}/u</Text><Text style={styles.purchaseMeta}>TVA inclus · {item.stock_quantity} buc.</Text></View></View>) : <Text style={styles.detailEmpty}>Nu exista achizitii confirmate.</Text>}
+            {purchaseHistory.length ? pagedPurchaseHistory.map((item) => <View key={item.nir_line_id} style={styles.purchaseCard}><View><Text style={styles.purchaseNir}>{item.nir_number}</Text><Text style={styles.purchaseMeta}>{item.reception_date} · {shopSupplierDisplayName(item, 'Furnizor')} · cod {item.supplier_code || '—'}</Text></View><View style={styles.purchaseRight}><Text style={styles.purchaseCost}>{money(Number(item.gross_unit_cost_ron || 0))}/u</Text><Text style={styles.purchaseMeta}>TVA inclus · {item.stock_quantity} buc.</Text></View></View>) : <Text style={styles.detailEmpty}>Nu exista achizitii confirmate.</Text>}
             <DetailGooglePagination label="achizitii" page={detailPurchasesSafePage} pageSize={DETAIL_PURCHASES_PAGE_SIZE} total={detailPurchasesTotal} onPageChange={setDetailPurchasesPage} />
           </ScrollView>}
         </SafeAreaView>

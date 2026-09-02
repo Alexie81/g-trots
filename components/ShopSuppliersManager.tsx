@@ -18,13 +18,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Building2, ChevronDown, ChevronLeft, ChevronRight, Globe2, Handshake, Mail, MapPin, Package, Pencil, Phone, Plus, Save, Trash2, UserRound, X } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
-import { shopApi, ShopSupplier, ShopSupplierPayload, ShopSupplierProductReference } from '@/services/shopApi';
+import { shopApi, shopSupplierDisplayName, ShopSupplier, ShopSupplierPayload, ShopSupplierProductReference } from '@/services/shopApi';
 
 type SupplierForm = ShopSupplierPayload & { id: string | null };
 
 const emptySupplier = (): SupplierForm => ({
   id: null,
   name: '',
+  alias: '',
   contact_person: '',
   email: '',
   phone: '',
@@ -68,6 +69,7 @@ export default function ShopSuppliersManager() {
   const edit = (supplier?: ShopSupplier) => setForm(supplier ? {
     id: supplier.id,
     name: supplier.name || '',
+    alias: supplier.alias || supplier.name || '',
     contact_person: supplier.contact_person || '',
     email: supplier.email || '',
     phone: supplier.phone || '',
@@ -81,8 +83,8 @@ export default function ShopSuppliersManager() {
 
   const save = async () => {
     if (!token || !form || saving) return;
-    if (!form.name.trim()) {
-      Alert.alert('Nume obligatoriu', 'Completează numele furnizorului.');
+    if (!form.alias?.trim() || !form.name.trim()) {
+      Alert.alert('Date obligatorii', 'Completează aliasul afișat și denumirea juridică a furnizorului.');
       return;
     }
     setSaving(true);
@@ -90,6 +92,7 @@ export default function ShopSuppliersManager() {
       const website = form.website?.trim() || '';
       const payload: ShopSupplierPayload = {
         name: form.name.trim(),
+        alias: form.alias.trim(),
         contact_person: form.contact_person?.trim() || '',
         email: form.email?.trim().toLowerCase() || '',
         phone: form.phone?.trim() || '',
@@ -113,7 +116,7 @@ export default function ShopSuppliersManager() {
 
   const remove = (supplier: ShopSupplier) => Alert.alert(
     'Ștergi furnizorul?',
-    `„${supplier.name}” va fi șters definitiv din ambele aplicații.`,
+    `„${shopSupplierDisplayName(supplier)}” va fi șters definitiv din ambele aplicații.`,
     [
       { text: 'Renunță', style: 'cancel' },
       {
@@ -177,8 +180,8 @@ export default function ShopSuppliersManager() {
         <View style={styles.cardHead}>
           <View style={[styles.avatar, !supplier.is_active && styles.avatarInactive]}><Building2 size={21} color={supplier.is_active ? '#5EEAD4' : Colors.textMuted} /></View>
           <View style={styles.cardTitleCopy}>
-            <View style={styles.titleLine}><Text numberOfLines={1} style={styles.cardTitle}>{supplier.name}</Text><Text style={[styles.status, !supplier.is_active && styles.statusInactive]}>{supplier.is_active ? 'ACTIV' : 'INACTIV'}</Text></View>
-            <Text style={styles.cardSubtitle}>{[supplier.cui ? `CUI ${supplier.cui}` : '', supplier.registration_number ? `RC ${supplier.registration_number}` : ''].filter(Boolean).join(' · ') || 'Fără date fiscale'}</Text>
+            <View style={styles.titleLine}><Text numberOfLines={1} style={styles.cardTitle}>{shopSupplierDisplayName(supplier)}</Text><Text style={[styles.status, !supplier.is_active && styles.statusInactive]}>{supplier.is_active ? 'ACTIV' : 'INACTIV'}</Text></View>
+            <Text style={styles.cardSubtitle}>{[`Denumire juridică: ${supplier.name}`, supplier.cui ? `CUI ${supplier.cui}` : '', supplier.registration_number ? `RC ${supplier.registration_number}` : ''].filter(Boolean).join(' · ')}</Text>
           </View>
         </View>
         <View style={styles.details}>
@@ -197,7 +200,7 @@ export default function ShopSuppliersManager() {
         {expandedSupplier === supplier.id ? <SupplierProductsPanel supplierId={supplier.id} references={productsBySupplier[supplier.id] || []} page={productPages[supplier.id] || 1} loading={loadingProducts === supplier.id} onPageChange={(nextPage) => setProductPages((current) => ({ ...current, [supplier.id]: nextPage }))} /> : null}
         <View style={styles.actions}>
           <TouchableOpacity style={styles.editButton} onPress={() => edit(supplier)}><Pencil size={16} color="#7DD3FC" /><Text style={styles.editText}>Editează</Text></TouchableOpacity>
-          <TouchableOpacity accessibilityLabel={`Șterge ${supplier.name}`} style={styles.deleteButton} onPress={() => remove(supplier)}><Trash2 size={17} color="#FDA4AF" /></TouchableOpacity>
+          <TouchableOpacity accessibilityLabel={`Șterge ${shopSupplierDisplayName(supplier)}`} style={styles.deleteButton} onPress={() => remove(supplier)}><Trash2 size={17} color="#FDA4AF" /></TouchableOpacity>
         </View>
       </View>)}
     </View> : <View style={styles.state}><View style={styles.emptyIcon}><Handshake size={29} color="#5EEAD4" /></View><Text style={styles.emptyTitle}>Niciun furnizor adăugat</Text><Text style={styles.stateText}>Adaugă primul partener comercial și datele lui de contact.</Text><TouchableOpacity style={styles.emptyButton} onPress={() => edit()}><Plus size={16} color="#062521" /><Text style={styles.emptyButtonText}>Adaugă furnizor</Text></TouchableOpacity></View>}
@@ -208,7 +211,8 @@ export default function ShopSuppliersManager() {
           <View style={[styles.sheet, { paddingBottom: Math.max(20, insets.bottom) }]}>
             <View style={styles.sheetHeader}><View><Text style={styles.sheetKicker}>FIȘĂ FURNIZOR</Text><Text style={styles.sheetTitle}>{form?.id ? 'Editează furnizorul' : 'Furnizor nou'}</Text></View><TouchableOpacity style={styles.closeButton} onPress={() => !saving && setForm(null)}><X size={20} color={Colors.textSecondary} /></TouchableOpacity></View>
             {form ? <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.formScroll}>
-              <Field label="NUME FURNIZOR *" value={form.name} onChangeText={(value) => setForm({ ...form, name: value })} placeholder="Ex: Distribuitor piese SRL" />
+              <Field label="ALIAS AFIȘAT *" value={form.alias || ''} onChangeText={(value) => setForm({ ...form, alias: value })} placeholder="Ex: Distribuitorul meu" />
+              <Field label="DENUMIRE JURIDICĂ *" value={form.name} onChangeText={(value) => setForm({ ...form, name: value })} placeholder="Ex: Distribuitor piese SRL" />
               <Field label="PERSOANĂ DE CONTACT" value={form.contact_person || ''} onChangeText={(value) => setForm({ ...form, contact_person: value })} placeholder="Nume și prenume" />
               <View style={styles.twoColumns}><View style={styles.column}><Field label="TELEFON" value={form.phone || ''} onChangeText={(value) => setForm({ ...form, phone: value })} placeholder="07…" keyboardType="phone-pad" /></View><View style={styles.column}><Field label="E-MAIL" value={form.email || ''} onChangeText={(value) => setForm({ ...form, email: value })} placeholder="contact@firma.ro" keyboardType="email-address" autoCapitalize="none" /></View></View>
               <View style={styles.twoColumns}><View style={styles.column}><Field label="CUI / CIF" value={form.cui || ''} onChangeText={(value) => setForm({ ...form, cui: value })} placeholder="RO12345678" autoCapitalize="characters" /></View><View style={styles.column}><Field label="REGISTRUL COMERȚULUI (J)" value={form.registration_number || ''} onChangeText={(value) => setForm({ ...form, registration_number: value })} placeholder="J40/1234/2026" autoCapitalize="characters" /></View></View>

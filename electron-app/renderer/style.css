@@ -12722,9 +12722,9 @@ body::after {
   width:48px;
   height:48px;
   min-height:48px;
-  display:grid;
-  place-items:center;
+  display:flex;
   align-items:center;
+  justify-content:center;
   gap:10px;
   overflow:hidden;
   border:1px solid rgba(255,255,255,.075);
@@ -12737,10 +12737,11 @@ body::after {
   letter-spacing:0;
   transition:transform .2s cubic-bezier(.2,.8,.2,1),background .2s ease,border-color .2s ease,box-shadow .2s ease;
 }
-.shop-tab-panel .shop-back-btn::before { content:'<'; width:100%; height:100%; display:grid; place-items:center; color:currentColor; font-family:Arial,sans-serif; font-size:23px; font-weight:700; line-height:1; transform:none; transition:transform .22s ease; }
+.shop-tab-panel .shop-back-btn::before { content:none; }
+.shop-tab-panel .shop-back-btn>svg { position:absolute; left:50%; top:50%; width:24px; height:24px; display:block; margin:0; overflow:visible; fill:none; stroke:currentColor; stroke-width:2.35; stroke-linecap:round; stroke-linejoin:round; transform:translate(-50%,-50%); transition:transform .22s ease; }
 .shop-tab-panel .shop-back-btn::after { content:none; }
 .shop-tab-panel .shop-back-btn:hover { transform:translateX(-3px) scale(1.045); border-color:rgba(255,152,80,.3); color:#ffd0ae; background:rgba(255,152,80,.2); box-shadow:inset 0 1px rgba(255,255,255,.08),0 12px 28px rgba(0,0,0,.2); }
-.shop-tab-panel .shop-back-btn:hover::before { transform:translateX(-2px); }
+.shop-tab-panel .shop-back-btn:hover>svg { transform:translate(calc(-50% - 2px),-50%); }
 .shop-tab-panel .shop-back-btn:active { transform:scale(.97); }
 .shop-tab-panel .shop-back-btn:focus-visible { outline:3px solid rgba(255,152,80,.28); outline-offset:3px; }
 .shop-placeholder-page>.shop-back-btn,.shop-invoice-configurator-page>.shop-back-btn,.shop-commerce-page>.shop-back-btn { margin:0 0 16px; }

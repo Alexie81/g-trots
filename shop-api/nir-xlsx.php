@@ -152,7 +152,7 @@ function shopNirPremiumXlsxCell(int $column, int $row, array $spec): string
     if ($value === null || $value === '') return '<c r="' . $reference . '"' . $styleAttribute . '/>';
 
     $type = (string)($spec['type'] ?? 'string');
-    if ($type === 'number' || $type === 'date' || $type === 'datetime' || $type === 'percent') {
+    if ($type === 'number' || $type === 'date' || $type === 'datetime' || $type === 'time' || $type === 'percent') {
         $number = shopNirPremiumXlsxNumber($value);
         if ($number === null) return '<c r="' . $reference . '"' . $styleAttribute . '/>';
         return '<c r="' . $reference . '"' . $styleAttribute . '><v>' . sprintf('%.12F', $number) . '</v></c>';
@@ -691,8 +691,24 @@ function shopNirPremiumXlsxIsDifference(array $line): bool
         || trim((string)($line['mismatch_reason'] ?? '')) !== '';
 }
 
+function shopNirPremiumXlsxLogoImage(int $maxWidth = 180, int $maxHeight = 180): ?array
+{
+    static $cache = [];
+    $cacheKey = $maxWidth . 'x' . $maxHeight;
+    if (array_key_exists($cacheKey, $cache)) return $cache[$cacheKey];
+    foreach ([__DIR__ . '/pdf-assets/logo.jpg', dirname(__DIR__) . '/assets/images/logo.png'] as $logoPath) {
+        if (!is_file($logoPath)) continue;
+        $bytes = file_get_contents($logoPath);
+        if (!is_string($bytes)) continue;
+        $image = shopNirPremiumXlsxNormaliseImage($bytes, $maxWidth, $maxHeight, true);
+        if ($image !== null) return $cache[$cacheKey] = $image;
+    }
+    return $cache[$cacheKey] = null;
+}
+
 function shopNirPremiumXlsxSafeLocalProductImage($url): ?array
 {
+    static $cache = [];
     $raw = trim((string)$url);
     if ($raw === '' || str_contains($raw, "\0")) return null;
     $path = parse_url($raw, PHP_URL_PATH);
@@ -711,13 +727,16 @@ function shopNirPremiumXlsxSafeLocalProductImage($url): ?array
     if (!str_starts_with($candidate, $prefix)) return null;
     $size = filesize($candidate);
     if ($size === false || $size < 32 || $size > 6 * 1024 * 1024) return null;
+    $cacheKey = $candidate . '|' . (string)filemtime($candidate) . '|' . $size;
+    if (array_key_exists($cacheKey, $cache)) return $cache[$cacheKey];
     $bytes = file_get_contents($candidate);
-    if (!is_string($bytes)) return null;
-    return shopNirPremiumXlsxNormaliseImage($bytes, 180, 180, false);
+    if (!is_string($bytes)) return $cache[$cacheKey] = null;
+    return $cache[$cacheKey] = shopNirPremiumXlsxNormaliseImage($bytes, 180, 180, false);
 }
 
 function shopNirPremiumXlsxSafeCompanyStamp($url): ?array
 {
+    static $cache = [];
     $raw = trim((string)$url);
     if ($raw === '' || str_contains($raw, "\0")) return null;
     $path = parse_url($raw, PHP_URL_PATH);
@@ -734,10 +753,12 @@ function shopNirPremiumXlsxSafeCompanyStamp($url): ?array
     if (!str_starts_with($candidate, rtrim($base, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR)) return null;
     $size = filesize($candidate);
     if ($size === false || $size < 32 || $size > 6 * 1024 * 1024) return null;
+    $cacheKey = $candidate . '|' . (string)filemtime($candidate) . '|' . $size;
+    if (array_key_exists($cacheKey, $cache)) return $cache[$cacheKey];
     $bytes = file_get_contents($candidate);
-    if (!is_string($bytes)) return null;
+    if (!is_string($bytes)) return $cache[$cacheKey] = null;
     $bytes = shopNirPremiumXlsxPrepareCompanyStamp($bytes) ?? $bytes;
-    return shopNirPremiumXlsxNormaliseImage($bytes, 600, 300, true);
+    return $cache[$cacheKey] = shopNirPremiumXlsxNormaliseImage($bytes, 600, 300, true);
 }
 
 function shopNirPremiumXlsxPrepareCompanyStamp(string $bytes): ?string
@@ -1361,16 +1382,11 @@ function shopNirRenderStrictXlsx(array $document): string
     }
 
     $media = []; $mediaIndex = []; $pictures = [];
-    foreach ([__DIR__ . '/pdf-assets/logo.jpg', dirname(__DIR__) . '/assets/images/logo.png'] as $logoPath) {
-        if (!is_file($logoPath)) continue;
-        $bytes = file_get_contents($logoPath);
-        if (!is_string($bytes)) continue;
-        $image = shopNirPremiumXlsxNormaliseImage($bytes, 180, 180, true);
-        if ($image === null) continue;
+    $image = shopNirPremiumXlsxLogoImage();
+    if ($image !== null) {
         $mediaName = shopNirPremiumXlsxRegisterMedia($media, $mediaIndex, $image, 'gtrots-logo');
         $scale = min(72 / max(1, (int)$image['width']), 72 / max(1, (int)$image['height']));
         $pictures[] = ['media' => $mediaName, 'name' => 'Logo G-Trots', 'description' => 'Logo G-Trots', 'col' => 0, 'row' => 0, 'colOff' => 90000, 'rowOff' => 40000, 'cx' => (int)round((int)$image['width'] * $scale * 9525), 'cy' => (int)round((int)$image['height'] * $scale * 9525)];
-        break;
     }
     foreach ($lines as $index => $line) {
         if (!is_array($line)) continue;

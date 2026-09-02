@@ -393,7 +393,7 @@ function shopNirAttachPriceComparisons(PDO $db, array $lines, array $document): 
     return $lines;
 }
 
-function shopNirFetchDocument(PDO $db, string $id, array $user, bool $withDetails = true): array {
+function shopNirFetchDocument(PDO $db, string $id, array $user, bool $withDetails = true, bool $withPriceComparisons = true): array {
     $stmt = $db->prepare(
         'SELECT n.*, s.name AS supplier_name, s.cui AS supplier_cui, w.name AS warehouse_name,
                 original.supplier_invoice_series AS original_invoice_series,
@@ -453,7 +453,7 @@ function shopNirFetchDocument(PDO $db, string $id, array $user, bool $withDetail
         }
         unset($line);
     }
-    if ($canViewCosts) $result['lines'] = shopNirAttachPriceComparisons($db, $result['lines'], $document);
+    if ($canViewCosts && $withPriceComparisons) $result['lines'] = shopNirAttachPriceComparisons($db, $result['lines'], $document);
     $attachments = $db->prepare('SELECT id, original_name, mime_type, extension, file_size, sha256, extraction_status, extraction_message, created_at FROM shop_nir_attachments WHERE nir_document_id = ? ORDER BY created_at ASC');
     $attachments->execute([$id]);
     $result['attachments'] = $attachments->fetchAll();
@@ -2783,13 +2783,17 @@ function shopNirBuildPdfSummaryData(array $document): array {
 }
 
 function shopNirExportRows(PDO $db, string $id, array $user): array {
-    $document = shopNirFetchDocument($db, $id, $user);
+    // Comparațiile istorice sunt utile în editor, nu apar în PDF/XLSX și
+    // deveneau foarte costisitoare în exporturile cu multe documente.
+    $document = shopNirFetchDocument($db, $id, $user, true, false);
     if (!shopNirCan($user, 'NIR_VIEW_COSTS')) throw new ShopNirHttpException('Nu ai permisiunea de a exporta costurile NIR.', 403);
 
     foreach ($document['lines'] as &$line) unset($line['price_comparison']);
     unset($line);
 
-    $company = $db->query('SELECT * FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
+    static $companyCache = null;
+    if ($companyCache === null) $companyCache = $db->query('SELECT * FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
+    $company = $companyCache;
     $companyDefaults = [
         'legal_name' => 'CAB IT EXPERT SRL',
         'trade_name' => 'G-Trots România',
@@ -2803,17 +2807,27 @@ function shopNirExportRows(PDO $db, string $id, array $user): array {
         if (trim((string)($company[$field] ?? '')) === '') $company[$field] = $fallback;
     }
 
+    static $supplierCache = [];
+    static $warehouseCache = [];
     $supplier = [];
     if (trim((string)($document['supplier_id'] ?? '')) !== '') {
-        $supplierStmt = $db->prepare('SELECT * FROM shop_suppliers WHERE id = ? LIMIT 1');
-        $supplierStmt->execute([(string)$document['supplier_id']]);
-        $supplier = $supplierStmt->fetch() ?: [];
+        $supplierId = (string)$document['supplier_id'];
+        if (!array_key_exists($supplierId, $supplierCache)) {
+            $supplierStmt = $db->prepare('SELECT * FROM shop_suppliers WHERE id = ? LIMIT 1');
+            $supplierStmt->execute([$supplierId]);
+            $supplierCache[$supplierId] = $supplierStmt->fetch() ?: [];
+        }
+        $supplier = $supplierCache[$supplierId];
     }
     $warehouse = [];
     if (trim((string)($document['warehouse_id'] ?? '')) !== '') {
-        $warehouseStmt = $db->prepare('SELECT * FROM shop_warehouses WHERE id = ? LIMIT 1');
-        $warehouseStmt->execute([(string)$document['warehouse_id']]);
-        $warehouse = $warehouseStmt->fetch() ?: [];
+        $warehouseId = (string)$document['warehouse_id'];
+        if (!array_key_exists($warehouseId, $warehouseCache)) {
+            $warehouseStmt = $db->prepare('SELECT * FROM shop_warehouses WHERE id = ? LIMIT 1');
+            $warehouseStmt->execute([$warehouseId]);
+            $warehouseCache[$warehouseId] = $warehouseStmt->fetch() ?: [];
+        }
+        $warehouse = $warehouseCache[$warehouseId];
     }
 
     $template = shopNirPdfTemplate($document);
@@ -3029,6 +3043,20 @@ function shopNirExport(PDO $db, string $id, string $format, array $user): array 
     throw new InvalidArgumentException('Formatul de export nu este acceptat.');
 }
 
+function shopNirZipAddStoredString(ZipArchive $zip, string $name, string $bytes): bool {
+    if (!$zip->addFromString($name, $bytes)) return false;
+    // PDF, XLSX și imaginile sunt deja comprimate. Recompresia lor în ZIP
+    // consuma mult CPU fără o reducere relevantă a arhivei.
+    if (method_exists($zip, 'setCompressionName')) $zip->setCompressionName($name, ZipArchive::CM_STORE);
+    return true;
+}
+
+function shopNirZipAddStoredFile(ZipArchive $zip, string $path, string $name): bool {
+    if (!$zip->addFile($path, $name)) return false;
+    if (method_exists($zip, 'setCompressionName')) $zip->setCompressionName($name, ZipArchive::CM_STORE);
+    return true;
+}
+
 /**
  * Generate a disposable archive containing both NIR exports and every source
  * document. Nothing is persisted after the response is built.
@@ -3057,8 +3085,8 @@ function shopNirDownloadBundle(PDO $db, string $id, array $user): array {
 
     $closed = false;
     try {
-        if (!$zip->addFromString($pdfName, shopNirBuildPdf($document))) throw new RuntimeException('PDF-ul NIR nu a putut fi adăugat în arhivă.');
-        if (!$zip->addFromString($xlsxName, shopNirBuildXlsx($document))) throw new RuntimeException('Excelul NIR nu a putut fi adăugat în arhivă.');
+        if (!shopNirZipAddStoredString($zip, $pdfName, shopNirBuildPdf($document))) throw new RuntimeException('PDF-ul NIR nu a putut fi adăugat în arhivă.');
+        if (!shopNirZipAddStoredString($zip, $xlsxName, shopNirBuildXlsx($document))) throw new RuntimeException('Excelul NIR nu a putut fi adăugat în arhivă.');
         if (!$zip->addEmptyDir('documente')) throw new RuntimeException('Folderul documentelor nu a putut fi creat în arhivă.');
 
         $usedNames = [];
@@ -3075,7 +3103,7 @@ function shopNirDownloadBundle(PDO $db, string $id, array $user): array {
                 $candidate = $baseName . '-' . $suffix++ . ($extension !== '' ? '.' . $extension : '');
             }
             $usedNames[mb_strtolower($candidate)] = true;
-            if (!$zip->addFile(shopNirAttachmentStoredPath((string)$attachment['storage_name']), 'documente/' . $candidate)) {
+            if (!shopNirZipAddStoredFile($zip, shopNirAttachmentStoredPath((string)$attachment['storage_name']), 'documente/' . $candidate)) {
                 throw new RuntimeException('Un document aferent NIR-ului nu a putut fi adăugat în arhivă.');
             }
         }

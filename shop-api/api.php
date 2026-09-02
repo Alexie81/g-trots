@@ -676,6 +676,7 @@ function ensureShopSchema(PDO $db): void {
             UNIQUE INDEX uq_shop_nir_number (nir_number),
             UNIQUE INDEX uq_shop_nir_temporary_number (temporary_number),
             UNIQUE INDEX uq_shop_nir_confirmed_duplicate (duplicate_fingerprint),
+            INDEX idx_shop_nir_reception_date (reception_date, reception_time, id),
             INDEX idx_shop_nir_status_date (status, reception_date),
             INDEX idx_shop_nir_supplier_date (supplier_id, reception_date),
             INDEX idx_shop_nir_invoice (supplier_invoice_number, supplier_invoice_date),
@@ -734,6 +735,9 @@ function ensureShopSchema(PDO $db): void {
     );
     if (!$db->query("SHOW INDEX FROM shop_nir_documents WHERE Key_name = 'uq_shop_nir_temporary_number'")->fetch()) {
         $db->exec('ALTER TABLE shop_nir_documents ADD UNIQUE INDEX uq_shop_nir_temporary_number (temporary_number)');
+    }
+    if (!$db->query("SHOW INDEX FROM shop_nir_documents WHERE Key_name = 'idx_shop_nir_reception_date'")->fetch()) {
+        $db->exec('ALTER TABLE shop_nir_documents ADD INDEX idx_shop_nir_reception_date (reception_date, reception_time, id)');
     }
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_nir_lines (
@@ -4801,17 +4805,29 @@ try {
 
     if ($action === 'downloadNirBundle' && $method === 'GET') {
         shopNirRequire($currentUser, 'NIR_EXPORT');
+        @set_time_limit(0);
         jsonResponse(shopNirDownloadBundle($db, trim((string)($_GET['id'] ?? '')), $currentUser));
     }
 
     if ($action === 'downloadNirRegistryBundle' && $method === 'GET') {
         shopNirRequire($currentUser, 'NIR_EXPORT');
+        @set_time_limit(0);
         jsonResponse(shopNirDownloadRegistryBundle(
             $db,
             trim((string)($_GET['from'] ?? '')),
             trim((string)($_GET['to'] ?? '')),
             ((int)($_GET['include_documents'] ?? 0)) === 1,
             $currentUser
+        ));
+    }
+
+    if ($action === 'getNirExportEstimate' && $method === 'GET') {
+        shopNirRequire($currentUser, 'NIR_EXPORT');
+        jsonResponse(shopNirExportEstimate(
+            $db,
+            trim((string)($_GET['from'] ?? '')),
+            trim((string)($_GET['to'] ?? '')),
+            ((int)($_GET['include_documents'] ?? 0)) === 1
         ));
     }
 

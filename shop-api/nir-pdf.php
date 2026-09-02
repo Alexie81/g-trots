@@ -124,6 +124,9 @@ function shopNirPdfOriginalInvoiceTrace(array $relationship): string {
 }
 
 function shopNirPdfLogoDataUri(): ?string {
+    static $cached = false;
+    static $cachedValue = null;
+    if ($cached) return $cachedValue;
     $candidates = [
         [__DIR__ . '/pdf-assets/logo.jpg', 'image/jpeg', false],
         [dirname(__DIR__) . '/assets/images/logo.png', 'image/png', true],
@@ -135,13 +138,18 @@ function shopNirPdfLogoDataUri(): ?string {
         if ($needsGd && !extension_loaded('gd')) continue;
         if (!is_file($path) || !is_readable($path)) continue;
         $bytes = file_get_contents($path);
-        if ($bytes !== false && $bytes !== '') return 'data:' . $mime . ';base64,' . base64_encode($bytes);
+        if ($bytes !== false && $bytes !== '') {
+            $cached = true;
+            return $cachedValue = 'data:' . $mime . ';base64,' . base64_encode($bytes);
+        }
     }
-    return null;
+    $cached = true;
+    return $cachedValue = null;
 }
 
 /** Resolve only product images stored by this API and embed them in the PDF. */
 function shopNirPdfProductImageDataUri(array $line): ?string {
+    static $cache = [];
     $raw = trim((string)($line['product_image_storage_path'] ?? $line['product_image_url'] ?? ''));
     if ($raw === '' || str_contains($raw, "\0")) return null;
     $path = parse_url($raw, PHP_URL_PATH);
@@ -160,15 +168,59 @@ function shopNirPdfProductImageDataUri(array $line): ?string {
     if (!str_starts_with($candidate, $prefix)) return null;
     $size = filesize($candidate);
     if ($size === false || $size < 32 || $size > 6 * 1024 * 1024) return null;
+    $cacheKey = $candidate . '|' . (string)filemtime($candidate) . '|' . $size;
+    if (array_key_exists($cacheKey, $cache)) return $cache[$cacheKey];
     $info = @getimagesize($candidate);
     $mime = strtolower((string)($info['mime'] ?? ''));
-    if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) return null;
+    if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) return $cache[$cacheKey] = null;
     $bytes = file_get_contents($candidate);
-    return is_string($bytes) && $bytes !== '' ? 'data:' . $mime . ';base64,' . base64_encode($bytes) : null;
+    if (!is_string($bytes) || $bytes === '') return $cache[$cacheKey] = null;
+
+    // Dompdf plătea costul decodării imaginii originale pentru fiecare rând și
+    // fiecare document. În PDF miniatura are numai 34px, deci păstrăm suficientă
+    // rezoluție pentru print, fără a introduce fotografii de mai mulți MB.
+    $width = (int)($info[0] ?? 0);
+    $height = (int)($info[1] ?? 0);
+    if ($width > 180 || $height > 180) {
+        $source = function_exists('imagecreatefromstring') ? @imagecreatefromstring($bytes) : false;
+        if ($source !== false) {
+            $scale = min(180 / max(1, $width), 180 / max(1, $height));
+            $targetWidth = max(1, (int)round($width * $scale));
+            $targetHeight = max(1, (int)round($height * $scale));
+            $canvas = imagecreatetruecolor($targetWidth, $targetHeight);
+            if ($mime === 'image/jpeg') {
+                $white = imagecolorallocate($canvas, 255, 255, 255);
+                imagefilledrectangle($canvas, 0, 0, $targetWidth, $targetHeight, $white);
+            } else {
+                imagealphablending($canvas, false);
+                imagesavealpha($canvas, true);
+                $transparent = imagecolorallocatealpha($canvas, 255, 255, 255, 127);
+                imagefilledrectangle($canvas, 0, 0, $targetWidth, $targetHeight, $transparent);
+            }
+            imagecopyresampled($canvas, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height);
+            ob_start();
+            if ($mime === 'image/jpeg' && function_exists('imagejpeg')) {
+                imagejpeg($canvas, null, 82);
+                $outputMime = 'image/jpeg';
+            } else {
+                imagepng($canvas, null, 7);
+                $outputMime = 'image/png';
+            }
+            $resized = ob_get_clean();
+            imagedestroy($canvas);
+            imagedestroy($source);
+            if (is_string($resized) && strlen($resized) > 20) {
+                $bytes = $resized;
+                $mime = $outputMime;
+            }
+        }
+    }
+    return $cache[$cacheKey] = 'data:' . $mime . ';base64,' . base64_encode($bytes);
 }
 
 /** Resolve only the company stamp stored by this API. */
 function shopNirPdfCompanyStampDataUri(array $company): ?string {
+    static $cache = [];
     $raw = trim((string)($company['stamp_path'] ?? ''));
     if ($raw === '' || str_contains($raw, "\0")) return null;
     $path = parse_url($raw, PHP_URL_PATH);
@@ -185,13 +237,15 @@ function shopNirPdfCompanyStampDataUri(array $company): ?string {
     if (!str_starts_with($candidate, rtrim($base, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR)) return null;
     $size = filesize($candidate);
     if ($size === false || $size < 32 || $size > 6 * 1024 * 1024) return null;
+    $cacheKey = $candidate . '|' . (string)filemtime($candidate) . '|' . $size;
+    if (array_key_exists($cacheKey, $cache)) return $cache[$cacheKey];
     $info = @getimagesize($candidate);
     $mime = strtolower((string)($info['mime'] ?? ''));
-    if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) return null;
+    if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) return $cache[$cacheKey] = null;
     $bytes = file_get_contents($candidate);
-    if (!is_string($bytes) || $bytes === '') return null;
+    if (!is_string($bytes) || $bytes === '') return $cache[$cacheKey] = null;
     $trimmed = shopNirPdfPrepareCompanyStamp($bytes);
-    return $trimmed !== null
+    return $cache[$cacheKey] = $trimmed !== null
         ? 'data:image/png;base64,' . base64_encode($trimmed)
         : 'data:' . $mime . ';base64,' . base64_encode($bytes);
 }

@@ -26,22 +26,77 @@ function shopNirRegistryRows(PDO $db, string $from, string $to): array
                 CASE WHEN n.reversal_of_id IS NOT NULL OR n.source_type = "reversal" THEN "STORNAT" WHEN n.status = "confirmed" THEN "CONFIRMAT" ELSE "CIORNĂ" END AS status_label,
                 s.name AS supplier_name, s.cui AS supplier_cui, w.name AS warehouse_name,
                 COALESCE(original.nir_number, original.temporary_number) AS original_document_number,
-                (SELECT COUNT(*) FROM shop_nir_lines l WHERE l.nir_document_id = n.id) AS line_count,
-                (SELECT COALESCE(SUM(l.invoiced_quantity), 0) FROM shop_nir_lines l WHERE l.nir_document_id = n.id) AS invoiced_quantity,
-                (SELECT COALESCE(SUM(l.received_quantity), 0) FROM shop_nir_lines l WHERE l.nir_document_id = n.id) AS received_quantity,
-                (SELECT COALESCE(SUM(l.accepted_quantity), 0) FROM shop_nir_lines l WHERE l.nir_document_id = n.id) AS accepted_quantity,
-                (SELECT COALESCE(SUM(l.rejected_quantity), 0) FROM shop_nir_lines l WHERE l.nir_document_id = n.id) AS rejected_quantity,
-                (SELECT COALESCE(SUM(l.accepted_quantity - l.invoiced_quantity), 0) FROM shop_nir_lines l WHERE l.nir_document_id = n.id) AS quantity_difference,
-                (SELECT COUNT(*) FROM shop_nir_attachments a WHERE a.nir_document_id = n.id) AS attachment_count
+                COALESCE(line_totals.line_count, 0) AS line_count,
+                COALESCE(line_totals.invoiced_quantity, 0) AS invoiced_quantity,
+                COALESCE(line_totals.received_quantity, 0) AS received_quantity,
+                COALESCE(line_totals.accepted_quantity, 0) AS accepted_quantity,
+                COALESCE(line_totals.rejected_quantity, 0) AS rejected_quantity,
+                COALESCE(line_totals.quantity_difference, 0) AS quantity_difference,
+                COALESCE(attachment_totals.attachment_count, 0) AS attachment_count
          FROM shop_nir_documents n
          LEFT JOIN shop_suppliers s ON s.id = n.supplier_id
          LEFT JOIN shop_warehouses w ON w.id = n.warehouse_id
          LEFT JOIN shop_nir_documents original ON original.id = n.reversal_of_id
+         LEFT JOIN (
+             SELECT nir_document_id, COUNT(*) AS line_count,
+                    SUM(invoiced_quantity) AS invoiced_quantity,
+                    SUM(received_quantity) AS received_quantity,
+                    SUM(accepted_quantity) AS accepted_quantity,
+                    SUM(rejected_quantity) AS rejected_quantity,
+                    SUM(accepted_quantity - invoiced_quantity) AS quantity_difference
+             FROM shop_nir_lines l_scope
+             INNER JOIN shop_nir_documents n_scope ON n_scope.id = l_scope.nir_document_id
+             WHERE n_scope.reception_date BETWEEN ? AND ?
+             GROUP BY nir_document_id
+         ) line_totals ON line_totals.nir_document_id = n.id
+         LEFT JOIN (
+             SELECT nir_document_id, COUNT(*) AS attachment_count
+             FROM shop_nir_attachments a_scope
+             INNER JOIN shop_nir_documents n_scope ON n_scope.id = a_scope.nir_document_id
+             WHERE n_scope.reception_date BETWEEN ? AND ?
+             GROUP BY nir_document_id
+         ) attachment_totals ON attachment_totals.nir_document_id = n.id
          WHERE n.reception_date BETWEEN ? AND ?
          ORDER BY n.reception_date, n.reception_time, n.created_at, n.id'
     );
-    $stmt->execute([$from, $to]);
+    $stmt->execute([$from, $to, $from, $to, $from, $to]);
     return $stmt->fetchAll();
+}
+
+function shopNirExportEstimate(PDO $db, string $from, string $to, bool $includeDocuments): array
+{
+    [$from, $to] = shopNirRegistryDateRange($db, $from, $to);
+    $documentStmt = $db->prepare('SELECT COUNT(*) FROM shop_nir_documents WHERE reception_date BETWEEN ? AND ?');
+    $documentStmt->execute([$from, $to]);
+    $documentCount = (int)$documentStmt->fetchColumn();
+
+    $lineStmt = $db->prepare('SELECT COUNT(*) FROM shop_nir_lines l INNER JOIN shop_nir_documents n ON n.id = l.nir_document_id WHERE n.reception_date BETWEEN ? AND ?');
+    $lineStmt->execute([$from, $to]);
+    $lineCount = (int)$lineStmt->fetchColumn();
+
+    $attachmentStmt = $db->prepare('SELECT COUNT(*) AS attachment_count, COALESCE(SUM(a.file_size), 0) AS attachment_bytes FROM shop_nir_attachments a INNER JOIN shop_nir_documents n ON n.id = a.nir_document_id WHERE n.reception_date BETWEEN ? AND ?');
+    $attachmentStmt->execute([$from, $to]);
+    $attachment = $attachmentStmt->fetch() ?: [];
+    $attachmentCount = (int)($attachment['attachment_count'] ?? 0);
+    $attachmentBytes = (int)($attachment['attachment_bytes'] ?? 0);
+
+    // Estimare conservatoare, actualizată în interfață pe baza timpului scurs.
+    // Registrul este mult mai ieftin decât generarea a două documente per NIR.
+    $estimatedSeconds = $includeDocuments
+        ? 1.2 + $documentCount * 0.34 + $lineCount * 0.018 + $attachmentCount * 0.025 + $attachmentBytes / (18 * 1024 * 1024)
+        : 0.7 + $documentCount * 0.00012 + $lineCount * 0.00002;
+    $estimatedSeconds = max(1, (int)ceil($estimatedSeconds));
+
+    return [
+        'from' => $from,
+        'to' => $to,
+        'document_count' => $documentCount,
+        'line_count' => $lineCount,
+        'attachment_count' => $attachmentCount,
+        'attachment_bytes' => $attachmentBytes,
+        'estimated_seconds' => $estimatedSeconds,
+        'bundle_type' => $includeDocuments ? 'complete' : 'registry',
+    ];
 }
 
 function shopNirRegistryColumns(): array
@@ -178,16 +233,11 @@ function shopNirBuildRegistryXlsx(array $documents, string $from, string $to, ar
     $media = [];
     $mediaIndex = [];
     $pictures = [];
-    foreach ([__DIR__ . '/pdf-assets/logo.jpg', dirname(__DIR__) . '/assets/images/logo.png'] as $logoPath) {
-        if (!is_file($logoPath)) continue;
-        $logoBytes = file_get_contents($logoPath);
-        if (!is_string($logoBytes)) continue;
-        $logoImage = shopNirPremiumXlsxNormaliseImage($logoBytes, 180, 180, true);
-        if ($logoImage === null) continue;
+    $logoImage = shopNirPremiumXlsxLogoImage();
+    if ($logoImage !== null) {
         $logoMedia = shopNirPremiumXlsxRegisterMedia($media, $mediaIndex, $logoImage, 'gtrots-logo');
         $logoScale = min(72 / max(1, (int)$logoImage['width']), 72 / max(1, (int)$logoImage['height']));
         $pictures[] = ['media' => $logoMedia, 'name' => 'Logo G-Trots', 'description' => 'Identitatea vizuală G-Trots', 'col' => 0, 'row' => 0, 'colOff' => 90000, 'rowOff' => 45000, 'cx' => (int)round((int)$logoImage['width'] * $logoScale * 9525), 'cy' => (int)round((int)$logoImage['height'] * $logoScale * 9525)];
-        break;
     }
     $sheet = shopNirPremiumXlsxSheet($rows, $widths, $lastRow, $lastColumn, [
         'merges' => ['A1:B3', 'C1:' . $lastColumnLetter . '1', 'C2:' . $lastColumnLetter . '2', 'C3:' . $lastColumnLetter . '3', 'A4:H4', 'I4:P4', 'Q4:X4', 'Y4:AF4', 'AG4:' . $lastColumnLetter . '4'],
@@ -249,7 +299,7 @@ function shopNirBundleAddAttachments(ZipArchive $zip, PDO $db, string $documentI
         $suffix = 2;
         while (isset($usedNames[mb_strtolower($candidate)])) $candidate = $base . '-' . $suffix++ . ($extension !== '' ? '.' . $extension : '');
         $usedNames[mb_strtolower($candidate)] = true;
-        if (!$zip->addFile(shopNirAttachmentStoredPath((string)$attachment['storage_name']), $folder . 'documente/' . $candidate)) {
+        if (!shopNirZipAddStoredFile($zip, shopNirAttachmentStoredPath((string)$attachment['storage_name']), $folder . 'documente/' . $candidate)) {
             throw new RuntimeException('Un document aferent NIR-ului nu a putut fi adăugat în arhivă.');
         }
     }
@@ -275,15 +325,15 @@ function shopNirDownloadRegistryBundle(PDO $db, string $from, string $to, bool $
     }
     $closed = false;
     try {
-        if (!$zip->addFromString($registryName, $registryBytes)) throw new RuntimeException('Registrul Excel nu a putut fi adăugat în arhivă.');
+        if (!shopNirZipAddStoredString($zip, $registryName, $registryBytes)) throw new RuntimeException('Registrul Excel nu a putut fi adăugat în arhivă.');
         foreach ($documents as $row) {
             $document = shopNirExportRows($db, (string)$row['id'], $user);
             $safeNumber = shopNirBundleSafeName((string)($document['nir_number'] ?? $document['temporary_number'] ?? 'NIR'));
             $folder = $safeNumber . '/';
             $zip->addEmptyDir($safeNumber);
             $zip->addEmptyDir($safeNumber . '/documente');
-            if (!$zip->addFromString($folder . $safeNumber . '.pdf', shopNirBuildPdf($document))) throw new RuntimeException('Un PDF NIR nu a putut fi adăugat în arhivă.');
-            if (!$zip->addFromString($folder . shopNirXlsxFileName($document), shopNirBuildXlsx($document))) throw new RuntimeException('Un Excel NIR nu a putut fi adăugat în arhivă.');
+            if (!shopNirZipAddStoredString($zip, $folder . $safeNumber . '.pdf', shopNirBuildPdf($document))) throw new RuntimeException('Un PDF NIR nu a putut fi adăugat în arhivă.');
+            if (!shopNirZipAddStoredString($zip, $folder . shopNirXlsxFileName($document), shopNirBuildXlsx($document))) throw new RuntimeException('Un Excel NIR nu a putut fi adăugat în arhivă.');
             shopNirBundleAddAttachments($zip, $db, (string)$row['id'], $folder);
         }
         if (!$zip->close()) throw new RuntimeException('Arhiva registrului nu a putut fi finalizată.');

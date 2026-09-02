@@ -10,7 +10,16 @@ import ssl
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 API_ROOT = PROJECT_ROOT / "shop-api"
 REMOTE_ROOT = "/g-trots.ro/shop-api"
-FILES = ("api.php", "nir-service.php")
+FILES = (
+    "api.php",
+    "api-v2.php",
+    "invoice-theme.php",
+    "nir-domain.php",
+    "nir-service.php",
+    "nir-bundle.php",
+    "nir-pdf.php",
+    "nir-xlsx.php",
+)
 
 
 def connect() -> FTP_TLS:

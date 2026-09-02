@@ -5,6 +5,7 @@
   const SHOP_DEVICE_KEY = "g-trots-shop-device-v1";
   const page = document.body.dataset.customerPage || "";
   const state = { customer: null, orders: [], addresses: [], coupons: [] };
+  let googleScriptPromise = null;
   const statusMeta = {
     new: ["În procesare", "Am primit comanda și o verificăm."],
     confirmed: ["Confirmată", "Comanda și plata au fost confirmate."],
@@ -144,28 +145,51 @@
     return `<button class="google-auth-button${retry ? " is-retry" : ""}" type="button"${retry ? " data-google-retry" : ""}>${googleLogo}<span>${text}</span><i aria-hidden="true">&gt;</i></button>`;
   }
 
+  function ensureGoogleScript() {
+    if (window.google?.accounts?.id) return Promise.resolve();
+    if (googleScriptPromise) return googleScriptPromise;
+    googleScriptPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      script.onload = () => window.google?.accounts?.id ? resolve() : reject(new Error("Google Identity Services nu este disponibil."));
+      script.onerror = () => reject(new Error("Scriptul Google nu a putut fi încărcat."));
+      document.head.append(script);
+    }).catch(error => {
+      googleScriptPromise = null;
+      throw error;
+    });
+    return googleScriptPromise;
+  }
+
   async function initializeGoogle() {
     const host = document.querySelector("[data-google-auth]");
     if (!host) return;
+    const label = page === "register" ? "Creează cont cu Google" : "Continuă cu Google";
+    if (!host.querySelector(".google-auth-button")) host.innerHTML = googleSurface(label);
+    host.setAttribute("aria-busy", "true");
     try {
-      const config = await api("customerAuthConfig", { auth: false });
+      const [config] = await Promise.all([
+        api("customerAuthConfig", { auth: false }),
+        ensureGoogleScript()
+      ]);
       if (!config.google_client_id) {
         host.innerHTML = `${googleSurface("Continuă cu Google", true)}<p class="google-auth-note">Reîncearcă autentificarea securizată cu Google.</p>`;
+        host.removeAttribute("aria-busy");
         host.querySelector("[data-google-retry]")?.addEventListener("click", initializeGoogle, { once: true });
         return;
       }
-      await new Promise((resolve, reject) => {
-        if (window.google?.accounts?.id) return resolve();
-        const script = document.createElement("script"); script.src = "https://accounts.google.com/gsi/client"; script.async = true; script.defer = true; script.onload = resolve; script.onerror = reject; document.head.append(script);
-      });
-      host.innerHTML = `<div class="google-auth-ready">${googleSurface(page === "register" ? "Creează cont cu Google" : "Continuă cu Google")}<div data-google-official aria-label="Continuă cu Google"></div></div>`;
+      host.innerHTML = `<div class="google-auth-ready">${googleSurface(label)}<div data-google-official aria-label="${label}"></div></div>`;
       window.google.accounts.id.initialize({ client_id: config.google_client_id, callback: async response => {
         try { const session = await api("customerGoogleLogin", { method: "POST", body: { credential: response.credential }, auth: false }); saveSession(session); redirectAfterAuth(); }
         catch (error) { setMessage(document, error.message); }
       }});
       window.google.accounts.id.renderButton(host.querySelector("[data-google-official]"), { theme: "outline", size: "large", shape: "pill", width: Math.max(240, host.clientWidth || 420), text: page === "register" ? "signup_with" : "signin_with", locale: "ro", logo_alignment: "left" });
+      host.removeAttribute("aria-busy");
     } catch (error) {
       host.innerHTML = `${googleSurface("Reîncearcă Google", true)}<p class="google-auth-note">Conexiunea nu a răspuns. Apasă pentru a reîncerca.</p>`;
+      host.removeAttribute("aria-busy");
       host.querySelector("[data-google-retry]")?.addEventListener("click", initializeGoogle, { once: true });
     }
   }

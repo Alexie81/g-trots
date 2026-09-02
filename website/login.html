@@ -10,10 +10,12 @@
   <link rel="icon" href="assets/logo.png" type="image/png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://accounts.google.com">
+  <link rel="preconnect" href="https://accounts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=20260827-shop-call">
   <link rel="stylesheet" href="favorites.css?v=20260828-line-promotions-v1">
-  <link rel="stylesheet" href="cont.css?v=20260828-account-settings-v1">
+  <link rel="stylesheet" href="cont.css?v=20260902-google-fast-v1">
 </head>
 <body class="customer-auth-page" data-customer-page="login">
   <header class="site-header"><div class="header-inner"><a class="logo" href="/" aria-label="G-Trots"><img src="assets/logo.png" alt=""><b><span>G</span>-Trots</b></a><nav class="main-nav"></nav><button class="menu-toggle" type="button" aria-label="Deschide meniul" aria-expanded="false"><span></span><span></span></button></div></header>
@@ -25,7 +27,7 @@
     <section class="auth-form-panel">
       <div class="auth-mobile-brand"><img src="assets/logo.png" alt=""><span><b>G-Trots</b><small>Service & magazin</small></span></div>
       <div class="auth-heading"><span>Bine ai revenit</span><h2>Intră în cont</h2><p>Continuă de unde ai rămas.</p></div>
-      <div data-google-auth></div>
+      <div data-google-auth aria-busy="true"><button class="google-auth-button is-loading" type="button" aria-disabled="true" tabindex="-1"><svg class="google-auth-logo" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.91h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.24c1.9-1.75 2.98-4.33 2.98-7.4Z"/><path fill="#34A853" d="M12 22c2.7 0 4.97-.9 6.62-2.37l-3.24-2.54c-.9.6-2.05.96-3.38.96-2.6 0-4.81-1.76-5.6-4.13H3.06v2.62A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.4 13.92A6 6 0 0 1 6.08 12c0-.67.12-1.32.32-1.92V7.46H3.06A10 10 0 0 0 2 12c0 1.61.38 3.14 1.06 4.54l3.34-2.62Z"/><path fill="#EA4335" d="M12 5.95c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.63 9.63 0 0 0 12 2a10 10 0 0 0-8.94 5.46l3.34 2.62C7.19 7.7 9.4 5.95 12 5.95Z"/></svg><span>Continuă cu Google</span><i aria-hidden="true">&gt;</i></button></div>
       <div class="auth-divider"><span>sau cu e-mail</span></div>
       <form class="customer-form" data-login-form novalidate>
         <label><span>E-mail <b>*</b></span><div class="auth-input"><i data-icon="mail" aria-hidden="true"></i><input name="email" type="email" autocomplete="email" placeholder="nume@exemplu.ro" required></div></label>
@@ -39,6 +41,6 @@
     </section>
   </main>
   <script src="favorites.js?v=20260828-usage-limits-v1" defer></script>
-  <script src="cont.js?v=20260828-account-settings-v4" defer></script>
+  <script src="cont.js?v=20260902-google-fast-v1" defer></script>
 </body>
 </html>

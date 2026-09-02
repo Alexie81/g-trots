@@ -12,6 +12,13 @@
   const PRODUCT_SALES_PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25, 50, 75, 100];
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
+  const supplierDisplayName = (source, fallback = 'Furnizor') => {
+    for (const value of [source?.supplier_alias, source?.alias, source?.supplier_display_name, source?.display_name, source?.supplier_name, source?.name]) {
+      const label = String(value ?? '').trim();
+      if (label) return label;
+    }
+    return fallback;
+  };
   const money = value => `${new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0))} lei`;
   const quantity = value => new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 0, maximumFractionDigits: 4 }).format(Number(value || 0));
   const slugify = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 200);
@@ -186,7 +193,7 @@
   function supplierModal() {
     return `<div class="shop-commerce-overlay" id="shop-supplier-modal" hidden><form class="shop-commerce-modal shop-supplier-modal" id="shop-supplier-form"><header><div><small>ACHIZITII / FURNIZORI</small><h2 id="shop-supplier-title">Furnizor nou</h2></div><button type="button" data-commerce-close="shop-supplier-modal">×</button></header><div class="shop-commerce-modal-scroll">
       ${section('01', 'Identitate', 'Datele firmei care livreaza produsele sau serviciile.')}
-      <label>Nume furnizor *<input id="shop-supplier-name" required maxlength="180" placeholder="Ex: Distribuitor piese SRL" /></label><div class="shop-commerce-columns"><label>CUI / CIF<input id="shop-supplier-cui" maxlength="60" placeholder="RO12345678" /></label><label>Registrul comertului (J)<input id="shop-supplier-registration" maxlength="80" placeholder="J40/1234/2026" /></label></div>
+      <div class="shop-commerce-columns"><label>Alias afisat *<input id="shop-supplier-alias" required maxlength="180" placeholder="Ex: Distribuitorul meu" /></label><label>Denumire juridica *<input id="shop-supplier-name" required maxlength="180" placeholder="Ex: Distribuitor piese SRL" /></label></div><div class="shop-commerce-columns"><label>CUI / CIF<input id="shop-supplier-cui" maxlength="60" placeholder="RO12345678" /></label><label>Registrul comertului (J)<input id="shop-supplier-registration" maxlength="80" placeholder="J40/1234/2026" /></label></div>
       ${section('02', 'Persoana de contact', 'Datele folosite pentru comenzi si comunicare directa.')}
       <label>Persoana de contact<input id="shop-supplier-contact" maxlength="180" placeholder="Nume si prenume" /></label><div class="shop-commerce-columns"><label>Telefon<input id="shop-supplier-phone" maxlength="50" placeholder="07..." /></label><label>E-mail<input id="shop-supplier-email" type="email" maxlength="180" placeholder="contact@firma.ro" /></label></div>
       <div class="shop-commerce-columns"><label>Website<input id="shop-supplier-website" maxlength="255" placeholder="https://firma.ro" /></label><label>Adresa<input id="shop-supplier-address" maxlength="255" placeholder="Strada, numar, localitate" /></label></div>
@@ -1002,7 +1009,7 @@
     });
     const purchasedSuppliers = new Map();
     (detail.purchase_history?.items || []).forEach(purchase => {
-      const supplierName = String(purchase.supplier_name || '').trim() || 'Furnizor';
+      const supplierName = supplierDisplayName(purchase, 'Furnizor');
       const key = purchase.supplier_id || supplierName.toLocaleLowerCase('ro-RO');
       addSupplierAlias(key, 'code', purchase.supplier_code);
       addSupplierAlias(key, 'name', purchase.supplier_product_name);
@@ -1017,9 +1024,9 @@
       const invoiceNames = (reference.aliases || []).filter(alias => alias.type === 'name').map(alias => alias.value);
       const supplierCodes = (reference.aliases || []).filter(alias => alias.type === 'code').map(alias => alias.value);
       const aliasSummary = [`Pe factura: ${invoiceNames.join(', ')}`, `Cod: ${supplierCodes.join(', ')}`].filter(part => !part.endsWith(': ')).join(' · ');
-      return `<article class="shop-detail-supplier-ref supplier-only ${reference.is_active === false ? 'inactive' : ''}"><span class="shop-detail-ref-icon">${supplierIconSvg('building')}</span><div><span class="shop-detail-ref-head"><strong>${esc(reference.supplier_name || 'Furnizor')}</strong><b>CUMPARAT PRIN NIR</b></span><span class="shop-detail-ref-data"><small>${reference.purchase_count ? `${reference.purchase_count} ${reference.purchase_count === 1 ? 'receptie confirmata' : 'receptii confirmate'}` : 'Furnizor asociat produsului'}</small></span>${aliasSummary ? `<small class="shop-detail-ref-aliases">${esc(aliasSummary)}</small>` : ''}<em>${reference.last_confirmed_price_ron ? `Ultimul cost cu TVA ${money(reference.last_confirmed_price_ron)}${reference.last_confirmed_at ? ` · ${esc(reference.last_confirmed_at)}` : ''}` : 'Fara cost confirmat'}</em></div></article>`;
+      return `<article class="shop-detail-supplier-ref supplier-only ${reference.is_active === false ? 'inactive' : ''}"><span class="shop-detail-ref-icon">${supplierIconSvg('building')}</span><div><span class="shop-detail-ref-head"><strong>${esc(supplierDisplayName(reference, 'Furnizor'))}</strong><b>CUMPARAT PRIN NIR</b></span><span class="shop-detail-ref-data"><small>${reference.purchase_count ? `${reference.purchase_count} ${reference.purchase_count === 1 ? 'receptie confirmata' : 'receptii confirmate'}` : 'Furnizor asociat produsului'}</small></span>${aliasSummary ? `<small class="shop-detail-ref-aliases">${esc(aliasSummary)}</small>` : ''}<em>${reference.last_confirmed_price_ron ? `Ultimul cost cu TVA ${money(reference.last_confirmed_price_ron)}${reference.last_confirmed_at ? ` · ${esc(reference.last_confirmed_at)}` : ''}` : 'Fara cost confirmat'}</em></div></article>`;
     }).join('') || '<p class="shop-detail-empty">Produsul nu are furnizori in istoricul NIR.</p>';
-    const history = purchasesPage.items.map(item => `<tr><td><strong>${esc(item.nir_number)}</strong><small>${esc(item.reception_date)}</small></td><td>${esc(item.supplier_name || '—')}</td><td>${esc(item.supplier_code || '—')}</td><td>${esc(item.stock_quantity)}</td><td><strong>${money(item.gross_unit_cost_ron || 0)}</strong><small>TVA inclus / unitate</small></td></tr>`).join('') || '<tr><td colspan="5">Nu exista achizitii confirmate.</td></tr>';
+    const history = purchasesPage.items.map(item => `<tr><td><strong>${esc(item.nir_number)}</strong><small>${esc(item.reception_date)}</small></td><td>${esc(supplierDisplayName(item, '—'))}</td><td>${esc(item.supplier_code || '—')}</td><td>${esc(item.stock_quantity)}</td><td><strong>${money(item.gross_unit_cost_ron || 0)}</strong><small>TVA inclus / unitate</small></td></tr>`).join('') || '<tr><td colspan="5">Nu exista achizitii confirmate.</td></tr>';
     $('shop-product-detail-content').innerHTML = `<div class="shop-detail-gallery">${gallery}</div><div class="shop-detail-metrics compact">${detailMetric('Total vânzări', money(detail.revenue))}${detailMetric('Preț vânzare mediu', money(averageSalePrice))}${detailMetric('Cost achiziție mediu · TVA inclus', averageAcquisitionPrice > 0 ? money(averageAcquisitionPrice) : '—')}${detailMetric('Profit mediu', money(averageProfit), true)}${detailMetric('Bucăți vândute', soldUnits)}${detailMetric('Vizualizări pe site', product.view_count)}${detailMetric('Număr recenzii', detail.reviews.length)}${detailMetric('Media recenziilor', reviewAverage ? `${reviewAverage.toFixed(1)} ★` : '—')}</div><div id="shop-product-sales-section">${section('01', 'Comenzi si vanzari', 'Istoricul comenzilor care contin acest produs.')}<div class="shop-commerce-table-wrap"><table class="shop-commerce-table shop-product-sales-table"><thead><tr><th>Numar comanda</th><th>Cantitate</th><th>Pret achizitie</th><th>Pret vanzare</th><th>Profit</th><th>Status</th></tr></thead><tbody>${orders || '<tr><td colspan="6">Produsul nu apare in nicio comanda.</td></tr>'}</tbody></table></div>${salesPagination}</div><div id="shop-product-reviews-section">${section('02', 'Recenzii', 'Raspunde clientilor sau sterge recenziile direct de aici.')}<div class="shop-detail-reviews">${reviews}</div>${reviewsPagination}</div>${section('03', 'Furnizori', 'Firmele de la care a fost sau poate fi cumparat acest produs.')}<div class="shop-detail-supplier-refs">${references}</div><div id="shop-product-purchases-section">${section('04', 'Istoric costuri de achizitie', 'Fiecare recepție confirmată arată costul unitar total cu TVA inclus.')}<div class="shop-commerce-table-wrap"><table class="shop-commerce-table"><thead><tr><th>NIR</th><th>Furnizor</th><th>Cod</th><th>Cantitate</th><th>Cost total / unitate</th></tr></thead><tbody>${history}</tbody></table></div>${purchasesPagination}</div>`;
     $('shop-product-detail-content').querySelectorAll('[data-ref-primary],[data-ref-active]').forEach(button => button.addEventListener('click', async () => {
       const id = button.dataset.refPrimary || button.dataset.refActive;
@@ -1508,7 +1515,7 @@
     const cards = state.suppliers.map((supplier, index) => `<article class="shop-supplier-card ${supplier.is_active ? '' : 'is-inactive'}" style="--supplier-index:${index}">
       <span class="shop-supplier-avatar"><i></i>${supplierIconSvg('building')}</span>
       <div class="shop-supplier-card-content">
-        <div class="shop-supplier-heading"><span class="shop-supplier-name"><small>${[supplier.cui ? `CUI ${esc(supplier.cui)}` : '', supplier.registration_number ? `RC ${esc(supplier.registration_number)}` : ''].filter(Boolean).join(' · ') || 'DATE FISCALE NEADĂUGATE'}</small><strong>${esc(supplier.name)}</strong><em>${supplierIconSvg('user')}${esc(supplier.contact_person || 'Persoana de contact necompletata')}</em></span><span class="shop-supplier-status ${supplier.is_active ? 'active' : 'inactive'}"><i></i>${supplier.is_active ? 'Activ' : 'Inactiv'}</span></div>
+        <div class="shop-supplier-heading"><span class="shop-supplier-name"><small>${esc(`DENUMIRE JURIDICA: ${supplier.name}`)}${supplier.cui ? ` · CUI ${esc(supplier.cui)}` : ''}${supplier.registration_number ? ` · RC ${esc(supplier.registration_number)}` : ''}</small><strong>${esc(supplierDisplayName(supplier))}</strong><em>${supplierIconSvg('user')}${esc(supplier.contact_person || 'Persoana de contact necompletata')}</em></span><span class="shop-supplier-status ${supplier.is_active ? 'active' : 'inactive'}"><i></i>${supplier.is_active ? 'Activ' : 'Inactiv'}</span></div>
         <div class="shop-supplier-contacts">${supplierContactItem('phone', 'Telefon', supplier.phone)}${supplierContactItem('mail', 'E-mail', supplier.email)}${supplierContactItem('location', 'Adresa', supplier.address)}${supplierContactItem('web', 'Website', String(supplier.website || '').replace(/^https?:\/\//i, ''))}${!supplier.phone && !supplier.email && !supplier.address && !supplier.website ? `<button type="button" class="shop-supplier-no-contact" data-supplier-edit="${esc(supplier.id)}">${supplierIconSvg('plus')}<span><strong>Completeaza datele de contact</strong><small>Telefon, e-mail, adresa sau website</small></span></button>` : ''}</div>
         ${supplier.notes ? `<p class="shop-supplier-notes">${esc(supplier.notes)}</p>` : ''}
       </div>
@@ -1560,6 +1567,7 @@
     const supplier = state.suppliers.find(item => String(item.id) === String(id)) || null;
     state.editingSupplier = supplier;
     $('shop-supplier-title').textContent = supplier ? 'Editeaza furnizorul' : 'Furnizor nou';
+    $('shop-supplier-alias').value = supplier?.alias || supplier?.name || '';
     $('shop-supplier-name').value = supplier?.name || '';
     $('shop-supplier-cui').value = supplier?.cui || '';
     $('shop-supplier-registration').value = supplier?.registration_number || '';
@@ -1581,6 +1589,7 @@
       let website = $('shop-supplier-website').value.trim();
       if (website && !/^https?:\/\//i.test(website)) website = `https://${website}`;
       const payload = {
+        alias: $('shop-supplier-alias').value.trim(),
         name: $('shop-supplier-name').value.trim(),
         cui: $('shop-supplier-cui').value.trim().toUpperCase(),
         registration_number: $('shop-supplier-registration').value.trim().toUpperCase(),
@@ -1602,6 +1611,7 @@
         state.nirPendingSupplierCreate = false;
         state.nirEditor.supplier_id = savedSupplier.id;
         state.nirEditor.supplier_name = savedSupplier.name;
+        state.nirEditor.supplier_alias = savedSupplier.alias;
         if (!state.suppliers.some(item => item.id === savedSupplier.id)) state.suppliers.push(savedSupplier);
         renderNirEditor(); scheduleNirAutosave();
       }
@@ -1610,7 +1620,7 @@
   }
   async function deleteSupplier(id) {
     const supplier = state.suppliers.find(item => String(item.id) === String(id));
-    if (!supplier || !confirm(`Stergi furnizorul „${supplier.name}”?`)) return;
+    if (!supplier || !confirm(`Stergi furnizorul „${supplierDisplayName(supplier)}”?`)) return;
     try {
       await window.SHOP_API.deleteSupplier(supplier.id);
       toast('Furnizorul a fost sters.');
@@ -2466,7 +2476,7 @@
     const cards = state.nirs.map((document, index) => {
       const [label, tone] = nirStatus(document);
       const number = document.nir_number || document.temporary_number;
-      return `<article role="button" tabindex="0" aria-label="Deschide ${esc(number)}" class="shop-nir-registry-card ${tone}" data-nir-open="${esc(document.id)}" style="--nir-index:${index}"><span class="shop-nir-card-mark"></span><span class="shop-nir-card-icon"><i></i>${nirUiIcon('document')}</span><span class="shop-nir-card-copy"><small>${esc(number)}</small><strong>${esc(document.supplier_name || 'Furnizor neselectat')}</strong><span class="shop-nir-card-meta"><em>${nirUiIcon('calendar')} ${esc(document.nir_date || document.reception_date)} · ${esc(String(document.nir_time || document.reception_time || '').slice(0, 5) || '—')}</em><em>${nirUiIcon('product')} ${Number(document.line_count || 0)} produse</em><em>${nirUiIcon('document')} Factura ${esc(document.supplier_invoice_series || '')} ${esc(document.supplier_invoice_number || '—')}</em></span></span><span class="shop-nir-card-right"><b class="shop-nir-state ${tone}">${label}</b>${nirCan('NIR_VIEW_COSTS') ? `<strong>${money(document.grand_total_ron || 0)}</strong>` : ''}<small>${esc(document.currency || 'RON')}</small><span class="shop-nir-card-actions"><button type="button" class="shop-nir-bundle-download" data-nir-bundle-download="${esc(document.id)}" aria-label="Descarcă toate fișierele pentru ${esc(number)}" title="Descarcă PDF, Excel și documente"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="shop-nir-download-arrow" d="M12 3v11m0 0 4-4m-4 4-4-4"/><path d="M5 17v3h14v-3"/></svg></button><i aria-hidden="true">›</i></span></span></article>`;
+      return `<article role="button" tabindex="0" aria-label="Deschide ${esc(number)}" class="shop-nir-registry-card ${tone}" data-nir-open="${esc(document.id)}" style="--nir-index:${index}"><span class="shop-nir-card-mark"></span><span class="shop-nir-card-icon"><i></i>${nirUiIcon('document')}</span><span class="shop-nir-card-copy"><small>${esc(number)}</small><strong>${esc(supplierDisplayName(document, 'Furnizor neselectat'))}</strong><span class="shop-nir-card-meta"><em>${nirUiIcon('calendar')} ${esc(document.nir_date || document.reception_date)} · ${esc(String(document.nir_time || document.reception_time || '').slice(0, 5) || '—')}</em><em>${nirUiIcon('product')} ${Number(document.line_count || 0)} produse</em><em>${nirUiIcon('document')} Factura ${esc(document.supplier_invoice_series || '')} ${esc(document.supplier_invoice_number || '—')}</em></span></span><span class="shop-nir-card-right"><b class="shop-nir-state ${tone}">${label}</b>${nirCan('NIR_VIEW_COSTS') ? `<strong>${money(document.grand_total_ron || 0)}</strong>` : ''}<small>${esc(document.currency || 'RON')}</small><span class="shop-nir-card-actions"><button type="button" class="shop-nir-bundle-download" data-nir-bundle-download="${esc(document.id)}" aria-label="Descarcă toate fișierele pentru ${esc(number)}" title="Descarcă PDF, Excel și documente"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="shop-nir-download-arrow" d="M12 3v11m0 0 4-4m-4 4-4-4"/><path d="M5 17v3h14v-3"/></svg></button><i aria-hidden="true">›</i></span></span></article>`;
     }).join('');
     const emptyRegistry = `<div class="shop-nir-empty-modern"><span class="shop-nir-empty-orb"><i></i>${nirUiIcon('document')}</span><div><small>REGISTRU NIR</small><strong>Niciun NIR pentru filtrul ales</strong><p>${state.nirSearch ? 'Nu am gasit un document care sa corespunda cautarii.' : 'Adauga prima receptie sau alege un alt filtru.'}</p></div>${nirCan('NIR_CREATE') ? '<button type="button" data-nir-empty-create><b>+</b> NIR nou</button>' : ''}</div>`;
     const summary = `<div><span class="shop-nir-summary-icon">${nirUiIcon('document')}</span><small>TOTAL DOCUMENTE</small><strong>${Number(registry.total || 0)}</strong><span>in registrul central</span></div><div class="draft"><span class="shop-nir-summary-icon">${nirUiIcon('calendar')}</span><small>CIORNE IN PAGINA</small><strong>${state.nirs.filter(item => item.status === 'draft').length}</strong><span>fara impact in stoc</span></div><div class="confirmed"><span class="shop-nir-summary-icon">${nirUiIcon('check')}</span><small>CONFIRMATE IN PAGINA</small><strong>${state.nirs.filter(item => !isNirReversalDocument(item) && (item.status === 'confirmed' || item.status === 'reversed')).length}</strong><span>cu evaluare contabila</span></div>`;
@@ -2598,7 +2608,7 @@
     const [statusLabel, statusTone] = nirStatus(document);
     $('shop-nir-title').textContent = document.nir_number || document.temporary_number;
     $('shop-nir-status').textContent = statusLabel; $('shop-nir-status').className = `shop-nir-status ${statusTone}`;
-    const supplierOptions = `<option value="">Selecteaza furnizorul</option>${state.suppliers.map(supplier => `<option value="${esc(supplier.id)}" ${supplier.id === document.supplier_id ? 'selected' : ''}>${esc(supplier.name)}${supplier.cui ? ` · ${esc(supplier.cui)}` : ''}</option>`).join('')}`;
+    const supplierOptions = `<option value="">Selecteaza furnizorul</option>${state.suppliers.map(supplier => `<option value="${esc(supplier.id)}" ${supplier.id === document.supplier_id ? 'selected' : ''}>${esc(supplierDisplayName(supplier))}${supplier.name !== supplierDisplayName(supplier) ? ` · ${esc(supplier.name)}` : ''}${supplier.cui ? ` · ${esc(supplier.cui)}` : ''}</option>`).join('')}`;
     const warehouseOptions = state.nirWarehouses.map(warehouse => `<option value="${esc(warehouse.id)}" ${warehouse.id === document.warehouse_id ? 'selected' : ''}>${esc(warehouse.name)}</option>`).join('');
     const lines = (document.lines || []).map((line, index) => renderNirLine(line, index, editable)).join('');
     const attachmentKind = (name, mime = '') => { const extension = String(name || '').split('.').pop().toUpperCase(); if (String(mime).startsWith('image/') || ['JPG', 'JPEG', 'PNG', 'WEBP'].includes(extension)) return `Imagine ${extension || ''}`.trim(); if (extension === 'PDF') return 'Factura PDF'; if (extension === 'XLSX') return 'Fisier Excel'; if (extension === 'XML') return 'Fisier XML'; return `Document ${extension || ''}`.trim(); };
@@ -2672,7 +2682,7 @@
     const comparison = line.price_comparison;
     const priceComparison = comparison ? `<aside class="shop-nir-price-compare ${comparison.is_significant ? 'warning' : ''}"><small>ULTIMA ACHIZITIE · ACELASI FURNIZOR</small><strong>${comparison.last_supplier ? `${money(comparison.last_supplier.unit_net_price_ron)} / unitate` : 'Fara istoric la acest furnizor'}</strong><span>Minim recent: ${comparison.recent_minimum_unit_net_price_ron ? money(comparison.recent_minimum_unit_net_price_ron) : '—'}${comparison.variance_percent !== null ? `<b>${Number(comparison.variance_percent) > 0 ? '+' : ''}${esc(comparison.variance_percent)}%</b>` : ''}</span>${comparison.is_significant ? '<em>Pretul difera semnificativ. Verifica valoarea.</em>' : ''}</aside>` : '';
     const matchLabel = ['matching_code', 'matching_name'].includes(line.resolution_status) ? 'Se verifica asocierea…' : matched ? (line.resolution_status === 'matched_code' ? 'Recunoscut dupa cod' : line.resolution_status === 'matched_name' ? 'Recunoscut dupa denumire' : 'Produs asociat') : 'Necesita asociere';
-    const supplierName = state.nirEditor?.supplier_name || state.suppliers.find(item => item.id === state.nirEditor?.supplier_id)?.name || 'Furnizor neselectat';
+    const supplierName = supplierDisplayName(state.suppliers.find(item => item.id === state.nirEditor?.supplier_id) || state.nirEditor, 'Furnizor neselectat');
     const localTotals = nirLocalLineTotals(line, state.nirEditor?.exchange_rate);
     const lineTotal = editable ? localTotals.totalRon : Number(line.line_total_ron || 0);
     const imageLabel = matched ? 'Produs fara fotografie' : 'Produs nerecunoscut';
@@ -2886,7 +2896,9 @@
     $('shop-nir-editor').querySelectorAll('[data-nir-field]').forEach(input => input.addEventListener('input', () => {
       const field = input.dataset.nirField; state.nirEditor[field] = field === 'currency' ? input.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) : input.value;
       if (field === 'supplier_id') {
-        state.nirEditor.supplier_name = state.suppliers.find(item => item.id === input.value)?.name || null;
+        const selectedSupplier = state.suppliers.find(item => item.id === input.value);
+        state.nirEditor.supplier_name = selectedSupplier?.name || null;
+        state.nirEditor.supplier_alias = selectedSupplier?.alias || null;
         scheduleNirAutosave(); renderNirEditor(); return;
       }
       if (field === 'currency') input.value = state.nirEditor.currency;
@@ -2986,7 +2998,7 @@
     if (!document || document.status !== 'draft' || !nirCan('NIR_EDIT_DRAFT')) return;
     if (state.nirSaving || state.nirSavePromise) return toast('Asteapta finalizarea salvarii, apoi sterge NIR-ul.', 'error');
     $('shop-nir-delete-number').textContent = document.nir_number || document.temporary_number || 'NIR nesalvat';
-    $('shop-nir-delete-supplier').textContent = document.supplier_name || 'Furnizor necompletat';
+    $('shop-nir-delete-supplier').textContent = supplierDisplayName(document, 'Furnizor necompletat');
     openModal('shop-nir-delete-dialog');
     requestAnimationFrame(() => $('shop-nir-delete-cancel')?.focus());
   }
@@ -3316,7 +3328,7 @@
     const document = state.nirEditor;
     if (!document || document.status !== 'confirmed' || !canNirStorno(document) || !nirCan('NIR_REVERSE') || state.nirReversing) return;
     $('shop-nir-reverse-number').textContent = document.nir_number || document.temporary_number || 'NIR';
-    $('shop-nir-reverse-supplier').textContent = document.supplier_name || 'Furnizor necompletat';
+    $('shop-nir-reverse-supplier').textContent = supplierDisplayName(document, 'Furnizor necompletat');
     const originalSeries = String(document.supplier_invoice_series || '').trim();
     const originalNumber = String(document.supplier_invoice_number || '').trim();
     const originalInvoice = [originalSeries, originalNumber].filter(Boolean).join('/') || 'Număr necompletat';

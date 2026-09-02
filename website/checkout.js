@@ -63,7 +63,12 @@
     const timeout = window.setTimeout(() => controller.abort(), 14000);
     const deviceToken = shopDeviceToken();
     try {
-      const response = await fetch(`${API_URL}?action=${encodeURIComponent(action)}`, {
+      const url = new URL(API_URL);
+      url.searchParams.set("action", action);
+      Object.entries(options.query || {}).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && String(value) !== "") url.searchParams.set(key, String(value));
+      });
+      const response = await fetch(url.toString(), {
         method: options.method || "GET",
         headers: {
           Accept: "application/json",
@@ -253,6 +258,12 @@
 
   function cartRows() {
     return window.GTrotsCart?.get?.() || [];
+  }
+
+  async function checkoutCatalog(cart) {
+    const ids = [...new Set(cart.map(item => String(item?.id || "").trim().slice(0, 180)).filter(Boolean))];
+    if (!ids.length) return [];
+    return api("publicCheckoutProducts", { method: "POST", body: { ids } });
   }
 
   function productPrice(product) {
@@ -539,7 +550,13 @@
     const message = $("[data-checkout-message]");
     const submit = $("[data-checkout-submit]");
     try {
-      const [rawProducts, config] = await Promise.all([api("publicProducts"), api("publicShopConfig")]);
+      const initialCart = cartRows();
+      if (!initialCart.length) {
+        loading.hidden = true;
+        empty.hidden = false;
+        return;
+      }
+      const [rawProducts, config] = await Promise.all([checkoutCatalog(initialCart), api("publicShopConfig")]);
       const normalized = Array.isArray(rawProducts) ? rawProducts.map(normalizeProduct) : [];
       window.GTrotsFavorites?.registerProducts?.(normalized);
       const cart = cartRows();

@@ -4171,10 +4171,23 @@ try {
         ]);
     }
 
-    if (in_array($action, ['publicProducts', 'publicProductsCompact', 'publicProductsPage'], true) && $method === 'GET') {
+    $isCheckoutCatalogRequest = $action === 'publicCheckoutProducts' && $method === 'POST';
+    $isPublicCatalogRequest = in_array($action, ['publicProducts', 'publicProductsCompact', 'publicProductsPage'], true) && $method === 'GET';
+    if ($isPublicCatalogRequest || $isCheckoutCatalogRequest) {
         $catalogStartedAt = microtime(true);
         $where = ['p.is_active = 1', 's.is_active = 1'];
         $params = [];
+        $checkoutProductIds = [];
+        if ($isCheckoutCatalogRequest) {
+            $checkoutProductIds = array_values(array_unique(array_filter(array_map(
+                static fn($value): string => mb_substr(trim((string)$value), 0, 180),
+                array_slice(is_array($body['ids'] ?? null) ? $body['ids'] : [], 0, 200)
+            ), static fn(string $value): bool => $value !== '')));
+            if (!$checkoutProductIds) jsonResponse([]);
+            $checkoutPlaceholders = implode(',', array_fill(0, count($checkoutProductIds), '?'));
+            $where[] = "(p.slug IN ({$checkoutPlaceholders}) OR p.id IN ({$checkoutPlaceholders}))";
+            array_push($params, ...$checkoutProductIds, ...$checkoutProductIds);
+        }
         $search = trim((string)($_GET['q'] ?? ''));
         if ($search !== '') {
             $where[] = '(p.name LIKE ? OR p.sku LIKE ? OR p.short_description LIKE ?)';
@@ -4193,7 +4206,9 @@ try {
             $where[] = 'EXISTS (SELECT 1 FROM shop_product_brands pb WHERE pb.product_id = p.id AND pb.brand_id = ?)';
             $params[] = $brandId;
         }
-        $pageSize = $action === 'publicProductsPage' ? max(1, min(500, (int)($_GET['page_size'] ?? 24))) : 2500;
+        $pageSize = $isCheckoutCatalogRequest
+            ? max(1, min(200, count($checkoutProductIds)))
+            : ($action === 'publicProductsPage' ? max(1, min(500, (int)($_GET['page_size'] ?? 24))) : 2500);
         $catalogPage = $action === 'publicProductsPage' ? max(1, (int)($_GET['page'] ?? 1)) : 1;
         $offset = ($catalogPage - 1) * $pageSize;
         $totalProducts = null;

@@ -61,6 +61,13 @@
 
   const json = (method, body) => ({ method, body: JSON.stringify(body) });
 
+  function requirePersistedSupplierAlias(supplier, requestedAlias) {
+    const expected = String(requestedAlias || '').trim();
+    const persisted = String(supplier?.alias || '').trim();
+    if (persisted === expected) return supplier;
+    throw new Error('Serverul SHOP nu a memorat aliasul furnizorului. API-ul public trebuie actualizat; modificarea nu a fost confirmata si formularul ramane deschis.');
+  }
+
   async function syncStripeCatalog(onProgress) {
     const summary = { synced: 0, archived: 0, skipped: 0, errors: [] };
     const plan = await call('syncStripeCatalog', json('POST', { prepare: true }));
@@ -124,8 +131,8 @@
     updateProductSource: (id, payload) => call('updateProductSource', json('PUT', payload), id),
     deleteProductSource: (id) => call('deleteProductSource', { method: 'DELETE' }, id),
     listSuppliers: () => call('listSuppliers'),
-    createSupplier: (payload) => call('createSupplier', json('POST', payload)),
-    updateSupplier: (id, payload) => call('updateSupplier', json('PUT', payload), id),
+    createSupplier: async (payload) => requirePersistedSupplierAlias(await call('createSupplier', json('POST', payload)), payload.alias),
+    updateSupplier: async (id, payload) => requirePersistedSupplierAlias(await call('updateSupplier', json('PUT', payload), id), payload.alias),
     deleteSupplier: (id) => call('deleteSupplier', { method: 'DELETE' }, id),
     searchSuppliers: (q = '') => call('searchSuppliers', {}, '', 0, { q, limit: 50 }),
     getSupplier: (id) => call('getSupplier', {}, id),

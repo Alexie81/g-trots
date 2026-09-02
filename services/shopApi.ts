@@ -310,6 +310,13 @@ export function shopSupplierDisplayName(source: SupplierDisplaySource | null | u
   return fallback;
 }
 
+function requirePersistedSupplierAlias(supplier: ShopSupplier, requestedAlias: string | null | undefined): ShopSupplier {
+  const expected = String(requestedAlias ?? '').trim();
+  const persisted = String(supplier?.alias ?? '').trim();
+  if (persisted === expected) return supplier;
+  throw new Error('Serverul SHOP nu a memorat aliasul furnizorului. API-ul public trebuie actualizat; modificarea nu a fost confirmată și formularul rămâne deschis.');
+}
+
 export type ShopTaxonomySyncResult = {
   success: boolean;
   categories: number;
@@ -932,8 +939,14 @@ export const shopApi = {
   updateProductSource: (token: string, id: string, payload: Omit<ShopProductSource, 'id'>) => shopCall<ShopProductSource>('updateProductSource', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
   deleteProductSource: (token: string, id: string) => shopCall<{ success: true }>('deleteProductSource', token, { method: 'DELETE' }, id),
   listSuppliers: (token: string) => shopCall<ShopSupplier[]>('listSuppliers', token),
-  createSupplier: (token: string, payload: ShopSupplierPayload) => shopCall<ShopSupplier>('createSupplier', token, { method: 'POST', body: JSON.stringify(payload) }),
-  updateSupplier: (token: string, id: string, payload: ShopSupplierPayload) => shopCall<ShopSupplier>('updateSupplier', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
+  createSupplier: async (token: string, payload: ShopSupplierPayload) => requirePersistedSupplierAlias(
+    await shopCall<ShopSupplier>('createSupplier', token, { method: 'POST', body: JSON.stringify(payload) }),
+    payload.alias,
+  ),
+  updateSupplier: async (token: string, id: string, payload: ShopSupplierPayload) => requirePersistedSupplierAlias(
+    await shopCall<ShopSupplier>('updateSupplier', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
+    payload.alias,
+  ),
   deleteSupplier: (token: string, id: string) => shopCall<{ success: true }>('deleteSupplier', token, { method: 'DELETE' }, id),
   searchSuppliers: (token: string, q = '') => shopCall<ShopSupplier[]>('searchSuppliers', token, undefined, undefined, 0, { q, limit: 40 }),
   getSupplier: (token: string, id: string) => shopCall<ShopSupplier & { products: ShopSupplierProductReference[] }>('getSupplier', token, undefined, id),

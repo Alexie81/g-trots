@@ -238,6 +238,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
   const [detail, setDetail] = useState<ShopProductStats | null>(null);
   const [supplierReferences, setSupplierReferences] = useState<ShopSupplierProductReference[]>([]);
   const [purchaseHistory, setPurchaseHistory] = useState<Record<string, string>[]>([]);
+  const [purchaseStatistics, setPurchaseStatistics] = useState<Record<string, string | number | null>>({});
   const [detailSalesPage, setDetailSalesPage] = useState(1);
   const [detailReviewPage, setDetailReviewPage] = useState(1);
   const [detailPurchasesPage, setDetailPurchasesPage] = useState(1);
@@ -309,6 +310,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
   const detailPurchasesTotal = purchaseHistory.length;
   const detailPurchasesSafePage = Math.min(detailPurchasesPage, Math.max(1, Math.ceil(detailPurchasesTotal / DETAIL_PURCHASES_PAGE_SIZE)));
   const pagedPurchaseHistory = purchaseHistory.slice((detailPurchasesSafePage - 1) * DETAIL_PURCHASES_PAGE_SIZE, detailPurchasesSafePage * DETAIL_PURCHASES_PAGE_SIZE);
+  const averageGrossPurchaseCost = Number(purchaseStatistics.weighted_average_gross_unit_cost_ron || 0);
   const productSuppliers = useMemo(() => {
     type SupplierAlias = { type: 'code' | 'name' | 'ean'; value: string };
     type ProductSupplierSummary = { key: string; supplierName: string; isActive: boolean; lastCostRon: string | null; lastPurchaseAt: string | null; purchaseCount: number; aliases: SupplierAlias[] };
@@ -344,7 +346,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
         key,
         supplierName,
         isActive: reference?.is_active !== false,
-        lastCostRon: String(purchase.inventory_unit_cost_ron || reference?.last_confirmed_price_ron || '').trim() || null,
+        lastCostRon: String(purchase.gross_unit_cost_ron || reference?.last_confirmed_price_ron || '').trim() || null,
         lastPurchaseAt: String(purchase.reception_date || reference?.last_confirmed_at || '').trim() || null,
         purchaseCount: 1,
         aliases: aliasesBySupplier.get(key) || [],
@@ -447,6 +449,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
       setDetail(next);
       setSupplierReferences(references);
       setPurchaseHistory(history.items);
+      setPurchaseStatistics(history.statistics);
       setReviewReplies(Object.fromEntries(next.reviews.map((review) => [review.id, review.admin_reply || ''])));
     } catch (detailError) {
       Alert.alert('Fisa indisponibila', detailError instanceof Error ? detailError.message : 'Nu s-a putut deschide fisa produsului.');
@@ -703,7 +706,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
             <View style={styles.metricGrid}>
               <Metric label="TOTAL VÂNZĂRI" value={money(detail.revenue)} />
               <Metric label="PREȚ VÂNZARE MEDIU" value={money(detail.units_sold ? detail.revenue / detail.units_sold : 0)} />
-              <Metric label="PREȚ ACHIZIȚIE MEDIU" value={money(detail.units_sold ? detail.acquisition_total / detail.units_sold : 0)} />
+              <Metric label="COST ACHIZIȚIE MEDIU · TVA INCLUS" value={averageGrossPurchaseCost > 0 ? money(averageGrossPurchaseCost) : '—'} />
               <Metric label="PROFIT MEDIU" value={money(detail.units_sold ? detail.profit / detail.units_sold : 0)} accent />
               <Metric label="BUCĂȚI VÂNDUTE" value={String(detail.units_sold)} />
               <Metric label="VIZUALIZĂRI PE SITE" value={String(detail.product.view_count)} icon="eye" />
@@ -730,9 +733,9 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
             {detail.reviews.length ? pagedDetailReviews.map((review) => <View key={review.id} style={styles.reviewCard}><View style={styles.reviewHead}><View><Text style={styles.reviewName}>{review.customer_name}</Text><Text style={styles.reviewMeta}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)} · {review.created_at}</Text></View><TouchableOpacity style={styles.reviewDelete} onPress={() => removeReview(review)}><Trash2 size={16} color={Colors.error} /></TouchableOpacity></View><Text style={styles.reviewMessage}>{review.message}</Text><TextInput value={reviewReplies[review.id] || ''} onChangeText={(value) => setReviewReplies((current) => ({ ...current, [review.id]: value }))} placeholder="Scrie raspunsul magazinului..." placeholderTextColor={Colors.textMuted} multiline style={styles.reviewReply} /><TouchableOpacity style={styles.reviewSave} onPress={() => void saveReviewReply(review)}><MessageSquare size={15} color={Colors.white} /><Text style={styles.reviewSaveText}>Salveaza raspunsul</Text></TouchableOpacity></View>) : <Text style={styles.detailEmpty}>Produsul nu are inca recenzii.</Text>}
             <DetailGooglePagination label="recenzii" page={detailReviewSafePage} pageSize={DETAIL_REVIEWS_PAGE_SIZE} total={detailReviewTotal} onPageChange={setDetailReviewPage} />
             <SectionTitle number="03" title="Furnizori" text="Firmele de la care a fost sau poate fi cumpărat acest produs." />
-            {productSuppliers.length ? productSuppliers.map((supplier) => { const invoiceNames = supplier.aliases.filter((alias) => alias.type === 'name').map((alias) => alias.value); const supplierCodes = supplier.aliases.filter((alias) => alias.type === 'code').map((alias) => alias.value); const aliasSummary = [`Pe factură: ${invoiceNames.join(', ')}`, `Cod: ${supplierCodes.join(', ')}`].filter((part) => !part.endsWith(': ')).join(' · '); return <View key={supplier.key} style={[styles.referenceCard, !supplier.isActive && styles.referenceInactive]}><View style={styles.referenceIcon}><Building2 size={18} color="#2DD4BF" /></View><View style={styles.referenceCopy}><View style={styles.referenceHeading}><Text numberOfLines={1} style={styles.referenceSupplier}>{supplier.supplierName}</Text><View style={styles.referencePrimary}><Text style={styles.referencePrimaryText}>CUMPĂRAT PRIN NIR</Text></View></View><Text style={styles.referenceMeta}>{supplier.purchaseCount ? `${supplier.purchaseCount} ${supplier.purchaseCount === 1 ? 'recepție confirmată' : 'recepții confirmate'}` : 'Furnizor asociat produsului'}</Text>{aliasSummary ? <Text numberOfLines={2} style={styles.referenceAliases}>{aliasSummary}</Text> : null}<Text numberOfLines={1} style={styles.referenceCost}>{supplier.lastCostRon ? `Ultimul cost ${money(Number(supplier.lastCostRon))}${supplier.lastPurchaseAt ? ` · ${supplier.lastPurchaseAt}` : ''}` : 'Fără cost confirmat'}</Text></View></View>; }) : <Text style={styles.detailEmpty}>Produsul nu are furnizori în istoricul NIR.</Text>}
+            {productSuppliers.length ? productSuppliers.map((supplier) => { const invoiceNames = supplier.aliases.filter((alias) => alias.type === 'name').map((alias) => alias.value); const supplierCodes = supplier.aliases.filter((alias) => alias.type === 'code').map((alias) => alias.value); const aliasSummary = [`Pe factură: ${invoiceNames.join(', ')}`, `Cod: ${supplierCodes.join(', ')}`].filter((part) => !part.endsWith(': ')).join(' · '); return <View key={supplier.key} style={[styles.referenceCard, !supplier.isActive && styles.referenceInactive]}><View style={styles.referenceIcon}><Building2 size={18} color="#2DD4BF" /></View><View style={styles.referenceCopy}><View style={styles.referenceHeading}><Text numberOfLines={1} style={styles.referenceSupplier}>{supplier.supplierName}</Text><View style={styles.referencePrimary}><Text style={styles.referencePrimaryText}>CUMPĂRAT PRIN NIR</Text></View></View><Text style={styles.referenceMeta}>{supplier.purchaseCount ? `${supplier.purchaseCount} ${supplier.purchaseCount === 1 ? 'recepție confirmată' : 'recepții confirmate'}` : 'Furnizor asociat produsului'}</Text>{aliasSummary ? <Text numberOfLines={2} style={styles.referenceAliases}>{aliasSummary}</Text> : null}<Text numberOfLines={1} style={styles.referenceCost}>{supplier.lastCostRon ? `Ultimul cost cu TVA ${money(Number(supplier.lastCostRon))}${supplier.lastPurchaseAt ? ` · ${supplier.lastPurchaseAt}` : ''}` : 'Fără cost confirmat'}</Text></View></View>; }) : <Text style={styles.detailEmpty}>Produsul nu are furnizori în istoricul NIR.</Text>}
             <SectionTitle number="04" title="Istoric preturi de achizitie" text="Fiecare NIR confirmat ramane un snapshot separat." />
-            {purchaseHistory.length ? pagedPurchaseHistory.map((item) => <View key={item.nir_line_id} style={styles.purchaseCard}><View><Text style={styles.purchaseNir}>{item.nir_number}</Text><Text style={styles.purchaseMeta}>{item.reception_date} · {item.supplier_name || 'Furnizor'} · cod {item.supplier_code || '—'}</Text></View><View style={styles.purchaseRight}><Text style={styles.purchaseCost}>{money(Number(item.inventory_unit_cost_ron || 0))}/u</Text><Text style={styles.purchaseMeta}>{item.stock_quantity} buc. · {item.unit_price} {item.currency}</Text></View></View>) : <Text style={styles.detailEmpty}>Nu exista achizitii confirmate.</Text>}
+            {purchaseHistory.length ? pagedPurchaseHistory.map((item) => <View key={item.nir_line_id} style={styles.purchaseCard}><View><Text style={styles.purchaseNir}>{item.nir_number}</Text><Text style={styles.purchaseMeta}>{item.reception_date} · {item.supplier_name || 'Furnizor'} · cod {item.supplier_code || '—'}</Text></View><View style={styles.purchaseRight}><Text style={styles.purchaseCost}>{money(Number(item.gross_unit_cost_ron || 0))}/u</Text><Text style={styles.purchaseMeta}>TVA inclus · {item.stock_quantity} buc.</Text></View></View>) : <Text style={styles.detailEmpty}>Nu exista achizitii confirmate.</Text>}
             <DetailGooglePagination label="achizitii" page={detailPurchasesSafePage} pageSize={DETAIL_PURCHASES_PAGE_SIZE} total={detailPurchasesTotal} onPageChange={setDetailPurchasesPage} />
           </ScrollView>}
         </SafeAreaView>

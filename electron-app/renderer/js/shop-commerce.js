@@ -2115,11 +2115,12 @@
   }
   function invoiceThemePreview(palette) {
     return `<div class="shop-invoice-theme-paper" style="--invoice-accent:${palette.accent};--invoice-dark:${palette.accentDark};--invoice-soft:${palette.soft}">
-      <i class="paper-accent"></i><header><b>GT</b><span><i></i><em></em></span><small><i></i><em></em></small></header>
-      <div class="paper-status"><b></b><span></span></div>
-      <div class="paper-parties"><span><b></b><i></i><em></em></span><span><b></b><i></i><em></em></span></div>
-      <div class="paper-table"><header></header>${[1, 2, 3].map(() => '<div><b></b><span><i></i><em></em></span><small></small></div>').join('')}</div>
-      <footer><span><i></i><em></em></span><b></b></footer>
+      <i class="paper-accent"></i>
+      <header><img src="../assets/logo.png" alt=""><span><strong>G-TROTS</strong><small>CAB IT EXPERT SRL</small></span><aside><small>FACTURĂ</small><b>GT 00100</b></aside></header>
+      <div class="paper-status"><b>NEACHITATĂ</b><span>Emisă la 02.09.2026</span></div>
+      <div class="paper-parties"><span><small>FURNIZOR</small><b>CAB IT EXPERT SRL</b><em>CUI 49972605 · București</em></span><span><small>CLIENT</small><b>EXEMPLU CLIENT SRL</b><em>CUI RO12345678 · România</em></span></div>
+      <div class="paper-table"><header><b>PRODUS</b><b>CANT.</b><b>PREȚ</b><b>TOTAL</b></header><div><span><b>Cauciuc offroad 10x2.75</b><em>SKU SE-CMM087</em></span><small>2</small><small>30,00 lei</small><strong>60,00 lei</strong></div><div><span><b>Plăcuțe frână model X</b><em>SKU GT-FR-00218</em></span><small>1</small><small>42,50 lei</small><strong>42,50 lei</strong></div></div>
+      <footer><span><small>TVA 21%</small><b>18,00 lei</b></span><strong><small>TOTAL</small>120,50 lei</strong></footer>
     </div>`;
   }
   function renderInvoiceConfigurator() {
@@ -2131,11 +2132,20 @@
     const palette = invoiceThemePalette(selected);
     const dirty = selected !== active;
     const last = settings.last_assignment ? `${settings.last_assignment.series || ''} ${settings.last_assignment.number || ''}`.trim() : '';
+    const hero = document.querySelector('.shop-invoice-configurator-hero');
+    if (hero) {
+      hero.style.setProperty('--invoice-accent', palette.accent);
+      hero.style.setProperty('--invoice-dark', palette.accentDark);
+      hero.style.setProperty('--invoice-soft', palette.soft);
+      hero.querySelector('.shop-invoice-hero-theme-name')?.replaceChildren(document.createTextNode(palette.label));
+      hero.querySelectorAll('.shop-invoice-showcase-palette i').forEach((dot, index) => dot.classList.toggle('active', invoiceThemeOrder[index] === selected));
+    }
     const cards = invoiceThemeOrder.map(theme => {
       const cardPalette = invoiceThemePalette(theme);
       const isSelected = selected === theme;
       const isActive = active === theme;
       return `<button type="button" class="shop-invoice-theme-card ${isSelected ? 'selected' : ''}" data-invoice-theme="${theme}" style="--invoice-accent:${cardPalette.accent};--invoice-dark:${cardPalette.accentDark};--invoice-soft:${cardPalette.soft}" role="radio" aria-checked="${isSelected}">
+        <span class="shop-invoice-theme-shine"></span>
         <div class="shop-invoice-theme-preview">${invoiceThemePreview(cardPalette)}</div>
         <footer><i></i><span><strong>${esc(cardPalette.label)}</strong><small>${isActive ? 'TEMA FOLOSITĂ ACUM' : isSelected ? 'PREGĂTITĂ PENTRU SALVARE' : 'PREVIZUALIZARE'}</small></span><b>${isSelected ? '✓' : ''}</b></footer>
       </button>`;

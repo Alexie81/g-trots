@@ -1,7 +1,7 @@
 (function () {
   const { shell } = require('electron');
   const state = {
-    products: [], orders: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], promotions: [], companies: [], nirs: [], nirPermissions: [], nirWarehouses: [],
+    products: [], orders: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], promotions: [], companies: [], nirs: [], nirPermissions: [], nirWarehouses: [], invoiceThemeSettings: null, selectedInvoiceTheme: 'orange', invoiceThemeSaving: false,
     editingProduct: null, editingOrder: null, editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
     productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, productTotal: 0, productSearchTimer: null, productLoadRequestId: 0, slugTouched: false, productQuery: '', orderQuery: '', orderSearchTimer: null, orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
     customerQuery: '', inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false,
@@ -126,6 +126,7 @@
       ${dashboardCard('shop-customers', 'blue', 'RELATII CLIENTI', 'Clienti', 'Conturi, comenzi si acces la magazin.')}
       ${dashboardCard('shop-discounts', 'amber', 'PROMOTII', 'Reduceri', 'Campanii, cupoane si anunturi pe site.')}
       ${dashboardCard('shop-company', 'purple', 'IDENTITATE', 'Datele firmei', 'Societati, conturi bancare si stampila.')}
+      ${dashboardCard('shop-invoice-configurator', 'amber', 'DOCUMENTE', 'Configurator factură', 'Patru teme și alegerea aspectului pentru facturile viitoare.')}
     `);
     document.body.insertAdjacentHTML('beforeend', productModal() + productDetailModal() + orderModal() + stockModal() + sourceModal() + supplierModal() + nirModal() + shippingModal() + customerModal() + promotionModal() + promotionStatsModal() + companyModal());
     wire();
@@ -260,7 +261,7 @@
 
   function wire() {
     mountNirStornoInvoiceFields();
-    const loaders = { 'shop-dashboard': loadDashboard, 'shop-products': loadProducts, 'shop-orders': loadOrders, 'shop-inventory': loadInventory, 'shop-sources': loadSourcesPage, 'shop-suppliers': loadSuppliers, 'shop-nirs': loadNirs, 'shop-payments': loadPayments, 'shop-shipping': loadShippingPage, 'shop-customers': loadCustomers, 'shop-discounts': loadPromotions, 'shop-company': loadCompanies };
+    const loaders = { 'shop-dashboard': loadDashboard, 'shop-products': loadProducts, 'shop-orders': loadOrders, 'shop-inventory': loadInventory, 'shop-sources': loadSourcesPage, 'shop-suppliers': loadSuppliers, 'shop-nirs': loadNirs, 'shop-payments': loadPayments, 'shop-shipping': loadShippingPage, 'shop-customers': loadCustomers, 'shop-discounts': loadPromotions, 'shop-company': loadCompanies, 'shop-invoice-configurator': loadInvoiceConfigurator };
     window.addEventListener('tab-change', event => {
       loaders[event.detail]?.();
     });
@@ -2092,6 +2093,84 @@
     if (!item || !confirm(`Stergi reducerea „${item.title}”?`)) return;
     try { await window.SHOP_API.deletePromotion(id); toast('Reducerea a fost stearsa.'); await loadPromotions(); }
     catch (error) { toast(error.message, 'error'); }
+  }
+
+  const invoiceThemeFallback = {
+    orange: { label: 'Portocaliu', accent: '#ff8a00', accent_dark: '#d96500', soft: '#fff3e2' },
+    green: { label: 'Verde', accent: '#19a86b', accent_dark: '#08794a', soft: '#e9f8f1' },
+    red: { label: 'Roșu', accent: '#ef4056', accent_dark: '#b91f36', soft: '#fff0f2' },
+    purple: { label: 'Mov', accent: '#7157d9', accent_dark: '#4c35ad', soft: '#f0edff' },
+  };
+  const invoiceThemeOrder = ['orange', 'green', 'red', 'purple'];
+  const invoiceThemeColor = (value, fallback) => /^#[0-9a-f]{6}$/i.test(String(value || '')) ? String(value) : fallback;
+  function invoiceThemePalette(theme) {
+    const fallback = invoiceThemeFallback[theme] || invoiceThemeFallback.orange;
+    const source = state.invoiceThemeSettings?.themes?.[theme] || fallback;
+    return {
+      label: String(source.label || fallback.label),
+      accent: invoiceThemeColor(source.accent, fallback.accent),
+      accentDark: invoiceThemeColor(source.accent_dark, fallback.accent_dark),
+      soft: invoiceThemeColor(source.soft, fallback.soft),
+    };
+  }
+  function invoiceThemePreview(palette) {
+    return `<div class="shop-invoice-theme-paper" style="--invoice-accent:${palette.accent};--invoice-dark:${palette.accentDark};--invoice-soft:${palette.soft}">
+      <i class="paper-accent"></i><header><b>GT</b><span><i></i><em></em></span><small><i></i><em></em></small></header>
+      <div class="paper-status"><b></b><span></span></div>
+      <div class="paper-parties"><span><b></b><i></i><em></em></span><span><b></b><i></i><em></em></span></div>
+      <div class="paper-table"><header></header>${[1, 2, 3].map(() => '<div><b></b><span><i></i><em></em></span><small></small></div>').join('')}</div>
+      <footer><span><i></i><em></em></span><b></b></footer>
+    </div>`;
+  }
+  function renderInvoiceConfigurator() {
+    const content = $('shop-invoice-configurator-content');
+    const settings = state.invoiceThemeSettings;
+    if (!content || !settings) return;
+    const selected = state.selectedInvoiceTheme;
+    const active = settings.active_theme;
+    const palette = invoiceThemePalette(selected);
+    const dirty = selected !== active;
+    const last = settings.last_assignment ? `${settings.last_assignment.series || ''} ${settings.last_assignment.number || ''}`.trim() : '';
+    const cards = invoiceThemeOrder.map(theme => {
+      const cardPalette = invoiceThemePalette(theme);
+      const isSelected = selected === theme;
+      const isActive = active === theme;
+      return `<button type="button" class="shop-invoice-theme-card ${isSelected ? 'selected' : ''}" data-invoice-theme="${theme}" style="--invoice-accent:${cardPalette.accent};--invoice-dark:${cardPalette.accentDark};--invoice-soft:${cardPalette.soft}" role="radio" aria-checked="${isSelected}">
+        <div class="shop-invoice-theme-preview">${invoiceThemePreview(cardPalette)}</div>
+        <footer><i></i><span><strong>${esc(cardPalette.label)}</strong><small>${isActive ? 'TEMA FOLOSITĂ ACUM' : isSelected ? 'PREGĂTITĂ PENTRU SALVARE' : 'PREVIZUALIZARE'}</small></span><b>${isSelected ? '✓' : ''}</b></footer>
+      </button>`;
+    }).join('');
+    content.innerHTML = `<section class="shop-invoice-theme-current" style="--invoice-accent:${palette.accent};--invoice-soft:${palette.soft}"><span class="current-palette">◐</span><div><small>${dirty ? 'SELECȚIE NESALVATĂ' : 'TEMA ACTIVĂ'}</small><strong>${esc(palette.label)}</strong><p>${dirty ? 'Salvează alegerea pentru a o folosi la următoarea factură.' : last ? `Ultimul document fixat: ${esc(last)}. Următoarea factură nouă va folosi această temă.` : 'Prima factură nouă va folosi această temă.'}</p></div><i></i></section>
+      <header class="shop-invoice-theme-heading"><div><small>4 PREVIZUALIZĂRI</small><h2>Paleta documentului</h2></div><span>Alege aspectul dorit</span></header>
+      <div class="shop-invoice-theme-grid" role="radiogroup" aria-label="Temă factură">${cards}</div>
+      <section class="shop-invoice-theme-protection"><span>✓</span><div><strong>Temele vechi sunt protejate</strong><p>Dacă GT001-GT099 au fost emise cu mov și activezi portocaliu după GT099, schimbarea începe cu GT100. Regenerarea documentelor GT001-GT099 păstrează mov.</p></div></section>
+      <button type="button" id="shop-invoice-theme-save" class="shop-invoice-theme-save" style="--invoice-accent:${palette.accent}" ${dirty && !state.invoiceThemeSaving ? '' : 'disabled'}><span><small>${dirty ? 'APLICĂ SCHIMBAREA' : 'CONFIGURAȚIE SALVATĂ'}</small><strong>${dirty ? `Folosește tema ${esc(palette.label)}` : `${esc(palette.label)} este activă`}</strong></span><b>${state.invoiceThemeSaving ? '…' : dirty ? '✓' : '✦'}</b></button>`;
+    content.querySelectorAll('[data-invoice-theme]').forEach(button => button.addEventListener('click', () => {
+      state.selectedInvoiceTheme = button.dataset.invoiceTheme;
+      renderInvoiceConfigurator();
+    }));
+    $('shop-invoice-theme-save')?.addEventListener('click', () => void saveInvoiceTheme());
+  }
+  async function loadInvoiceConfigurator() {
+    const content = $('shop-invoice-configurator-content');
+    if (!content) return;
+    content.innerHTML = '<div class="shop-commerce-loading">Se încarcă temele facturii...</div>';
+    try {
+      state.invoiceThemeSettings = await window.SHOP_API.getInvoiceThemeSettings();
+      state.selectedInvoiceTheme = state.invoiceThemeSettings.active_theme || 'orange';
+      renderInvoiceConfigurator();
+    } catch (error) { failure('shop-invoice-configurator-content', error); }
+  }
+  async function saveInvoiceTheme() {
+    if (state.invoiceThemeSaving || !state.invoiceThemeSettings || state.selectedInvoiceTheme === state.invoiceThemeSettings.active_theme) return;
+    state.invoiceThemeSaving = true;
+    renderInvoiceConfigurator();
+    try {
+      state.invoiceThemeSettings = await window.SHOP_API.updateInvoiceThemeSettings(state.selectedInvoiceTheme);
+      state.selectedInvoiceTheme = state.invoiceThemeSettings.active_theme;
+      toast(`Tema ${invoiceThemePalette(state.selectedInvoiceTheme).label} se aplică următoarei facturi noi. Documentele vechi rămân neschimbate.`);
+    } catch (error) { toast(error.message || 'Tema nu s-a putut salva.', 'error'); }
+    finally { state.invoiceThemeSaving = false; renderInvoiceConfigurator(); }
   }
 
   async function loadCompanies() {

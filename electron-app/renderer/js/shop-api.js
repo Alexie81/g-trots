@@ -191,6 +191,8 @@
     updateOrder: (id, payload) => call('updateOrder', json('PUT', payload), id),
     getPaymentSettings: () => call('getPaymentSettings'),
     updatePaymentSettings: (payload) => call('updatePaymentSettings', json('PUT', payload)),
+    getInvoiceThemeSettings: () => call('getInvoiceThemeSettings'),
+    updateInvoiceThemeSettings: (theme) => call('updateInvoiceThemeSettings', json('PUT', { theme })),
     listCompanySettings: () => call('listCompanySettings'),
     getCompanySettings: () => call('getCompanySettings'),
     createCompanySettings: (payload) => call('createCompanySettings', json('POST', payload)),

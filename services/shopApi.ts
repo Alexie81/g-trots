@@ -639,6 +639,30 @@ export type ShopPaymentSettings = {
   updated_at?: string | null;
 };
 
+export type ShopInvoiceTheme = 'orange' | 'green' | 'red' | 'purple';
+
+export type ShopInvoiceThemePalette = {
+  label: string;
+  accent: string;
+  accent_dark: string;
+  soft: string;
+  ink: string;
+};
+
+export type ShopInvoiceThemeSettings = {
+  active_theme: ShopInvoiceTheme;
+  themes: Record<ShopInvoiceTheme, ShopInvoiceThemePalette>;
+  assigned_documents: number;
+  last_assignment: null | {
+    series: string;
+    number: string;
+    theme: ShopInvoiceTheme;
+    assigned_at: string;
+  };
+  updated_by: string;
+  updated_at: string | null;
+};
+
 export type ShopCompanySettings = {
   id: number;
   legal_name: string;
@@ -949,6 +973,8 @@ export const shopApi = {
   deletePromotion: (token: string, id: string) => shopCall<{ success: true }>('deletePromotion', token, { method: 'DELETE' }, id),
   getPaymentSettings: (token: string) => shopCall<ShopPaymentSettings>('getPaymentSettings', token),
   updatePaymentSettings: (token: string, payload: ShopPaymentSettings) => shopCall<ShopPaymentSettings>('updatePaymentSettings', token, { method: 'PUT', body: JSON.stringify(payload) }),
+  getInvoiceThemeSettings: (token: string) => shopCall<ShopInvoiceThemeSettings>('getInvoiceThemeSettings', token),
+  updateInvoiceThemeSettings: (token: string, theme: ShopInvoiceTheme) => shopCall<ShopInvoiceThemeSettings>('updateInvoiceThemeSettings', token, { method: 'PUT', body: JSON.stringify({ theme }) }),
   listCompanySettings: (token: string) => shopCall<ShopCompanySettings[]>('listCompanySettings', token),
   getCompanySettings: (token: string) => shopCall<ShopCompanySettings>('getCompanySettings', token),
   createCompanySettings: (token: string, payload: ShopCompanySettings) => shopCall<ShopCompanySettings>('createCompanySettings', token, { method: 'POST', body: JSON.stringify(payload) }),

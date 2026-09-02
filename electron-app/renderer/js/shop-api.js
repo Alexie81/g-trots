@@ -11,7 +11,7 @@
     const controller = new AbortController();
     // Stergerea arhiveaza mai intai produsul si pretul in Stripe, deci poate
     // dura mai mult decat o cerere obisnuita pe o conexiune lenta.
-    const timeoutMs = ['downloadNirBundle', 'downloadNirRegistryBundle'].includes(action) ? 240000 : action === 'syncStripeCatalog' ? 90000 : ['syncBoomagTaxonomy', 'syncBoomagStock'].includes(action) ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
+    const timeoutMs = ['downloadNirBundle', 'downloadNirRegistryBundle'].includes(action) ? 1800000 : action === 'syncStripeCatalog' ? 90000 : ['syncBoomagTaxonomy', 'syncBoomagStock'].includes(action) ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const isGet = !options.method || options.method === 'GET';
     const cacheBuster = isGet ? `&_=${Date.now()}` : '';
@@ -158,6 +158,7 @@
     downloadAllNirAttachments: id => call('downloadAllNirAttachments', {}, id),
     downloadNirBundle: id => call('downloadNirBundle', {}, id),
     downloadNirRegistryBundle: (from, to, includeDocuments) => call('downloadNirRegistryBundle', {}, '', 0, { from, to, include_documents: includeDocuments ? 1 : 0 }),
+    getNirExportEstimate: (from, to, includeDocuments) => call('getNirExportEstimate', {}, '', 0, { from, to, include_documents: includeDocuments ? 1 : 0 }),
     getNirMovements: (id) => call('getNirMovements', {}, id),
     getNirFifoLayers: (id) => call('getNirFifoLayers', {}, id),
     exportNir: (id, format) => call('exportNir', {}, id, 0, { format }),

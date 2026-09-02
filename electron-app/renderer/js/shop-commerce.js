@@ -4,7 +4,7 @@
     products: [], orders: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], promotions: [], companies: [], nirs: [], nirPermissions: [], nirWarehouses: [], invoiceThemeSettings: null, selectedInvoiceTheme: 'orange', invoiceThemeSaving: false,
     editingProduct: null, editingOrder: null, editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
     productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, productTotal: 0, productSearchTimer: null, productLoadRequestId: 0, slugTouched: false, productQuery: '', orderQuery: '', orderSearchTimer: null, orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
-    customerQuery: '', inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false, nirBundleDownloading: '', nirRegistryDownloadPeriod: 'current_month', nirRegistryDownloadContent: 'complete', nirRegistryDownloading: false,
+    customerQuery: '', inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false, nirBundleDownloading: '', nirRegistryDownloadPeriod: 'current_month', nirRegistryDownloadContent: 'complete', nirRegistryDownloading: false, nirExportProgressTimer: null,
     pages: { products: 1, orders: 1, inventory: 1, stockFlow: 1, stockMovements: 1, productSales: 1, productReviews: 1, productPurchases: 1, customers: 1, customerOrders: 1, nirs: 1 },
     pageSizes: { products: 10, orders: 10, inventory: 10, stockFlow: 5, stockMovements: 5, productSales: 5, productReviews: 5, productPurchases: 5, customers: 10, customerOrders: 5, nirs: 15 },
   };
@@ -220,7 +220,8 @@
       ['current_month', 'Luna curentă', 'De la începutul lunii până astăzi'],
       ['custom', 'Custom', 'Alegi exact datele'],
     ].map(([value, label, hint]) => `<button type="button" data-nir-registry-period="${value}" class="${value === 'current_month' ? 'active' : ''}"><span class="shop-nir-period-icon">${periodIcons[value]}</span><strong>${label}</strong><small>${hint}</small><i></i></button>`).join('');
-    return `<div class="shop-commerce-overlay shop-nir-registry-download-overlay" id="shop-nir-registry-download-dialog" hidden><section class="shop-nir-registry-download-dialog" role="dialog" aria-modal="true" aria-labelledby="shop-nir-registry-download-title"><header><span class="shop-nir-registry-download-orb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7zM14 3v5h5M12 10v7m0 0 3-3m-3 3-3-3"/></svg></span><div><small>EXPORT CONTABIL</small><h2 id="shop-nir-registry-download-title">Descarcă registrul NIR</h2><p>Alege perioada și conținutul arhivei. Fișierele sunt generate acum și nu ocupă spațiul hostingului.</p></div><button type="button" data-commerce-close="shop-nir-registry-download-dialog" aria-label="Închide">×</button></header><div class="shop-nir-registry-download-body"><section><div class="shop-nir-registry-section-title"><span>01</span><div><strong>Ce vrei să descarci?</strong><small>Registrul este un Excel detaliat, pregătit pentru verificare.</small></div></div><div class="shop-nir-registry-content-options"><button type="button" data-nir-registry-content="registry"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 10h16M10 4v16"/></svg><span><strong>Doar registrul</strong><small>Un singur fișier XLSX detaliat</small></span><i></i></button><button type="button" data-nir-registry-content="complete" class="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 2h9v11H3zM8 3h8v4H8z"/></svg><span><strong>Registru + toate NIR-urile</strong><small>ZIP cu registru și câte un folder pentru fiecare NIR</small></span><i></i></button></div></section><section><div class="shop-nir-registry-section-title"><span>02</span><div><strong>Pentru ce perioadă?</strong><small>Poți folosi o perioadă rapidă sau un interval ales de tine.</small></div></div><div class="shop-nir-registry-periods">${periods}</div><div class="shop-nir-registry-custom" id="shop-nir-registry-custom" hidden><label>De la<input type="date" id="shop-nir-registry-from" /></label><span>—</span><label>Până la<input type="date" id="shop-nir-registry-to" /></label></div></section><aside class="shop-nir-registry-download-summary"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></span><div><small>SE VA GENERA</small><strong id="shop-nir-registry-download-summary">Arhivă completă pentru luna curentă</strong><p id="shop-nir-registry-download-range">Perioada este calculată automat.</p></div></aside></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-nir-registry-download-dialog">Renunță</button><button type="button" class="shop-nir-registry-download-confirm" id="shop-nir-registry-download-confirm"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg><span>Descarcă acum</span></button></footer></section></div>`;
+    return `<div class="shop-commerce-overlay shop-nir-registry-download-overlay" id="shop-nir-registry-download-dialog" hidden><section class="shop-nir-registry-download-dialog" role="dialog" aria-modal="true" aria-labelledby="shop-nir-registry-download-title"><header><span class="shop-nir-registry-download-orb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7zM14 3v5h5M12 10v7m0 0 3-3m-3 3-3-3"/></svg></span><div><small>EXPORT CONTABIL</small><h2 id="shop-nir-registry-download-title">Descarcă registrul NIR</h2><p>Alege perioada și conținutul arhivei. Fișierele sunt generate acum și nu ocupă spațiul hostingului.</p></div><button type="button" data-commerce-close="shop-nir-registry-download-dialog" aria-label="Închide">×</button></header><div class="shop-nir-registry-download-body"><section><div class="shop-nir-registry-section-title"><span>01</span><div><strong>Ce vrei să descarci?</strong><small>Registrul este un Excel detaliat, pregătit pentru verificare.</small></div></div><div class="shop-nir-registry-content-options"><button type="button" data-nir-registry-content="registry"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 10h16M10 4v16"/></svg><span><strong>Doar registrul</strong><small>Un singur fișier XLSX detaliat</small></span><i></i></button><button type="button" data-nir-registry-content="complete" class="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 2h9v11H3zM8 3h8v4H8z"/></svg><span><strong>Registru + toate NIR-urile</strong><small>ZIP cu registru și câte un folder pentru fiecare NIR</small></span><i></i></button></div></section><section><div class="shop-nir-registry-section-title"><span>02</span><div><strong>Pentru ce perioadă?</strong><small>Poți folosi o perioadă rapidă sau un interval ales de tine.</small></div></div><div class="shop-nir-registry-periods">${periods}</div><div class="shop-nir-registry-custom" id="shop-nir-registry-custom" hidden><label>De la<input type="date" id="shop-nir-registry-from" /></label><span>—</span><label>Până la<input type="date" id="shop-nir-registry-to" /></label></div></section><aside class="shop-nir-registry-download-summary"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></span><div><small>SE VA GENERA</small><strong id="shop-nir-registry-download-summary">Arhivă completă pentru luna curentă</strong><p id="shop-nir-registry-download-range">Perioada este calculată automat.</p></div></aside></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-nir-registry-download-dialog">Renunță</button><button type="button" class="shop-nir-registry-download-confirm" id="shop-nir-registry-download-confirm"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg><span>Descarcă acum</span></button></footer></section></div>
+    <div class="shop-commerce-overlay shop-nir-export-progress-overlay" id="shop-nir-export-progress-dialog" hidden><section class="shop-nir-export-progress" role="dialog" aria-modal="true" aria-labelledby="shop-nir-export-progress-title"><div class="shop-nir-export-progress-orb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7zM14 3v5h5M12 10v7m0 0 3-3m-3 3-3-3"/></svg><i></i></div><small>EXPORT ÎN CURS</small><h2 id="shop-nir-export-progress-title">Pregătim exportul</h2><p id="shop-nir-export-progress-detail">Calculăm volumul de date…</p><div class="shop-nir-export-progress-stats"><span><b id="shop-nir-export-progress-docs">—</b><small>NIR-URI</small></span><span><b id="shop-nir-export-progress-lines">—</b><small>POZIȚII</small></span><span><b id="shop-nir-export-progress-files">—</b><small>FIȘIERE</small></span></div><div class="shop-nir-export-progress-meta"><strong id="shop-nir-export-progress-percent">2%</strong><span id="shop-nir-export-progress-eta">Calculăm timpul rămas…</span></div><div class="shop-nir-export-progress-track"><i id="shop-nir-export-progress-fill"></i></div><footer>Poți lăsa această fereastră deschisă. Descărcarea pornește automat când arhiva este gata.</footer></section></div>`;
   }
   function shippingModal() {
     return `<div class="shop-commerce-overlay" id="shop-shipping-modal" hidden><form class="shop-commerce-modal mini" id="shop-shipping-form"><header><div><small>LIVRARE SHOP</small><h2 id="shop-shipping-title">Livrare noua</h2></div><button type="button" data-commerce-close="shop-shipping-modal">×</button></header><div class="shop-commerce-modal-scroll"><label>Nume *<input id="shop-shipping-name" required maxlength="120" /></label><label>Descriere<textarea id="shop-shipping-description" rows="3" maxlength="500"></textarea></label><div class="shop-commerce-columns"><label>Cost lei<input id="shop-shipping-cost" type="number" min="0" step="0.01" required /></label><label>Gratuit peste<input id="shop-shipping-free" type="number" min="0" step="0.01" placeholder="Optional" /></label></div><label>Termen estimat<input id="shop-shipping-eta" maxlength="120" placeholder="1-3 zile lucratoare" /></label><div class="shop-editor-toggles"><label><span><b>Livrare activa</b><small>Este disponibila pe site.</small></span><input id="shop-shipping-active" type="checkbox" checked /></label></div></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-shipping-modal">Renunta</button><button type="submit" class="btn-primary" id="shop-shipping-save">Salveaza livrarea</button></footer></form></div>`;
@@ -3544,6 +3545,54 @@
     openModal('shop-nir-registry-download-dialog');
   }
 
+  function formatNirExportDuration(seconds) {
+    const value = Math.max(0, Math.ceil(Number(seconds) || 0));
+    if (value < 60) return `${value} sec`;
+    const minutes = Math.floor(value / 60);
+    const remainder = value % 60;
+    return remainder ? `${minutes} min ${remainder} sec` : `${minutes} min`;
+  }
+
+  function startNirExportProgress(estimate = {}, title = 'Pregătim exportul') {
+    if (state.nirExportProgressTimer) clearInterval(state.nirExportProgressTimer);
+    const startedAt = Date.now();
+    const estimatedSeconds = Math.max(1, Number(estimate.estimated_seconds) || 3);
+    const titleElement = $('shop-nir-export-progress-title');
+    const detailElement = $('shop-nir-export-progress-detail');
+    if (titleElement) titleElement.textContent = title;
+    if (detailElement) detailElement.textContent = estimate.bundle_type === 'registry' ? 'Construim registrul Excel optimizat…' : 'Generăm documentele și împachetăm arhiva ZIP…';
+    if ($('shop-nir-export-progress-docs')) $('shop-nir-export-progress-docs').textContent = Number(estimate.document_count || 0).toLocaleString('ro-RO');
+    if ($('shop-nir-export-progress-lines')) $('shop-nir-export-progress-lines').textContent = Number(estimate.line_count || 0).toLocaleString('ro-RO');
+    if ($('shop-nir-export-progress-files')) $('shop-nir-export-progress-files').textContent = Number(estimate.attachment_count || 0).toLocaleString('ro-RO');
+    openModal('shop-nir-export-progress-dialog');
+    const render = () => {
+      const elapsed = (Date.now() - startedAt) / 1000;
+      const adaptiveTotal = Math.max(estimatedSeconds, elapsed / 0.9);
+      const percent = Math.min(94, Math.max(2, Math.round(2 + (elapsed / adaptiveTotal) * 92)));
+      const remaining = Math.max(1, adaptiveTotal - elapsed);
+      if ($('shop-nir-export-progress-percent')) $('shop-nir-export-progress-percent').textContent = `${percent}%`;
+      if ($('shop-nir-export-progress-eta')) $('shop-nir-export-progress-eta').textContent = `Timp estimat rămas: ${formatNirExportDuration(remaining)}`;
+      if ($('shop-nir-export-progress-fill')) $('shop-nir-export-progress-fill').style.width = `${percent}%`;
+    };
+    render();
+    state.nirExportProgressTimer = setInterval(render, 250);
+  }
+
+  async function finishNirExportProgress(success = true) {
+    if (state.nirExportProgressTimer) clearInterval(state.nirExportProgressTimer);
+    state.nirExportProgressTimer = null;
+    if (!success) {
+      closeModal('shop-nir-export-progress-dialog');
+      return;
+    }
+    if ($('shop-nir-export-progress-percent')) $('shop-nir-export-progress-percent').textContent = '100%';
+    if ($('shop-nir-export-progress-eta')) $('shop-nir-export-progress-eta').textContent = 'Fișierul este pregătit';
+    if ($('shop-nir-export-progress-fill')) $('shop-nir-export-progress-fill').style.width = '100%';
+    if ($('shop-nir-export-progress-detail')) $('shop-nir-export-progress-detail').textContent = 'Export finalizat. Descărcarea pornește acum.';
+    await new Promise(resolve => setTimeout(resolve, 320));
+    closeModal('shop-nir-export-progress-dialog');
+  }
+
   async function downloadNirRegistry() {
     if (state.nirRegistryDownloading) return;
     const range = nirRegistryPeriodRange();
@@ -3557,10 +3606,20 @@
     if (button) button.disabled = true;
     try {
       const complete = state.nirRegistryDownloadContent === 'complete';
-      saveNirDownload(await window.SHOP_API.downloadNirRegistryBundle(range.from, range.to, complete));
       closeModal('shop-nir-registry-download-dialog');
+      startNirExportProgress({ estimated_seconds: complete ? 12 : 2, bundle_type: complete ? 'complete' : 'registry' }, complete ? 'Pregătim arhiva completă' : 'Pregătim registrul Excel');
+      try {
+        const estimate = await window.SHOP_API.getNirExportEstimate(range.from, range.to, complete);
+        startNirExportProgress(estimate, complete ? 'Pregătim arhiva completă' : 'Pregătim registrul Excel');
+      } catch (_) {
+        // Exportul continuă și pe serverele API mai vechi; estimarea de rezervă rămâne vizibilă.
+      }
+      const file = await window.SHOP_API.downloadNirRegistryBundle(range.from, range.to, complete);
+      await finishNirExportProgress(true);
+      saveNirDownload(file);
       toast(complete ? 'Arhiva completă a registrului NIR a fost descărcată.' : 'Registrul NIR în Excel a fost descărcat.');
     } catch (error) {
+      await finishNirExportProgress(false);
       toast(error.message || 'Registrul NIR nu a putut fi descărcat.', 'error');
     } finally {
       state.nirRegistryDownloading = false;
@@ -3575,9 +3634,14 @@
     button?.classList.add('is-loading');
     if (button) button.disabled = true;
     try {
-      saveNirDownload(await window.SHOP_API.downloadNirBundle(id));
+      const document = state.nirs?.find(item => item.id === id);
+      startNirExportProgress({ document_count: 1, line_count: Number(document?.line_count || 0), attachment_count: Number(document?.attachment_count || 0), estimated_seconds: Math.max(2, 1.5 + Number(document?.line_count || 0) * 0.1), bundle_type: 'complete' }, `Pregătim ${document?.nir_number || 'NIR-ul'}`);
+      const file = await window.SHOP_API.downloadNirBundle(id);
+      await finishNirExportProgress(true);
+      saveNirDownload(file);
       toast('NIR-ul, Excelul și toate documentele au fost descărcate într-o arhivă ZIP.');
     } catch (error) {
+      await finishNirExportProgress(false);
       toast(error.message || 'Arhiva NIR nu a putut fi descărcată.', 'error');
     } finally {
       state.nirBundleDownloading = '';

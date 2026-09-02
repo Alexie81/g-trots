@@ -21,7 +21,8 @@ require_once __DIR__ . '/stripe.php';
 require_once __DIR__ . '/gomag.php';
 require_once __DIR__ . '/nir-domain.php';
 require_once __DIR__ . '/nir-service.php';
-require_once __DIR__ . '/nir-bundle.php';
+$nirBundlePath = __DIR__ . '/nir-bundle.php';
+if (is_file($nirBundlePath) && filesize($nirBundlePath) > 0) require_once $nirBundlePath;
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(204);

@@ -207,6 +207,7 @@ export default function ShopModuleScreen() {
   const [ordersInitialFilter, setOrdersInitialFilter] = useState<'all' | 'new'>('all');
   const [initialOrderId, setInitialOrderId] = useState<string | null>(null);
   const [initialNirId, setInitialNirId] = useState<string | null>(null);
+  const [initialInvoiceId, setInitialInvoiceId] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<ShopDashboardStats | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [categories, setCategories] = useState<ShopCategory[]>([]);
@@ -296,6 +297,11 @@ export default function ShopModuleScreen() {
   const openNirFromInventory = (nirId: string) => {
     setInitialNirId(nirId);
     setView('nirs');
+  };
+
+  const openInvoiceFromOrder = (invoiceId: string) => {
+    setInitialInvoiceId(invoiceId);
+    setView('invoices');
   };
 
   const openCategoryForm = (category?: ShopCategory) => {
@@ -503,7 +509,7 @@ export default function ShopModuleScreen() {
           </View> : null}
 
           {view === 'orders' ? (
-            <ShopOrdersManager initialStatusFilter={ordersInitialFilter} initialOrderId={initialOrderId} onInitialOrderHandled={() => setInitialOrderId(null)} />
+            <ShopOrdersManager initialStatusFilter={ordersInitialFilter} initialOrderId={initialOrderId} onInitialOrderHandled={() => setInitialOrderId(null)} onOpenInvoice={openInvoiceFromOrder} />
           ) : view === 'products' ? (
             <ShopProductsManager onOpenOrder={(orderId) => openOrders('all', orderId)} />
           ) : view === 'inventory' ? (
@@ -585,7 +591,7 @@ export default function ShopModuleScreen() {
     return (
       <View style={styles.container}>
         <Header title="Facturi emise" showBack onBack={() => setView('more')} />
-        <ShopInvoicesManager />
+        <ShopInvoicesManager initialInvoiceId={initialInvoiceId} onInitialInvoiceHandled={() => setInitialInvoiceId(null)} />
         <ShopBottomNavigation activeTab="more" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
       </View>
     );

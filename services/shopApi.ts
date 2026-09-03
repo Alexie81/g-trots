@@ -573,6 +573,8 @@ export type ShopInvoiceItem = {
   quantity: number;
   unit_price: number;
   discount_percent?: number;
+  discount_amount?: number;
+  discount_amount_gross?: number;
   vat_rate: number;
 };
 
@@ -587,6 +589,9 @@ export type ShopInvoicePayload = {
   seller: ShopInvoiceParty;
   buyer: ShopInvoiceParty;
   items: ShopInvoiceItem[];
+  discount_total?: number;
+  discount_code?: string;
+  discount_scope?: string;
   payment?: { method?: string; reference?: string; iban?: string; bank_name?: string; paid_at?: string; transaction_id?: string };
   notes?: string;
   order_reference?: string;

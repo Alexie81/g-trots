@@ -253,6 +253,7 @@ final class GtrotsInvoicePdf
 
         ksort($vatSummary, SORT_NATURAL);
         $related = is_array($invoice['related_invoice'] ?? null) ? $invoice['related_invoice'] : [];
+        $declaredDiscountTotal = abs(self::number($invoice['discount_total'] ?? 0, 'reducere totală'));
         return [
             'status' => $status,
             'theme' => $theme,
@@ -266,7 +267,8 @@ final class GtrotsInvoicePdf
             'buyer' => $buyer,
             'items' => $items,
             'subtotal' => round($subtotal, 2),
-            'discount_total' => round($discountTotal, 2),
+            'discount_total' => round($declaredDiscountTotal > 0 ? $declaredDiscountTotal : abs($discountTotal), 2),
+            'discount_code' => trim((string)($invoice['discount_code'] ?? '')),
             'vat_total' => round($vatTotal, 2),
             'shipping' => round($shipping, 2),
             'total' => $total,
@@ -361,6 +363,9 @@ final class GtrotsInvoicePdf
         $paidRow = $d['status'] === 'unpaid' && $d['amount_paid'] > 0
             ? '<tr class="paid-line"><td>Achitat parțial</td><td>-' . self::money($d['amount_paid'], $d['currency']) . '</td></tr>'
             : '';
+        $discountRow = $d['discount_total'] > 0
+            ? '<tr class="discount-summary"><td>Reducere aplicată' . ($d['discount_code'] !== '' ? ' · ' . self::e($d['discount_code']) : '') . '<small> inclusă în valorile pozițiilor</small></td><td>−' . self::money($d['discount_total'], $d['currency']) . '</td></tr>'
+            : '';
         $warrantyFooter = $d['warranty_note'] !== ''
             ? ' <span class="warranty-copy">' . self::e($d['warranty_note']) . '</span>'
             : '';
@@ -372,7 +377,7 @@ final class GtrotsInvoicePdf
             . '.payment-grid{width:calc(100% - 6mm);margin:.8mm 3mm 1.2mm;border-collapse:collapse;table-layout:fixed}.payment-grid th,.payment-grid td{padding:1mm 0;border-bottom:1px solid #ebe8ec;vertical-align:middle}.payment-grid tr:last-child th,.payment-grid tr:last-child td{border-bottom:0}.payment-grid th{width:22mm;text-align:left;color:#89838b;font-size:5pt;font-weight:900;letter-spacing:.35pt}.payment-grid td{padding-left:2mm;color:#242126;font-size:6pt}.payment-code{font-family:"DejaVu Sans Mono",monospace;font-size:5.5pt!important;letter-spacing:.1pt}.payment-reference{font-weight:900;color:' . $ink . '!important}'
             . '.note-card{padding:0;overflow:hidden;background:' . $soft . ';border-color:' . $accent . '}.note-heading{width:100%;border-collapse:collapse}.note-heading td{padding:1.5mm 2.5mm .8mm}.note-kicker{font-size:5.2pt;font-weight:900;letter-spacing:1pt;color:' . $ink . '}.note-badge{text-align:right;color:' . $accentDark . ';font-size:4.6pt;font-weight:900;letter-spacing:.4pt}.note-content{padding:0 2.5mm 1.5mm}.note-entry{display:table;width:100%;padding:1mm 1.5mm;border-radius:1.6mm;background:rgba(255,255,255,.76);border-left:.7mm solid ' . $accent . ';color:' . $ink . ';font-size:5.3pt;line-height:1.3}.note-entry+.note-entry{margin-top:.65mm}.note-entry b,.note-entry span{display:table-cell;vertical-align:middle}.note-entry b{width:28mm;padding-left:2.2mm;padding-right:2.2mm;font-size:4.5pt;letter-spacing:.5pt;text-transform:uppercase;color:' . $accentDark . '}.note-general{background:#fff;border-left-color:#c8c3ca;color:#5e5860}.note-general b{color:#817a83}'
             . '.closing{margin-top:2mm;padding:2.4mm 3.5mm;background:#fff;border:1px solid #d8d4da;border-top:1.4mm solid ' . $accent . ';border-radius:3mm;page-break-inside:avoid}.closing-grid{width:100%;border-collapse:collapse}.closing-icon-cell{width:15mm;padding:0;vertical-align:middle}.closing .closing-logo-frame{width:12mm;height:12mm;margin:0;border-collapse:separate;border-spacing:0;table-layout:fixed;border-radius:3mm;background:' . $soft . '}.closing-logo-center{width:12mm;height:12mm;padding:1mm;text-align:center;vertical-align:middle;line-height:0}.closing-logo,.closing-logo-fallback{display:block;width:10mm;height:10mm;margin:0 auto;border-radius:2.5mm;background:' . $accent . '}.closing-logo{object-fit:contain}.closing-logo-fallback{line-height:10mm;text-align:center;color:#fff;font-size:8pt;font-weight:900}.closing-message{vertical-align:middle}.closing-message strong{display:block;color:#171519;font-size:9.4pt;line-height:1.1}.closing-message span{display:block;margin-top:.9mm;color:#625d64;font-size:6.2pt}.closing-contacts{width:42%;padding-left:4mm;border-left:1px solid #e7e3e8;vertical-align:middle;text-align:left}.contact-line{position:relative;width:42.2mm;height:6.4mm;margin:.35mm 0;white-space:nowrap}.closing .contact-icon{position:absolute;left:0;top:0;display:block;width:6.4mm;height:6.4mm;margin:0;padding:0;border-radius:3.2mm;background:' . $soft . '}.contact-icon-image{position:absolute;left:1.1mm;top:1.1mm;display:block;width:4.2mm;height:4.2mm;margin:0}.closing .contact-copy{display:block;width:34mm;margin-left:8.2mm;padding-top:.55mm;text-align:left;white-space:nowrap}.closing .contact-label{display:block;color:#777078;font-size:4.8pt;font-weight:900;letter-spacing:.9pt;line-height:1}.closing .contact-value{display:block;margin-top:.45mm;color:' . $accentDark . ';font-size:7pt;font-weight:900;line-height:1.05}'
-            . '.legal-footer{position:fixed;left:10mm;right:10mm;bottom:12.5mm;margin:0;padding:1mm 1mm 0;border-top:1px solid #d5d1d7;text-align:center}.legal-copy{max-width:177mm;margin:0 auto;color:#615b63;font-size:5.1pt;line-height:1.4}.warranty-copy{color:inherit;font-weight:400}';
+            . '.discount-summary td{color:#a94f00;background:' . $soft . ';font-weight:900}.discount-summary small{display:block;margin-top:.35mm;color:#766d65;font-size:4.5pt;font-weight:700}.discount-summary td:last-child{color:#cf4d00}.legal-footer{position:fixed;left:10mm;right:10mm;bottom:12.5mm;margin:0;padding:1mm 1mm 0;border-top:1px solid #d5d1d7;text-align:center}.legal-copy{max-width:177mm;margin:0 auto;color:#615b63;font-size:5.1pt;line-height:1.4}.warranty-copy{color:inherit;font-weight:400}';
 
         return '<!doctype html><html lang="ro"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'
             . self::e($s['title'] . ' ' . $d['series'] . ' ' . $d['number']) . '</title><style>' . $css . '@page{margin:0}.document-shell{width:190mm;margin:10mm}.demo-ribbon{top:10mm;right:10mm}.document-shell .parties{width:100%;margin:3mm 0 2.5mm;border-spacing:0}.document-shell .parties td:first-child{padding-right:1.5mm}.document-shell .parties td:last-child{padding-left:1.5mm}' . '</style></head><body>'
@@ -388,7 +393,7 @@ final class GtrotsInvoicePdf
             . '<thead><tr><th>#</th><th>Foto</th><th>Articol facturat</th><th>U.M.</th><th>Cant.</th><th>Preț unitar<br><small>fără TVA</small></th><th>TVA</th><th>Valoare<br><small>fără TVA</small></th><th>Total</th></tr></thead><tbody>' . $rows . '</tbody></table>'
             . '<table class="bottom-layout"><tr><td class="left-bottom">' . $payment . $notes . '</td><td class="right-bottom">'
             . '<table class="vat-summary"><thead><tr><th>Sumar TVA</th><th>Bază</th><th>TVA</th></tr></thead><tbody>' . $vatRows . '</tbody></table>'
-            . '<table class="totals"><tr><td>Subtotal fără TVA</td><td>' . self::money($d['subtotal'], $d['currency']) . '</td></tr>' . $shippingRow
+            . '<table class="totals">' . $discountRow . '<tr><td>Subtotal fără TVA</td><td>' . self::money($d['subtotal'], $d['currency']) . '</td></tr>' . $shippingRow
             . '<tr><td>Total TVA</td><td>' . self::money($d['vat_total'], $d['currency']) . '</td></tr><tr class="grand"><td>Total factură</td><td>' . self::money($d['total'], $d['currency']) . '</td></tr>' . $paidRow . '</table>'
             . '<div class="due-card"><small>' . self::e($dueLabel) . '</small><strong>' . self::money($dueValue, $d['currency']) . '</strong></div>'
             . '</td></tr></table>'

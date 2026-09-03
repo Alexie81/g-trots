@@ -47,7 +47,8 @@ final class GtrotsInvoiceUbl
             $key = $category . ':' . self::decimal($rate, 2);
             if (!isset($taxGroups[$key])) $taxGroups[$key] = ['category' => $category, 'rate' => $rate, 'net' => 0.0, 'tax' => 0.0];
             $taxGroups[$key]['net'] = round($taxGroups[$key]['net'] + $net, 2);
-            $lines[] = ['index' => $index + 1, 'item' => $item, 'quantity' => $quantity, 'price' => $price, 'net' => $net, 'rate' => $rate, 'category' => $category];
+            $base = round($quantity * $price, 2);
+            $lines[] = ['index' => $index + 1, 'item' => $item, 'quantity' => $quantity, 'price' => $price, 'discount' => $discount, 'discount_amount' => round($base - $net, 2), 'base' => $base, 'net' => $net, 'rate' => $rate, 'category' => $category];
         }
         foreach ($taxGroups as &$group) $group['tax'] = round($group['net'] * $group['rate'] / 100, 2);
         unset($group);
@@ -237,6 +238,14 @@ final class GtrotsInvoiceUbl
         $quantity = self::cbc($document, $node, 'InvoicedQuantity', self::decimal($line['quantity'], 4));
         $quantity->setAttribute('unitCode', 'C62');
         self::amount($document, $node, 'LineExtensionAmount', $line['net'], $currency);
+        if ((float)($line['discount_amount'] ?? 0) > 0) {
+            $allowance = self::cac($document, $node, 'AllowanceCharge');
+            self::cbc($document, $allowance, 'ChargeIndicator', 'false');
+            self::cbc($document, $allowance, 'AllowanceChargeReason', 'Reducere comercială');
+            self::cbc($document, $allowance, 'MultiplierFactorNumeric', self::decimal((float)$line['discount'] / 100, 8));
+            self::amount($document, $allowance, 'Amount', (float)$line['discount_amount'], $currency);
+            self::amount($document, $allowance, 'BaseAmount', (float)$line['base'], $currency);
+        }
         $itemNode = self::cac($document, $node, 'Item');
         $fullName = trim((string)$item['name']);
         if (mb_strlen($fullName, 'UTF-8') > 100) self::cbc($document, $itemNode, 'Description', self::text($fullName, 200));

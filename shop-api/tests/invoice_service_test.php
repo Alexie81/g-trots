@@ -28,10 +28,10 @@ $schema = [
     'CREATE TABLE shop_invoice_sequences (series TEXT PRIMARY KEY, last_number INTEGER NOT NULL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)',
     'CREATE TABLE shop_invoices (id TEXT PRIMARY KEY, order_id TEXT NOT NULL UNIQUE, series TEXT NOT NULL, invoice_number TEXT NOT NULL, document_status TEXT NOT NULL, theme TEXT NOT NULL, issue_date TEXT NOT NULL, due_date TEXT, currency TEXT NOT NULL, total REAL NOT NULL, buyer_name TEXT NOT NULL, buyer_cui TEXT, payload_json TEXT NOT NULL, issued_by TEXT, email_sent_at TEXT, email_last_error TEXT, spv_status TEXT NOT NULL DEFAULT "not_sent", spv_sent_at TEXT, spv_submission_id TEXT, issued_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(series, invoice_number))',
     'CREATE TABLE shop_company_settings (id INTEGER PRIMARY KEY, legal_name TEXT, trade_name TEXT, cui TEXT, registration_number TEXT, address TEXT, city TEXT, county TEXT, postal_code TEXT, country TEXT, email TEXT, phone TEXT, website TEXT, bank_name TEXT, iban TEXT, share_capital TEXT, is_default INTEGER, vat_payer INTEGER, vat_rate REAL)',
-    'CREATE TABLE shop_orders (id TEXT PRIMARY KEY, order_number TEXT, status TEXT, payment_status TEXT, payment_method TEXT, currency TEXT, total REAL, shipping_cost REAL, shipping_method_name TEXT, subtotal REAL, discount_total REAL, vat_payer INTEGER, vat_rate REAL, customer_type TEXT, customer_name TEXT, customer_email TEXT, customer_phone TEXT, company_name TEXT, company_cui TEXT, company_registration_number TEXT, company_address TEXT, address TEXT, city TEXT, county TEXT, postal_code TEXT, promotion_code TEXT, customer_notes TEXT, stripe_paid_at TEXT, stripe_payment_intent_id TEXT)',
-    'CREATE TABLE shop_order_items (id TEXT PRIMARY KEY, order_id TEXT, product_id TEXT, product_name TEXT, product_sku TEXT, quantity INTEGER, unit_price REAL, line_total REAL, discounted_unit_price REAL, discounted_line_total REAL)',
+    'CREATE TABLE shop_orders (id TEXT PRIMARY KEY, order_number TEXT, status TEXT, payment_status TEXT, payment_method TEXT, currency TEXT, total REAL, shipping_cost REAL, shipping_method_name TEXT, subtotal REAL, discount_total REAL, vat_payer INTEGER, vat_rate REAL, customer_type TEXT, customer_name TEXT, customer_email TEXT, customer_phone TEXT, company_name TEXT, company_cui TEXT, company_registration_number TEXT, company_address TEXT, address TEXT, city TEXT, county TEXT, postal_code TEXT, promotion_code TEXT, promotion_scope TEXT, customer_notes TEXT, stripe_paid_at TEXT, stripe_payment_intent_id TEXT)',
+    'CREATE TABLE shop_order_items (id TEXT PRIMARY KEY, order_id TEXT, product_id TEXT, product_name TEXT, product_sku TEXT, quantity INTEGER, unit_price REAL, line_total REAL, discount_total REAL, discounted_unit_price REAL, discounted_line_total REAL)',
     'CREATE TABLE shop_product_images (id TEXT PRIMARY KEY, product_id TEXT, image_path TEXT, sort_order INTEGER, created_at TEXT)',
-    'CREATE TABLE shop_products (id TEXT PRIMARY KEY, name TEXT, stock_mode TEXT, stock_quantity INTEGER, accounting_stock_quantity REAL)',
+    'CREATE TABLE shop_products (id TEXT PRIMARY KEY, name TEXT, sku TEXT, supplier_product_code TEXT, stock_mode TEXT, stock_quantity INTEGER, accounting_stock_quantity REAL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)',
     'CREATE TABLE shop_inventory_movements (id TEXT PRIMARY KEY, product_id TEXT, warehouse_id TEXT, order_id TEXT, sales_invoice_id TEXT, sales_invoice_line_id TEXT, movement_type TEXT, quantity_delta INTEGER, quantity_after INTEGER, accounting_quantity_delta REAL, accounting_quantity_after REAL, inventory_unit_cost_ron REAL, inventory_cost_total_ron REAL, sale_unit_price_ron REAL, sale_total_ron REAL, fifo_status TEXT, fifo_quantity_allocated REAL, fifo_quantity_pending REAL, note TEXT, created_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)',
     'CREATE TABLE shop_nir_settings (id INTEGER PRIMARY KEY, default_warehouse_id TEXT)',
     'CREATE TABLE shop_inventory_cost_layers (id TEXT PRIMARY KEY, product_id TEXT NOT NULL, warehouse_id TEXT NOT NULL, supplier_id TEXT, nir_document_id TEXT, source_type TEXT, source_reference TEXT, invoice_number_snapshot TEXT, reception_date TEXT NOT NULL, confirmed_at TEXT, original_quantity REAL NOT NULL, remaining_quantity REAL NOT NULL, unit_cost_ron REAL NOT NULL, total_cost_ron REAL NOT NULL, status TEXT NOT NULL DEFAULT "open", is_reversed INTEGER NOT NULL DEFAULT 0, row_version INTEGER NOT NULL DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP)',
@@ -46,7 +46,7 @@ $db->exec("INSERT INTO shop_company_settings (id, legal_name, trade_name, cui, r
 $insertOrder = $db->prepare('INSERT INTO shop_orders (id, order_number, status, payment_status, payment_method, currency, total, shipping_cost, shipping_method_name, subtotal, discount_total, vat_payer, vat_rate, customer_type, customer_name, customer_email, customer_phone, address, city, county, postal_code, customer_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
 $insertItem = $db->prepare('INSERT INTO shop_order_items (id, order_id, product_id, product_name, product_sku, quantity, unit_price, line_total, discounted_unit_price, discounted_line_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
 $insertOrder->execute(['order-1', 'CMD-001', 'confirmed', 'pending', 'cash', 'RON', 119.00, 19.00, 'Curier', 100.00, 0, 1, 19, 'individual', 'Client Test', 'client@example.com', '0700111222', 'Str. Client 1', 'Bucuresti', 'Bucuresti', '010102', 'Test factura']);
-$db->exec("INSERT INTO shop_products (id, name, stock_mode, stock_quantity, accounting_stock_quantity) VALUES ('product-1', 'Produs test', 'tracked', 10, 10)");
+$db->exec("INSERT INTO shop_products (id, name, sku, supplier_product_code, stock_mode, stock_quantity, accounting_stock_quantity) VALUES ('product-1', 'Produs test', 'GT-TEST', 'SUP-TEST', 'tracked', 10, 10)");
 $db->exec("INSERT INTO shop_product_images (id, product_id, image_path, sort_order, created_at) VALUES ('image-1', 'product-1', 'uploads/products/produs-test.jpg', 0, '2026-08-01 09:00:00')");
 $db->exec("INSERT INTO shop_inventory_cost_layers (id, product_id, warehouse_id, supplier_id, nir_document_id, source_type, source_reference, invoice_number_snapshot, reception_date, original_quantity, remaining_quantity, unit_cost_ron, total_cost_ron, created_at) VALUES ('layer-1-old', 'product-1', 'warehouse-main', 'supplier-a', 'nir-1', 'NIR', 'NIR-2026-000001', 'FA 001', '2026-08-01', 2, 2, 10, 20, '2026-08-01 10:00:00'), ('layer-1-new', 'product-1', 'warehouse-main', 'supplier-b', 'nir-2', 'NIR', 'NIR-2026-000002', 'FB 002', '2026-08-20', 8, 8, 20, 160, '2026-08-20 10:00:00')");
 $insertItem->execute(['item-1', 'order-1', 'product-1', 'Produs test', 'GT-TEST', 4, 25.00, 100.00, 25.00, 100.00]);
@@ -60,7 +60,7 @@ invoiceAssert($first['status'] === 'unpaid', 'Comanda neplatita trebuie sa emita
 GtrotsInvoiceThemeStore::update($db, 'orange', 'Test');
 $insertOrder->execute(['order-2', 'CMD-002', 'completed', 'paid', 'card', 'RON', 238.00, 0, '', 238.00, 0, 1, 19, 'company', 'Client Firma', 'firma@example.com', '0700333444', 'Bd. Firma 2', 'Cluj-Napoca', 'Cluj', '400001', '']);
 $db->exec("UPDATE shop_orders SET company_name='CLIENT SRL', company_cui='RO123', company_registration_number='J12/1/2020', company_address='Bd. Firma 2', stripe_paid_at='2026-09-03 10:30:00' WHERE id='order-2'");
-$db->exec("INSERT INTO shop_products (id, name, stock_mode, stock_quantity, accounting_stock_quantity) VALUES ('product-2', 'Produs platit', 'tracked', 10, 10)");
+$db->exec("INSERT INTO shop_products (id, name, sku, supplier_product_code, stock_mode, stock_quantity, accounting_stock_quantity) VALUES ('product-2', 'Produs platit', 'GT-PAID', 'SUP-PAID', 'tracked', 10, 10)");
 $db->exec("INSERT INTO shop_inventory_cost_layers (id, product_id, warehouse_id, supplier_id, nir_document_id, source_type, source_reference, invoice_number_snapshot, reception_date, original_quantity, remaining_quantity, unit_cost_ron, total_cost_ron, created_at) VALUES ('layer-2', 'product-2', 'warehouse-main', 'supplier-c', 'nir-3', 'NIR', 'NIR-2026-000003', 'FC 003', '2026-08-25', 10, 10, 50, 500, '2026-08-25 10:00:00')");
 $insertItem->execute(['item-2', 'order-2', 'product-2', 'Produs platit', 'GT-PAID', 2, 119.00, 238.00, 119.00, 238.00]);
 $second = GtrotsInvoiceService::issue($db, 'order-2', $actor, []);
@@ -83,7 +83,7 @@ invoiceAssert((int)$db->query("SELECT COUNT(*) FROM shop_inventory_layer_consump
 
 // Facturarea trebuie să rămână posibilă înainte de introducerea NIR-ului.
 $insertOrder->execute(['order-3', 'CMD-003', 'confirmed', 'pending', 'cash', 'RON', 60.00, 0, '', 60.00, 0, 1, 19, 'individual', 'Client fără NIR', 'client3@example.com', '0700555666', 'Str. Client 3', 'Iași', 'Iași', '700001', '']);
-$db->exec("INSERT INTO shop_products (id, name, stock_mode, stock_quantity, accounting_stock_quantity) VALUES ('product-3', 'Produs fără NIR încă', 'tracked', 5, 0)");
+$db->exec("INSERT INTO shop_products (id, name, sku, supplier_product_code, stock_mode, stock_quantity, accounting_stock_quantity) VALUES ('product-3', 'Produs fără NIR încă', 'GT-PENDING', 'SUP-PENDING', 'tracked', 5, 0)");
 $insertItem->execute(['item-3', 'order-3', 'product-3', 'Produs fără NIR încă', 'GT-PENDING', 2, 30.00, 60.00, 30.00, 60.00]);
 $third = GtrotsInvoiceService::issue($db, 'order-3', $actor, []);
 invoiceAssert($third['display_number'] === 'GT 003', 'Factura fără NIR trebuie emisă normal.');
@@ -123,11 +123,18 @@ $thirdReissued = GtrotsInvoiceService::issue($db, 'order-3', $actor, []);
 invoiceAssert($thirdReissued['display_number'] === 'GT 003', 'Următoarea factură trebuie să reutilizeze numărul eliberat.');
 
 $db->exec("UPDATE shop_orders SET payment_status='paid' WHERE id='order-1'");
+$legacyPayload = json_decode((string)$db->query("SELECT payload_json FROM shop_invoices WHERE order_id='order-1'")->fetchColumn(), true, 512, JSON_THROW_ON_ERROR);
+$legacyPayload['items'][0]['product_id'] = null;
+$db->prepare("UPDATE shop_invoices SET payload_json = ? WHERE order_id='order-1'")->execute([json_encode($legacyPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)]);
+$db->exec("UPDATE shop_order_items SET product_id=NULL, unit_price=110, line_total=110, discount_total=0, discounted_unit_price=110, discounted_line_total=110 WHERE id='item-1'");
+$db->exec("UPDATE shop_orders SET subtotal=110, discount_total=10, promotion_code='SAVE10', promotion_scope='global' WHERE id='order-1'");
 $updated = GtrotsInvoiceService::get($db, $first['id']);
 invoiceAssert($updated['status'] === 'paid', 'Starea facturii trebuie sa urmareasca plata curenta a comenzii.');
 invoiceAssert(($updated['payload']['items'][0]['product_id'] ?? '') === 'product-1', 'Fișa facturii trebuie să păstreze legătura către produs.');
 invoiceAssert(($updated['payload']['items'][0]['image_path'] ?? '') === 'uploads/products/produs-test.jpg', 'Fișa facturii trebuie să includă imaginea poziției.');
 invoiceAssert(($updated['payload']['buyer']['name'] ?? '') === 'Client Test', 'Fișa facturii trebuie să includă datele cumpărătorului.');
+invoiceAssert(abs((float)($updated['payload']['items'][0]['discount_percent'] ?? 0) - 9.09090909) < 0.0001, 'Reducerea istorică trebuie reconstruită explicit pe poziția facturii.');
+invoiceAssert((float)($updated['payload']['discount_total'] ?? 0) === 10.0 && ($updated['payload']['discount_code'] ?? '') === 'SAVE10', 'Fișa trebuie să includă totalul și codul reducerii aplicate.');
 
 $storedPayload = json_decode((string)$db->query("SELECT payload_json FROM shop_invoices WHERE order_id='order-1'")->fetchColumn(), true, 512, JSON_THROW_ON_ERROR);
 invoiceAssert(($storedPayload['seller']['phone'] ?? '') === '0700000000', 'Snapshotul trebuie sa includa telefonul firmei.');
@@ -143,6 +150,7 @@ invoiceAssert(is_string($xlsx) && str_starts_with($xlsx, "PK\x03\x04"), 'Descarc
 invoiceAssert($xlsxDownload['mime_type'] === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'XLSX-ul trebuie livrat cu tipul corect.');
 invoiceAssert(str_contains($xlsx, 'Produs test') && str_contains($xlsx, 'GT-TEST'), 'XLSX-ul trebuie sa includa denumirea si codul produsului.');
 invoiceAssert(str_contains($xlsx, 'PLĂTITĂ'), 'XLSX-ul trebuie sa reflecte starea platita a comenzii.');
+invoiceAssert(str_contains($xlsx, 'REDUCERE APLICATĂ') && str_contains($xlsx, 'SAVE10'), 'XLSX-ul trebuie să afișeze explicit reducerea și codul promoțional.');
 
 $storageDirectory = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'gtrots-invoice-storage-' . bin2hex(random_bytes(5));
 $storageConfig = ['website_base_url' => 'https://g-trots.ro', 'invoice_storage_dir' => $storageDirectory, 'api_key' => 'test-secret'];
@@ -178,6 +186,8 @@ $xmlXpath->registerNamespace('cac', 'urn:oasis:names:specification:ubl:schema:xs
 $productNames = $xmlXpath->query('//cac:InvoiceLine/cac:Item/cbc:Name');
 invoiceAssert($productNames !== false && $productNames->length > 0, 'XML-ul trebuie să conțină denumirea fiecărui produs facturat.');
 foreach ($productNames ?: [] as $productName) invoiceAssert(mb_strlen((string)$productName->textContent, 'UTF-8') <= 100, 'Denumirea produsului BT-153 trebuie să respecte limita RO_CIUS de 100 de caractere.');
+$allowances = $xmlXpath->query('//cac:InvoiceLine/cac:AllowanceCharge[cbc:ChargeIndicator="false"]');
+invoiceAssert($allowances !== false && $allowances->length === 1, 'Reducerea trebuie declarată explicit ca allowance la poziția UBL aferentă.');
 
 try {
     GtrotsInvoiceService::download($db, $first['id'], 'docx');

@@ -1168,12 +1168,15 @@
 
   const invoiceThemeColors = { orange: '#ff8a00', green: '#19a86b', red: '#ef4056', purple: '#8b72e8' };
   const invoiceMoney = (value, currency = 'RON') => `${new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0))} ${esc(currency || 'RON')}`;
+  const invoiceAssetUrl = value => { const path = String(value || '').trim(); return !path || /^(?:https?:|data:)/i.test(path) ? path : `${String(window.SHOP_API_URL || 'https://g-trots.ro/shop-api').replace(/\/$/, '')}/${path.replace(/^\/+/, '')}`; };
   function invoiceItemAmounts(item) {
     const quantityValue = Math.max(0, Number(item?.quantity || 0));
     const discount = Math.max(0, Math.min(100, Number(item?.discount_percent || 0)));
-    const net = quantityValue * Number(item?.unit_price || 0) * (1 - discount / 100);
+    const base = quantityValue * Number(item?.unit_price || 0);
+    const net = base * (1 - discount / 100);
     const vat = net * Math.max(0, Number(item?.vat_rate || 0)) / 100;
-    return { net, vat, gross: net + vat };
+    const discountNet = Math.max(0, base - net);
+    return { base, net, vat, gross: net + vat, discountNet, discountGross: discountNet * (1 + Math.max(0, Number(item?.vat_rate || 0)) / 100) };
   }
   function invoicePartyCard(kind, party = {}) {
     const seller = kind === 'seller';
@@ -1191,16 +1194,32 @@
     const accent = invoiceThemeColors[invoice.theme] || invoiceThemeColors.orange;
     const items = Array.isArray(payload.items) ? payload.items : [];
     const totals = items.reduce((sum, item) => { const line = invoiceItemAmounts(item); return { net: sum.net + line.net, vat: sum.vat + line.vat, gross: sum.gross + line.gross }; }, { net: 0, vat: 0, gross: 0 });
+    const calculatedDiscount = items.reduce((sum, item) => sum + invoiceItemAmounts(item).discountGross, 0);
+    const discountTotal = Math.max(0, Number(payload.discount_total || calculatedDiscount));
+    const discountCode = String(payload.discount_code || '').trim();
     const productIcon = '<svg viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="M3 7v10l9 5 9-5V7M12 12v10"/></svg>';
+    const courierIcon = '<svg viewBox="0 0 24 24"><path d="M3 6h11v10H3zM14 9h4l3 3v4h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>';
     const rows = items.map((item, index) => {
       const line = invoiceItemAmounts(item);
       const unitGross = line.gross / Math.max(1, Number(item.quantity || 1));
-      const content = `<span class="shop-invoice-product-icon">${productIcon}</span><span class="shop-invoice-product-copy"><strong>${esc(item.name || 'Produs')}</strong><small>${esc(item.sku || 'Fără cod')} · ${esc(item.quantity)} ${esc(item.unit || 'buc.')} × ${invoiceMoney(unitGross, payload.currency)}</small><em>TVA ${esc(new Intl.NumberFormat('ro-RO').format(Number(item.vat_rate || 0)))}%</em></span><b>${invoiceMoney(line.gross, payload.currency)}</b>${item.product_id ? '<span class="shop-invoice-product-arrow"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span>' : ''}`;
+      const isDelivery = String(item.sku || '').trim().toUpperCase() === 'TRANSPORT';
+      const imageUrl = invoiceAssetUrl(item.image_path);
+      const thumbnail = isDelivery
+        ? `<span class="shop-invoice-product-icon delivery" aria-label="Serviciu de curierat">${courierIcon}</span>`
+        : imageUrl
+          ? `<span class="shop-invoice-product-icon image"><img src="${esc(imageUrl)}" alt="Miniatură ${esc(item.name || 'produs')}" loading="lazy" decoding="async"></span>`
+          : `<span class="shop-invoice-product-icon">${productIcon}</span>`;
+      const discount = Number(item.discount_percent || 0) > 0
+        ? `<em class="shop-invoice-line-discount"><b>−${esc(new Intl.NumberFormat('ro-RO', { maximumFractionDigits: 2 }).format(Number(item.discount_percent)))}%</b><span>Reducere ${invoiceMoney(item.discount_amount_gross || line.discountGross, payload.currency)}</span></em>`
+        : '';
+      const content = `${thumbnail}<span class="shop-invoice-product-copy"><strong>${esc(item.name || 'Produs')}</strong><small>${esc(item.sku || 'Fără cod')} · ${esc(item.quantity)} ${esc(item.unit || 'buc.')} × ${invoiceMoney(unitGross, payload.currency)}</small><em>TVA ${esc(new Intl.NumberFormat('ro-RO').format(Number(item.vat_rate || 0)))}%</em>${discount}</span><b>${invoiceMoney(line.gross, payload.currency)}</b>${item.product_id ? '<span class="shop-invoice-product-arrow"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span>' : ''}`;
       return item.product_id
-        ? `<button type="button" class="shop-invoice-product" data-invoice-product="${esc(item.product_id)}" title="Deschide fișa produsului">${content}</button>`
+        ? `<button type="button" class="shop-invoice-product interactive" data-invoice-product="${esc(item.product_id)}" title="Deschide fișa completă a produsului">${content}</button>`
         : `<div class="shop-invoice-product service">${content}</div>`;
     }).join('');
-    root.innerHTML = `<section class="shop-invoice-detail-hero" style="--invoice-accent:${accent}"><span class="shop-invoice-detail-document"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span><div><small>DOCUMENT FISCAL · TEMA ${esc(String(invoice.theme || '').toUpperCase())}</small><h3>${esc(invoice.display_number)}</h3><p>Comanda ${esc(invoice.order_number)} · emisă ${esc(invoice.issue_date)}</p></div><span class="shop-invoice-state-stack"><b class="${invoice.status}">${invoice.status === 'paid' ? 'PLĂTITĂ' : 'NEPLĂTITĂ'}</b><b class="spv ${invoice.spv_status === 'sent' ? 'sent' : 'pending'}">SPV ${invoice.spv_status === 'sent' ? 'TRIMISĂ' : 'NETRIMISĂ'}</b></span></section><section class="shop-invoice-parties">${invoicePartyCard('seller', payload.seller)}${invoicePartyCard('buyer', payload.buyer)}</section><section class="shop-invoice-products"><header><div><small>POZIȚII FACTURATE</small><strong>${items.length} ${items.length === 1 ? 'poziție' : 'poziții'}</strong></div><span>${productIcon}</span></header>${rows || '<p class="shop-detail-empty">Factura nu conține poziții.</p>'}</section><section class="shop-invoice-detail-bottom"><article class="shop-invoice-payment"><small>PLATĂ ȘI EMITERE</small><strong>${esc(payload.payment?.method || 'Metodă neprecizată')}</strong><p>Scadență ${esc(payload.due_date || payload.issue_date)} · emisă de ${esc(invoice.issued_by || 'Administrator')}</p>${payload.notes ? `<em>${esc(payload.notes)}</em>` : ''}</article><article class="shop-invoice-totals"><span><small>Subtotal fără TVA</small><strong>${invoiceMoney(totals.net, payload.currency)}</strong></span><span><small>TVA</small><strong>${invoiceMoney(totals.vat, payload.currency)}</strong></span><span class="grand" style="--invoice-accent:${accent}"><small>TOTAL FACTURĂ</small><strong>${invoiceMoney(invoice.total, payload.currency)}</strong></span></article></section>`;
+    const discountCallout = discountTotal > 0 ? `<div class="shop-invoice-discount-callout"><span class="shop-invoice-discount-orbit"><b>%</b><i></i></span><span><small>REDUCERE APLICATĂ</small><strong>${esc(discountCode ? `Cod ${discountCode}` : 'Promoție comercială')}</strong><em>Este deja inclusă în prețurile pozițiilor.</em></span><b>−${invoiceMoney(discountTotal, payload.currency)}</b></div>` : '';
+    const discountTotalRow = discountTotal > 0 ? `<span class="discount"><small>Reducere${discountCode ? ` · ${esc(discountCode)}` : ''}<em>inclusă în subtotal</em></small><strong>−${invoiceMoney(discountTotal, payload.currency)}</strong></span>` : '';
+    root.innerHTML = `<section class="shop-invoice-detail-hero" style="--invoice-accent:${accent}"><span class="shop-invoice-detail-document"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span><div><small>DOCUMENT FISCAL · TEMA ${esc(String(invoice.theme || '').toUpperCase())}</small><h3>${esc(invoice.display_number)}</h3><p>Comanda ${esc(invoice.order_number)} · emisă ${esc(invoice.issue_date)}</p></div><span class="shop-invoice-state-stack"><b class="${invoice.status}">${invoice.status === 'paid' ? 'PLĂTITĂ' : 'NEPLĂTITĂ'}</b><b class="spv ${invoice.spv_status === 'sent' ? 'sent' : 'pending'}">SPV ${invoice.spv_status === 'sent' ? 'TRIMISĂ' : 'NETRIMISĂ'}</b></span></section><section class="shop-invoice-parties">${invoicePartyCard('seller', payload.seller)}${invoicePartyCard('buyer', payload.buyer)}</section><section class="shop-invoice-products"><header><div><small>POZIȚII FACTURATE</small><strong>${items.length} ${items.length === 1 ? 'poziție' : 'poziții'}</strong></div><span>${productIcon}</span></header>${rows || '<p class="shop-detail-empty">Factura nu conține poziții.</p>'}</section><section class="shop-invoice-detail-bottom"><article class="shop-invoice-payment"><small>PLATĂ ȘI EMITERE</small><strong>${esc(payload.payment?.method || 'Metodă neprecizată')}</strong><p>Scadență ${esc(payload.due_date || payload.issue_date)} · emisă de ${esc(invoice.issued_by || 'Administrator')}</p>${discountCallout}${payload.notes ? `<em class="shop-invoice-payment-note">${esc(payload.notes)}</em>` : ''}</article><article class="shop-invoice-totals">${discountTotalRow}<span><small>Subtotal fără TVA</small><strong>${invoiceMoney(totals.net, payload.currency)}</strong></span><span><small>TVA</small><strong>${invoiceMoney(totals.vat, payload.currency)}</strong></span><span class="grand" style="--invoice-accent:${accent}"><small>TOTAL FACTURĂ</small><strong>${invoiceMoney(invoice.total, payload.currency)}</strong></span></article></section>`;
     root.querySelectorAll('[data-invoice-product]').forEach(button => button.addEventListener('click', () => void openProductDetail(button.dataset.invoiceProduct, { overOrder: true })));
     $('shop-invoice-detail-email').disabled = !invoice.customer_email;
     $('shop-invoice-detail-delete').hidden = !invoice.can_delete;

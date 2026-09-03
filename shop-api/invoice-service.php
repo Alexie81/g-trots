@@ -140,7 +140,7 @@ final class GtrotsInvoiceService
         $payload = json_decode((string)($invoice['payload_json'] ?? ''), true, 512, JSON_THROW_ON_ERROR);
         if (!is_array($payload)) throw new RuntimeException('Datele facturii nu mai sunt disponibile.');
 
-        $payload = self::refreshPayloadState($invoice, $payload);
+        $payload = self::detailPayload($db, $invoice, self::refreshPayloadState($invoice, $payload));
         $fileNumber = preg_replace('/[^A-Za-z0-9._-]+/', '-', (string)$invoice['invoice_number']) ?: 'factura';
         if ($format === 'xlsx') {
             require_once __DIR__ . '/invoice-xlsx.php';
@@ -442,7 +442,8 @@ final class GtrotsInvoiceService
     private static function detailPayload(PDO $db, array $invoice, array $payload): array
     {
         $stmt = $db->prepare(
-            'SELECT oi.id, oi.product_id,
+            'SELECT oi.id, oi.product_id, oi.product_name, oi.product_sku, oi.quantity,
+                    oi.unit_price, oi.line_total, oi.discount_total, oi.discounted_unit_price, oi.discounted_line_total,
                     (SELECT pi.image_path FROM shop_product_images pi WHERE pi.product_id = oi.product_id ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS image_path
              FROM shop_order_items oi
              WHERE oi.order_id = ?
@@ -450,15 +451,74 @@ final class GtrotsInvoiceService
         );
         $stmt->execute([(string)$invoice['order_id']]);
         $orderItems = $stmt->fetchAll();
+        $orderStmt = $db->prepare('SELECT discount_total, promotion_code, promotion_scope FROM shop_orders WHERE id = ? LIMIT 1');
+        $orderStmt->execute([(string)$invoice['order_id']]);
+        $order = $orderStmt->fetch() ?: [];
+        $orderDiscount = max(0.0, (float)($order['discount_total'] ?? 0));
+        if ($orderDiscount > 0) {
+            $payload['discount_total'] = round($orderDiscount, 2);
+            $payload['discount_code'] = trim((string)($order['promotion_code'] ?? ''));
+            $payload['discount_scope'] = trim((string)($order['promotion_scope'] ?? ''));
+        }
+
+        // Comenzile mai vechi păstrează reducerea globală doar pe antet, nu și
+        // pe fiecare poziție. O distribuim proporțional pentru ca fișa și toate
+        // formatele fiscale regenerate să o declare explicit, fără a schimba totalul.
+        $recordedLineDiscount = array_reduce($orderItems, static fn(float $sum, array $row): float => $sum + max(0.0, (float)($row['discount_total'] ?? 0)), 0.0);
+        $remainingGlobalDiscount = round(max(0.0, $orderDiscount - $recordedLineDiscount), 2);
+        $discountableBase = array_reduce($orderItems, static fn(float $sum, array $row): float => $sum + max(0.0, (float)($row['line_total'] ?? 0) - max(0.0, (float)($row['discount_total'] ?? 0))), 0.0);
+        $legacyDiscountAllocations = [];
+        $allocatedLegacyDiscount = 0.0;
+        foreach ($orderItems as $index => $row) {
+            $base = max(0.0, (float)($row['line_total'] ?? 0) - max(0.0, (float)($row['discount_total'] ?? 0)));
+            $allocation = $index === array_key_last($orderItems)
+                ? round(max(0.0, $remainingGlobalDiscount - $allocatedLegacyDiscount), 2)
+                : round($discountableBase > 0 ? $remainingGlobalDiscount * ($base / $discountableBase) : 0.0, 2);
+            $legacyDiscountAllocations[$index] = min($base, $allocation);
+            $allocatedLegacyDiscount += $legacyDiscountAllocations[$index];
+        }
+
+        $productByImage = $db->prepare('SELECT product_id FROM shop_product_images WHERE image_path = ? LIMIT 1');
+        $productBySku = $db->prepare(
+            'SELECT id FROM shop_products
+             WHERE UPPER(TRIM(sku)) = UPPER(TRIM(?)) OR UPPER(TRIM(supplier_product_code)) = UPPER(TRIM(?))
+             ORDER BY CASE WHEN UPPER(TRIM(sku)) = UPPER(TRIM(?)) THEN 0 ELSE 1 END, created_at DESC
+             LIMIT 1'
+        );
+        if (!is_array($payload['items'] ?? null)) $payload['items'] = [];
         $position = 0;
-        foreach ($payload['items'] ?? [] as &$item) {
+        foreach ($payload['items'] as &$item) {
             if (!is_array($item) || strtoupper(trim((string)($item['sku'] ?? ''))) === 'TRANSPORT') {
                 if (is_array($item)) $item['product_id'] = null;
                 continue;
             }
             $source = $orderItems[$position] ?? [];
-            if (trim((string)($item['product_id'] ?? '')) === '') $item['product_id'] = trim((string)($source['product_id'] ?? '')) ?: null;
             if (trim((string)($item['image_path'] ?? '')) === '') $item['image_path'] = (string)($source['image_path'] ?? '');
+            $productId = trim((string)($item['product_id'] ?? $source['product_id'] ?? ''));
+            if ($productId === '' && trim((string)($item['image_path'] ?? '')) !== '') {
+                $productByImage->execute([(string)$item['image_path']]);
+                $productId = trim((string)($productByImage->fetchColumn() ?: ''));
+            }
+            $sku = trim((string)($item['sku'] ?? $source['product_sku'] ?? ''));
+            if ($productId === '' && $sku !== '') {
+                $productBySku->execute([$sku, $sku, $sku]);
+                $productId = trim((string)($productBySku->fetchColumn() ?: ''));
+            }
+            $item['product_id'] = $productId !== '' ? $productId : null;
+
+            $sourceDiscount = max(0.0, (float)($source['discount_total'] ?? 0)) + max(0.0, (float)($legacyDiscountAllocations[$position] ?? 0));
+            $sourceOriginalGross = max(0.0, (float)($source['line_total'] ?? 0));
+            $sourceDiscountedGross = $sourceDiscount > 0
+                ? max(0.0, $sourceOriginalGross - $sourceDiscount)
+                : max(0.0, (float)($source['discounted_line_total'] ?? $sourceOriginalGross));
+            if ($sourceDiscount > 0.0 && $sourceOriginalGross > 0.0 && $sourceDiscountedGross < $sourceOriginalGross) {
+                $quantity = max(0.000001, abs((float)($item['quantity'] ?? $source['quantity'] ?? 1)));
+                $vatMultiplier = 1 + max(0.0, (float)($item['vat_rate'] ?? 0)) / 100;
+                $item['unit_price'] = round(($sourceOriginalGross / $quantity) / $vatMultiplier, 8);
+                $item['discount_percent'] = round((1 - $sourceDiscountedGross / $sourceOriginalGross) * 100, 8);
+                $item['discount_amount'] = round(($sourceOriginalGross - $sourceDiscountedGross) / $vatMultiplier, 2);
+                $item['discount_amount_gross'] = round($sourceOriginalGross - $sourceDiscountedGross, 2);
+            }
             $position++;
         }
         unset($item);
@@ -520,7 +580,7 @@ final class GtrotsInvoiceService
 
         $payload = json_decode((string)($invoice['payload_json'] ?? ''), true, 512, JSON_THROW_ON_ERROR);
         if (!is_array($payload)) throw new RuntimeException('Datele facturii nu mai sunt disponibile.');
-        $payload = self::refreshPayloadState($invoice, $payload);
+        $payload = self::detailPayload($db, $invoice, self::refreshPayloadState($invoice, $payload));
         $rendererPath = __DIR__ . ($format === 'pdf' ? '/invoice-pdf.php' : ($format === 'xlsx' ? '/invoice-xlsx.php' : '/invoice-ubl.php'));
         $validationRevision = $format === 'xml' ? date('Y-m-d') : '';
         $signature = hash('sha256', $format . '|' . $validationRevision . '|' . (string)@filemtime($rendererPath) . '|' . json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
@@ -789,7 +849,11 @@ final class GtrotsInvoiceService
         $items = [];
         foreach ($orderItems as $index => $item) {
             $quantity = max(1, (int)($item['quantity'] ?? 1));
-            $grossUnit = $lineGrossValues[$index] / $quantity;
+            $finalGross = max(0.0, (float)($lineGrossValues[$index] ?? 0));
+            $originalGross = max($finalGross, (float)($item['line_total'] ?? $finalGross));
+            $discountGross = max(0.0, $originalGross - $finalGross);
+            $discountPercent = $originalGross > 0 ? ($discountGross / $originalGross) * 100 : 0.0;
+            $grossUnit = $originalGross / $quantity;
             $netUnit = $vatRate > 0 ? $grossUnit / (1 + $vatRate / 100) : $grossUnit;
             $items[] = [
                 'product_id' => trim((string)($item['product_id'] ?? '')) ?: null,
@@ -799,7 +863,9 @@ final class GtrotsInvoiceService
                 'unit' => 'buc.',
                 'quantity' => $quantity,
                 'unit_price' => round($netUnit, 8),
-                'discount_percent' => 0,
+                'discount_percent' => round($discountPercent, 8),
+                'discount_amount' => round($vatRate > 0 ? $discountGross / (1 + $vatRate / 100) : $discountGross, 2),
+                'discount_amount_gross' => round($discountGross, 2),
                 'vat_rate' => $vatRate,
             ];
         }
@@ -869,6 +935,9 @@ final class GtrotsInvoiceService
             'seller' => $seller,
             'buyer' => $buyer,
             'items' => $items,
+            'discount_total' => round(max(0.0, (float)($order['discount_total'] ?? 0)), 2),
+            'discount_code' => trim((string)($order['promotion_code'] ?? '')),
+            'discount_scope' => trim((string)($order['promotion_scope'] ?? '')),
             'payment' => [
                 'method' => $paymentMethod,
                 'reference' => $series . ' ' . $number,

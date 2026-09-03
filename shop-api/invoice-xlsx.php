@@ -45,7 +45,7 @@ final class GtrotsInvoiceXlsx
         $rows .= shopNirPremiumXlsxRow(7, [1 => shopNirPremiumXlsxCellSpec(self::partyDetails($seller, true), 'string', 5), 6 => shopNirPremiumXlsxCellSpec(self::partyDetails($buyer, false), 'string', 5)], 55);
         $rows .= shopNirPremiumXlsxRow(10, [], 9);
         $rows .= shopNirPremiumXlsxRow(11, [1 => shopNirPremiumXlsxCellSpec('POZIȚII FACTURATE · ' . count($items), 'string', 18)], 25);
-        $headers = ['Nr.', 'Cod / SKU', 'Produs sau serviciu', 'U.M.', 'Cantitate', 'Preț unitar fără TVA', 'Discount', 'TVA', 'Valoare fără TVA', 'Total'];
+        $headers = ['Nr.', 'Cod / SKU', 'Produs sau serviciu', 'U.M.', 'Cantitate', 'Preț unitar fără TVA', 'Reducere %', 'TVA', 'Valoare fără TVA', 'Total'];
         $headerCells = [];
         foreach ($headers as $index => $header) $headerCells[$index + 1] = shopNirPremiumXlsxCellSpec($header, 'string', 6);
         $rows .= shopNirPremiumXlsxRow(12, $headerCells, 42);
@@ -85,11 +85,18 @@ final class GtrotsInvoiceXlsx
             return $sum + ($status === 'return' ? -$value : $value);
         }, 0.0);
         $totalRow = $dataRow + 1;
-        foreach ([
+        $summaryRows = [];
+        $discountTotal = max(0.0, (float)($invoice['discount_total'] ?? 0));
+        if ($discountTotal > 0) {
+            $discountCode = trim((string)($invoice['discount_code'] ?? ''));
+            $summaryRows[] = ['REDUCERE APLICATĂ' . ($discountCode !== '' ? ' · ' . $discountCode : '') . ' (inclusă)', -$discountTotal, '', 12, 11];
+        }
+        array_push($summaryRows,
             ['Subtotal fără TVA', $subtotal, 'SUM(I' . $firstDataRow . ':I' . $lastDataRow . ')', 12, 11],
             ['Total TVA', $grandTotal - $subtotal, 'SUM(J' . $firstDataRow . ':J' . $lastDataRow . ')-SUM(I' . $firstDataRow . ':I' . $lastDataRow . ')', 12, 11],
-            ['TOTAL FACTURĂ', $grandTotal, 'SUM(J' . $firstDataRow . ':J' . $lastDataRow . ')', 13, 14],
-        ] as [$label, $value, $formula, $labelStyle, $valueStyle]) {
+            ['TOTAL FACTURĂ', $grandTotal, 'SUM(J' . $firstDataRow . ':J' . $lastDataRow . ')', 13, 14]
+        );
+        foreach ($summaryRows as [$label, $value, $formula, $labelStyle, $valueStyle]) {
             $merges[] = 'G' . $totalRow . ':I' . $totalRow;
             $rows .= shopNirPremiumXlsxRow($totalRow, [7 => shopNirPremiumXlsxCellSpec($label, 'string', $labelStyle), 10 => shopNirPremiumXlsxCellSpec($value, 'number', $valueStyle, $formula)], $labelStyle === 13 ? 31 : 25);
             $totalRow++;

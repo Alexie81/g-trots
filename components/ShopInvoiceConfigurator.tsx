@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
-import { Check, FileText, Palette, Save, Settings2, ShieldCheck, Sparkles } from 'lucide-react-native';
+import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { CalendarClock, Check, FileText, Hash, Palette, Save, Settings2, ShieldCheck, Sparkles, StickyNote } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { ShopInvoiceTheme, ShopInvoiceThemePalette, ShopInvoiceThemeSettings, shopApi } from '@/services/shopApi';
@@ -15,13 +15,13 @@ const fallbackThemes: Record<ShopInvoiceTheme, ShopInvoiceThemePalette> = {
 };
 const themeOrder: ShopInvoiceTheme[] = ['orange', 'green', 'red', 'purple'];
 
-function InvoicePreview({ palette }: { palette: ShopInvoiceThemePalette }) {
+function InvoicePreview({ palette, series, nextNumber }: { palette: ShopInvoiceThemePalette; series: string; nextNumber: string }) {
   return <View style={styles.paper}>
     <View style={[styles.paperAccent, { backgroundColor: palette.accent }]} />
     <View style={styles.paperHead}>
       <Image source={require('../assets/images/logo.png')} style={styles.paperLogo} resizeMode="contain" />
       <View style={styles.paperTitle}><Text style={styles.paperBrand}>G-TROTS</Text><Text style={styles.paperCompany}>CAB IT EXPERT SRL</Text></View>
-      <View style={styles.paperNumber}><Text style={styles.paperLabel}>FACTURĂ</Text><Text style={[styles.paperNumberText, { color: palette.accent_dark }]}>GT 00100</Text></View>
+      <View style={styles.paperNumber}><Text style={styles.paperLabel}>FACTURĂ</Text><Text style={[styles.paperNumberText, { color: palette.accent_dark }]}>{series.trim().toUpperCase() || 'GT'} {String(Math.max(1, Math.trunc(Number(nextNumber) || 1))).padStart(3, '0')}</Text></View>
     </View>
     <View style={[styles.paperStatus, { backgroundColor: palette.soft, borderColor: palette.accent }]}><Text style={[styles.paperPill, { backgroundColor: palette.accent }]}>NEACHITATĂ</Text><Text style={[styles.paperStatusText, { color: palette.accent_dark }]}>Emisă la 02.09.2026</Text></View>
     <View style={styles.paperParties}>
@@ -41,6 +41,10 @@ export default function ShopInvoiceConfigurator({ bottomInset = 0 }: Props) {
   const { width } = useWindowDimensions();
   const [settings, setSettings] = useState<ShopInvoiceThemeSettings | null>(null);
   const [selected, setSelected] = useState<ShopInvoiceTheme>('orange');
+  const [series, setSeries] = useState('GT');
+  const [nextNumber, setNextNumber] = useState('1');
+  const [dueDays, setDueDays] = useState('7');
+  const [defaultNotes, setDefaultNotes] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const wide = width >= 720;
@@ -52,6 +56,10 @@ export default function ShopInvoiceConfigurator({ bottomInset = 0 }: Props) {
       const next = await shopApi.getInvoiceThemeSettings(token);
       setSettings(next);
       setSelected(next.active_theme);
+      setSeries(next.invoice_series);
+      setNextNumber(String(next.next_number));
+      setDueDays(String(next.due_days));
+      setDefaultNotes(next.default_notes || '');
     } catch (error) {
       Alert.alert('Configurarea nu s-a încărcat', error instanceof Error ? error.message : 'Încearcă din nou.');
     } finally { setLoading(false); }
@@ -59,17 +67,27 @@ export default function ShopInvoiceConfigurator({ bottomInset = 0 }: Props) {
   useEffect(() => { void load(); }, [load]);
 
   const themes = settings?.themes || fallbackThemes;
-  const dirty = Boolean(settings && selected !== settings.active_theme);
+  const dirty = Boolean(settings && (selected !== settings.active_theme || series.trim().toUpperCase() !== settings.invoice_series || Number(nextNumber) !== settings.next_number || Number(dueDays) !== settings.due_days || defaultNotes.trim() !== settings.default_notes));
   const activePalette = themes[selected] || fallbackThemes[selected];
   const lastDocument = useMemo(() => settings?.last_assignment ? `${settings.last_assignment.series} ${settings.last_assignment.number}`.trim() : '', [settings]);
   const save = async () => {
     if (!token || saving || !dirty) return;
+    const cleanSeries = series.trim().toUpperCase();
+    const parsedNext = Math.trunc(Number(nextNumber));
+    const parsedDue = Math.trunc(Number(dueDays));
+    if (!cleanSeries || !/^[A-Z0-9._\/-]+$/.test(cleanSeries)) return Alert.alert('Prefix invalid', 'Folosește doar litere, cifre, punct, cratimă sau slash.');
+    if (!Number.isFinite(parsedNext) || parsedNext < 1) return Alert.alert('Număr invalid', 'Următorul număr trebuie să fie cel puțin 1.');
+    if (!Number.isFinite(parsedDue) || parsedDue < 0 || parsedDue > 365) return Alert.alert('Scadență invalidă', 'Alege între 0 și 365 de zile.');
     setSaving(true);
     try {
-      const next = await shopApi.updateInvoiceThemeSettings(token, selected);
+      const next = await shopApi.updateInvoiceThemeSettings(token, { theme: selected, invoice_series: cleanSeries, next_number: parsedNext, due_days: parsedDue, default_notes: defaultNotes.trim() });
       setSettings(next);
       setSelected(next.active_theme);
-      Alert.alert('Tema a fost activată', `${next.themes[next.active_theme].label} se va aplica următoarei facturi noi. Facturile deja emise își păstrează tema inițială.`);
+      setSeries(next.invoice_series);
+      setNextNumber(String(next.next_number));
+      setDueDays(String(next.due_days));
+      setDefaultNotes(next.default_notes || '');
+      Alert.alert('Configurare salvată', `Următoarea factură va fi ${next.invoice_series} ${String(next.next_number).padStart(3, '0')} și va folosi tema ${next.themes[next.active_theme].label.toLowerCase()}.`);
     } catch (error) {
       Alert.alert('Tema nu s-a putut salva', error instanceof Error ? error.message : 'Încearcă din nou.');
     } finally { setSaving(false); }
@@ -93,14 +111,24 @@ export default function ShopInvoiceConfigurator({ bottomInset = 0 }: Props) {
           const isSelected = selected === theme;
           const isActive = settings?.active_theme === theme;
           return <TouchableOpacity key={theme} activeOpacity={0.88} accessibilityRole="radio" accessibilityState={{ checked: isSelected }} onPress={() => setSelected(theme)} style={[styles.themeCard, wide && styles.themeCardWide, isSelected && { borderColor: palette.accent, backgroundColor: `${palette.accent}10` }]}>
-            <View style={styles.previewWrap}><InvoicePreview palette={palette} /><View pointerEvents="none" style={[styles.previewGlow, { backgroundColor: `${palette.accent}18` }]} /></View>
+            <View style={styles.previewWrap}><InvoicePreview palette={palette} series={series} nextNumber={nextNumber} /><View pointerEvents="none" style={[styles.previewGlow, { backgroundColor: `${palette.accent}18` }]} /></View>
             <View style={styles.themeFooter}><View style={[styles.themeDot, { backgroundColor: palette.accent }]} /><View style={styles.themeCopy}><Text style={styles.themeName}>{palette.label}</Text><Text style={styles.themeMeta}>{isActive ? 'TEMA FOLOSITĂ ACUM' : isSelected ? 'PREGĂTITĂ PENTRU SALVARE' : 'PREVIZUALIZARE'}</Text></View><View style={[styles.selector, isSelected && { backgroundColor: palette.accent, borderColor: palette.accent }]}>{isSelected ? <Check size={17} color="#FFF" strokeWidth={3} /> : null}</View></View>
           </TouchableOpacity>;
         })}
       </View>
 
+      <View style={styles.numberingCard}>
+        <View style={styles.numberingHead}><View style={styles.numberingIcon}><Hash size={22} color="#FDBA74" /></View><View style={styles.numberingCopy}><Text style={styles.numberingKicker}>SERIE FACTURI</Text><Text style={styles.numberingTitle}>Numerotare și scadență</Text><Text style={styles.numberingText}>Setările se aplică începând cu următoarea factură emisă.</Text></View></View>
+        <View style={[styles.fieldGrid, wide && styles.fieldGridWide]}>
+          <View style={styles.field}><Text style={styles.fieldLabel}>PREFIX</Text><View style={styles.inputShell}><Hash size={17} color="#FB923C" /><TextInput value={series} onChangeText={setSeries} autoCapitalize="characters" maxLength={20} placeholder="GT" placeholderTextColor="#6F6870" style={styles.input} /></View></View>
+          <View style={styles.field}><Text style={styles.fieldLabel}>URMĂTORUL NUMĂR</Text><View style={styles.inputShell}><FileText size={17} color="#A8C7FA" /><TextInput value={nextNumber} onChangeText={setNextNumber} keyboardType="number-pad" placeholder="1" placeholderTextColor="#6F6870" style={styles.input} /></View></View>
+          <View style={styles.field}><Text style={styles.fieldLabel}>ZILE SCADENȚĂ</Text><View style={styles.inputShell}><CalendarClock size={17} color="#86EFAC" /><TextInput value={dueDays} onChangeText={setDueDays} keyboardType="number-pad" placeholder="7" placeholderTextColor="#6F6870" style={styles.input} /></View></View>
+        </View>
+        <View style={styles.field}><Text style={styles.fieldLabel}>NOTE IMPLICITE</Text><View style={[styles.inputShell, styles.notesShell]}><StickyNote size={17} color="#C4B5FD" /><TextInput value={defaultNotes} onChangeText={setDefaultNotes} multiline maxLength={2000} placeholder="Ex: Vă mulțumim pentru comandă." placeholderTextColor="#6F6870" style={[styles.input, styles.notesInput]} /></View><Text style={styles.fieldHelp}>Textul va apărea automat pe facturile noi și poate include condiții de plată sau un mesaj pentru client.</Text></View>
+      </View>
+
       <View style={styles.protectionCard}><View style={styles.protectionIcon}><ShieldCheck size={24} color="#86EFAC" /></View><View style={styles.protectionCopy}><Text style={styles.protectionTitle}>Temele vechi sunt protejate</Text><Text style={styles.protectionText}>Dacă GT001-GT099 au fost emise cu mov și activezi portocaliu după GT099, schimbarea începe cu GT100. Orice regenerare a documentelor GT001-GT099 folosește în continuare mov.</Text></View></View>
-      <TouchableOpacity disabled={!dirty || saving} onPress={() => void save()} style={[styles.saveButton, { backgroundColor: activePalette.accent }, (!dirty || saving) && styles.saveDisabled]}>{saving ? <ActivityIndicator color="#FFF" /> : <><View><Text style={styles.saveKicker}>{dirty ? 'APLICĂ SCHIMBAREA' : 'CONFIGURAȚIE SALVATĂ'}</Text><Text style={styles.saveText}>{dirty ? `Folosește tema ${activePalette.label}` : `${activePalette.label} este activă`}</Text></View><View style={styles.saveIcon}>{dirty ? <Save size={20} color="#FFF" /> : <Sparkles size={20} color="#FFF" />}</View></>}</TouchableOpacity>
+      <TouchableOpacity disabled={!dirty || saving} onPress={() => void save()} style={[styles.saveButton, { backgroundColor: activePalette.accent }, (!dirty || saving) && styles.saveDisabled]}>{saving ? <ActivityIndicator color="#FFF" /> : <><View><Text style={styles.saveKicker}>{dirty ? 'APLICĂ SCHIMBĂRILE' : 'CONFIGURAȚIE SALVATĂ'}</Text><Text style={styles.saveText}>{dirty ? 'Salvează configurarea facturii' : `${series || 'GT'} ${String(Number(nextNumber) || 1).padStart(3, '0')} este următoarea`}</Text></View><View style={styles.saveIcon}>{dirty ? <Save size={20} color="#FFF" /> : <Sparkles size={20} color="#FFF" />}</View></>}</TouchableOpacity>
     </View>
   </ScrollView>;
 }
@@ -118,6 +146,8 @@ const styles = StyleSheet.create({
   paperStatus: { height: 23, marginTop: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: 5, paddingHorizontal: 5 }, paperPill: { overflow: 'hidden', borderRadius: 5, paddingHorizontal: 5, paddingVertical: 3, color: '#FFF', fontSize: 4, fontWeight: '900', letterSpacing: .25 }, paperStatusText: { fontSize: 4, fontWeight: '800' }, paperParties: { marginTop: 7, flexDirection: 'row', gap: 5 }, paperParty: { height: 48, flex: 1, borderWidth: 1, borderColor: '#E1DEE2', borderTopWidth: 3, borderTopColor: '#29262B', borderRadius: 5, padding: 5 }, paperPartyName: { marginTop: 4, color: '#29262B', fontSize: 4.6, fontWeight: '900' }, paperPartyMeta: { marginTop: 3, color: '#817B82', fontSize: 3.6 },
   paperTable: { marginTop: 7, overflow: 'hidden', borderWidth: 1, borderColor: '#E0DDE0', borderRadius: 5 }, paperTableHead: { height: 17, flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 5, backgroundColor: '#29262B' }, paperTableHeadText: { width: 42, color: '#FFF', fontSize: 3.4, fontWeight: '900', textAlign: 'right' }, paperTableRow: { height: 34, flexDirection: 'row', alignItems: 'center', gap: 3, borderTopWidth: 1, borderTopColor: '#ECEAEC', paddingHorizontal: 5 }, paperProduct: { minWidth: 0, flex: 1 }, paperProductName: { color: '#343036', fontSize: 4.1, fontWeight: '800' }, paperSku: { marginTop: 2, color: '#9A949B', fontSize: 3.2 }, paperCell: { width: 42, color: '#4A454C', fontSize: 3.8, textAlign: 'right' }, paperCellStrong: { width: 42, color: '#242126', fontSize: 4, fontWeight: '900', textAlign: 'right' }, paperFooter: { marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 9 }, paperVat: { flexDirection: 'row', gap: 5 }, paperVatLabel: { color: '#777178', fontSize: 4 }, paperVatValue: { color: '#333035', fontSize: 4, fontWeight: '800' }, paperTotal: { minWidth: 78, flexDirection: 'row', justifyContent: 'space-between', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 6 }, paperTotalLabel: { color: '#FFFFFFC0', fontSize: 3.5, fontWeight: '900' }, paperTotalValue: { color: '#FFF', fontSize: 5.5, fontWeight: '900' },
   themeFooter: { minHeight: 61, flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 11, paddingHorizontal: 2 }, themeDot: { width: 12, height: 35, borderRadius: 7 }, themeCopy: { minWidth: 0, flex: 1 }, themeName: { color: '#FFF', fontSize: 14, fontWeight: '900' }, themeMeta: { marginTop: 3, color: '#847C83', fontSize: 7, fontWeight: '900', letterSpacing: .65 }, selector: { width: 33, height: 33, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#514B51', borderRadius: 12, backgroundColor: '#242126' },
+  numberingCard: { gap: 15, borderWidth: 1, borderColor: '#4A3B31', borderRadius: 26, padding: 17, backgroundColor: '#201C1A' }, numberingHead: { flexDirection: 'row', alignItems: 'center', gap: 12 }, numberingIcon: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: '#FB923C16' }, numberingCopy: { flex: 1, minWidth: 0 }, numberingKicker: { color: '#FB923C', fontSize: 8, fontWeight: '900', letterSpacing: 1 }, numberingTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: '900', marginTop: 3 }, numberingText: { color: Colors.textSecondary, fontSize: 9, lineHeight: 14, marginTop: 4 },
+  fieldGrid: { gap: 11 }, fieldGridWide: { flexDirection: 'row' }, field: { flex: 1, gap: 7 }, fieldLabel: { color: '#A29AA2', fontSize: 8, fontWeight: '900', letterSpacing: .8 }, inputShell: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: 1, borderColor: '#49434A', borderRadius: 16, paddingHorizontal: 13, backgroundColor: '#181619' }, input: { flex: 1, minWidth: 0, paddingVertical: 12, color: Colors.textPrimary, fontSize: 13, fontWeight: '700' }, notesShell: { minHeight: 96, alignItems: 'flex-start', paddingTop: 15 }, notesInput: { minHeight: 76, paddingTop: 0, textAlignVertical: 'top', fontWeight: '500', lineHeight: 18 }, fieldHelp: { color: '#7F777E', fontSize: 8, lineHeight: 13 },
   protectionCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, borderWidth: 1, borderColor: '#2F5842', borderRadius: 22, padding: 15, backgroundColor: '#17231D' }, protectionIcon: { width: 47, height: 47, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: '#4ADE8012' }, protectionCopy: { minWidth: 0, flex: 1 }, protectionTitle: { color: '#EFFFF5', fontSize: 12, fontWeight: '900' }, protectionText: { marginTop: 5, color: '#86A492', fontSize: 9, lineHeight: 15 },
   saveButton: { minHeight: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 22, paddingLeft: 19, paddingRight: 9 }, saveDisabled: { opacity: .5 }, saveKicker: { color: '#FFFFFFBB', fontSize: 7, fontWeight: '900', letterSpacing: .9 }, saveText: { marginTop: 3, color: '#FFF', fontSize: 13, fontWeight: '900' }, saveIcon: { width: 50, height: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: '#FFFFFF22' },
 });

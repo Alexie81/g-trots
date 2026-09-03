@@ -24,6 +24,7 @@ import {
   Camera,
   ChevronRight,
   CircleEllipsis,
+  CloudUpload,
   CreditCard,
   FileText,
   FileCog,
@@ -38,6 +39,7 @@ import {
   Plus,
   RefreshCw,
   Save,
+  ShieldCheck,
   BadgePercent,
   Building2,
   ShoppingCart,
@@ -75,7 +77,7 @@ import {
 } from '@/services/shopApi';
 
 type CatalogView = 'categories' | 'brands' | 'manufacturers';
-type SettingsView = 'sources' | 'suppliers' | 'nirs' | 'invoices' | 'invoice-configurator' | 'payments' | 'shipping' | 'customers' | 'discounts' | 'company';
+type SettingsView = 'sources' | 'suppliers' | 'nirs' | 'invoices' | 'invoice-configurator' | 'spv' | 'payments' | 'shipping' | 'customers' | 'discounts' | 'company';
 type PrimaryTab = 'home' | 'orders' | 'products' | 'inventory' | 'more';
 type ShopView = PrimaryTab | CatalogView | SettingsView;
 type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; item: ShopBrand } | { type: 'manufacturer'; item: ShopManufacturer };
@@ -84,7 +86,7 @@ type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; 
 // SHOP activa, astfel incat utilizatorul sa nu fie trimis inapoi pe Acasa.
 let persistedShopView: ShopView = 'home';
 const SHOP_VIEW_STORAGE_KEY = 'gtrots.shopView.v2';
-const shopViews = new Set<ShopView>(['home', 'orders', 'products', 'inventory', 'more', 'categories', 'brands', 'manufacturers', 'sources', 'suppliers', 'nirs', 'invoices', 'invoice-configurator', 'payments', 'shipping', 'customers', 'discounts', 'company']);
+const shopViews = new Set<ShopView>(['home', 'orders', 'products', 'inventory', 'more', 'categories', 'brands', 'manufacturers', 'sources', 'suppliers', 'nirs', 'invoices', 'invoice-configurator', 'spv', 'payments', 'shipping', 'customers', 'discounts', 'company']);
 
 const orderStatusLabels: Record<string, string> = {
   new: 'NOUĂ',
@@ -184,6 +186,7 @@ const moreAreaGroups = [
     areas: [
       { key: 'payments', title: 'Metode de plată', description: 'Activează plata cu cardul sau ramburs la curier.', Icon: CreditCard, color: '#A78BFA' },
       { key: 'invoice-configurator', title: 'Configurator factură', description: 'Structura, aspectul și tema facturilor viitoare.', Icon: FileCog, color: '#FB923C' },
+      { key: 'spv', title: 'SPV / e-Factura', description: 'Conectarea ANAF și trimiterea facturilor vor fi configurate aici.', Icon: CloudUpload, color: '#60A5FA' },
       { key: 'company', title: 'Datele firmei', description: 'Identitate juridică, adresă, contact și date bancare.', Icon: Building2, color: '#FE8C19' },
     ],
   },
@@ -588,6 +591,29 @@ export default function ShopModuleScreen() {
     );
   }
 
+  if (view === 'spv') {
+    return (
+      <View style={styles.container}>
+        <Header title="SPV / e-Factura" showBack onBack={() => setView('more')} />
+        <ScrollView contentContainerStyle={[styles.spvContent, { paddingBottom: 120 + insets.bottom }]} showsVerticalScrollIndicator={false}>
+          <View style={styles.spvHero}>
+            <View style={styles.spvGlow} />
+            <View style={styles.spvIcon}><CloudUpload size={33} color="#A8C7FA" /></View>
+            <View style={styles.spvState}><View style={styles.spvStateDot} /><Text style={styles.spvStateText}>ÎN LUCRU</Text></View>
+            <Text style={styles.spvKicker}>CONFIGURARE ANAF</Text>
+            <Text style={styles.spvTitle}>SPV și RO e-Factura</Text>
+            <Text style={styles.spvText}>Aici vom configura autentificarea, firmele autorizate și transmiterea facturilor către ANAF.</Text>
+          </View>
+          <View style={styles.spvInfo}>
+            <ShieldCheck size={24} color="#6EE7B7" />
+            <View style={styles.spvInfoCopy}><Text style={styles.spvInfoTitle}>Secțiune pregătită</Text><Text style={styles.spvInfoText}>Momentan nu se trimit date și nu se solicită niciun certificat. Continuăm când stabilești fluxul dorit.</Text></View>
+          </View>
+        </ScrollView>
+        <ShopBottomNavigation activeTab="more" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
+      </View>
+    );
+  }
+
   if (view === 'sources' || view === 'suppliers' || view === 'payments' || view === 'shipping' || view === 'customers' || view === 'discounts' || view === 'company') {
     const title = view === 'sources' ? 'Surse de aprovizionare' : view === 'suppliers' ? 'Furnizori' : view === 'payments' ? 'Metode de plată' : view === 'shipping' ? 'Livrări' : view === 'customers' ? 'Clienți' : view === 'company' ? 'Datele firmei' : 'Reduceri';
     return (
@@ -956,6 +982,20 @@ const styles = StyleSheet.create({
   primaryEmptyText: { maxWidth: 310, color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 7 },
   comingSoonPill: { borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7, marginTop: 17 },
   comingSoonText: { fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 1 },
+  spvContent: { width: '100%', maxWidth: 760, alignSelf: 'center', gap: 12, padding: 15 },
+  spvHero: { minHeight: 310, justifyContent: 'center', overflow: 'hidden', borderWidth: 1, borderColor: '#35527A', borderRadius: 30, padding: 24, backgroundColor: '#18202C' },
+  spvGlow: { position: 'absolute', right: -70, top: -80, width: 230, height: 230, borderRadius: 115, borderWidth: 38, borderColor: '#60A5FA0D', backgroundColor: '#60A5FA08' },
+  spvIcon: { width: 67, height: 67, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: '#60A5FA18', marginBottom: 18 },
+  spvState: { position: 'absolute', right: 20, top: 20, flexDirection: 'row', alignItems: 'center', gap: 7, borderRadius: 99, paddingHorizontal: 11, paddingVertical: 7, backgroundColor: '#A8C7FA12' },
+  spvStateDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#A8C7FA' },
+  spvStateText: { color: '#A8C7FA', fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.9 },
+  spvKicker: { color: '#A8C7FA', fontFamily: 'Inter-Bold', fontSize: 9, letterSpacing: 1.2 },
+  spvTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 27, marginTop: 7 },
+  spvText: { maxWidth: 520, color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 12, lineHeight: 19, marginTop: 10 },
+  spvInfo: { flexDirection: 'row', alignItems: 'center', gap: 13, borderWidth: 1, borderColor: '#285341', borderRadius: 22, padding: 17, backgroundColor: '#17231E' },
+  spvInfoCopy: { flex: 1 },
+  spvInfoTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 13 },
+  spvInfoText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 16, marginTop: 4 },
   bottomNavigation: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20, flexDirection: 'row', alignItems: 'flex-start', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', paddingTop: 6, paddingHorizontal: 4, backgroundColor: 'rgba(20,20,20,0.98)', shadowColor: '#000', shadowOpacity: 0.36, shadowRadius: 14, shadowOffset: { width: 0, height: -5 }, elevation: 18 },
   bottomNavigationItem: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', gap: 2 },
   bottomNavigationIcon: { width: 38, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },

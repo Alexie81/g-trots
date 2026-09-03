@@ -546,6 +546,54 @@ export type ShopOrderEmailNotification = {
   error?: string;
 };
 
+export type ShopInvoiceParty = {
+  type?: 'company' | 'individual';
+  name: string;
+  trade_name?: string;
+  cui?: string;
+  registration_number?: string;
+  address?: string;
+  city?: string;
+  county?: string;
+  postal_code?: string;
+  country?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  bank_name?: string;
+  iban?: string;
+};
+
+export type ShopInvoiceItem = {
+  product_id?: string | null;
+  name: string;
+  sku?: string;
+  image_path?: string;
+  unit: string;
+  quantity: number;
+  unit_price: number;
+  discount_percent?: number;
+  vat_rate: number;
+};
+
+export type ShopInvoicePayload = {
+  document_id: string;
+  status: 'paid' | 'unpaid';
+  series: string;
+  number: string;
+  issue_date: string;
+  due_date?: string | null;
+  currency: string;
+  seller: ShopInvoiceParty;
+  buyer: ShopInvoiceParty;
+  items: ShopInvoiceItem[];
+  payment?: { method?: string; reference?: string; iban?: string; bank_name?: string; paid_at?: string; transaction_id?: string };
+  notes?: string;
+  order_reference?: string;
+  tax_note?: string;
+  amount_paid?: number;
+};
+
 export type ShopIssuedInvoice = {
   id: string;
   order_id: string;
@@ -569,6 +617,12 @@ export type ShopIssuedInvoice = {
   updated_at: string;
   email_sent_at: string | null;
   email_last_error: string | null;
+  spv_status: 'not_sent' | 'sent';
+  spv_sent_at: string | null;
+  spv_submission_id: string | null;
+  can_delete: boolean;
+  payload?: ShopInvoicePayload;
+  pdf_url?: string;
   existing?: boolean;
   email_notification?: ShopOrderEmailNotification;
 };
@@ -711,6 +765,10 @@ export type ShopInvoiceThemePalette = {
 
 export type ShopInvoiceThemeSettings = {
   active_theme: ShopInvoiceTheme;
+  invoice_series: string;
+  next_number: number;
+  due_days: number;
+  default_notes: string;
   themes: Record<ShopInvoiceTheme, ShopInvoiceThemePalette>;
   assigned_documents: number;
   last_assignment: null | {
@@ -1058,8 +1116,10 @@ export const shopApi = {
   issueInvoice: (token: string, orderId: string, sendEmail = false) => shopCall<ShopIssuedInvoice>('issueInvoice', token, { method: 'POST', body: JSON.stringify({ order_id: orderId, send_email: sendEmail }) }, orderId),
   listInvoices: (token: string) => shopCall<ShopIssuedInvoice[]>('listInvoices', token),
   getInvoice: (token: string, id: string) => shopCall<ShopIssuedInvoice>('getInvoice', token, undefined, id),
-  downloadInvoice: (token: string, id: string, format: 'pdf' | 'xlsx' = 'pdf') => shopCall<{ file_name: string; mime_type: string; content_base64: string }>('downloadInvoice', token, undefined, id, 0, { format }),
+  downloadInvoice: (token: string, id: string, format: 'pdf' | 'xlsx' | 'xml' = 'pdf') => shopCall<{ file_name: string; mime_type: string; content_base64: string; public_url?: string; stored?: boolean; anaf_validation?: { stare: string; trace_id?: string } }>('downloadInvoice', token, undefined, id, 0, { format }),
+  getInvoicePublicLink: (token: string, id: string, format: 'pdf' | 'xlsx' | 'xml' = 'pdf') => shopCall<{ url: string; file_name: string; mime_type: string; format: 'pdf' | 'xlsx' | 'xml' }>('getInvoicePublicLink', token, undefined, id, 0, { format }),
   sendInvoiceEmail: (token: string, id: string) => shopCall<ShopOrderEmailNotification>('sendInvoiceEmail', token, { method: 'POST', body: JSON.stringify({ invoice_id: id }) }, id),
+  deleteInvoice: (token: string, id: string) => shopCall<{ deleted: boolean; id: string; order_id: string; released_number: string }>('deleteInvoice', token, { method: 'DELETE' }, id),
   listCustomers: (token: string) => shopCall<ShopCustomerSummary[]>('listCustomers', token),
   getCustomer: (token: string, id: string) => shopCall<ShopCustomerDetail>('getCustomer', token, undefined, id),
   updateCustomerStatus: (token: string, id: string, isActive: boolean) => shopCall<{ success: true; is_active: boolean }>('updateCustomerStatus', token, { method: 'PATCH', body: JSON.stringify({ is_active: isActive }) }, id),
@@ -1071,7 +1131,7 @@ export const shopApi = {
   getPaymentSettings: (token: string) => shopCall<ShopPaymentSettings>('getPaymentSettings', token),
   updatePaymentSettings: (token: string, payload: ShopPaymentSettings) => shopCall<ShopPaymentSettings>('updatePaymentSettings', token, { method: 'PUT', body: JSON.stringify(payload) }),
   getInvoiceThemeSettings: (token: string) => shopCall<ShopInvoiceThemeSettings>('getInvoiceThemeSettings', token),
-  updateInvoiceThemeSettings: (token: string, theme: ShopInvoiceTheme) => shopCall<ShopInvoiceThemeSettings>('updateInvoiceThemeSettings', token, { method: 'PUT', body: JSON.stringify({ theme }) }),
+  updateInvoiceThemeSettings: (token: string, payload: { theme: ShopInvoiceTheme; invoice_series: string; next_number: number; due_days: number; default_notes: string }) => shopCall<ShopInvoiceThemeSettings>('updateInvoiceThemeSettings', token, { method: 'PUT', body: JSON.stringify(payload) }),
   listCompanySettings: (token: string) => shopCall<ShopCompanySettings[]>('listCompanySettings', token),
   getCompanySettings: (token: string) => shopCall<ShopCompanySettings>('getCompanySettings', token),
   createCompanySettings: (token: string, payload: ShopCompanySettings) => shopCall<ShopCompanySettings>('createCompanySettings', token, { method: 'POST', body: JSON.stringify(payload) }),

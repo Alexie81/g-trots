@@ -330,7 +330,7 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
     } finally { setSaving(false); }
   };
 
-  const shareInvoice = async (invoiceId: string, format: 'pdf' | 'xlsx' = 'pdf') => {
+  const shareInvoice = async (invoiceId: string, format: 'pdf' | 'xlsx' | 'xml' = 'pdf') => {
     if (!token || invoiceBusy) return;
     setInvoiceBusy(invoiceId);
     try {
@@ -367,12 +367,13 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
 
   const chooseInvoiceAction = (order: ShopOrder) => {
     if (order.invoice) {
-      Alert.alert(order.invoice.display_number, 'Factura este deja emisă. Ce dorești să faci?', [
+      Alert.alert(order.invoice.display_number, `Factura este deja emisă · SPV ${order.invoice.spv_status === 'sent' ? 'trimisă' : 'netrimisă'}. Ce dorești să faci?`, [
         { text: 'Închide', style: 'cancel' },
         { text: 'Descarcă', onPress: () => Alert.alert('Alege formatul', 'Factura are aceleași date în ambele formate.', [
           { text: 'Renunță', style: 'cancel' },
           { text: 'PDF', onPress: () => void shareInvoice(order.invoice!.id, 'pdf') },
           { text: 'XLSX', onPress: () => void shareInvoice(order.invoice!.id, 'xlsx') },
+          { text: 'XML e-Factura', onPress: () => void shareInvoice(order.invoice!.id, 'xml') },
         ]) },
         { text: 'Trimite pe e-mail', onPress: async () => {
           if (!token || invoiceBusy) return;

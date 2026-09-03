@@ -15398,7 +15398,9 @@ body::after {
 #shop-invoice-detail-content .shop-invoice-party>strong{margin-top:7px;color:#fff9f4;font-size:18px;line-height:1.3}
 #shop-invoice-detail-content .shop-invoice-party>em{margin-top:7px;color:#c6bdc5;font-size:11px;line-height:1.45}
 #shop-invoice-detail-content .shop-invoice-party>p{margin-top:6px;color:#a79fa7;font-size:11px;line-height:1.55}
-#shop-invoice-detail-content .shop-invoice-products>header{min-height:80px;padding:17px 20px}
+#shop-invoice-detail-content{grid-auto-rows:max-content;align-content:start}
+#shop-invoice-detail-content .shop-invoice-products{height:max-content;min-height:max-content;align-self:start}
+#shop-invoice-detail-content .shop-invoice-products>header{min-height:72px;padding:15px 20px}
 #shop-invoice-detail-content .shop-invoice-products header small{color:#aaa2aa;font-size:9px}
 #shop-invoice-detail-content .shop-invoice-products header strong{font-size:17px}
 #shop-invoice-detail-content .shop-invoice-product{min-height:96px;gap:15px;padding:14px 19px}

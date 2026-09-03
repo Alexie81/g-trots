@@ -880,6 +880,7 @@
       const quickActions = [
         { target: 'shop-products', tone: 'orange', title: 'Produse', description: 'Adaugă sau editează catalogul.', icon: '<svg viewBox="0 0 24 24"><path d="m12 3 8 4.5-8 4.5-8-4.5L12 3Z"/><path d="m4 12 8 4.5 8-4.5M4 16.5l8 4.5 8-4.5"/></svg>' },
         { target: 'shop-orders', tone: 'blue', title: 'Comenzi', description: 'Verifică și procesează comenzile.', icon: '<svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 8h6m-6 4h6"/></svg>', filter: 'all' },
+        { target: 'shop-invoices', tone: 'amber', title: 'Facturi emise', description: 'Vezi documentele fiscale și starea lor.', icon: '<svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>' },
         { target: 'shop-payments', tone: 'purple', title: 'Metode de plată', description: 'Configurează cardul online și rambursul.', icon: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h3"/></svg>' },
       ].map(action => `<button type="button" class="${action.tone}" data-shop-open="${action.target}" ${action.filter ? `data-shop-order-filter="${action.filter}"` : ''}><span>${action.icon}</span><strong>${action.title}</strong><small>${action.description}</small><b>Deschide <i>→</i></b></button>`).join('');
       host.innerHTML = `<section class="shop-dashboard-hero"><div><span>DASHBOARD COMERCIAL</span><h1>Magazinul tau, pe scurt.</h1><p>Vanzari, comenzi, achizitii si profit sincronizate direct cu magazinul online.</p><b><i></i>Date sincronizate cu baza de date</b></div><div class="shop-dashboard-orbit" aria-hidden="true"><strong>↗</strong><span>${Number(dashboard.new_orders_count || 0)}</span><small>COMENZI NOI</small></div></section><section class="shop-dashboard-metrics">${dashboardMetric('Vanzari', money(dashboard.revenue), '#38bdf8')}${dashboardMetric('Comenzi', dashboard.orders_count, '#a78bfa')}${dashboardMetric('Achizitii', money(dashboard.acquisitions), '#f59e0b')}${dashboardMetric('Profit', money(dashboard.profit), '#22c55e')}</section><section class="shop-dashboard-columns"><div><div class="shop-section-head"><div><span>ACTIUNI RAPIDE</span><h2>Administreaza magazinul</h2></div></div><div class="shop-dashboard-actions">${quickActions}</div></div><div><div class="shop-section-head"><div><span>ACTIVITATE RECENTA</span><h2>Ultimele comenzi</h2></div><button type="button" class="shop-dashboard-see-all" data-shop-open="shop-orders" data-shop-order-filter="new">Vezi toate <b>→</b></button></div><div class="shop-dashboard-orders">${recent}</div></div></section>`;
@@ -2100,13 +2101,24 @@
     const pageItems = customerPaginationItems(totalPages, state.pages.customerOrders);
     const pager = allOrders.length ? `<nav class="shop-customer-pagination compact" aria-label="Paginile comenzilor clientului"><button type="button" class="direction" data-customer-orders-page="${state.pages.customerOrders - 1}" ${state.pages.customerOrders === 1 ? 'disabled' : ''}>‹</button>${pageItems.map(item => item === '…' ? '<span>…</span>' : `<button type="button" data-customer-orders-page="${item}" class="${item === state.pages.customerOrders ? 'active' : ''}">${item}</button>`).join('')}<button type="button" class="direction" data-customer-orders-page="${state.pages.customerOrders + 1}" ${state.pages.customerOrders === totalPages ? 'disabled' : ''}>›</button></nav>` : '';
     $('shop-customer-details').innerHTML = `<section class="shop-customer-profile"><span class="shop-customer-avatar large">${esc(String(customer.full_name || customer.email || '?').trim().charAt(0).toUpperCase())}</span><div><small>CLIENT G-TROTS</small><h3>${esc(customer.full_name || 'Client fara nume')}</h3><p>${esc(customer.email)}${customer.phone ? ` · ${esc(customer.phone)}` : ''}</p><em>Cont creat ${esc(dateTime(customer.created_at))} · ultima autentificare ${esc(dateTime(customer.last_login_at))}</em></div><span class="commerce-pill ${customer.is_active ? 'active' : 'inactive'}">${customer.is_active ? 'CONT ACTIV' : 'CONT DEZACTIVAT'}</span></section><section class="shop-customer-metrics modal-metrics">${detailMetric('Comenzi', Number(customer.orders_count || 0))}${detailMetric('Valoare totala', money(customer.orders_total), true)}${detailMetric('Ultima comanda', dateTime(customer.orders?.[0]?.created_at))}</section>${section('01', 'Comenzile clientului', `${allOrders.length} comenzi · pagina ${state.pages.customerOrders} din ${totalPages}`)}<div class="shop-customer-orders">${orders || empty('Nicio comanda', 'Clientul nu are inca nicio comanda asociata.')}</div>${pager}`;
-    $('shop-customer-details').querySelectorAll('[data-customer-order]').forEach(button => button.addEventListener('click', () => { closeModal('shop-customer-modal'); setTimeout(() => openOrder(button.dataset.customerOrder), 190); }));
+    $('shop-customer-details').querySelectorAll('[data-customer-order]').forEach(button => button.addEventListener('click', () => void navigateToCustomerOrder(button.dataset.customerOrder)));
     $('shop-customer-details').querySelectorAll('[data-customer-orders-page]').forEach(button => button.addEventListener('click', () => {
       const page = Number(button.dataset.customerOrdersPage || 1);
       if (button.disabled || page === state.pages.customerOrders) return;
       state.pages.customerOrders = page;
       renderCustomerDetail();
     }));
+  }
+
+  async function navigateToCustomerOrder(id) {
+    if (!id) return;
+    closeModal('shop-customer-modal');
+    state.orderStatusFilter = 'all';
+    state.orderQuery = '';
+    state.pages.orders = 1;
+    window.switchTab?.('shop-orders');
+    await loadOrders();
+    await openOrder(id);
   }
 
   async function toggleCustomerStatus() {

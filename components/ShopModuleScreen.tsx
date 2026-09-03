@@ -59,6 +59,7 @@ import ShopCompanySettingsManager from '@/components/ShopCompanySettingsManager'
 import ShopSuppliersManager from '@/components/ShopSuppliersManager';
 import ShopNirManager from '@/components/ShopNirManager';
 import ShopInvoiceConfigurator from '@/components/ShopInvoiceConfigurator';
+import ShopInvoicesManager from '@/components/ShopInvoicesManager';
 import { ShopPaymentMethodsManager, ShopProductSourcesManager, ShopShippingManager } from '@/components/ShopMoreManagers';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -74,7 +75,7 @@ import {
 } from '@/services/shopApi';
 
 type CatalogView = 'categories' | 'brands' | 'manufacturers';
-type SettingsView = 'sources' | 'suppliers' | 'nirs' | 'invoice-configurator' | 'payments' | 'shipping' | 'customers' | 'discounts' | 'company';
+type SettingsView = 'sources' | 'suppliers' | 'nirs' | 'invoices' | 'invoice-configurator' | 'payments' | 'shipping' | 'customers' | 'discounts' | 'company';
 type PrimaryTab = 'home' | 'orders' | 'products' | 'inventory' | 'more';
 type ShopView = PrimaryTab | CatalogView | SettingsView;
 type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; item: ShopBrand } | { type: 'manufacturer'; item: ShopManufacturer };
@@ -83,7 +84,7 @@ type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; 
 // SHOP activa, astfel incat utilizatorul sa nu fie trimis inapoi pe Acasa.
 let persistedShopView: ShopView = 'home';
 const SHOP_VIEW_STORAGE_KEY = 'gtrots.shopView.v2';
-const shopViews = new Set<ShopView>(['home', 'orders', 'products', 'inventory', 'more', 'categories', 'brands', 'manufacturers', 'sources', 'suppliers', 'nirs', 'invoice-configurator', 'payments', 'shipping', 'customers', 'discounts', 'company']);
+const shopViews = new Set<ShopView>(['home', 'orders', 'products', 'inventory', 'more', 'categories', 'brands', 'manufacturers', 'sources', 'suppliers', 'nirs', 'invoices', 'invoice-configurator', 'payments', 'shipping', 'customers', 'discounts', 'company']);
 
 const orderStatusLabels: Record<string, string> = {
   new: 'NOUĂ',
@@ -110,7 +111,7 @@ const homeAreas = [
   { key: 'categories', title: 'Categorii', description: 'Categorii, subcategorii si imagini.', Icon: FolderTree, color: '#FB7185' },
   { key: 'brands', title: 'Compatibilitati branduri', description: 'Marcile cu care sunt compatibile produsele.', Icon: Tags, color: '#2DD4BF' },
   { key: 'manufacturers', title: 'Producatori', description: 'Companiile care fabrica produsele.', Icon: Factory, color: '#818CF8' },
-  { key: 'invoices', title: 'Facturi', description: 'Documentele si situatia incasarilor.', Icon: FileText, color: '#F59E0B' },
+  { key: 'invoices', title: 'Facturi emise', description: 'Documentele emise și situația încasărilor.', Icon: FileText, color: '#F59E0B' },
 ] as const;
 
 const primaryTabDetails = {
@@ -152,20 +153,40 @@ const primaryTabDetails = {
   },
 } as const;
 
-const moreAreas = [
-  { key: 'company', title: 'Datele firmei', description: 'Identitate juridică, sediu, contact și date bancare.', Icon: Building2, color: '#FE8C19' },
-  { key: 'customers', title: 'Clienți', description: 'Conturi, comenzi, valoare totală și controlul accesului.', Icon: UsersRound, color: '#38BDF8' },
-  { key: 'discounts', title: 'Reduceri', description: 'Campanii globale sau per produs și anunțuri pe site.', Icon: BadgePercent, color: '#F59E0B' },
-  { key: 'sources', title: 'Surse produse', description: 'Magazinele si furnizorii din care provin produsele.', Icon: Globe2, color: '#38BDF8' },
-  { key: 'suppliers', title: 'Furnizori', description: 'Firme partenere, contacte și date comerciale pentru achiziții.', Icon: Handshake, color: '#5EEAD4' },
-  { key: 'nirs', title: 'NIR-uri', description: 'Recepții, facturi de achiziție și costuri istorice.', Icon: FileText, color: '#14B8A6' },
-  { key: 'invoice-configurator', title: 'Configurator factură', description: 'Spațiu separat pentru structura și aspectul facturilor.', Icon: FileCog, color: '#FB923C' },
-  { key: 'categories', title: 'Categorii', description: 'Categorii, subcategorii si imagini.', Icon: FolderTree, color: '#FB7185' },
-  { key: 'brands', title: 'Compatibilitati branduri', description: 'Marcile cu care sunt compatibile produsele.', Icon: Tags, color: '#2DD4BF' },
-  { key: 'manufacturers', title: 'Producatori', description: 'Companiile care fabrica produsele.', Icon: Factory, color: '#818CF8' },
-  { key: 'invoices', title: 'Facturi', description: 'Documentele si situatia incasarilor.', Icon: FileText, color: '#F59E0B' },
-  { key: 'payments', title: 'Metode de plata', description: 'Activeaza plata cu cardul sau ramburs la curier.', Icon: CreditCard, color: '#A78BFA' },
-  { key: 'shipping', title: 'Livrari', description: 'Costuri, praguri gratuite si termene de livrare.', Icon: Truck, color: '#22C55E' },
+const moreAreaGroups = [
+  {
+    key: 'sales', title: 'VÂNZĂRI', color: '#38BDF8',
+    areas: [
+      { key: 'shipping', title: 'Livrări', description: 'Costuri, praguri gratuite și termene de livrare.', Icon: Truck, color: '#22C55E' },
+      { key: 'customers', title: 'Clienți', description: 'Conturi, comenzi, valoare totală și controlul accesului.', Icon: UsersRound, color: '#38BDF8' },
+      { key: 'invoices', title: 'Facturi emise', description: 'Documentele emise și situația încasărilor.', Icon: FileText, color: '#F59E0B' },
+    ],
+  },
+  {
+    key: 'catalog', title: 'CATALOG', color: '#A78BFA',
+    areas: [
+      { key: 'categories', title: 'Categorii', description: 'Categorii, subcategorii și imagini.', Icon: FolderTree, color: '#FB7185' },
+      { key: 'brands', title: 'Compatibilități branduri', description: 'Mărcile cu care sunt compatibile produsele.', Icon: Tags, color: '#2DD4BF' },
+      { key: 'manufacturers', title: 'Producători', description: 'Companiile care fabrică produsele.', Icon: Factory, color: '#818CF8' },
+      { key: 'discounts', title: 'Reduceri', description: 'Campanii globale sau per produs și anunțuri pe site.', Icon: BadgePercent, color: '#F59E0B' },
+    ],
+  },
+  {
+    key: 'stock', title: 'STOC & ACHIZIȚII', color: '#2DD4BF',
+    areas: [
+      { key: 'nirs', title: 'NIR-uri', description: 'Recepții, facturi de achiziție și costuri istorice.', Icon: FileText, color: '#14B8A6' },
+      { key: 'suppliers', title: 'Furnizori', description: 'Firme partenere, contacte și date comerciale pentru achiziții.', Icon: Handshake, color: '#5EEAD4' },
+      { key: 'sources', title: 'Surse de aprovizionare', description: 'Canalele și partenerii din care provin produsele.', Icon: Globe2, color: '#38BDF8' },
+    ],
+  },
+  {
+    key: 'settings', title: 'CONFIGURARE', color: '#FB923C',
+    areas: [
+      { key: 'payments', title: 'Metode de plată', description: 'Activează plata cu cardul sau ramburs la curier.', Icon: CreditCard, color: '#A78BFA' },
+      { key: 'invoice-configurator', title: 'Configurator factură', description: 'Structura, aspectul și tema facturilor viitoare.', Icon: FileCog, color: '#FB923C' },
+      { key: 'company', title: 'Datele firmei', description: 'Identitate juridică, adresă, contact și date bancare.', Icon: Building2, color: '#FE8C19' },
+    ],
+  },
 ] as const;
 
 export default function ShopModuleScreen() {
@@ -492,37 +513,31 @@ export default function ShopModuleScreen() {
                   <Text style={styles.sectionTitle}>Administrare magazin</Text>
                 </View>
               </View>
-              <View style={styles.moreList}>
-                {moreAreas.map(({ key, title, description, Icon, color }) => {
-                  const enabled = key !== 'invoices';
-                  const openArea = () => {
-                    if (!enabled) return;
-                    if (key === 'categories' || key === 'brands' || key === 'manufacturers') openCatalog(key);
-                    else setView(key);
-                  };
-                  return (
-                    <TouchableOpacity
-                      key={key}
-                      style={styles.moreCard}
-                      activeOpacity={enabled ? 0.72 : 1}
-                      accessibilityRole="button"
-                      accessibilityState={{ disabled: !enabled }}
-                      onPress={openArea}>
-                      <View style={[styles.moreCardIcon, { backgroundColor: `${color}16` }]}>
-                        <Icon size={21} color={color} />
-                      </View>
-                      <View style={styles.moreCardCopy}>
-                        <Text style={styles.moreCardTitle}>{title}</Text>
-                        <Text style={styles.moreCardDescription}>{description}</Text>
-                      </View>
-                      {enabled ? (
-                        <ChevronRight size={19} color={Colors.textMuted} />
-                      ) : (
-                        <View style={styles.soonBadge}><Text style={styles.soonBadgeText}>IN CURAND</Text></View>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
+              <View style={styles.moreGroups}>
+                {moreAreaGroups.map((group, groupIndex) => (
+                  <View key={group.key} style={styles.moreGroup}>
+                    <View style={styles.moreGroupHeader}>
+                      <View style={[styles.moreGroupIndex, { backgroundColor: `${group.color}18` }]}><Text style={[styles.moreGroupIndexText, { color: group.color }]}>{String(groupIndex + 1).padStart(2, '0')}</Text></View>
+                      <Text style={[styles.moreGroupTitle, { color: group.color }]}>{group.title}</Text>
+                      <View style={[styles.moreGroupLine, { backgroundColor: `${group.color}28` }]} />
+                    </View>
+                    <View style={styles.moreList}>
+                      {group.areas.map(({ key, title, description, Icon, color }) => {
+                        const openArea = () => {
+                          if (key === 'categories' || key === 'brands' || key === 'manufacturers') openCatalog(key);
+                          else setView(key);
+                        };
+                        return (
+                          <TouchableOpacity key={key} style={styles.moreCard} activeOpacity={0.72} accessibilityRole="button" onPress={openArea}>
+                            <View style={[styles.moreCardIcon, { backgroundColor: `${color}16` }]}><Icon size={21} color={color} /></View>
+                            <View style={styles.moreCardCopy}><Text style={styles.moreCardTitle}>{title}</Text><Text style={styles.moreCardDescription}>{description}</Text></View>
+                            <View style={[styles.moreCardArrow, { backgroundColor: `${color}12` }]}><ChevronRight size={18} color={color} /></View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ))}
               </View>
             </>
           ) : (
@@ -563,8 +578,18 @@ export default function ShopModuleScreen() {
     );
   }
 
+  if (view === 'invoices') {
+    return (
+      <View style={styles.container}>
+        <Header title="Facturi emise" showBack onBack={() => setView('more')} />
+        <ShopInvoicesManager />
+        <ShopBottomNavigation activeTab="more" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
+      </View>
+    );
+  }
+
   if (view === 'sources' || view === 'suppliers' || view === 'payments' || view === 'shipping' || view === 'customers' || view === 'discounts' || view === 'company') {
-    const title = view === 'sources' ? 'Surse produse' : view === 'suppliers' ? 'Furnizori' : view === 'payments' ? 'Metode de plată' : view === 'shipping' ? 'Livrări' : view === 'customers' ? 'Clienți' : view === 'company' ? 'Datele firmei' : 'Reduceri';
+    const title = view === 'sources' ? 'Surse de aprovizionare' : view === 'suppliers' ? 'Furnizori' : view === 'payments' ? 'Metode de plată' : view === 'shipping' ? 'Livrări' : view === 'customers' ? 'Clienți' : view === 'company' ? 'Datele firmei' : 'Reduceri';
     return (
       <View style={styles.container}>
         <Header title={title} showBack onBack={() => setView('more')} />
@@ -909,12 +934,20 @@ const styles = StyleSheet.create({
   cardDescription: { flex: 1, color: Colors.textSecondary, fontSize: 10, lineHeight: 15, fontFamily: 'Inter-Regular', marginTop: 5 },
   cardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 11 },
   cardState: { fontSize: 8, fontFamily: 'Inter-Bold', letterSpacing: 1.1 },
+  moreGroups: { gap: 24 },
+  moreGroup: { gap: 10 },
+  moreGroupHeader: { minHeight: 30, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 3 },
+  moreGroupIndex: { width: 28, height: 24, alignItems: 'center', justifyContent: 'center', borderRadius: 9 },
+  moreGroupIndexText: { fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.5 },
+  moreGroupTitle: { fontFamily: 'Inter-Bold', fontSize: 9, letterSpacing: 1.25 },
+  moreGroupLine: { flex: 1, height: StyleSheet.hairlineWidth },
   moreList: { gap: 9 },
   moreCard: { minHeight: 78, flexDirection: 'row', alignItems: 'center', gap: 13, borderRadius: 20, padding: 13, backgroundColor: '#1B1B1F' },
   moreCardIcon: { width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   moreCardCopy: { flex: 1, minWidth: 0 },
   moreCardTitle: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 13 },
   moreCardDescription: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 15, marginTop: 3 },
+  moreCardArrow: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17 },
   soonBadge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5, backgroundColor: 'rgba(245,158,11,0.11)' },
   soonBadgeText: { color: '#F59E0B', fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.7 },
   primaryEmpty: { minHeight: 280, alignItems: 'center', justifyContent: 'center', borderRadius: 26, padding: 28, backgroundColor: '#1B1B1F', marginTop: 16 },

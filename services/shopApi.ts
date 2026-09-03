@@ -546,6 +546,33 @@ export type ShopOrderEmailNotification = {
   error?: string;
 };
 
+export type ShopIssuedInvoice = {
+  id: string;
+  order_id: string;
+  order_number: string;
+  series: string;
+  number: string;
+  display_number: string;
+  status: 'paid' | 'unpaid';
+  theme: ShopInvoiceTheme;
+  issue_date: string;
+  due_date: string | null;
+  currency: string;
+  total: number;
+  buyer_name: string;
+  buyer_cui: string;
+  customer_email: string;
+  payment_status: ShopOrder['payment_status'];
+  payment_method: ShopOrder['payment_method'];
+  issued_by: string;
+  issued_at: string;
+  updated_at: string;
+  email_sent_at: string | null;
+  email_last_error: string | null;
+  existing?: boolean;
+  email_notification?: ShopOrderEmailNotification;
+};
+
 export type ShopOrder = {
   id: string;
   order_number: string;
@@ -581,6 +608,7 @@ export type ShopOrder = {
   items: ShopOrderItem[];
   status_history?: ShopOrderStatusHistory[];
   email_notification?: ShopOrderEmailNotification;
+  invoice?: ShopIssuedInvoice | null;
   created_at: string;
   updated_at: string;
 };
@@ -765,6 +793,10 @@ export type ShopInventoryMovement = {
   warehouse_id?: string | null;
   nir_document_id?: string | null;
   nir_line_id?: string | null;
+  sales_invoice_id?: string | null;
+  sales_invoice_line_id?: string | null;
+  invoice_series?: string | null;
+  invoice_number?: string | null;
   movement_type: string;
   quantity_delta: number;
   quantity_after: number;
@@ -772,6 +804,25 @@ export type ShopInventoryMovement = {
   accounting_quantity_after?: string | number | null;
   inventory_unit_cost_ron?: string | number | null;
   inventory_cost_total_ron?: string | number | null;
+  sale_unit_price_ron?: string | number | null;
+  sale_total_ron?: string | number | null;
+  fifo_status?: 'allocated' | 'partial' | 'pending' | null;
+  fifo_quantity_allocated?: string | number | null;
+  fifo_quantity_pending?: string | number | null;
+  fifo_allocations?: {
+    layer_id: string;
+    quantity: string | number;
+    unit_cost_ron: string | number;
+    total_cost_ron: string | number;
+    reception_date: string;
+    source_reference?: string | null;
+    invoice_number_snapshot?: string | null;
+    nir_number?: string | null;
+    supplier_id?: string | null;
+    supplier_name?: string | null;
+    supplier_alias?: string | null;
+    supplier_display_name: string;
+  }[];
   reception_date?: string | null;
   note: string | null;
   created_by: string | null;
@@ -1004,6 +1055,11 @@ export const shopApi = {
   listOrders: (token: string) => shopCall<ShopOrder[]>('listOrders', token),
   getOrder: (token: string, id: string) => shopCall<ShopOrder>('getOrder', token, undefined, id),
   updateOrder: (token: string, id: string, payload: Pick<ShopOrder, 'status' | 'payment_status'> & { admin_notes: string; notify_customer: boolean; address?: string; city?: string; county?: string; postal_code?: string }) => shopCall<ShopOrder>('updateOrder', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
+  issueInvoice: (token: string, orderId: string, sendEmail = false) => shopCall<ShopIssuedInvoice>('issueInvoice', token, { method: 'POST', body: JSON.stringify({ order_id: orderId, send_email: sendEmail }) }, orderId),
+  listInvoices: (token: string) => shopCall<ShopIssuedInvoice[]>('listInvoices', token),
+  getInvoice: (token: string, id: string) => shopCall<ShopIssuedInvoice>('getInvoice', token, undefined, id),
+  downloadInvoice: (token: string, id: string, format: 'pdf' | 'xlsx' = 'pdf') => shopCall<{ file_name: string; mime_type: string; content_base64: string }>('downloadInvoice', token, undefined, id, 0, { format }),
+  sendInvoiceEmail: (token: string, id: string) => shopCall<ShopOrderEmailNotification>('sendInvoiceEmail', token, { method: 'POST', body: JSON.stringify({ invoice_id: id }) }, id),
   listCustomers: (token: string) => shopCall<ShopCustomerSummary[]>('listCustomers', token),
   getCustomer: (token: string, id: string) => shopCall<ShopCustomerDetail>('getCustomer', token, undefined, id),
   updateCustomerStatus: (token: string, id: string, isActive: boolean) => shopCall<{ success: true; is_active: boolean }>('updateCustomerStatus', token, { method: 'PATCH', body: JSON.stringify({ is_active: isActive }) }, id),

@@ -107,8 +107,8 @@ final class GtrotsInvoiceXlsx
         if ($logo !== null) {
             $media = []; $mediaIndex = [];
             $mediaName = shopNirPremiumXlsxRegisterMedia($media, $mediaIndex, $logo, 'gtrots-logo');
-            $scale = min(72 / max(1, (int)$logo['width']), 72 / max(1, (int)$logo['height']));
-            $drawing = shopNirPremiumXlsxDrawing([['media' => $mediaName, 'name' => 'Logo G-Trots', 'description' => 'Logo G-Trots', 'col' => 0, 'row' => 0, 'colOff' => 90000, 'rowOff' => 40000, 'cx' => (int)round((int)$logo['width'] * $scale * 9525), 'cy' => (int)round((int)$logo['height'] * $scale * 9525)]]);
+            $scale = min(88 / max(1, (int)$logo['width']), 88 / max(1, (int)$logo['height']));
+            $drawing = shopNirPremiumXlsxDrawing([['media' => $mediaName, 'name' => 'Logo G-Trots', 'description' => 'Logo G-Trots', 'col' => 0, 'row' => 0, 'colOff' => 295000, 'rowOff' => 95000, 'cx' => (int)round((int)$logo['width'] * $scale * 9525), 'cy' => (int)round((int)$logo['height'] * $scale * 9525)]]);
             foreach ($media as $name => $bytes) $files['xl/media/' . $name] = $bytes;
             $files['xl/drawings/drawing1.xml'] = $drawing['xml'];
             $files['xl/drawings/_rels/drawing1.xml.rels'] = $drawing['rels'];

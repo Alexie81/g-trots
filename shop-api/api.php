@@ -197,7 +197,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026090302;
+    $schemaVersion = 2026090303;
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_schema_meta (
             meta_key VARCHAR(80) NOT NULL PRIMARY KEY,

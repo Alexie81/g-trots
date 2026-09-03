@@ -1,8 +1,8 @@
 (function () {
-  const { shell } = require('electron');
+  const { shell, clipboard } = require('electron');
   const state = {
-    products: [], orders: [], invoices: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], promotions: [], companies: [], nirs: [], nirPermissions: [], nirWarehouses: [], invoiceThemeSettings: null, selectedInvoiceTheme: 'orange', invoiceThemeSaving: false, invoiceQuery: '', invoiceStatusFilter: 'all', invoiceBusy: '',
-    editingProduct: null, editingOrder: null, invoiceIssueOrder: null, editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
+    products: [], orders: [], invoices: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], promotions: [], companies: [], nirs: [], nirPermissions: [], nirWarehouses: [], invoiceThemeSettings: null, selectedInvoiceTheme: 'orange', invoiceSettingsDraft: { invoice_series: 'GT', next_number: 1, due_days: 7, default_notes: '' }, invoiceThemeSaving: false, invoiceQuery: '', invoiceStatusFilter: 'all', invoiceBusy: '',
+    editingProduct: null, editingOrder: null, invoiceIssueOrder: null, invoiceDetail: null, editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
     productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, productTotal: 0, productSearchTimer: null, productLoadRequestId: 0, slugTouched: false, productQuery: '', orderQuery: '', orderSearchTimer: null, orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
     customerQuery: '', inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false, nirBundleDownloading: '', nirRegistryDownloadPeriod: 'current_month', nirRegistryDownloadContent: 'complete', nirRegistryDownloading: false, nirExportProgressTimer: null,
     pages: { products: 1, orders: 1, invoices: 1, inventory: 1, stockFlow: 1, stockMovements: 1, productSales: 1, productReviews: 1, productPurchases: 1, customers: 1, customerOrders: 1, nirs: 1 },
@@ -135,8 +135,9 @@
       ${dashboardCard('shop-discounts', 'amber', 'PROMOTII', 'Reduceri', 'Campanii, cupoane si anunturi pe site.')}
       ${dashboardCard('shop-company', 'purple', 'IDENTITATE', 'Datele firmei', 'Societati, conturi bancare si stampila.')}
       ${dashboardCard('shop-invoice-configurator', 'amber', 'DOCUMENTE', 'Configurator factură', 'Patru teme și alegerea aspectului pentru facturile viitoare.')}
+      ${dashboardCard('shop-spv', 'blue', 'ANAF', 'SPV / e-Factura', 'Conectarea și transmiterea facturilor vor fi configurate aici.')}
     `);
-    document.body.insertAdjacentHTML('beforeend', productModal() + productDetailModal() + orderModal() + invoiceIssueModal() + stockModal() + sourceModal() + supplierModal() + nirModal() + nirRegistryDownloadModal() + shippingModal() + customerModal() + promotionModal() + promotionStatsModal() + companyModal());
+    document.body.insertAdjacentHTML('beforeend', productModal() + productDetailModal() + orderModal() + invoiceIssueModal() + invoiceDetailModal() + stockModal() + sourceModal() + supplierModal() + nirModal() + nirRegistryDownloadModal() + shippingModal() + customerModal() + promotionModal() + promotionStatsModal() + companyModal());
     wire();
     if ($('tab-shop-dashboard')?.classList.contains('active')) void loadDashboard();
   }
@@ -187,6 +188,9 @@
   }
   function invoiceIssueModal() {
     return `<div class="shop-commerce-overlay shop-invoice-issue-overlay" id="shop-invoice-issue-modal" hidden><form class="shop-commerce-modal compact shop-invoice-issue-modal" id="shop-invoice-issue-form"><span class="shop-invoice-issue-glow" aria-hidden="true"></span><header><div><small>DOCUMENT FISCAL · TEMĂ FIXATĂ</small><h2>Emite factura</h2></div><button type="button" data-commerce-close="shop-invoice-issue-modal">×</button></header><div class="shop-invoice-issue-body"><div class="shop-invoice-issue-lead"><span><svg viewBox="0 0 24 24"><path d="M6 2h9l4 4v16l-3-2-3 2-3-2-4 2V2Z"/><path d="M14 2v5h5M9 11h6m-6 4h4"/></svg></span><div><small>EMITERE DIN COMANDĂ</small><strong id="shop-invoice-issue-order">—</strong><p>Factura scade stocul imediat. FIFO alege loturile, iar valorile păstrate sunt costurile reale de achiziție din NIR.</p></div></div><div class="shop-invoice-issue-summary"><span><small>CLIENT</small><strong id="shop-invoice-issue-client">—</strong></span><span><small>TOTAL FACTURĂ</small><strong id="shop-invoice-issue-total">—</strong></span></div><label class="shop-invoice-email-switch"><span class="shop-invoice-email-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/></svg></span><span><strong>Trimite și pe e-mail</strong><small id="shop-invoice-issue-email">—</small></span><input id="shop-invoice-issue-send-email" type="checkbox"><i><b></b></i></label><div class="shop-invoice-issue-note"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg><span>Numărul, tema și valorile rămân neschimbate la orice regenerare.</span></div></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-invoice-issue-modal">Renunță</button><button type="submit" class="btn-primary shop-invoice-issue-confirm" id="shop-invoice-issue-confirm"><svg viewBox="0 0 24 24"><path d="M6 2h9l4 4v16l-3-2-3 2-3-2-4 2V2Z"/><path d="M14 2v5h5M9 11h6m-6 4h4"/></svg><span>Emite factura</span></button></footer></form></div>`;
+  }
+  function invoiceDetailModal() {
+    return `<div class="shop-commerce-overlay shop-invoice-detail-overlay" id="shop-invoice-detail-modal" hidden><section class="shop-commerce-modal shop-invoice-detail-modal"><header><div><small>FACTURI EMISE / FIȘĂ COMPLETĂ</small><h2 id="shop-invoice-detail-title">Factură</h2></div><button type="button" data-commerce-close="shop-invoice-detail-modal">×</button></header><div class="shop-commerce-modal-scroll" id="shop-invoice-detail-content"><div class="shop-commerce-loading">Se pregătește factura...</div></div><footer><button type="button" class="shop-invoice-detail-action link" id="shop-invoice-detail-link"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2"/></svg><span>Obține link</span></button><button type="button" class="shop-invoice-detail-action email" id="shop-invoice-detail-email"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg><span>E-mail</span></button><button type="button" class="shop-invoice-detail-action pdf" id="shop-invoice-detail-pdf"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14"/></svg><span>PDF</span></button><button type="button" class="shop-invoice-detail-action xlsx" id="shop-invoice-detail-xlsx"><svg viewBox="0 0 24 24"><path d="M6 2h9l4 4v16H6Z"/><path d="M15 2v5h5M9 11l5 6m0-6-5 6"/></svg><span>XLSX</span></button><button type="button" class="shop-invoice-detail-action xml" id="shop-invoice-detail-xml"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3M10 8l-4 4 4 4m4-8 4 4-4 4"/></svg><span>e-Factura XML</span></button><button type="button" class="shop-invoice-detail-action delete" id="shop-invoice-detail-delete" hidden><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg><span>Șterge</span></button></footer></section></div>`;
   }
   function stockModal() {
     return `<div class="shop-commerce-overlay shop-stock-sheet-overlay" id="shop-stock-modal" hidden><form class="shop-commerce-modal shop-stock-sheet-modal" id="shop-stock-form"><header><div><small>STOCURI / FISA PRODUSULUI</small><h2 id="shop-stock-title">Produs</h2></div><span class="shop-stock-sheet-live"><i></i>ISTORIC ACTUALIZAT</span><button type="button" data-commerce-close="shop-stock-modal">×</button></header><div class="shop-commerce-modal-scroll" id="shop-stock-details"><div class="shop-commerce-loading">Se pregateste fisa de stoc...</div></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-stock-modal">Inchide</button><button type="submit" class="btn-primary" id="shop-stock-save">Salveaza ajustarea</button></footer></form></div>`;
@@ -328,6 +332,12 @@
     $('shop-order-form').addEventListener('submit', saveOrder);
     $('shop-invoice-issue-form').addEventListener('submit', submitInvoiceIssue);
     $('shop-invoice-issue-send-email').addEventListener('change', syncInvoiceIssuePanel);
+    $('shop-invoice-detail-link').addEventListener('click', () => void copyInvoicePublicLink(state.invoiceDetail?.id));
+    $('shop-invoice-detail-email').addEventListener('click', () => void emailIssuedInvoice(state.invoiceDetail?.id));
+    $('shop-invoice-detail-pdf').addEventListener('click', () => void downloadIssuedInvoice(state.invoiceDetail?.id, 'pdf'));
+    $('shop-invoice-detail-xlsx').addEventListener('click', () => void downloadIssuedInvoice(state.invoiceDetail?.id, 'xlsx'));
+    $('shop-invoice-detail-xml').addEventListener('click', () => void downloadIssuedInvoice(state.invoiceDetail?.id, 'xml'));
+    $('shop-invoice-detail-delete').addEventListener('click', () => void deleteIssuedInvoice(state.invoiceDetail?.id));
     $('shop-stock-form').addEventListener('submit', saveStock);
     $('shop-source-form').addEventListener('submit', saveSource);
     $('shop-supplier-form').addEventListener('submit', saveSupplier);
@@ -1158,6 +1168,67 @@
 
   const invoiceThemeColors = { orange: '#ff8a00', green: '#19a86b', red: '#ef4056', purple: '#8b72e8' };
   const invoiceMoney = (value, currency = 'RON') => `${new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0))} ${esc(currency || 'RON')}`;
+  function invoiceItemAmounts(item) {
+    const quantityValue = Math.max(0, Number(item?.quantity || 0));
+    const discount = Math.max(0, Math.min(100, Number(item?.discount_percent || 0)));
+    const net = quantityValue * Number(item?.unit_price || 0) * (1 - discount / 100);
+    const vat = net * Math.max(0, Number(item?.vat_rate || 0)) / 100;
+    return { net, vat, gross: net + vat };
+  }
+  function invoicePartyCard(kind, party = {}) {
+    const seller = kind === 'seller';
+    const icon = seller
+      ? '<svg viewBox="0 0 24 24"><path d="M4 21V5l8-3 8 3v16"/><path d="M9 21v-5h6v5M8 8h1m3 0h1m3 0h1M8 12h1m3 0h1m3 0h1"/></svg>'
+      : '<svg viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>';
+    const fiscal = party.cui ? `CUI ${esc(party.cui)}${party.registration_number ? ` · ${esc(party.registration_number)}` : ''}` : 'Persoană fizică';
+    const location = [party.address, party.city, party.county, party.postal_code].filter(Boolean).map(esc).join(', ') || 'Adresă necompletată';
+    return `<article class="shop-invoice-party ${seller ? 'seller' : 'buyer'}"><span>${icon}</span><small>${seller ? 'FURNIZOR' : 'CLIENT'}</small><strong>${esc(party.name || '—')}</strong><em>${fiscal}</em><p>${location}</p>${party.email || party.phone ? `<p>${[party.email, party.phone].filter(Boolean).map(esc).join(' · ')}</p>` : ''}</article>`;
+  }
+  function renderInvoiceDetail(invoice) {
+    const root = $('shop-invoice-detail-content');
+    const payload = invoice?.payload;
+    if (!root || !payload) return;
+    const accent = invoiceThemeColors[invoice.theme] || invoiceThemeColors.orange;
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    const totals = items.reduce((sum, item) => { const line = invoiceItemAmounts(item); return { net: sum.net + line.net, vat: sum.vat + line.vat, gross: sum.gross + line.gross }; }, { net: 0, vat: 0, gross: 0 });
+    const productIcon = '<svg viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="M3 7v10l9 5 9-5V7M12 12v10"/></svg>';
+    const rows = items.map((item, index) => {
+      const line = invoiceItemAmounts(item);
+      const unitGross = line.gross / Math.max(1, Number(item.quantity || 1));
+      const content = `<span class="shop-invoice-product-icon">${productIcon}</span><span class="shop-invoice-product-copy"><strong>${esc(item.name || 'Produs')}</strong><small>${esc(item.sku || 'Fără cod')} · ${esc(item.quantity)} ${esc(item.unit || 'buc.')} × ${invoiceMoney(unitGross, payload.currency)}</small><em>TVA ${esc(new Intl.NumberFormat('ro-RO').format(Number(item.vat_rate || 0)))}%</em></span><b>${invoiceMoney(line.gross, payload.currency)}</b>${item.product_id ? '<span class="shop-invoice-product-arrow"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span>' : ''}`;
+      return item.product_id
+        ? `<button type="button" class="shop-invoice-product" data-invoice-product="${esc(item.product_id)}" title="Deschide fișa produsului">${content}</button>`
+        : `<div class="shop-invoice-product service">${content}</div>`;
+    }).join('');
+    root.innerHTML = `<section class="shop-invoice-detail-hero" style="--invoice-accent:${accent}"><span class="shop-invoice-detail-document"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span><div><small>DOCUMENT FISCAL · TEMA ${esc(String(invoice.theme || '').toUpperCase())}</small><h3>${esc(invoice.display_number)}</h3><p>Comanda ${esc(invoice.order_number)} · emisă ${esc(invoice.issue_date)}</p></div><span class="shop-invoice-state-stack"><b class="${invoice.status}">${invoice.status === 'paid' ? 'PLĂTITĂ' : 'NEPLĂTITĂ'}</b><b class="spv ${invoice.spv_status === 'sent' ? 'sent' : 'pending'}">SPV ${invoice.spv_status === 'sent' ? 'TRIMISĂ' : 'NETRIMISĂ'}</b></span></section><section class="shop-invoice-parties">${invoicePartyCard('seller', payload.seller)}${invoicePartyCard('buyer', payload.buyer)}</section><section class="shop-invoice-products"><header><div><small>POZIȚII FACTURATE</small><strong>${items.length} ${items.length === 1 ? 'poziție' : 'poziții'}</strong></div><span>${productIcon}</span></header>${rows || '<p class="shop-detail-empty">Factura nu conține poziții.</p>'}</section><section class="shop-invoice-detail-bottom"><article class="shop-invoice-payment"><small>PLATĂ ȘI EMITERE</small><strong>${esc(payload.payment?.method || 'Metodă neprecizată')}</strong><p>Scadență ${esc(payload.due_date || payload.issue_date)} · emisă de ${esc(invoice.issued_by || 'Administrator')}</p>${payload.notes ? `<em>${esc(payload.notes)}</em>` : ''}</article><article class="shop-invoice-totals"><span><small>Subtotal fără TVA</small><strong>${invoiceMoney(totals.net, payload.currency)}</strong></span><span><small>TVA</small><strong>${invoiceMoney(totals.vat, payload.currency)}</strong></span><span class="grand" style="--invoice-accent:${accent}"><small>TOTAL FACTURĂ</small><strong>${invoiceMoney(invoice.total, payload.currency)}</strong></span></article></section>`;
+    root.querySelectorAll('[data-invoice-product]').forEach(button => button.addEventListener('click', () => void openProductDetail(button.dataset.invoiceProduct, { overOrder: true })));
+    $('shop-invoice-detail-email').disabled = !invoice.customer_email;
+    $('shop-invoice-detail-delete').hidden = !invoice.can_delete;
+  }
+  async function openInvoiceDetail(id) {
+    if (!id) return;
+    const summary = state.invoices.find(item => item.id === id) || null;
+    state.invoiceDetail = summary;
+    $('shop-invoice-detail-title').textContent = summary?.display_number || 'Se încarcă...';
+    $('shop-invoice-detail-content').innerHTML = '<div class="shop-commerce-loading">Se pregătește fișa facturii...</div>';
+    openModal('shop-invoice-detail-modal');
+    try {
+      const invoice = await window.SHOP_API.getInvoice(id);
+      state.invoiceDetail = invoice;
+      $('shop-invoice-detail-title').textContent = invoice.display_number;
+      renderInvoiceDetail(invoice);
+    } catch (error) { $('shop-invoice-detail-content').innerHTML = `<div class="shop-commerce-error">${esc(error.message || 'Factura nu a putut fi încărcată.')}</div>`; }
+  }
+  async function copyInvoicePublicLink(id) {
+    if (!id || state.invoiceBusy) return;
+    state.invoiceBusy = id;
+    try {
+      const result = await window.SHOP_API.getInvoicePublicLink(id, 'pdf');
+      clipboard.writeText(result.url);
+      toast(`Linkul pentru ${state.invoiceDetail?.display_number || 'factură'} a fost copiat.`);
+    } catch (error) { toast(error.message || 'Linkul facturii nu a putut fi obținut.', 'error'); }
+    finally { state.invoiceBusy = ''; }
+  }
   async function loadInvoices() {
     loading('shop-invoices-content', 'Se încarcă facturile emise...');
     try {
@@ -1182,13 +1253,19 @@
     const cards = page.items.map(invoice => {
       const accent = invoiceThemeColors[invoice.theme] || invoiceThemeColors.orange;
       const sent = Boolean(invoice.email_sent_at);
-      return `<article class="shop-issued-invoice" style="--invoice-accent:${accent}"><span class="shop-issued-invoice-icon"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span><div class="shop-issued-invoice-copy"><header><strong>${esc(invoice.display_number)}</strong><b class="${invoice.status}">${invoice.status === 'paid' ? 'PLĂTITĂ' : 'NEPLĂTITĂ'}</b></header><h3>${esc(invoice.buyer_name)}</h3><p>Comanda ${esc(invoice.order_number)} · ${esc(invoice.issue_date)} · tema ${esc(invoice.theme)}</p><span class="${sent ? 'sent' : ''}"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/></svg>${sent ? `Trimisă la ${esc(invoice.customer_email)}` : esc(invoice.customer_email || 'Fără e-mail')}</span></div><aside><strong>${invoiceMoney(invoice.total, invoice.currency)}</strong><div><button type="button" data-invoice-email="${esc(invoice.id)}" title="Trimite factura pe e-mail" ${invoice.customer_email ? '' : 'disabled'}><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg><span>E-mail</span></button><button type="button" class="primary" data-invoice-download="${esc(invoice.id)}" data-invoice-format="pdf"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14"/></svg><span>PDF</span></button><button type="button" class="xlsx" data-invoice-download="${esc(invoice.id)}" data-invoice-format="xlsx"><svg viewBox="0 0 24 24"><path d="M6 2h9l4 4v16H6Z"/><path d="M15 2v5h5M9 11l5 6m0-6-5 6"/></svg><span>XLSX</span></button></div></aside></article>`;
+      return `<article class="shop-issued-invoice" data-invoice-open="${esc(invoice.id)}" tabindex="0" role="button" aria-label="Deschide fișa facturii ${esc(invoice.display_number)}" style="--invoice-accent:${accent}"><span class="shop-issued-invoice-icon"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span><div class="shop-issued-invoice-copy"><header><strong>${esc(invoice.display_number)}</strong><b class="${invoice.status}">${invoice.status === 'paid' ? 'PLĂTITĂ' : 'NEPLĂTITĂ'}</b><b class="shop-invoice-spv ${invoice.spv_status === 'sent' ? 'sent' : 'pending'}">SPV ${invoice.spv_status === 'sent' ? 'TRIMISĂ' : 'NETRIMISĂ'}</b></header><h3>${esc(invoice.buyer_name)}</h3><p>Comanda ${esc(invoice.order_number)} · ${esc(invoice.issue_date)} · tema ${esc(invoice.theme)}</p><span class="${sent ? 'sent' : ''}"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/></svg>${sent ? `Trimisă la ${esc(invoice.customer_email)}` : esc(invoice.customer_email || 'Fără e-mail')}</span></div><aside><strong>${invoiceMoney(invoice.total, invoice.currency)}</strong><div><button type="button" data-invoice-link="${esc(invoice.id)}" title="Copiază linkul PDF"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2"/></svg><span>Link</span></button><button type="button" data-invoice-email="${esc(invoice.id)}" title="Trimite factura pe e-mail" ${invoice.customer_email ? '' : 'disabled'}><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg><span>E-mail</span></button><button type="button" class="primary" data-invoice-download="${esc(invoice.id)}" data-invoice-format="pdf"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14"/></svg><span>PDF</span></button><button type="button" class="xlsx" data-invoice-download="${esc(invoice.id)}" data-invoice-format="xlsx"><svg viewBox="0 0 24 24"><path d="M6 2h9l4 4v16H6Z"/><path d="M15 2v5h5M9 11l5 6m0-6-5 6"/></svg><span>XLSX</span></button><button type="button" class="xml" data-invoice-download="${esc(invoice.id)}" data-invoice-format="xml"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3M10 8l-4 4 4 4m4-8 4 4-4 4"/></svg><span>XML</span></button>${invoice.can_delete ? `<button type="button" class="delete" data-invoice-delete="${esc(invoice.id)}" title="Șterge ultima factură netrimisă în SPV"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg><span>Șterge</span></button>` : ''}</div></aside></article>`;
     }).join('');
     root.innerHTML = `${metrics}${toolbar}${cards ? `<section class="shop-issued-invoice-list">${cards}</section>${pagination('invoices', filtered.length, page.page, page.pageCount, page.pageSize)}` : empty('Nu există facturi emise', state.invoices.length ? 'Schimbă filtrul sau căutarea.' : 'Emite prima factură din pagina unei comenzi.')}`;
     $('shop-invoices-search')?.addEventListener('input', event => { state.invoiceQuery = event.target.value; state.pages.invoices = 1; renderInvoices(); $('shop-invoices-search')?.focus({ preventScroll: true }); });
     root.querySelectorAll('[data-invoice-status]').forEach(button => button.addEventListener('click', () => { state.invoiceStatusFilter = button.dataset.invoiceStatus; state.pages.invoices = 1; renderInvoices(); }));
-    root.querySelectorAll('[data-invoice-download]').forEach(button => button.addEventListener('click', () => void downloadIssuedInvoice(button.dataset.invoiceDownload, button.dataset.invoiceFormat || 'pdf')));
-    root.querySelectorAll('[data-invoice-email]').forEach(button => button.addEventListener('click', () => void emailIssuedInvoice(button.dataset.invoiceEmail)));
+    root.querySelectorAll('[data-invoice-open]').forEach(card => {
+      card.addEventListener('click', event => { if (!event.target.closest('button')) void openInvoiceDetail(card.dataset.invoiceOpen); });
+      card.addEventListener('keydown', event => { if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('button')) { event.preventDefault(); void openInvoiceDetail(card.dataset.invoiceOpen); } });
+    });
+    root.querySelectorAll('[data-invoice-download]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); void downloadIssuedInvoice(button.dataset.invoiceDownload, button.dataset.invoiceFormat || 'pdf'); }));
+    root.querySelectorAll('[data-invoice-email]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); void emailIssuedInvoice(button.dataset.invoiceEmail); }));
+    root.querySelectorAll('[data-invoice-link]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); state.invoiceDetail = state.invoices.find(item => item.id === button.dataset.invoiceLink) || null; void copyInvoicePublicLink(button.dataset.invoiceLink); }));
+    root.querySelectorAll('[data-invoice-delete]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); void deleteIssuedInvoice(button.dataset.invoiceDelete); }));
     bindPagination('shop-invoices-content', 'invoices', renderInvoices);
   }
   async function downloadIssuedInvoice(id, format = 'pdf') {
@@ -1196,6 +1273,22 @@
     state.invoiceBusy = id;
     try { saveNirDownload(await window.SHOP_API.downloadInvoice(id, format)); }
     catch (error) { toast(error.message || 'Factura nu a putut fi descărcată.', 'error'); }
+    finally { state.invoiceBusy = ''; }
+  }
+  async function deleteIssuedInvoice(id) {
+    if (!id || state.invoiceBusy) return;
+    const invoice = state.invoices.find(item => item.id === id) || state.invoiceDetail;
+    if (!invoice?.can_delete) return toast(invoice?.spv_status === 'sent' ? 'Factura este deja trimisă în SPV și nu poate fi ștearsă.' : 'Poți șterge numai ultima factură emisă din serie.', 'error');
+    if (!confirm(`Ștergi ${invoice.display_number}?\n\nFactura este netrimisă în SPV. Stocul și mișcările vor fi refăcute, iar acest număr va fi reutilizat la următoarea emitere.`)) return;
+    state.invoiceBusy = id;
+    try {
+      const result = await window.SHOP_API.deleteInvoice(id);
+      if (state.invoiceDetail?.id === id) closeModal('shop-invoice-detail-modal');
+      state.invoiceDetail = null;
+      state.invoices = state.invoices.filter(item => item.id !== id);
+      toast(`${result.released_number || invoice.display_number} a fost eliberat pentru următoarea factură.`);
+      await Promise.all([loadInvoices(), loadOrders()]);
+    } catch (error) { toast(error.message || 'Factura nu a putut fi ștearsă.', 'error'); }
     finally { state.invoiceBusy = ''; }
   }
   async function emailIssuedInvoice(id) {
@@ -1437,7 +1530,7 @@
     const deliveryCard = `<section class="shop-order-summary-card"><div class="shop-order-card-head"><small>LIVRARE</small><div class="shop-order-card-actions"><em>DATE COMPLETE</em><button type="button" data-order-delivery-edit>${editIcon}<span>Editează</span></button></div></div>${orderDeliveryInput('Adresă completă', 'shop-order-address', order.address, true)}${orderDeliveryInput('Localitate', 'shop-order-city', order.city)}${orderDeliveryInput('Județ', 'shop-order-county', order.county)}${orderDeliveryInput('Cod poștal', 'shop-order-postal-code', order.postal_code)}${orderDetailRow('Metodă', order.shipping_method_name)}${orderDetailRow('Cost livrare', money(order.shipping_cost))}<p class="shop-order-delivery-helper" hidden>Modificările se salvează folosind butonul „Salvează comanda”.</p></section>`;
     const hasVat = Boolean(order.vat_payer);
     const invoiceCard = order.invoice
-      ? `<section class="shop-order-invoice-card issued"><span class="shop-order-invoice-icon">✓</span><div><small>FACTURĂ EMISĂ · TEMA ${esc(String(order.invoice.theme || '').toUpperCase())}</small><strong>${esc(order.invoice.display_number)}</strong><p>${order.invoice.status === 'paid' ? 'Plătită' : 'Neplătită'} · ${invoiceMoney(order.invoice.total, order.invoice.currency)} · ieșire de stoc înregistrată</p></div><aside><button type="button" data-order-invoice-email="${esc(order.invoice.id)}"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>E-mail</button><button type="button" class="primary" data-order-invoice-download="${esc(order.invoice.id)}" data-order-invoice-format="pdf"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14"/></svg>PDF</button><button type="button" class="xlsx" data-order-invoice-download="${esc(order.invoice.id)}" data-order-invoice-format="xlsx"><svg viewBox="0 0 24 24"><path d="M6 2h9l4 4v16H6Z"/><path d="M15 2v5h5M9 11l5 6m0-6-5 6"/></svg>XLSX</button></aside></section>`
+      ? `<section class="shop-order-invoice-card issued"><span class="shop-order-invoice-icon">✓</span><div><small>FACTURĂ EMISĂ · TEMA ${esc(String(order.invoice.theme || '').toUpperCase())}</small><strong>${esc(order.invoice.display_number)}</strong><p>${order.invoice.status === 'paid' ? 'Plătită' : 'Neplătită'} · SPV ${order.invoice.spv_status === 'sent' ? 'trimisă' : 'netrimisă'} · ${invoiceMoney(order.invoice.total, order.invoice.currency)} · ieșire de stoc înregistrată</p></div><aside><button type="button" data-order-invoice-email="${esc(order.invoice.id)}"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>E-mail</button><button type="button" class="primary" data-order-invoice-download="${esc(order.invoice.id)}" data-order-invoice-format="pdf"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14"/></svg>PDF</button><button type="button" class="xlsx" data-order-invoice-download="${esc(order.invoice.id)}" data-order-invoice-format="xlsx"><svg viewBox="0 0 24 24"><path d="M6 2h9l4 4v16H6Z"/><path d="M15 2v5h5M9 11l5 6m0-6-5 6"/></svg>XLSX</button><button type="button" class="xml" data-order-invoice-download="${esc(order.invoice.id)}" data-order-invoice-format="xml"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3M10 8l-4 4 4 4m4-8 4 4-4 4"/></svg>XML</button></aside></section>`
       : `<section class="shop-order-invoice-card"><span class="shop-order-invoice-icon"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span><div><small>FACTURĂ FISCALĂ</small><strong>Factura nu este emisă</strong><p>La emitere se fixează tema și prețurile, se scade stocul și se stabilește proveniența FIFO disponibilă.</p></div><aside><button type="button" class="primary issue" data-order-invoice-issue="${esc(order.id)}">Emite factura</button></aside></section>`;
     $('shop-order-details').innerHTML = `<div class="shop-order-grid">${clientCard}${deliveryCard}</div><div class="shop-order-items">${orderItemsHtml}</div><div class="shop-order-total"><span>${isProductPromotion && orderDiscount > 0 ? 'Subtotal după reduceri' : 'Subtotal'}${hasVat ? ' (TVA inclus)' : ''} ${money(productsTotal)} · Livrare ${money(order.shipping_cost)}${globalDiscount}</span><strong>Total de plată${hasVat ? ' (TVA inclus)' : ''} ${money(order.total)}</strong></div>${invoiceCard}${orderTimeline(order)}${orderStatusPicker(order)}<label class="shop-order-notify" data-notify-state="waiting"><input id="shop-order-notify" type="checkbox"><span class="shop-order-notify-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/></svg><i></i></span><span class="shop-order-notify-copy"><span class="shop-order-notify-eyebrow">NOTIFICARE CLIENT <b id="shop-order-notify-state">ALEGE STATUS</b></span><strong>Trimite actualizarea pe e-mail</strong><small id="shop-order-notify-helper"></small></span><span class="shop-order-notify-switch" aria-hidden="true"><i></i></span></label><div class="shop-commerce-columns"><label>Status plată<select id="shop-order-payment-status">${['pending', 'paid', 'failed', 'refunded'].map(value => `<option value="${value}" ${order.payment_status === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label><label>Metodă de plată<input value="${order.payment_method === 'card' ? 'Card online' : 'Ramburs la curier'}" disabled></label></div><label>Notițe interne<textarea id="shop-order-admin-notes" rows="4">${esc(order.admin_notes || '')}</textarea></label>${order.customer_notes ? `<div class="shop-order-note"><small>OBSERVAȚII CLIENT</small>${esc(order.customer_notes)}</div>` : ''}`;
     $('shop-order-details').querySelector('[data-order-call]')?.addEventListener('click', () => void openOrderContact('call', order.customer_phone));
@@ -2271,14 +2364,34 @@
     };
   }
   function invoiceThemePreview(palette) {
+    const previewNumber = `${String(state.invoiceSettingsDraft.invoice_series || 'GT').trim().toUpperCase() || 'GT'} ${String(Math.max(1, Math.trunc(Number(state.invoiceSettingsDraft.next_number) || 1))).padStart(3, '0')}`;
     return `<div class="shop-invoice-theme-paper" style="--invoice-accent:${palette.accent};--invoice-dark:${palette.accentDark};--invoice-soft:${palette.soft}">
       <i class="paper-accent"></i>
-      <header><img src="../assets/logo.png" alt=""><span><strong>G-TROTS</strong><small>CAB IT EXPERT SRL</small></span><aside><small>FACTURĂ</small><b>GT 00100</b></aside></header>
+      <header><img src="../assets/logo.png" alt=""><span><strong>G-TROTS</strong><small>CAB IT EXPERT SRL</small></span><aside><small>FACTURĂ</small><b>${esc(previewNumber)}</b></aside></header>
       <div class="paper-status"><b>NEACHITATĂ</b><span>Emisă la 02.09.2026</span></div>
       <div class="paper-parties"><span><small>FURNIZOR</small><b>CAB IT EXPERT SRL</b><em>CUI 49972605 · București</em></span><span><small>CLIENT</small><b>EXEMPLU CLIENT SRL</b><em>CUI RO12345678 · România</em></span></div>
       <div class="paper-table"><header><b>PRODUS</b><b>CANT.</b><b>PREȚ</b><b>TOTAL</b></header><div><span><b>Cauciuc offroad 10x2.75</b><em>SKU SE-CMM087</em></span><small>2</small><small>30,00 lei</small><strong>60,00 lei</strong></div><div><span><b>Plăcuțe frână model X</b><em>SKU GT-FR-00218</em></span><small>1</small><small>42,50 lei</small><strong>42,50 lei</strong></div></div>
       <footer><span><small>TVA 21%</small><b>18,00 lei</b></span><strong><small>TOTAL</small>120,50 lei</strong></footer>
     </div>`;
+  }
+  function invoiceSettingsDirty() {
+    const settings = state.invoiceThemeSettings;
+    const draft = state.invoiceSettingsDraft;
+    return Boolean(settings && (state.selectedInvoiceTheme !== settings.active_theme
+      || String(draft.invoice_series || '').trim().toUpperCase() !== String(settings.invoice_series || 'GT')
+      || Number(draft.next_number) !== Number(settings.next_number)
+      || Number(draft.due_days) !== Number(settings.due_days)
+      || String(draft.default_notes || '').trim() !== String(settings.default_notes || '')));
+  }
+  function syncInvoiceSettingsSave() {
+    const button = $('shop-invoice-theme-save');
+    if (!button) return;
+    const dirty = invoiceSettingsDirty();
+    button.disabled = !dirty || state.invoiceThemeSaving;
+    const small = button.querySelector('small');
+    const strong = button.querySelector('strong');
+    if (small) small.textContent = dirty ? 'APLICĂ SCHIMBĂRILE' : 'CONFIGURAȚIE SALVATĂ';
+    if (strong) strong.textContent = dirty ? 'Salvează configurarea facturii' : `${state.invoiceSettingsDraft.invoice_series || 'GT'} ${String(Number(state.invoiceSettingsDraft.next_number) || 1).padStart(3, '0')} este următoarea`;
   }
   function renderInvoiceConfigurator() {
     const content = $('shop-invoice-configurator-content');
@@ -2287,7 +2400,7 @@
     const selected = state.selectedInvoiceTheme;
     const active = settings.active_theme;
     const palette = invoiceThemePalette(selected);
-    const dirty = selected !== active;
+    const dirty = invoiceSettingsDirty();
     const last = settings.last_assignment ? `${settings.last_assignment.series || ''} ${settings.last_assignment.number || ''}`.trim() : '';
     const hero = document.querySelector('.shop-invoice-configurator-hero');
     if (hero) {
@@ -2310,11 +2423,20 @@
     content.innerHTML = `<section class="shop-invoice-theme-current" style="--invoice-accent:${palette.accent};--invoice-soft:${palette.soft}"><span class="current-palette">◐</span><div><small>${dirty ? 'SELECȚIE NESALVATĂ' : 'TEMA ACTIVĂ'}</small><strong>${esc(palette.label)}</strong><p>${dirty ? 'Salvează alegerea pentru a o folosi la următoarea factură.' : last ? `Ultimul document fixat: ${esc(last)}. Următoarea factură nouă va folosi această temă.` : 'Prima factură nouă va folosi această temă.'}</p></div><i></i></section>
       <header class="shop-invoice-theme-heading"><div><small>4 PREVIZUALIZĂRI</small><h2>Paleta documentului</h2></div><span>Alege aspectul dorit</span></header>
       <div class="shop-invoice-theme-grid" role="radiogroup" aria-label="Temă factură">${cards}</div>
+      <section class="shop-invoice-numbering"><header><span class="numbering-icon"><svg viewBox="0 0 24 24"><path d="M10 3 8 21M16 3l-2 18M4 9h16M3 15h16"/></svg></span><div><small>SERIE FACTURI</small><h2>Numerotare și scadență</h2><p>Setările se aplică începând cu următoarea factură emisă.</p></div></header><div class="shop-invoice-numbering-grid"><label><span>PREFIX</span><div><b>#</b><input id="shop-invoice-series" maxlength="20" value="${esc(state.invoiceSettingsDraft.invoice_series)}" placeholder="GT"></div></label><label><span>URMĂTORUL NUMĂR</span><div><b>№</b><input id="shop-invoice-next-number" type="number" min="1" step="1" value="${esc(state.invoiceSettingsDraft.next_number)}"></div></label><label><span>ZILE SCADENȚĂ</span><div><b>◷</b><input id="shop-invoice-due-days" type="number" min="0" max="365" step="1" value="${esc(state.invoiceSettingsDraft.due_days)}"></div></label></div><label class="shop-invoice-default-notes"><span>NOTE IMPLICITE</span><div><b>≡</b><textarea id="shop-invoice-default-notes" maxlength="2000" rows="3" placeholder="Ex: Vă mulțumim pentru comandă.">${esc(state.invoiceSettingsDraft.default_notes)}</textarea></div><small>Textul apare automat pe facturile noi și poate include condiții de plată sau un mesaj pentru client.</small></label></section>
       <section class="shop-invoice-theme-protection"><span>✓</span><div><strong>Temele vechi sunt protejate</strong><p>Dacă GT001-GT099 au fost emise cu mov și activezi portocaliu după GT099, schimbarea începe cu GT100. Regenerarea documentelor GT001-GT099 păstrează mov.</p></div></section>
-      <button type="button" id="shop-invoice-theme-save" class="shop-invoice-theme-save" style="--invoice-accent:${palette.accent}" ${dirty && !state.invoiceThemeSaving ? '' : 'disabled'}><span><small>${dirty ? 'APLICĂ SCHIMBAREA' : 'CONFIGURAȚIE SALVATĂ'}</small><strong>${dirty ? `Folosește tema ${esc(palette.label)}` : `${esc(palette.label)} este activă`}</strong></span><b>${state.invoiceThemeSaving ? '…' : dirty ? '✓' : '✦'}</b></button>`;
+      <button type="button" id="shop-invoice-theme-save" class="shop-invoice-theme-save" style="--invoice-accent:${palette.accent}" ${dirty && !state.invoiceThemeSaving ? '' : 'disabled'}><span><small>${dirty ? 'APLICĂ SCHIMBĂRILE' : 'CONFIGURAȚIE SALVATĂ'}</small><strong>${dirty ? 'Salvează configurarea facturii' : `${esc(state.invoiceSettingsDraft.invoice_series || 'GT')} ${String(Number(state.invoiceSettingsDraft.next_number) || 1).padStart(3, '0')} este următoarea`}</strong></span><b>${state.invoiceThemeSaving ? '…' : dirty ? '✓' : '✦'}</b></button>`;
     content.querySelectorAll('[data-invoice-theme]').forEach(button => button.addEventListener('click', () => {
       state.selectedInvoiceTheme = button.dataset.invoiceTheme;
       renderInvoiceConfigurator();
+    }));
+    [['shop-invoice-series', 'invoice_series'], ['shop-invoice-next-number', 'next_number'], ['shop-invoice-due-days', 'due_days'], ['shop-invoice-default-notes', 'default_notes']].forEach(([id, key]) => $(id)?.addEventListener('input', event => {
+      state.invoiceSettingsDraft[key] = key === 'next_number' || key === 'due_days' ? event.target.value : event.target.value;
+      if (key === 'invoice_series' || key === 'next_number') {
+        const previewNumber = `${String(state.invoiceSettingsDraft.invoice_series || 'GT').trim().toUpperCase() || 'GT'} ${String(Math.max(1, Math.trunc(Number(state.invoiceSettingsDraft.next_number) || 1))).padStart(3, '0')}`;
+        content.querySelectorAll('.shop-invoice-theme-paper header aside b').forEach(label => { label.textContent = previewNumber; });
+      }
+      syncInvoiceSettingsSave();
     }));
     $('shop-invoice-theme-save')?.addEventListener('click', () => void saveInvoiceTheme());
   }
@@ -2325,17 +2447,30 @@
     try {
       state.invoiceThemeSettings = await window.SHOP_API.getInvoiceThemeSettings();
       state.selectedInvoiceTheme = state.invoiceThemeSettings.active_theme || 'orange';
+      state.invoiceSettingsDraft = {
+        invoice_series: state.invoiceThemeSettings.invoice_series || 'GT',
+        next_number: Number(state.invoiceThemeSettings.next_number || 1),
+        due_days: Number(state.invoiceThemeSettings.due_days ?? 7),
+        default_notes: state.invoiceThemeSettings.default_notes || '',
+      };
       renderInvoiceConfigurator();
     } catch (error) { failure('shop-invoice-configurator-content', error); }
   }
   async function saveInvoiceTheme() {
-    if (state.invoiceThemeSaving || !state.invoiceThemeSettings || state.selectedInvoiceTheme === state.invoiceThemeSettings.active_theme) return;
+    if (state.invoiceThemeSaving || !state.invoiceThemeSettings || !invoiceSettingsDirty()) return;
+    const invoiceSeries = String(state.invoiceSettingsDraft.invoice_series || '').trim().toUpperCase();
+    const nextNumber = Math.trunc(Number(state.invoiceSettingsDraft.next_number));
+    const dueDays = Math.trunc(Number(state.invoiceSettingsDraft.due_days));
+    if (!invoiceSeries || !/^[A-Z0-9._\/-]+$/.test(invoiceSeries)) return toast('Prefixul poate conține doar litere, cifre, punct, cratimă sau slash.', 'error');
+    if (!Number.isFinite(nextNumber) || nextNumber < 1) return toast('Următorul număr trebuie să fie cel puțin 1.', 'error');
+    if (!Number.isFinite(dueDays) || dueDays < 0 || dueDays > 365) return toast('Zilele de scadență trebuie să fie între 0 și 365.', 'error');
     state.invoiceThemeSaving = true;
     renderInvoiceConfigurator();
     try {
-      state.invoiceThemeSettings = await window.SHOP_API.updateInvoiceThemeSettings(state.selectedInvoiceTheme);
+      state.invoiceThemeSettings = await window.SHOP_API.updateInvoiceThemeSettings({ theme: state.selectedInvoiceTheme, invoice_series: invoiceSeries, next_number: nextNumber, due_days: dueDays, default_notes: String(state.invoiceSettingsDraft.default_notes || '').trim() });
       state.selectedInvoiceTheme = state.invoiceThemeSettings.active_theme;
-      toast(`Tema ${invoiceThemePalette(state.selectedInvoiceTheme).label} se aplică următoarei facturi noi. Documentele vechi rămân neschimbate.`);
+      state.invoiceSettingsDraft = { invoice_series: state.invoiceThemeSettings.invoice_series, next_number: state.invoiceThemeSettings.next_number, due_days: state.invoiceThemeSettings.due_days, default_notes: state.invoiceThemeSettings.default_notes || '' };
+      toast(`Configurarea a fost salvată. Următoarea factură va fi ${state.invoiceThemeSettings.invoice_series} ${String(state.invoiceThemeSettings.next_number).padStart(3, '0')}.`);
     } catch (error) { toast(error.message || 'Tema nu s-a putut salva.', 'error'); }
     finally { state.invoiceThemeSaving = false; renderInvoiceConfigurator(); }
   }

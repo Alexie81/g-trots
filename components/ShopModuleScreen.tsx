@@ -591,7 +591,7 @@ export default function ShopModuleScreen() {
     return (
       <View style={styles.container}>
         <Header title="Facturi emise" showBack onBack={() => setView('more')} />
-        <ShopInvoicesManager initialInvoiceId={initialInvoiceId} onInitialInvoiceHandled={() => setInitialInvoiceId(null)} />
+        <ShopInvoicesManager initialInvoiceId={initialInvoiceId} onInitialInvoiceHandled={() => setInitialInvoiceId(null)} onOpenSpv={() => setView('spv')} />
         <ShopBottomNavigation activeTab="more" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
       </View>
     );

@@ -11,6 +11,8 @@ return [
     'auth_api_url' => 'https://g-trots.ro/trotty-api/api.php',
     'public_base_url' => 'https://g-trots.ro/shop-api',
     'website_base_url' => 'https://g-trots.ro',
+    // XML UBL 2.1 este verificat prin același validator oficial folosit de pagina ANAF uploadxmi.
+    'anaf_invoice_validation_url' => 'https://webservicesp.anaf.ro/prod/FCTEL/rest/validare/FACT1',
     // Client ID OAuth Web din Google Cloud, folosit pentru autentificarea clienților.
     'google_client_id' => '',
     // Foloseste exclusiv chei sk_test_/pk_test_ pana la validarea fluxului.

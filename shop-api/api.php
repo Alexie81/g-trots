@@ -998,11 +998,23 @@ function ensureShopSchema(PDO $db): void {
         "CREATE TABLE IF NOT EXISTS shop_invoice_settings (
             id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
             default_theme VARCHAR(20) NOT NULL DEFAULT 'orange',
+            invoice_series VARCHAR(20) NOT NULL DEFAULT 'GT',
+            due_days SMALLINT UNSIGNED NOT NULL DEFAULT 7,
+            default_notes TEXT NULL,
             updated_by VARCHAR(180) NULL,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     $db->exec("INSERT IGNORE INTO shop_invoice_settings (id, default_theme) VALUES (1, 'orange')");
+    if (!$db->query("SHOW COLUMNS FROM shop_invoice_settings LIKE 'invoice_series'")->fetch()) {
+        $db->exec("ALTER TABLE shop_invoice_settings ADD COLUMN invoice_series VARCHAR(20) NOT NULL DEFAULT 'GT' AFTER default_theme");
+    }
+    if (!$db->query("SHOW COLUMNS FROM shop_invoice_settings LIKE 'due_days'")->fetch()) {
+        $db->exec("ALTER TABLE shop_invoice_settings ADD COLUMN due_days SMALLINT UNSIGNED NOT NULL DEFAULT 7 AFTER invoice_series");
+    }
+    if (!$db->query("SHOW COLUMNS FROM shop_invoice_settings LIKE 'default_notes'")->fetch()) {
+        $db->exec("ALTER TABLE shop_invoice_settings ADD COLUMN default_notes TEXT NULL AFTER due_days");
+    }
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_invoice_theme_assignments (
             document_key VARCHAR(80) NOT NULL PRIMARY KEY,
@@ -1043,6 +1055,9 @@ function ensureShopSchema(PDO $db): void {
             issued_by VARCHAR(180) NULL,
             email_sent_at DATETIME NULL,
             email_last_error VARCHAR(500) NULL,
+            spv_status VARCHAR(20) NOT NULL DEFAULT 'not_sent',
+            spv_sent_at DATETIME NULL,
+            spv_submission_id VARCHAR(180) NULL,
             issued_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             UNIQUE INDEX uq_shop_invoice_order (order_id),
@@ -1051,6 +1066,15 @@ function ensureShopSchema(PDO $db): void {
             INDEX idx_shop_invoice_status (document_status, issued_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+    foreach ([
+        'spv_status' => "VARCHAR(20) NOT NULL DEFAULT 'not_sent' AFTER email_last_error",
+        'spv_sent_at' => 'DATETIME NULL AFTER spv_status',
+        'spv_submission_id' => 'VARCHAR(180) NULL AFTER spv_sent_at',
+    ] as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_invoices LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_invoices ADD COLUMN {$column} {$definition}");
+        }
+    }
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_company_settings (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -4696,7 +4720,7 @@ try {
 
     if ($action === 'updateInvoiceThemeSettings' && in_array($method, ['PUT', 'PATCH'], true)) {
         $actor = (string)($currentUser['display_name'] ?? $currentUser['username'] ?? 'Administrator');
-        jsonResponse(GtrotsInvoiceThemeStore::update($db, (string)($body['theme'] ?? ''), $actor));
+        jsonResponse(GtrotsInvoiceThemeStore::update($db, (string)($body['theme'] ?? ''), $actor, $body));
     }
 
     if ($action === 'assignInvoiceTheme' && $method === 'POST') {
@@ -4710,7 +4734,7 @@ try {
         $wasExisting = !empty($invoice['existing']);
         if (boolValue($body['send_email'] ?? false)) {
             $notification = GtrotsInvoiceService::sendEmail($db, (string)$invoice['id'], $config);
-            $invoice = GtrotsInvoiceService::get($db, (string)$invoice['id']);
+            $invoice = GtrotsInvoiceService::get($db, (string)$invoice['id'], $config);
             $invoice['existing'] = $wasExisting;
             $invoice['email_notification'] = $notification;
         } else {
@@ -4724,15 +4748,27 @@ try {
     }
 
     if ($action === 'getInvoice' && $method === 'GET') {
-        jsonResponse(GtrotsInvoiceService::get($db, trim((string)($_GET['id'] ?? ''))));
+        jsonResponse(GtrotsInvoiceService::get($db, trim((string)($_GET['id'] ?? '')), $config));
     }
 
     if ($action === 'downloadInvoice' && $method === 'GET') {
-        jsonResponse(GtrotsInvoiceService::download($db, trim((string)($_GET['id'] ?? '')), trim((string)($_GET['format'] ?? 'pdf'))));
+        jsonResponse(GtrotsInvoiceService::download($db, trim((string)($_GET['id'] ?? '')), trim((string)($_GET['format'] ?? 'pdf')), $config));
+    }
+
+    if ($action === 'getInvoicePublicLink' && $method === 'GET') {
+        jsonResponse(GtrotsInvoiceService::publicLink($db, trim((string)($_GET['id'] ?? '')), $config, trim((string)($_GET['format'] ?? 'pdf'))));
     }
 
     if ($action === 'sendInvoiceEmail' && $method === 'POST') {
         jsonResponse(GtrotsInvoiceService::sendEmail($db, trim((string)($_GET['id'] ?? $body['invoice_id'] ?? '')), $config));
+    }
+
+    if ($action === 'markInvoiceSpvSent' && $method === 'POST') {
+        jsonResponse(GtrotsInvoiceService::markSpvSent($db, trim((string)($_GET['id'] ?? $body['invoice_id'] ?? '')), (string)($body['submission_id'] ?? '')));
+    }
+
+    if ($action === 'deleteInvoice' && $method === 'DELETE') {
+        jsonResponse(GtrotsInvoiceService::delete($db, trim((string)($_GET['id'] ?? '')), $config));
     }
 
     if ($action === 'nirPermissions' && $method === 'GET') {
@@ -5762,6 +5798,7 @@ try {
         if (!in_array($status, $statuses, true) || !in_array($paymentStatus, $paymentStatuses, true)) throw new InvalidArgumentException('Statusul comenzii nu este valid.');
         $historyId = null;
         $statusChanged = false;
+        $paymentChanged = false;
         $db->beginTransaction();
         try {
             $stmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ? FOR UPDATE');
@@ -5796,6 +5833,7 @@ try {
             }
             if ($status === 'refunded') $paymentStatus = 'refunded';
             $statusChanged = $status !== (string)$current['status'];
+            $paymentChanged = $paymentStatus !== (string)$current['payment_status'];
             if (in_array($status, $terminalStatuses, true) && !in_array($currentStatus, $terminalStatuses, true)) {
                 $items = $db->prepare('SELECT * FROM shop_order_items WHERE order_id = ?');
                 $items->execute([$id]);
@@ -5833,6 +5871,7 @@ try {
             if ($db->inTransaction()) $db->rollBack();
             throw $error;
         }
+        if ($paymentChanged) GtrotsInvoiceService::refreshStoredForOrder($db, $id, $config);
         $stmt = $db->prepare('SELECT o.*' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ?');
         $stmt->execute([$id]);
         $order = orderRow($db, $stmt->fetch(), $config, true);

@@ -36,11 +36,16 @@ final class GtrotsInvoiceThemeStore
 
     public static function settings(PDO $db): array
     {
-        $row = $db->query('SELECT default_theme, updated_by, updated_at FROM shop_invoice_settings WHERE id = 1 LIMIT 1')->fetch() ?: [];
+        $row = $db->query('SELECT default_theme, invoice_series, due_days, default_notes, updated_by, updated_at FROM shop_invoice_settings WHERE id = 1 LIMIT 1')->fetch() ?: [];
         $theme = self::normalize((string)($row['default_theme'] ?? 'orange'));
+        $series = self::normalizeSeries((string)($row['invoice_series'] ?? 'GT'));
         $last = $db->query('SELECT invoice_series, invoice_number, theme, assigned_at FROM shop_invoice_theme_assignments ORDER BY assigned_at DESC, document_key DESC LIMIT 1')->fetch() ?: null;
         return [
             'active_theme' => $theme,
+            'invoice_series' => $series,
+            'next_number' => self::availableNextNumber($db, $series),
+            'due_days' => max(0, min(365, (int)($row['due_days'] ?? 7))),
+            'default_notes' => (string)($row['default_notes'] ?? ''),
             'themes' => self::THEMES,
             'assigned_documents' => (int)$db->query('SELECT COUNT(*) FROM shop_invoice_theme_assignments')->fetchColumn(),
             'last_assignment' => $last ? [
@@ -54,17 +59,57 @@ final class GtrotsInvoiceThemeStore
         ];
     }
 
-    public static function update(PDO $db, string $theme, string $updatedBy): array
+    public static function update(PDO $db, string $theme, string $updatedBy, array $documentSettings = []): array
     {
         $theme = self::normalize($theme);
+        $current = $db->query('SELECT invoice_series, due_days, default_notes FROM shop_invoice_settings WHERE id = 1 LIMIT 1')->fetch() ?: [];
+        $series = self::normalizeSeries((string)($documentSettings['invoice_series'] ?? $current['invoice_series'] ?? 'GT'));
+        $dueDays = max(0, min(365, (int)($documentSettings['due_days'] ?? $current['due_days'] ?? 7)));
+        $defaultNotes = mb_substr(trim((string)($documentSettings['default_notes'] ?? $current['default_notes'] ?? '')), 0, 2000);
+        $requestedNext = isset($documentSettings['next_number']) ? (int)$documentSettings['next_number'] : self::availableNextNumber($db, $series);
+        $minimumNext = self::minimumNextNumber($db, $series);
+        if ($requestedNext < $minimumNext) {
+            throw new InvalidArgumentException('Următorul număr pentru seria ' . $series . ' trebuie să fie cel puțin ' . $minimumNext . '.');
+        }
         $sql = self::isSqlite($db)
-            ? 'INSERT INTO shop_invoice_settings (id, default_theme, updated_by) VALUES (1, ?, ?)
-               ON CONFLICT(id) DO UPDATE SET default_theme = excluded.default_theme, updated_by = excluded.updated_by, updated_at = CURRENT_TIMESTAMP'
-            : 'INSERT INTO shop_invoice_settings (id, default_theme, updated_by) VALUES (1, ?, ?)
-               ON DUPLICATE KEY UPDATE default_theme = VALUES(default_theme), updated_by = VALUES(updated_by), updated_at = CURRENT_TIMESTAMP';
+            ? 'INSERT INTO shop_invoice_settings (id, default_theme, invoice_series, due_days, default_notes, updated_by) VALUES (1, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET default_theme = excluded.default_theme, invoice_series = excluded.invoice_series, due_days = excluded.due_days, default_notes = excluded.default_notes, updated_by = excluded.updated_by, updated_at = CURRENT_TIMESTAMP'
+            : 'INSERT INTO shop_invoice_settings (id, default_theme, invoice_series, due_days, default_notes, updated_by) VALUES (1, ?, ?, ?, ?, ?)
+               ON DUPLICATE KEY UPDATE default_theme = VALUES(default_theme), invoice_series = VALUES(invoice_series), due_days = VALUES(due_days), default_notes = VALUES(default_notes), updated_by = VALUES(updated_by), updated_at = CURRENT_TIMESTAMP';
         $stmt = $db->prepare($sql);
-        $stmt->execute([$theme, mb_substr(trim($updatedBy), 0, 180)]);
+        $stmt->execute([$theme, $series, $dueDays, $defaultNotes, mb_substr(trim($updatedBy), 0, 180)]);
+        $lastNumber = $requestedNext - 1;
+        $sequenceSql = self::isSqlite($db)
+            ? 'INSERT INTO shop_invoice_sequences (series, last_number) VALUES (?, ?) ON CONFLICT(series) DO UPDATE SET last_number = excluded.last_number, updated_at = CURRENT_TIMESTAMP'
+            : 'INSERT INTO shop_invoice_sequences (series, last_number) VALUES (?, ?) ON DUPLICATE KEY UPDATE last_number = VALUES(last_number), updated_at = CURRENT_TIMESTAMP';
+        $db->prepare($sequenceSql)->execute([$series, $lastNumber]);
         return self::settings($db);
+    }
+
+    private static function normalizeSeries(string $series): string
+    {
+        $series = strtoupper(trim($series));
+        if ($series === '' || mb_strlen($series) > 20 || !preg_match('/^[A-Z0-9._\/-]+$/', $series)) {
+            throw new InvalidArgumentException('Prefixul seriei poate conține doar litere, cifre, punct, cratimă sau slash.');
+        }
+        return $series;
+    }
+
+    private static function minimumNextNumber(PDO $db, string $series): int
+    {
+        $cast = self::isSqlite($db) ? 'INTEGER' : 'UNSIGNED';
+        $invoice = $db->prepare("SELECT MAX(CAST(invoice_number AS {$cast})) FROM shop_invoices WHERE series = ?");
+        $invoice->execute([$series]);
+        $assignment = $db->prepare("SELECT MAX(CAST(invoice_number AS {$cast})) FROM shop_invoice_theme_assignments WHERE invoice_series = ?");
+        $assignment->execute([$series]);
+        return max((int)$invoice->fetchColumn(), (int)$assignment->fetchColumn()) + 1;
+    }
+
+    private static function availableNextNumber(PDO $db, string $series): int
+    {
+        $sequence = $db->prepare('SELECT last_number FROM shop_invoice_sequences WHERE series = ? LIMIT 1');
+        $sequence->execute([$series]);
+        return max(self::minimumNextNumber($db, $series), (int)$sequence->fetchColumn() + 1);
     }
 
     public static function pin(PDO $db, array $invoice, string $assignedBy = ''): array

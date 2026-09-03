@@ -548,6 +548,9 @@ function stripeApplyCheckoutSession(PDO $db, array $session, ?array $config = nu
         if ($db->inTransaction()) $db->rollBack();
         throw $error;
     }
+    if ($shouldNotify && $config && class_exists('GtrotsInvoiceService')) {
+        GtrotsInvoiceService::refreshStoredForOrder($db, (string)$order['id'], $config);
+    }
     $stmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ?');
     $stmt->execute([(string)$order['id']]);
     $saved = $stmt->fetch() ?: null;

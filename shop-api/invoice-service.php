@@ -6,9 +6,8 @@ require_once __DIR__ . '/invoice-theme.php';
 /**
  * Invoice issuing domain service.
  *
- * Only the business snapshot is persisted. PDF and XLSX bytes are regenerated
- * on demand, while the color theme remains pinned forever by the existing
- * theme store.
+ * The business snapshot and its cached PDF/XLSX representations are persisted,
+ * while the color theme remains pinned for the lifetime of the invoice.
  */
 final class GtrotsInvoiceService
 {
@@ -22,7 +21,7 @@ final class GtrotsInvoiceService
             $existing = self::findByOrder($db, $orderId, true);
             if ($existing) {
                 $db->commit();
-                return self::row($existing, true);
+                return self::row($existing, true, self::canDelete($db, $existing));
             }
 
             $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
@@ -41,13 +40,15 @@ final class GtrotsInvoiceService
             }
 
             $invoiceId = self::uuid();
-            $series = 'GT';
+            $documentSettings = GtrotsInvoiceThemeStore::settings($db);
+            $series = (string)($documentSettings['invoice_series'] ?? 'GT');
             $number = self::nextNumber($db, $series);
             $issueDate = date('Y-m-d');
             $status = self::statusForOrder($order);
-            $dueDate = $status === 'paid' ? $issueDate : date('Y-m-d', strtotime($issueDate . ' +7 days'));
+            $dueDays = max(0, min(365, (int)($documentSettings['due_days'] ?? 7)));
+            $dueDate = $status === 'paid' ? $issueDate : date('Y-m-d', strtotime($issueDate . ' +' . $dueDays . ' days'));
             self::postStock($db, $order, $invoiceId, $series, $number, $actor);
-            $payload = self::payload($db, $order, $company, $invoiceId, $series, $number, $issueDate, $dueDate, $status);
+            $payload = self::payload($db, $order, $company, $invoiceId, $series, $number, $issueDate, $dueDate, $status, (string)($documentSettings['default_notes'] ?? ''));
             $assignedBy = mb_substr(trim((string)($actor['display_name'] ?? $actor['username'] ?? 'Administrator')), 0, 180);
             $assignment = GtrotsInvoiceThemeStore::pin($db, $payload, $assignedBy);
             $payload['theme'] = $assignment['theme'];
@@ -78,7 +79,9 @@ final class GtrotsInvoiceService
 
             $saved = self::find($db, $invoiceId);
             if (!$saved) throw new RuntimeException('Factura a fost emisă, dar nu a putut fi recitită.');
-            return self::row($saved, false);
+            $result = self::row($saved, false, self::canDelete($db, $saved));
+            self::warmStoredDocuments($db, $saved, $config);
+            return $result;
         } catch (Throwable $error) {
             if ($db->inTransaction()) $db->rollBack();
             throw $error;
@@ -94,26 +97,45 @@ final class GtrotsInvoiceService
              ORDER BY i.issued_at DESC, i.series DESC, i.invoice_number DESC
              LIMIT 1000'
         )->fetchAll();
-        return array_map(static fn(array $row): array => self::row($row, true), $rows);
+        $deletableId = self::deletableInvoiceId($db);
+        return array_map(static fn(array $row): array => self::row($row, true, (string)$row['id'] === $deletableId), $rows);
     }
 
-    public static function get(PDO $db, string $id): array
+    public static function get(PDO $db, string $id, array $config = []): array
     {
         $invoice = self::find($db, trim($id));
         if (!$invoice) throw new InvalidArgumentException('Factura nu există.');
-        return self::row($invoice, true);
+        $result = self::row($invoice, true, self::canDelete($db, $invoice));
+        $payload = json_decode((string)($invoice['payload_json'] ?? ''), true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($payload)) throw new RuntimeException('Datele facturii nu mai sunt disponibile.');
+        $result['payload'] = self::detailPayload($db, $invoice, self::refreshPayloadState($invoice, $payload));
+        if (self::storageEnabled($config)) $result['pdf_url'] = self::storedDocument($db, $invoice, 'pdf', $config)['public_url'];
+        return $result;
     }
 
-    public static function download(PDO $db, string $id, string $format = 'pdf'): array
+    public static function download(PDO $db, string $id, string $format = 'pdf', array $config = []): array
     {
         $invoice = self::find($db, trim($id));
         if (!$invoice) throw new InvalidArgumentException('Factura nu există.');
+        $format = strtolower(trim($format));
+        if (!in_array($format, ['pdf', 'xlsx', 'xml'], true)) throw new InvalidArgumentException('Formatul facturii nu este acceptat.');
+        if (self::storageEnabled($config)) {
+            $stored = self::storedDocument($db, $invoice, $format, $config);
+            $contents = file_get_contents((string)$stored['path']);
+            if (!is_string($contents)) throw new RuntimeException('Factura stocată nu a putut fi citită.');
+            return [
+                'file_name' => (string)$stored['file_name'],
+                'mime_type' => (string)$stored['mime_type'],
+                'content_base64' => base64_encode($contents),
+                'public_url' => (string)$stored['public_url'],
+                'stored' => true,
+            ];
+        }
         $payload = json_decode((string)($invoice['payload_json'] ?? ''), true, 512, JSON_THROW_ON_ERROR);
         if (!is_array($payload)) throw new RuntimeException('Datele facturii nu mai sunt disponibile.');
 
         $payload = self::refreshPayloadState($invoice, $payload);
         $fileNumber = preg_replace('/[^A-Za-z0-9._-]+/', '-', (string)$invoice['invoice_number']) ?: 'factura';
-        $format = strtolower(trim($format));
         if ($format === 'xlsx') {
             require_once __DIR__ . '/invoice-xlsx.php';
             $xlsx = GtrotsInvoiceXlsx::render($payload);
@@ -123,7 +145,17 @@ final class GtrotsInvoiceService
                 'content_base64' => base64_encode($xlsx),
             ];
         }
-        if ($format !== 'pdf') throw new InvalidArgumentException('Formatul facturii nu este acceptat.');
+        if ($format === 'xml') {
+            require_once __DIR__ . '/invoice-ubl.php';
+            $xml = GtrotsInvoiceUbl::render($payload);
+            $validation = GtrotsInvoiceUbl::validateWithAnaf($xml, $config);
+            return [
+                'file_name' => 'e-Factura-' . (string)$invoice['series'] . '-' . $fileNumber . '.xml',
+                'mime_type' => 'application/xml',
+                'content_base64' => base64_encode($xml),
+                'anaf_validation' => $validation,
+            ];
+        }
         require_once __DIR__ . '/invoice-pdf.php';
         $pdf = GtrotsInvoicePdf::renderPinned($db, $payload, (string)($invoice['issued_by'] ?? ''));
         return [
@@ -145,8 +177,8 @@ final class GtrotsInvoiceService
         }
 
         try {
-            $pdfFile = self::download($db, (string)$invoice['id'], 'pdf');
-            $xlsxFile = self::download($db, (string)$invoice['id'], 'xlsx');
+            $pdfFile = self::download($db, (string)$invoice['id'], 'pdf', $config);
+            $xlsxFile = self::download($db, (string)$invoice['id'], 'xlsx', $config);
             $number = trim((string)$invoice['series'] . ' ' . (string)$invoice['invoice_number']);
             $buyer = htmlspecialchars((string)($invoice['customer_name'] ?? $invoice['buyer_name'] ?? 'client'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $safeNumber = htmlspecialchars($number, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -179,6 +211,90 @@ final class GtrotsInvoiceService
         }
     }
 
+    public static function publicLink(PDO $db, string $id, array $config, string $format = 'pdf'): array
+    {
+        $invoice = self::find($db, trim($id));
+        if (!$invoice) throw new InvalidArgumentException('Factura nu există.');
+        if (!self::storageEnabled($config)) throw new RuntimeException('Stocarea facturilor nu este configurată pe server.');
+        $format = strtolower(trim($format));
+        if (!in_array($format, ['pdf', 'xlsx', 'xml'], true)) throw new InvalidArgumentException('Formatul facturii nu este acceptat.');
+        $stored = self::storedDocument($db, $invoice, $format, $config);
+        return [
+            'url' => (string)$stored['public_url'],
+            'file_name' => (string)$stored['file_name'],
+            'mime_type' => (string)$stored['mime_type'],
+            'format' => $format,
+        ];
+    }
+
+    public static function refreshStoredForOrder(PDO $db, string $orderId, array $config): void
+    {
+        if (!self::storageEnabled($config)) return;
+        $invoice = self::findByOrder($db, trim($orderId), false);
+        if (!$invoice) return;
+        try {
+            self::storedDocument($db, $invoice, 'pdf', $config, true);
+            self::storedDocument($db, $invoice, 'xlsx', $config, true);
+        } catch (Throwable $error) {
+            error_log('[G-Trots invoice storage refresh] ' . $error->getMessage());
+        }
+    }
+
+    public static function markSpvSent(PDO $db, string $id, string $submissionId = ''): array
+    {
+        $id = trim($id);
+        if ($id === '') throw new InvalidArgumentException('Factura nu a fost selectată.');
+        $invoice = self::find($db, $id);
+        if (!$invoice) throw new InvalidArgumentException('Factura nu există.');
+        if ((string)($invoice['spv_status'] ?? 'not_sent') !== 'sent') {
+            $stmt = $db->prepare("UPDATE shop_invoices SET spv_status = 'sent', spv_sent_at = ?, spv_submission_id = ? WHERE id = ?");
+            $stmt->execute([date('Y-m-d H:i:s'), mb_substr(trim($submissionId), 0, 180) ?: null, $id]);
+        }
+        return self::get($db, $id);
+    }
+
+    /**
+     * Deletes only the final, never-submitted invoice and rolls back every
+     * inventory/FIFO effect produced by issuing it. The released sequence is
+     * intentionally reused by the next invoice in the same series.
+     */
+    public static function delete(PDO $db, string $id, array $config): array
+    {
+        $id = trim($id);
+        if ($id === '') throw new InvalidArgumentException('Factura nu a fost selectată.');
+        $deletedInvoice = null;
+        $db->beginTransaction();
+        try {
+            $invoice = self::findForUpdate($db, $id);
+            if (!$invoice) throw new InvalidArgumentException('Factura nu există.');
+            if ((string)($invoice['spv_status'] ?? 'not_sent') === 'sent') {
+                throw new InvalidArgumentException('Factura a fost trimisă în SPV și nu mai poate fi ștearsă.');
+            }
+            if (!self::canDelete($db, $invoice, true)) {
+                throw new InvalidArgumentException('Poți șterge numai ultima factură emisă. Există deja un document emis după aceasta.');
+            }
+
+            self::rollbackStock($db, $invoice);
+            $db->prepare('DELETE FROM shop_invoice_theme_assignments WHERE document_id = ? OR (invoice_series = ? AND invoice_number = ?)')
+                ->execute([(string)$invoice['id'], (string)$invoice['series'], (string)$invoice['invoice_number']]);
+            $db->prepare('DELETE FROM shop_invoices WHERE id = ?')->execute([$id]);
+            self::resetSequence($db, (string)$invoice['series']);
+            $db->commit();
+            $deletedInvoice = $invoice;
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
+
+        if (is_array($deletedInvoice)) self::removeStoredDocuments($deletedInvoice, $config);
+        return [
+            'deleted' => true,
+            'id' => $id,
+            'order_id' => (string)($deletedInvoice['order_id'] ?? ''),
+            'released_number' => trim((string)($deletedInvoice['series'] ?? '') . ' ' . (string)($deletedInvoice['invoice_number'] ?? '')),
+        ];
+    }
+
     public static function orderSummary(array $row): ?array
     {
         $id = trim((string)($row['issued_invoice_id'] ?? ''));
@@ -191,6 +307,9 @@ final class GtrotsInvoiceService
             'display_number' => trim((string)($row['issued_invoice_series'] ?? '') . ' ' . (string)($row['issued_invoice_number'] ?? '')),
             'status' => self::statusForOrder($row),
             'theme' => (string)($row['issued_invoice_theme'] ?? 'orange'),
+            'spv_status' => (string)($row['issued_invoice_spv_status'] ?? 'not_sent'),
+            'spv_sent_at' => ($row['issued_invoice_spv_sent_at'] ?? null) !== null ? (string)$row['issued_invoice_spv_sent_at'] : null,
+            'customer_email' => (string)($row['customer_email'] ?? ''),
             'issue_date' => (string)($row['issued_invoice_date'] ?? ''),
             'total' => round((float)($row['total'] ?? 0), 2),
             'currency' => strtoupper(trim((string)($row['currency'] ?? 'RON'))) ?: 'RON',
@@ -209,6 +328,8 @@ final class GtrotsInvoiceService
                   issued_invoice.series AS issued_invoice_series,
                   issued_invoice.invoice_number AS issued_invoice_number,
                   issued_invoice.theme AS issued_invoice_theme,
+                  issued_invoice.spv_status AS issued_invoice_spv_status,
+                  issued_invoice.spv_sent_at AS issued_invoice_spv_sent_at,
                   issued_invoice.issue_date AS issued_invoice_date,
                   issued_invoice.issued_at AS issued_invoice_at';
     }
@@ -222,6 +343,15 @@ final class GtrotsInvoiceService
              WHERE i.id = ?
              LIMIT 1'
         );
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+        return $row ?: null;
+    }
+
+    private static function findForUpdate(PDO $db, string $id): ?array
+    {
+        $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
+        $stmt = $db->prepare('SELECT * FROM shop_invoices WHERE id = ? LIMIT 1' . ($driver === 'sqlite' ? '' : ' FOR UPDATE'));
         $stmt->execute([$id]);
         $row = $stmt->fetch();
         return $row ?: null;
@@ -242,7 +372,7 @@ final class GtrotsInvoiceService
         return $row ?: null;
     }
 
-    private static function row(array $row, bool $existing): array
+    private static function row(array $row, bool $existing, bool $canDelete = false): array
     {
         $status = self::effectiveStatus($row);
         return [
@@ -268,6 +398,10 @@ final class GtrotsInvoiceService
             'customer_email' => (string)($row['customer_email'] ?? ''),
             'email_sent_at' => ($row['email_sent_at'] ?? null) !== null ? (string)$row['email_sent_at'] : null,
             'email_last_error' => ($row['email_last_error'] ?? null) !== null ? (string)$row['email_last_error'] : null,
+            'spv_status' => (string)($row['spv_status'] ?? 'not_sent') === 'sent' ? 'sent' : 'not_sent',
+            'spv_sent_at' => ($row['spv_sent_at'] ?? null) !== null ? (string)$row['spv_sent_at'] : null,
+            'spv_submission_id' => ($row['spv_submission_id'] ?? null) !== null ? (string)$row['spv_submission_id'] : null,
+            'can_delete' => $canDelete,
             'existing' => $existing,
         ];
     }
@@ -292,6 +426,229 @@ final class GtrotsInvoiceService
             ? (trim((string)($invoice['stripe_paid_at'] ?? '')) ?: (string)($invoice['issue_date'] ?? ''))
             : '';
         return $payload;
+    }
+
+    /**
+     * Adds navigation metadata without changing the immutable fiscal snapshot.
+     * Older invoices did not persist product_id, so their positions are matched
+     * to the original order in the same stable order used at issue time.
+     */
+    private static function detailPayload(PDO $db, array $invoice, array $payload): array
+    {
+        $stmt = $db->prepare(
+            'SELECT oi.id, oi.product_id,
+                    (SELECT pi.image_path FROM shop_product_images pi WHERE pi.product_id = oi.product_id ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS image_path
+             FROM shop_order_items oi
+             WHERE oi.order_id = ?
+             ORDER BY oi.id ASC'
+        );
+        $stmt->execute([(string)$invoice['order_id']]);
+        $orderItems = $stmt->fetchAll();
+        $position = 0;
+        foreach ($payload['items'] ?? [] as &$item) {
+            if (!is_array($item) || strtoupper(trim((string)($item['sku'] ?? ''))) === 'TRANSPORT') {
+                if (is_array($item)) $item['product_id'] = null;
+                continue;
+            }
+            $source = $orderItems[$position] ?? [];
+            if (trim((string)($item['product_id'] ?? '')) === '') $item['product_id'] = trim((string)($source['product_id'] ?? '')) ?: null;
+            if (trim((string)($item['image_path'] ?? '')) === '') $item['image_path'] = (string)($source['image_path'] ?? '');
+            $position++;
+        }
+        unset($item);
+        return $payload;
+    }
+
+    private static function storageEnabled(array $config): bool
+    {
+        return trim((string)($config['invoice_storage_dir'] ?? '')) !== ''
+            || trim((string)($config['website_base_url'] ?? '')) !== '';
+    }
+
+    private static function storageSettings(array $invoice, array $config, string $format): array
+    {
+        $directory = trim((string)($config['invoice_storage_dir'] ?? ''));
+        if ($directory === '') $directory = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'fact';
+        $publicBase = rtrim(trim((string)($config['invoice_public_base_url'] ?? '')), '/');
+        if ($publicBase === '') $publicBase = rtrim((string)($config['website_base_url'] ?? ''), '/') . '/fact';
+        if ($publicBase === '/fact') throw new RuntimeException('Adresa publică pentru facturi nu este configurată.');
+
+        $safeSeries = preg_replace('/[^A-Za-z0-9._-]+/', '-', (string)$invoice['series']) ?: 'GT';
+        $safeNumber = preg_replace('/[^A-Za-z0-9._-]+/', '-', (string)$invoice['invoice_number']) ?: 'factura';
+        $secret = (string)($config['api_key'] ?? '');
+        $token = substr(hash('sha256', (string)$invoice['id'] . '|' . $secret . '|gtrots-invoice-public-v1'), 0, 32);
+        $storedName = strtolower('factura-' . $safeSeries . '-' . $safeNumber . '-' . $token . '.' . $format);
+        $friendlyName = ($format === 'xml' ? 'e-Factura-' : 'Factura-') . $safeSeries . '-' . $safeNumber . '.' . $format;
+        return [
+            'directory' => $directory,
+            'stored_name' => $storedName,
+            'file_name' => $friendlyName,
+            'public_url' => $publicBase . '/' . rawurlencode($storedName),
+            'mime_type' => $format === 'pdf' ? 'application/pdf' : ($format === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/xml'),
+        ];
+    }
+
+    private static function warmStoredDocuments(PDO $db, array $invoice, array $config): void
+    {
+        if (!self::storageEnabled($config)) return;
+        try {
+            self::storedDocument($db, $invoice, 'pdf', $config);
+            self::storedDocument($db, $invoice, 'xlsx', $config);
+        } catch (Throwable $error) {
+            // Emiterea fiscală rămâne validă chiar dacă hostingul refuză temporar scrierea cache-ului.
+            error_log('[G-Trots invoice storage warmup] ' . $error->getMessage());
+        }
+    }
+
+    private static function storedDocument(PDO $db, array $invoice, string $format, array $config, bool $force = false): array
+    {
+        $settings = self::storageSettings($invoice, $config, $format);
+        $directory = (string)$settings['directory'];
+        if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
+            throw new RuntimeException('Folderul public pentru facturi nu a putut fi creat.');
+        }
+        $indexPath = $directory . DIRECTORY_SEPARATOR . 'index.html';
+        if (!is_file($indexPath)) @file_put_contents($indexPath, '<!doctype html><title>Facturi G-Trots</title>', LOCK_EX);
+        $htaccessPath = $directory . DIRECTORY_SEPARATOR . '.htaccess';
+        if (!is_file($htaccessPath)) @file_put_contents($htaccessPath, "Options -Indexes\n", LOCK_EX);
+
+        $payload = json_decode((string)($invoice['payload_json'] ?? ''), true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($payload)) throw new RuntimeException('Datele facturii nu mai sunt disponibile.');
+        $payload = self::refreshPayloadState($invoice, $payload);
+        $rendererPath = __DIR__ . ($format === 'pdf' ? '/invoice-pdf.php' : ($format === 'xlsx' ? '/invoice-xlsx.php' : '/invoice-ubl.php'));
+        $validationRevision = $format === 'xml' ? date('Y-m-d') : '';
+        $signature = hash('sha256', $format . '|' . $validationRevision . '|' . (string)@filemtime($rendererPath) . '|' . json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        $path = $directory . DIRECTORY_SEPARATOR . (string)$settings['stored_name'];
+        $signaturePath = $path . '.sha256';
+        $currentSignature = is_file($signaturePath) ? trim((string)@file_get_contents($signaturePath)) : '';
+
+        if ($force || !is_file($path) || filesize($path) === 0 || !hash_equals($signature, $currentSignature)) {
+            if ($format === 'pdf') {
+                require_once __DIR__ . '/invoice-pdf.php';
+                $bytes = GtrotsInvoicePdf::renderPinned($db, $payload, (string)($invoice['issued_by'] ?? ''));
+            } elseif ($format === 'xlsx') {
+                require_once __DIR__ . '/invoice-xlsx.php';
+                $bytes = GtrotsInvoiceXlsx::render($payload);
+            } else {
+                require_once __DIR__ . '/invoice-ubl.php';
+                $bytes = GtrotsInvoiceUbl::render($payload);
+                GtrotsInvoiceUbl::validateWithAnaf($bytes, $config);
+            }
+            $temporary = $path . '.tmp-' . bin2hex(random_bytes(5));
+            if (file_put_contents($temporary, $bytes, LOCK_EX) === false) throw new RuntimeException('Factura nu a putut fi salvată pe server.');
+            if (!@rename($temporary, $path)) {
+                @unlink($path);
+                if (!@rename($temporary, $path)) {
+                    @unlink($temporary);
+                    throw new RuntimeException('Factura stocată nu a putut fi actualizată.');
+                }
+            }
+            if (file_put_contents($signaturePath, $signature, LOCK_EX) === false) throw new RuntimeException('Versiunea facturii stocate nu a putut fi confirmată.');
+        }
+
+        return array_merge($settings, ['path' => $path]);
+    }
+
+    private static function deletableInvoiceId(PDO $db): string
+    {
+        $cast = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite' ? 'INTEGER' : 'UNSIGNED';
+        $row = $db->query("SELECT * FROM shop_invoices ORDER BY issued_at DESC, CAST(invoice_number AS {$cast}) DESC, series DESC LIMIT 1")->fetch();
+        return $row && self::canDelete($db, $row) ? (string)$row['id'] : '';
+    }
+
+    private static function canDelete(PDO $db, array $invoice, bool $lock = false): bool
+    {
+        if ((string)($invoice['spv_status'] ?? 'not_sent') === 'sent') return false;
+        $series = (string)($invoice['series'] ?? '');
+        $number = (int)($invoice['invoice_number'] ?? 0);
+        if ($series === '' || $number <= 0) return false;
+
+        $later = $db->prepare('SELECT id FROM shop_invoices WHERE issued_at > ? LIMIT 1');
+        $later->execute([(string)($invoice['issued_at'] ?? '')]);
+        if ($later->fetchColumn()) return false;
+
+        $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
+        $cast = $driver === 'sqlite' ? 'INTEGER' : 'UNSIGNED';
+        $suffix = $lock && $driver !== 'sqlite' ? ' FOR UPDATE' : '';
+        $invoices = $db->prepare("SELECT invoice_number FROM shop_invoices WHERE series = ? ORDER BY CAST(invoice_number AS {$cast}) DESC LIMIT 1{$suffix}");
+        $invoices->execute([$series]);
+        if ((int)$invoices->fetchColumn() !== $number) return false;
+        $assignments = $db->prepare("SELECT invoice_number FROM shop_invoice_theme_assignments WHERE invoice_series = ? ORDER BY CAST(invoice_number AS {$cast}) DESC LIMIT 1{$suffix}");
+        $assignments->execute([$series]);
+        $assignmentNumber = (int)$assignments->fetchColumn();
+        return $assignmentNumber <= $number;
+    }
+
+    private static function rollbackStock(PDO $db, array $invoice): void
+    {
+        $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
+        $lock = $driver === 'sqlite' ? '' : ' FOR UPDATE';
+        $movements = $db->prepare("SELECT * FROM shop_inventory_movements WHERE sales_invoice_id = ? AND movement_type = 'sale'" . $lock);
+        $movements->execute([(string)$invoice['id']]);
+        $product = $db->prepare('SELECT stock_quantity, accounting_stock_quantity FROM shop_products WHERE id = ?' . $lock);
+        $updateProduct = $db->prepare('UPDATE shop_products SET stock_quantity = ?, accounting_stock_quantity = ? WHERE id = ?');
+        foreach ($movements->fetchAll() as $movement) {
+            $productId = trim((string)($movement['product_id'] ?? ''));
+            if ($productId === '') continue;
+            $product->execute([$productId]);
+            $current = $product->fetch();
+            if (!$current) continue;
+            $quantity = abs((float)($movement['quantity_delta'] ?? 0));
+            $accountingQuantity = abs((float)($movement['accounting_quantity_delta'] ?? $quantity));
+            $stockAfter = round((float)($current['stock_quantity'] ?? 0) + $quantity, 4);
+            $accountingAfter = round((float)($current['accounting_stock_quantity'] ?? 0) + $accountingQuantity, 4);
+            $updateProduct->execute([$stockAfter, $accountingAfter, $productId]);
+        }
+
+        $consumptions = $db->prepare(
+            "SELECT c.id, c.inventory_cost_layer_id, c.quantity
+             FROM shop_inventory_layer_consumptions c
+             WHERE c.source_document_type = 'SALES_INVOICE' AND c.source_document_id = ? AND c.reversed_at IS NULL" . $lock
+        );
+        $consumptions->execute([(string)$invoice['id']]);
+        $layer = $db->prepare('SELECT original_quantity, remaining_quantity, is_reversed FROM shop_inventory_cost_layers WHERE id = ?' . $lock);
+        $updateLayer = $db->prepare('UPDATE shop_inventory_cost_layers SET remaining_quantity = ?, status = ?, row_version = row_version + 1 WHERE id = ?');
+        $deleteConsumption = $db->prepare('DELETE FROM shop_inventory_layer_consumptions WHERE id = ?');
+        foreach ($consumptions->fetchAll() as $consumption) {
+            $layer->execute([(string)$consumption['inventory_cost_layer_id']]);
+            $current = $layer->fetch();
+            if (!$current || !empty($current['is_reversed'])) continue;
+            $remaining = min((float)$current['original_quantity'], (float)$current['remaining_quantity'] + (float)$consumption['quantity']);
+            $status = abs($remaining - (float)$current['original_quantity']) <= 0.00005 ? 'open' : 'partially_consumed';
+            $updateLayer->execute([round($remaining, 4), $status, (string)$consumption['inventory_cost_layer_id']]);
+            $deleteConsumption->execute([(string)$consumption['id']]);
+        }
+        $db->prepare("DELETE FROM shop_inventory_movements WHERE sales_invoice_id = ? AND movement_type = 'sale'")->execute([(string)$invoice['id']]);
+    }
+
+    private static function resetSequence(PDO $db, string $series): void
+    {
+        $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
+        $cast = $driver === 'sqlite' ? 'INTEGER' : 'UNSIGNED';
+        $invoice = $db->prepare("SELECT MAX(CAST(invoice_number AS {$cast})) FROM shop_invoices WHERE series = ?");
+        $invoice->execute([$series]);
+        $assignment = $db->prepare("SELECT MAX(CAST(invoice_number AS {$cast})) FROM shop_invoice_theme_assignments WHERE invoice_series = ?");
+        $assignment->execute([$series]);
+        $last = max((int)$invoice->fetchColumn(), (int)$assignment->fetchColumn());
+        $insert = $driver === 'sqlite'
+            ? 'INSERT INTO shop_invoice_sequences (series, last_number) VALUES (?, ?) ON CONFLICT(series) DO UPDATE SET last_number = excluded.last_number, updated_at = CURRENT_TIMESTAMP'
+            : 'INSERT INTO shop_invoice_sequences (series, last_number) VALUES (?, ?) ON DUPLICATE KEY UPDATE last_number = VALUES(last_number), updated_at = CURRENT_TIMESTAMP';
+        $db->prepare($insert)->execute([$series, $last]);
+    }
+
+    private static function removeStoredDocuments(array $invoice, array $config): void
+    {
+        if (!self::storageEnabled($config)) return;
+        foreach (['pdf', 'xlsx', 'xml'] as $format) {
+            try {
+                $settings = self::storageSettings($invoice, $config, $format);
+                $path = (string)$settings['directory'] . DIRECTORY_SEPARATOR . (string)$settings['stored_name'];
+                if (is_file($path)) @unlink($path);
+                if (is_file($path . '.sha256')) @unlink($path . '.sha256');
+            } catch (Throwable $error) {
+                error_log('[G-Trots invoice storage delete] ' . $error->getMessage());
+            }
+        }
     }
 
     private static function statusForOrder(array $order): string
@@ -319,9 +676,10 @@ final class GtrotsInvoiceService
         $sequence->execute([$series]);
         $last = (int)$sequence->fetchColumn();
 
-        $invoiceMax = $db->prepare('SELECT MAX(CAST(invoice_number AS INTEGER)) FROM shop_invoices WHERE series = ?');
+        $cast = $driver === 'sqlite' ? 'INTEGER' : 'UNSIGNED';
+        $invoiceMax = $db->prepare("SELECT MAX(CAST(invoice_number AS {$cast})) FROM shop_invoices WHERE series = ?");
         $invoiceMax->execute([$series]);
-        $assignmentMax = $db->prepare('SELECT MAX(CAST(invoice_number AS INTEGER)) FROM shop_invoice_theme_assignments WHERE invoice_series = ?');
+        $assignmentMax = $db->prepare("SELECT MAX(CAST(invoice_number AS {$cast})) FROM shop_invoice_theme_assignments WHERE invoice_series = ?");
         $assignmentMax->execute([$series]);
         $next = max($last, (int)$invoiceMax->fetchColumn(), (int)$assignmentMax->fetchColumn()) + 1;
         $db->prepare('UPDATE shop_invoice_sequences SET last_number = ? WHERE series = ?')->execute([$next, $series]);
@@ -394,7 +752,7 @@ final class GtrotsInvoiceService
         }
     }
 
-    private static function payload(PDO $db, array $order, array $company, string $invoiceId, string $series, string $number, string $issueDate, string $dueDate, string $status): array
+    private static function payload(PDO $db, array $order, array $company, string $invoiceId, string $series, string $number, string $issueDate, string $dueDate, string $status, string $defaultNotes = ''): array
     {
         $itemsStmt = $db->prepare(
             'SELECT oi.*,
@@ -428,6 +786,7 @@ final class GtrotsInvoiceService
             $grossUnit = $lineGrossValues[$index] / $quantity;
             $netUnit = $vatRate > 0 ? $grossUnit / (1 + $vatRate / 100) : $grossUnit;
             $items[] = [
+                'product_id' => trim((string)($item['product_id'] ?? '')) ?: null,
                 'name' => (string)($item['product_name'] ?? 'Produs'),
                 'sku' => (string)($item['product_sku'] ?? ''),
                 'image_path' => (string)($item['image_path'] ?? ''),
@@ -457,6 +816,7 @@ final class GtrotsInvoiceService
             ? (string)$order['company_address']
             : (string)($order['address'] ?? '');
         $buyer = [
+            'type' => $isCompany ? 'company' : 'individual',
             'name' => $isCompany ? (string)($order['company_name'] ?? $order['customer_name']) : (string)$order['customer_name'],
             'cui' => $isCompany ? (string)($order['company_cui'] ?? '') : '',
             'registration_number' => $isCompany ? (string)($order['company_registration_number'] ?? '') : '',
@@ -484,6 +844,7 @@ final class GtrotsInvoiceService
             'bank_name' => (string)($company['bank_name'] ?? ''),
             'iban' => (string)($company['iban'] ?? ''),
             'share_capital' => (string)($company['share_capital'] ?? ''),
+            'vat_payer' => !empty($company['vat_payer']),
         ];
         $paymentMethod = (string)($order['payment_method'] ?? '') === 'card' ? 'Card online' : 'Ramburs la curier';
         $promotionNote = trim((string)($order['promotion_code'] ?? '')) !== ''
@@ -510,7 +871,7 @@ final class GtrotsInvoiceService
                 'paid_at' => $status === 'paid' ? (trim((string)($order['stripe_paid_at'] ?? '')) ?: $issueDate) : '',
                 'transaction_id' => (string)($order['stripe_payment_intent_id'] ?? ''),
             ],
-            'notes' => implode("\n", array_filter([(string)($order['customer_notes'] ?? ''), $promotionNote])),
+            'notes' => implode("\n", array_filter([trim($defaultNotes), (string)($order['customer_notes'] ?? ''), $promotionNote])),
             'order_reference' => (string)($order['order_number'] ?? ''),
             'tax_note' => $vatRate > 0
                 ? 'Prețurile comerciale includ TVA ' . rtrim(rtrim(number_format($vatRate, 2, '.', ''), '0'), '.') . '%, evidențiată separat în factură.'

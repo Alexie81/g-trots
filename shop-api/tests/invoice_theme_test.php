@@ -4,8 +4,10 @@ declare(strict_types=1);
 require_once __DIR__ . '/../invoice-theme.php';
 
 $db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
-$db->exec("CREATE TABLE shop_invoice_settings (id INTEGER PRIMARY KEY, default_theme TEXT NOT NULL DEFAULT 'orange', updated_by TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+$db->exec("CREATE TABLE shop_invoice_settings (id INTEGER PRIMARY KEY, default_theme TEXT NOT NULL DEFAULT 'orange', invoice_series TEXT NOT NULL DEFAULT 'GT', due_days INTEGER NOT NULL DEFAULT 7, default_notes TEXT, updated_by TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
 $db->exec("CREATE TABLE shop_invoice_theme_assignments (document_key TEXT PRIMARY KEY, document_id TEXT, invoice_series TEXT NOT NULL, invoice_number TEXT NOT NULL, theme TEXT NOT NULL, assigned_by TEXT, assigned_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, last_rendered_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(invoice_series, invoice_number))");
+$db->exec("CREATE TABLE shop_invoice_sequences (series TEXT PRIMARY KEY, last_number INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+$db->exec("CREATE TABLE shop_invoices (id TEXT PRIMARY KEY, series TEXT NOT NULL, invoice_number TEXT NOT NULL)");
 $db->exec("INSERT INTO shop_invoice_settings (id, default_theme) VALUES (1, 'orange')");
 
 $failures = [];
@@ -26,6 +28,10 @@ $expect($regenerated['theme'] === 'purple' && $regenerated['existing'] === true,
 $regeneratedWithId = GtrotsInvoiceThemeStore::pin($db, ['document_id' => 'invoice-row-099', 'series' => 'GT', 'number' => '099'], 'Test');
 $expect($regeneratedWithId['theme'] === 'purple' && $regeneratedWithId['existing'] === true, 'GT099 trebuie identificată după serie și număr chiar dacă ulterior primește un ID intern.');
 $expect((int)$db->query('SELECT COUNT(*) FROM shop_invoice_theme_assignments')->fetchColumn() === 2, 'Regenerarea nu trebuie să creeze o atribuire nouă.');
+
+$configured = GtrotsInvoiceThemeStore::update($db, 'orange', 'Test', ['invoice_series' => 'WEB', 'next_number' => 120, 'due_days' => 14, 'default_notes' => 'Mulțumim pentru comandă.']);
+$expect($configured['invoice_series'] === 'WEB' && $configured['next_number'] === 120, 'Configuratorul trebuie să salveze seria și următorul număr.');
+$expect($configured['due_days'] === 14 && $configured['default_notes'] === 'Mulțumim pentru comandă.', 'Configuratorul trebuie să salveze scadența și notele implicite.');
 
 if ($failures) {
     fwrite(STDERR, "Istoric teme factură: " . count($failures) . " verificări eșuate:\n- " . implode("\n- ", $failures) . "\n");

@@ -10,7 +10,7 @@ import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { shopApi, ShopInvoiceItem, ShopIssuedInvoice, ShopProduct } from '@/services/shopApi';
 import ShopPagination from '@/components/ShopPagination';
-import SwipeDownSheet from '@/components/SwipeDownSheet';
+import SwipeDownSheet, { type SwipeDownSheetHandle } from '@/components/SwipeDownSheet';
 
 const themeColors: Record<ShopIssuedInvoice['theme'], string> = { orange: '#FF8A00', green: '#19A86B', red: '#EF4056', purple: '#8B72E8' };
 const shopApiBase = (process.env.EXPO_PUBLIC_SHOP_API_URL || 'https://g-trots.ro/shop-api').replace(/\/$/, '');
@@ -58,6 +58,7 @@ export default function ShopInvoicesManager({ initialInvoiceId = null, onInitial
   const [productLoading, setProductLoading] = useState(false);
   const [productError, setProductError] = useState('');
   const initialOpenedInvoiceId = useRef<string | null>(null);
+  const invoiceSheetRef = useRef<SwipeDownSheetHandle>(null);
   const [discountPulse] = useState(() => new Animated.Value(0));
 
   const load = useCallback(async () => {
@@ -208,6 +209,11 @@ export default function ShopInvoicesManager({ initialInvoiceId = null, onInitial
     setProductError('');
   };
 
+  const dismissInvoice = () => {
+    if (invoiceSheetRef.current) invoiceSheetRef.current.dismiss();
+    else closeInvoice();
+  };
+
   const payload = selectedInvoice?.payload;
   const invoiceItems = payload?.items || [];
   const totals = invoiceItems.reduce((sum, item) => {
@@ -223,8 +229,8 @@ export default function ShopInvoicesManager({ initialInvoiceId = null, onInitial
   const productImage = selectedProduct?.images?.[0]?.url || '';
   const showingProduct = Boolean(productLoading || productError || selectedProduct);
   const sheetHeader = showingProduct
-    ? <View style={styles.detailHeader}><TouchableOpacity style={styles.detailHeaderButton} onPress={() => { setSelectedProduct(null); setProductError(''); setProductLoading(false); }}><ArrowLeft size={20} color={Colors.textPrimary} /></TouchableOpacity><View style={styles.detailHeaderCopy}><Text style={styles.detailEyebrow}>FIȘA PRODUSULUI</Text><Text style={styles.detailTitle} numberOfLines={1}>{selectedProduct?.name || 'Se încarcă produsul...'}</Text></View><TouchableOpacity style={styles.detailHeaderButton} onPress={closeInvoice}><X size={20} color={Colors.textPrimary} /></TouchableOpacity></View>
-    : <View style={styles.detailHeader}><View style={[styles.detailHeaderIcon, { backgroundColor: `${invoiceAccent}20` }]}><FileCheck2 size={22} color={invoiceAccent} /></View><View style={styles.detailHeaderCopy}><Text style={[styles.detailEyebrow, { color: invoiceAccent }]}>FIȘA FACTURII EMISE</Text><Text style={styles.detailTitle}>{selectedInvoice?.display_number || 'Factură'}</Text></View><TouchableOpacity style={styles.detailHeaderButton} onPress={closeInvoice}><X size={20} color={Colors.textPrimary} /></TouchableOpacity></View>;
+    ? <View style={styles.detailHeader}><TouchableOpacity style={styles.detailHeaderButton} onPress={() => { setSelectedProduct(null); setProductError(''); setProductLoading(false); }}><ArrowLeft size={20} color={Colors.textPrimary} /></TouchableOpacity><View style={styles.detailHeaderCopy}><Text style={styles.detailEyebrow}>FIȘA PRODUSULUI</Text><Text style={styles.detailTitle} numberOfLines={1}>{selectedProduct?.name || 'Se încarcă produsul...'}</Text></View><TouchableOpacity style={styles.detailHeaderButton} onPress={dismissInvoice}><X size={20} color={Colors.textPrimary} /></TouchableOpacity></View>
+    : <View style={styles.detailHeader}><View style={[styles.detailHeaderIcon, { backgroundColor: `${invoiceAccent}20` }]}><FileCheck2 size={22} color={invoiceAccent} /></View><View style={styles.detailHeaderCopy}><Text style={[styles.detailEyebrow, { color: invoiceAccent }]}>FIȘA FACTURII EMISE</Text><Text style={styles.detailTitle}>{selectedInvoice?.display_number || 'Factură'}</Text></View><TouchableOpacity style={styles.detailHeaderButton} onPress={dismissInvoice}><X size={20} color={Colors.textPrimary} /></TouchableOpacity></View>;
 
   return <><ScrollView style={styles.screen} contentContainerStyle={[styles.content, { paddingBottom: 105 + insets.bottom }]} showsVerticalScrollIndicator={false}>
     <View style={styles.hero}><View style={styles.heroIcon}><FileCheck2 size={27} color="#FFB36B" /></View><View style={styles.heroCopy}><Text style={styles.eyebrow}>DOCUMENTE COMERCIALE</Text><Text style={styles.title}>Facturi emise</Text><Text style={styles.subtitle}>Facturi reale, generate din comenzi, cu tema și starea plății actualizate corect.</Text></View><TouchableOpacity style={styles.refresh} onPress={() => void load()}><RefreshCw size={18} color="#FFB36B" /></TouchableOpacity></View>
@@ -256,7 +262,7 @@ export default function ShopInvoicesManager({ initialInvoiceId = null, onInitial
       </LinearGradient>;
     }) : <View style={styles.state}><FileCheck2 size={34} color="#FFB36B" /><Text style={styles.emptyTitle}>Nu există facturi emise</Text><Text style={styles.stateText}>Emite prima factură din pagina unei comenzi.</Text></View>}
     {!loading && !error ? <ShopPagination page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} onPageSizeChange={setPageSize} /> : null}
-  </ScrollView><Modal visible={Boolean(selectedInvoice)} transparent animationType="slide" statusBarTranslucent onRequestClose={closeInvoice}><View style={styles.modalBackdrop}><SwipeDownSheet visible={Boolean(selectedInvoice)} onClose={closeInvoice} disabled={Boolean(busy)} header={sheetHeader} style={[styles.detailSheet, { paddingTop: Math.max(insets.top, 12), paddingBottom: Math.max(insets.bottom, 12) }]}>
+  </ScrollView><Modal visible={Boolean(selectedInvoice)} transparent animationType="fade" statusBarTranslucent onRequestClose={dismissInvoice}><View style={styles.modalBackdrop}><SwipeDownSheet ref={invoiceSheetRef} visible={Boolean(selectedInvoice)} onClose={closeInvoice} disabled={Boolean(busy)} header={sheetHeader} style={[styles.detailSheet, { paddingTop: Math.max(insets.top, 12), paddingBottom: Math.max(insets.bottom, 12) }]}>
     {showingProduct ? <>
       {productLoading ? <View style={styles.detailLoading}><ActivityIndicator color={Colors.orange} /><Text style={styles.stateText}>Se pregătește fișa produsului...</Text></View> : productError ? <View style={styles.detailLoading}><Text style={styles.error}>{productError}</Text><TouchableOpacity style={styles.retry} onPress={() => setProductError('')}><Text style={styles.retryText}>Înapoi la factură</Text></TouchableOpacity></View> : selectedProduct ? <ScrollView contentContainerStyle={styles.detailScroll} showsVerticalScrollIndicator={false}>
         <View style={styles.productHero}>{productImage ? <Image source={{ uri: productImage }} style={styles.productImage} resizeMode="contain" /> : <View style={styles.productImageEmpty}><Package size={42} color="#FFB36B" /></View>}<View style={styles.productHeroCopy}><Text style={styles.productName}>{selectedProduct.name}</Text><Text style={styles.productSku}>{selectedProduct.sku || 'Fără SKU'}{selectedProduct.ean ? ` · EAN ${selectedProduct.ean}` : ''}</Text><View style={[styles.productStock, { backgroundColor: selectedProduct.stock_available ? '#34D39918' : '#FB718518' }]}><Text style={{ color: selectedProduct.stock_available ? '#6EE7B7' : '#FDA4AF', fontFamily: 'Inter-Bold', fontSize: 9 }}>{selectedProduct.stock_mode === 'unlimited' ? 'STOC NELIMITAT' : `${selectedProduct.stock_quantity} BUCĂȚI ÎN STOC`}</Text></View></View></View>

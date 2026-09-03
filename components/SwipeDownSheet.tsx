@@ -1,12 +1,12 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle } from 'react';
 import {
-  PanResponder,
   StyleSheet,
   View,
   type StyleProp,
   type ViewStyle,
   useWindowDimensions,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
@@ -25,70 +25,65 @@ type Props = {
   disabled?: boolean;
 };
 
-export default function SwipeDownSheet({
+export type SwipeDownSheetHandle = {
+  dismiss: () => void;
+};
+
+const SwipeDownSheet = forwardRef<SwipeDownSheetHandle, Props>(function SwipeDownSheet({
   children,
   header,
   visible,
   onClose,
   style,
   disabled = false,
-}: Props) {
+}, ref) {
   const { height } = useWindowDimensions();
-  const translateY = useSharedValue(0);
+  const translateY = useSharedValue(height);
   const startY = useSharedValue(0);
 
   useEffect(() => {
-    if (visible) translateY.value = 0;
-  }, [translateY, visible]);
+    if (!visible) return;
+    translateY.value = height;
+    translateY.value = withTiming(0, { duration: 280 });
+  }, [height, translateY, visible]);
 
-  const close = () => {
+  const finishClose = useCallback(() => {
     if (!disabled) onClose();
-  };
+  }, [disabled, onClose]);
 
-  const panResponder = useMemo(
-    () => {
-      const isDownwardDrag = (dy: number, dx: number) =>
-        !disabled && dy > 3 && dy > Math.abs(dx);
+  const dismiss = useCallback(() => {
+    if (disabled) return;
+    translateY.value = withTiming(height, { duration: 220 }, (finished) => {
+      if (finished) runOnJS(finishClose)();
+    });
+  }, [disabled, finishClose, height, translateY]);
 
-      return PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_event, gestureState) =>
-          isDownwardDrag(gestureState.dy, gestureState.dx),
-        onMoveShouldSetPanResponderCapture: (_event, gestureState) =>
-          isDownwardDrag(gestureState.dy, gestureState.dx),
-        onPanResponderGrant: () => {
-          startY.value = translateY.value;
-        },
-        onPanResponderMove: (_event, gestureState) => {
-          translateY.value = Math.max(0, startY.value + gestureState.dy);
-        },
-        onPanResponderRelease: (_event, gestureState) => {
-          const currentY = Math.max(0, startY.value + gestureState.dy);
-          if (gestureState.vy > 0.65 || currentY > 70) {
-            translateY.value = withTiming(height, { duration: 210 }, (finished) => {
-              if (finished) runOnJS(close)();
-            });
-            return;
-          }
-          translateY.value = withSpring(0, {
-            damping: 22,
-            stiffness: 230,
-            mass: 0.85,
-          });
-        },
-        onPanResponderTerminate: () => {
-          translateY.value = withSpring(0, {
-            damping: 22,
-            stiffness: 230,
-            mass: 0.85,
-          });
-        },
-        onPanResponderTerminationRequest: () => false,
-        onShouldBlockNativeResponder: () => true,
+  useImperativeHandle(ref, () => ({ dismiss }), [dismiss]);
+
+  const panGesture = Gesture.Pan()
+    .enabled(!disabled)
+    .activeOffsetY(4)
+    .failOffsetX([-24, 24])
+    .onBegin(() => {
+      startY.value = translateY.value;
+    })
+    .onUpdate((event) => {
+      translateY.value = Math.max(0, startY.value + event.translationY);
+    })
+    .onEnd((event) => {
+      const currentY = Math.max(0, startY.value + event.translationY);
+      if (event.velocityY > 650 || currentY > 70) {
+        translateY.value = withTiming(height, { duration: 210 }, (finished) => {
+          if (finished) runOnJS(finishClose)();
+        });
+        return;
+      }
+      translateY.value = withSpring(0, {
+        damping: 22,
+        stiffness: 230,
+        mass: 0.85,
       });
-    },
-    [disabled, height, startY, translateY]
-  );
+    });
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
@@ -96,14 +91,18 @@ export default function SwipeDownSheet({
 
   return (
     <Animated.View style={[style, animatedStyle]}>
-      {header ? <View style={styles.headerDragArea} {...panResponder.panHandlers}>
-        <View style={styles.headerHandleHitArea}><View style={styles.handle} /></View>
-        {header}
-      </View> : <View style={styles.handleHitArea} {...panResponder.panHandlers}><View style={styles.handle} /></View>}
+      <GestureDetector gesture={panGesture}>
+        {header ? <View style={styles.headerDragArea}>
+          <View style={styles.headerHandleHitArea}><View style={styles.handle} /></View>
+          {header}
+        </View> : <View style={styles.handleHitArea}><View style={styles.handle} /></View>}
+      </GestureDetector>
       {children}
     </Animated.View>
   );
-}
+});
+
+export default SwipeDownSheet;
 
 const styles = StyleSheet.create({
   handleHitArea: {

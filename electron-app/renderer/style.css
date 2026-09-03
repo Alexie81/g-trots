@@ -18,7 +18,7 @@
   --error: #EF4444;
   --error-dim: rgba(239,68,68,0.12);
   --warning: #F59E0B;
-  --sidebar-w: 210px;
+  --sidebar-w: 244px;
   --radius: 10px;
   --shadow-soft: 0 18px 45px rgba(0,0,0,0.32);
   --shadow-focus: 0 0 0 3px rgba(255,107,0,0.14);
@@ -11356,7 +11356,7 @@ body::after {
 
 /* Responsive desktop shell for restored and compact Electron windows. */
 @media (max-width: 1180px) {
-  :root { --sidebar-w: 184px; }
+  :root { --sidebar-w: 224px; }
 
   .page-header,
   .service-page-header,
@@ -12294,31 +12294,34 @@ body::after {
 }
 .sidebar-nav[hidden] { display: none !important; }
 .sidebar-nav { min-height: 0; overflow-x: hidden; overflow-y: auto; }
-.shop-sidebar-nav { gap: 0; padding: 10px 8px 18px; scroll-padding-block: 10px; }
+.shop-sidebar-nav { gap: 0; padding: 12px 10px 20px; scroll-padding-block: 12px; }
 .shop-sidebar-nav .shop-dashboard-link {
   --nav-icon-color: #ff9a50;
   --nav-icon-glow: rgba(255,138,39,.34);
-  min-height: 43px;
-  margin-bottom: 7px;
+  min-height: 50px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
   color: #f4eee9;
   background: linear-gradient(135deg, rgba(255,138,39,.12), rgba(255,255,255,.025));
   border-color: rgba(255,138,39,.18);
   font-weight: 850;
+  font-size: 13px;
 }
-.shop-nav-group { --group-tone:#65cafa; display:flex; flex-direction:column; gap:2px; padding:4px 0 7px; }
+.shop-nav-group { --group-tone:#65cafa; display:flex; flex-direction:column; gap:3px; padding:7px 0 10px; }
 .shop-nav-group + .shop-nav-group { border-top:1px solid rgba(255,255,255,.055); }
 .shop-nav-group[data-tone="catalog"] { --group-tone:#a78bfa; }
 .shop-nav-group[data-tone="stock"] { --group-tone:#4bd9bd; }
 .shop-nav-group[data-tone="settings"] { --group-tone:#fb923c; }
-.shop-nav-section { min-height:25px; display:flex; align-items:center; gap:7px; padding:8px 10px 4px; }
-.shop-nav-section::before { content:''; width:5px; height:5px; flex:0 0 auto; border-radius:50%; background:var(--group-tone); box-shadow:0 0 9px color-mix(in srgb,var(--group-tone) 62%,transparent); }
+.shop-nav-section { min-height:30px; display:flex; align-items:center; gap:8px; padding:9px 11px 5px; }
+.shop-nav-section::before { content:''; width:6px; height:6px; flex:0 0 auto; border-radius:50%; background:var(--group-tone); box-shadow:0 0 10px color-mix(in srgb,var(--group-tone) 70%,transparent); }
 .shop-nav-section::after { content:''; height:1px; flex:1; background:linear-gradient(90deg,color-mix(in srgb,var(--group-tone) 25%,transparent),transparent); }
-.shop-nav-section span { color:var(--group-tone); font-size:7px; font-weight:900; letter-spacing:.15em; text-transform:uppercase; white-space:nowrap; }
-.shop-sidebar-nav .nav-btn { --nav-icon-color: var(--group-tone, #65cafa); --nav-icon-glow: color-mix(in srgb,var(--nav-icon-color) 28%,transparent); min-height:34px; padding:6px 9px; border-radius:10px; font-size:10px; font-weight:700; }
-.shop-sidebar-nav .nav-btn span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.shop-nav-section span { color:var(--group-tone); font-size:9px; font-weight:900; letter-spacing:.13em; line-height:1.2; text-transform:uppercase; white-space:nowrap; }
+.shop-sidebar-nav .nav-btn { --nav-icon-color: var(--group-tone, #65cafa); --nav-icon-glow: color-mix(in srgb,var(--nav-icon-color) 28%,transparent); min-height:43px; gap:11px; padding:9px 11px; border-radius:12px; color:#bdb7b2; font-size:13px; line-height:1.25; font-weight:750; }
+.shop-sidebar-nav .nav-btn span { overflow:visible; text-overflow:clip; white-space:normal; }
 .shop-sidebar-nav .nav-btn > svg {
-  width: 17px;
-  height: 17px;
+  width: 20px;
+  height: 20px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -12348,6 +12351,15 @@ body::after {
   box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 8px 22px color-mix(in srgb,var(--nav-icon-color,#38bdf8) 8%,transparent);
 }
 .shop-sidebar-nav .nav-btn:hover { transform:translateX(2px); }
+@media (max-width: 920px) {
+  .shop-sidebar-nav { padding-inline:8px; }
+  .shop-sidebar-nav .shop-dashboard-link,
+  .shop-sidebar-nav .nav-btn { width:52px; min-height:46px; justify-content:center; padding:10px; }
+  .shop-sidebar-nav .nav-btn > svg { width:22px; height:22px; }
+  .shop-nav-section { min-height:16px; justify-content:center; padding:5px 0; }
+  .shop-nav-section span,
+  .shop-nav-section::after { display:none; }
+}
 .active-module-chip {
   height: 30px;
   display: inline-flex;

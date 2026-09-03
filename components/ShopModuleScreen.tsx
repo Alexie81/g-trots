@@ -49,6 +49,7 @@ import {
   TrendingUp,
   Truck,
   UsersRound,
+  Zap,
   X,
 } from 'lucide-react-native';
 import Header from '@/components/Header';
@@ -62,6 +63,7 @@ import ShopSuppliersManager from '@/components/ShopSuppliersManager';
 import ShopNirManager from '@/components/ShopNirManager';
 import ShopInvoiceConfigurator from '@/components/ShopInvoiceConfigurator';
 import ShopInvoicesManager from '@/components/ShopInvoicesManager';
+import ShopAutomationsManager from '@/components/ShopAutomationsManager';
 import { ShopPaymentMethodsManager, ShopProductSourcesManager, ShopShippingManager } from '@/components/ShopMoreManagers';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -77,7 +79,7 @@ import {
 } from '@/services/shopApi';
 
 type CatalogView = 'categories' | 'brands' | 'manufacturers';
-type SettingsView = 'sources' | 'suppliers' | 'nirs' | 'invoices' | 'invoice-configurator' | 'spv' | 'payments' | 'shipping' | 'customers' | 'discounts' | 'company';
+type SettingsView = 'sources' | 'suppliers' | 'nirs' | 'invoices' | 'invoice-configurator' | 'automations' | 'spv' | 'payments' | 'shipping' | 'customers' | 'discounts' | 'company';
 type PrimaryTab = 'home' | 'orders' | 'products' | 'inventory' | 'more';
 type ShopView = PrimaryTab | CatalogView | SettingsView;
 type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; item: ShopBrand } | { type: 'manufacturer'; item: ShopManufacturer };
@@ -86,7 +88,7 @@ type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; 
 // SHOP activa, astfel incat utilizatorul sa nu fie trimis inapoi pe Acasa.
 let persistedShopView: ShopView = 'home';
 const SHOP_VIEW_STORAGE_KEY = 'gtrots.shopView.v2';
-const shopViews = new Set<ShopView>(['home', 'orders', 'products', 'inventory', 'more', 'categories', 'brands', 'manufacturers', 'sources', 'suppliers', 'nirs', 'invoices', 'invoice-configurator', 'spv', 'payments', 'shipping', 'customers', 'discounts', 'company']);
+const shopViews = new Set<ShopView>(['home', 'orders', 'products', 'inventory', 'more', 'categories', 'brands', 'manufacturers', 'sources', 'suppliers', 'nirs', 'invoices', 'invoice-configurator', 'automations', 'spv', 'payments', 'shipping', 'customers', 'discounts', 'company']);
 
 const orderStatusLabels: Record<string, string> = {
   new: 'NOUĂ',
@@ -186,6 +188,7 @@ const moreAreaGroups = [
     areas: [
       { key: 'payments', title: 'Metode de plată', description: 'Activează plata cu cardul sau ramburs la curier.', Icon: CreditCard, color: '#A78BFA' },
       { key: 'invoice-configurator', title: 'Configurator factură', description: 'Structura, aspectul și tema facturilor viitoare.', Icon: FileCog, color: '#FB923C' },
+      { key: 'automations', title: 'Automatizări', description: 'Emitere și trimitere automată a facturilor.', Icon: Zap, color: '#F59E0B' },
       { key: 'spv', title: 'SPV / e-Factura', description: 'Conectarea ANAF și trimiterea facturilor vor fi configurate aici.', Icon: CloudUpload, color: '#60A5FA' },
       { key: 'company', title: 'Datele firmei', description: 'Identitate juridică, adresă, contact și date bancare.', Icon: Building2, color: '#FE8C19' },
     ],
@@ -620,8 +623,8 @@ export default function ShopModuleScreen() {
     );
   }
 
-  if (view === 'sources' || view === 'suppliers' || view === 'payments' || view === 'shipping' || view === 'customers' || view === 'discounts' || view === 'company') {
-    const title = view === 'sources' ? 'Surse de aprovizionare' : view === 'suppliers' ? 'Furnizori' : view === 'payments' ? 'Metode de plată' : view === 'shipping' ? 'Livrări' : view === 'customers' ? 'Clienți' : view === 'company' ? 'Datele firmei' : 'Reduceri';
+  if (view === 'sources' || view === 'suppliers' || view === 'payments' || view === 'shipping' || view === 'customers' || view === 'discounts' || view === 'company' || view === 'automations') {
+    const title = view === 'sources' ? 'Surse de aprovizionare' : view === 'suppliers' ? 'Furnizori' : view === 'payments' ? 'Metode de plată' : view === 'shipping' ? 'Livrări' : view === 'customers' ? 'Clienți' : view === 'company' ? 'Datele firmei' : view === 'automations' ? 'Automatizări' : 'Reduceri';
     return (
       <View style={styles.container}>
         <Header title={title} showBack onBack={() => setView('more')} />
@@ -633,7 +636,7 @@ export default function ShopModuleScreen() {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             automaticallyAdjustKeyboardInsets>
-            {view === 'sources' ? <ShopProductSourcesManager /> : view === 'suppliers' ? <ShopSuppliersManager /> : view === 'payments' ? <ShopPaymentMethodsManager /> : view === 'shipping' ? <ShopShippingManager /> : view === 'customers' ? <ShopCustomersManager onSearchFocus={() => setTimeout(() => settingsScrollRef.current?.scrollTo({ y: 390, animated: true }), 120)} onOpenOrder={(orderId) => openOrders('all', orderId)} /> : view === 'company' ? <ShopCompanySettingsManager onFieldFocus={revealSettingsField} /> : <ShopDiscountsManager />}
+            {view === 'sources' ? <ShopProductSourcesManager /> : view === 'suppliers' ? <ShopSuppliersManager /> : view === 'payments' ? <ShopPaymentMethodsManager /> : view === 'shipping' ? <ShopShippingManager /> : view === 'customers' ? <ShopCustomersManager onSearchFocus={() => setTimeout(() => settingsScrollRef.current?.scrollTo({ y: 390, animated: true }), 120)} onOpenOrder={(orderId) => openOrders('all', orderId)} /> : view === 'company' ? <ShopCompanySettingsManager onFieldFocus={revealSettingsField} /> : view === 'automations' ? <ShopAutomationsManager /> : <ShopDiscountsManager />}
           </ScrollView>
         </KeyboardAvoidingView>
         <ShopBottomNavigation activeTab="more" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />

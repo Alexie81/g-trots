@@ -546,6 +546,19 @@ export type ShopOrderEmailNotification = {
   error?: string;
 };
 
+export type ShopInvoiceAutomationResult = {
+  processed: boolean;
+  eligible?: boolean;
+  issue?: boolean;
+  email?: boolean;
+  duplicate?: boolean;
+  status?: 'processing' | 'completed' | 'failed';
+  invoice_id?: string | null;
+  email_sent?: boolean;
+  reason?: string;
+  error?: string;
+};
+
 export type ShopInvoiceParty = {
   type?: 'company' | 'individual';
   name: string;
@@ -667,6 +680,7 @@ export type ShopOrder = {
   items: ShopOrderItem[];
   status_history?: ShopOrderStatusHistory[];
   email_notification?: ShopOrderEmailNotification;
+  invoice_automation?: ShopInvoiceAutomationResult;
   invoice?: ShopIssuedInvoice | null;
   created_at: string;
   updated_at: string;
@@ -755,6 +769,15 @@ export type ShopPaymentSettings = {
   stripe_test_mode: boolean;
   stripe_synced_products: number;
   stripe_sync_errors: number;
+  updated_at?: string | null;
+};
+
+export type ShopInvoiceAutomationSettings = {
+  card_issue_enabled: boolean;
+  card_email_enabled: boolean;
+  cod_issue_enabled: boolean;
+  cod_email_enabled: boolean;
+  updated_by?: string;
   updated_at?: string | null;
 };
 
@@ -1135,6 +1158,8 @@ export const shopApi = {
   deletePromotion: (token: string, id: string) => shopCall<{ success: true }>('deletePromotion', token, { method: 'DELETE' }, id),
   getPaymentSettings: (token: string) => shopCall<ShopPaymentSettings>('getPaymentSettings', token),
   updatePaymentSettings: (token: string, payload: ShopPaymentSettings) => shopCall<ShopPaymentSettings>('updatePaymentSettings', token, { method: 'PUT', body: JSON.stringify(payload) }),
+  getInvoiceAutomationSettings: (token: string) => shopCall<ShopInvoiceAutomationSettings>('getInvoiceAutomationSettings', token),
+  updateInvoiceAutomationSettings: (token: string, payload: ShopInvoiceAutomationSettings) => shopCall<ShopInvoiceAutomationSettings>('updateInvoiceAutomationSettings', token, { method: 'PUT', body: JSON.stringify(payload) }),
   getInvoiceThemeSettings: (token: string) => shopCall<ShopInvoiceThemeSettings>('getInvoiceThemeSettings', token),
   updateInvoiceThemeSettings: (token: string, payload: { theme: ShopInvoiceTheme; invoice_series: string; next_number: number; due_days: number; default_notes: string }) => shopCall<ShopInvoiceThemeSettings>('updateInvoiceThemeSettings', token, { method: 'PUT', body: JSON.stringify(payload) }),
   listCompanySettings: (token: string) => shopCall<ShopCompanySettings[]>('listCompanySettings', token),

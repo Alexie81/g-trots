@@ -317,11 +317,20 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
       setDeliveryPostalCode(updated.postal_code || '');
       setNotifyCustomer(false);
       const email = updated.email_notification;
+      const automation = updated.invoice_automation;
+      const orderMessage = email?.requested
+        ? (email.sent ? `Statusul a fost salvat, iar clientul a primit e-mailul comenzii la ${email.recipient || selected.customer_email}.` : `Statusul a fost salvat, dar e-mailul comenzii nu a putut fi trimis: ${email.error || 'verifică setările SMTP.'}`)
+        : `Statusul comenzii ${updated.order_number} a fost salvat.`;
+      const automationMessage = automation?.processed
+        ? automation.status === 'completed'
+          ? automation.email_sent
+            ? `\n\n${updated.invoice?.display_number || 'Factura'} a fost emisă automat și trimisă separat pe e-mail.`
+            : `\n\n${updated.invoice?.display_number || 'Factura'} a fost emisă automat și este disponibilă în Facturi emise.`
+          : `\n\nFactura automată nu s-a finalizat: ${automation.error || 'poate fi reluată în siguranță.'}`
+        : '';
       Alert.alert(
-        'Comanda actualizată',
-        email?.requested
-          ? (email.sent ? `Statusul a fost salvat, iar clientul a primit e-mailul la ${email.recipient || selected.customer_email}.` : `Statusul a fost salvat, dar e-mailul nu a putut fi trimis: ${email.error || 'verifică setările SMTP.'}`)
-          : `Statusul comenzii ${updated.order_number} a fost salvat.`
+        automation?.processed ? 'Comandă și factură actualizate' : 'Comanda actualizată',
+        `${orderMessage}${automationMessage}`
       );
     } catch (saveError) {
       Alert.alert('Nu s-a putut salva', saveError instanceof Error ? saveError.message : 'Incearca din nou.');

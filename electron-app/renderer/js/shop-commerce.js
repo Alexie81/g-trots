@@ -1,7 +1,7 @@
 (function () {
   const { shell, clipboard } = require('electron');
   const state = {
-    products: [], orders: [], invoices: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], promotions: [], companies: [], nirs: [], nirPermissions: [], nirWarehouses: [], invoiceThemeSettings: null, selectedInvoiceTheme: 'orange', invoiceSettingsDraft: { invoice_series: 'GT', next_number: 1, due_days: 7, default_notes: '' }, invoiceThemeSaving: false, invoiceQuery: '', invoiceStatusFilter: 'all', invoiceBusy: '',
+    products: [], orders: [], invoices: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], promotions: [], companies: [], nirs: [], nirPermissions: [], nirWarehouses: [], invoiceThemeSettings: null, invoiceAutomationSettings: null, invoiceAutomationSaving: false, selectedInvoiceTheme: 'orange', invoiceSettingsDraft: { invoice_series: 'GT', next_number: 1, due_days: 7, default_notes: '' }, invoiceThemeSaving: false, invoiceQuery: '', invoiceStatusFilter: 'all', invoiceBusy: '',
     editingProduct: null, editingOrder: null, invoiceIssueOrder: null, invoiceDetail: null, editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
     productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, productTotal: 0, productSearchTimer: null, productLoadRequestId: 0, slugTouched: false, productQuery: '', orderQuery: '', orderSearchTimer: null, orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
     customerQuery: '', inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false, nirBundleDownloading: '', nirRegistryDownloadPeriod: 'current_month', nirRegistryDownloadContent: 'complete', nirRegistryDownloading: false, nirExportProgressTimer: null,
@@ -10,6 +10,8 @@
   };
   const PAGE_SIZE_OPTIONS = [10, 25, 50];
   const PRODUCT_SALES_PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25, 50, 75, 100];
+  let invoiceAutomationSaveQueue = Promise.resolve();
+  let invoiceAutomationSaveRevision = 0;
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
   const supplierDisplayName = (source, fallback = 'Furnizor') => {
@@ -120,6 +122,7 @@
       <div class="tab-panel shop-tab-panel" id="tab-shop-suppliers">${commercePage('Furnizori', 'Firme partenere, persoane de contact si date comerciale pentru achizitii.', 'shop-suppliers-content', true)}</div>
       <div class="tab-panel shop-tab-panel" id="tab-shop-nirs">${commercePage('NIR-uri', 'Recepții contabile, facturi de achiziție și costuri istorice.', 'shop-nirs-content', true)}</div>
       <div class="tab-panel shop-tab-panel" id="tab-shop-payments">${commercePage('Metode de plata', 'Controleaza optiunile disponibile la finalizarea comenzii.', 'shop-payments-content')}</div>
+      <div class="tab-panel shop-tab-panel" id="tab-shop-automations">${commercePage('Automatizări', 'Emitere și expediere automată a facturilor după plată și starea comenzii.', 'shop-automations-content')}</div>
       <div class="tab-panel shop-tab-panel" id="tab-shop-shipping">${commercePage('Livrari', 'Costuri, transport gratuit si termene estimate.', 'shop-shipping-content', true)}</div>
       <div class="tab-panel shop-tab-panel" id="tab-shop-customers">${commercePage('Clienti', 'Conturi, comenzi, valoare totala si controlul accesului.', 'shop-customers-content')}</div>
       <div class="tab-panel shop-tab-panel" id="tab-shop-discounts">${commercePage('Reduceri', 'Campanii detaliate, clienti eligibili si rezultate masurate pentru fiecare reducere.', 'shop-discounts-content', true)}</div>
@@ -135,6 +138,7 @@
       ${dashboardCard('shop-discounts', 'amber', 'PROMOTII', 'Reduceri', 'Campanii, cupoane si anunturi pe site.')}
       ${dashboardCard('shop-company', 'purple', 'IDENTITATE', 'Datele firmei', 'Societati, conturi bancare si stampila.')}
       ${dashboardCard('shop-invoice-configurator', 'amber', 'DOCUMENTE', 'Configurator factură', 'Patru teme și alegerea aspectului pentru facturile viitoare.')}
+      ${dashboardCard('shop-automations', 'amber', 'FLUXURI', 'Automatizări', 'Emitere și trimitere automată a facturilor.')}
       ${dashboardCard('shop-spv', 'blue', 'ANAF', 'SPV / e-Factura', 'Conectarea și transmiterea facturilor vor fi configurate aici.')}
     `);
     document.body.insertAdjacentHTML('beforeend', productModal() + productDetailModal() + orderModal() + invoiceIssueModal() + invoiceDetailModal() + stockModal() + sourceModal() + supplierModal() + nirModal() + nirRegistryDownloadModal() + shippingModal() + customerModal() + promotionModal() + promotionStatsModal() + companyModal());
@@ -144,7 +148,7 @@
 
   function commercePage(title, description, contentId, hasAdd = false) {
     const kind = contentId.replace('shop-', '').replace('-content', '');
-    const symbols = { products: '◇', orders: '✓', invoices: '<svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>', inventory: '▦', sources: '◎', suppliers: '⌁', nirs: '<svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h5M9 12h7m-7 4h7"/><path d="m9 8 1.2 1.2L12.7 7"/></svg>', payments: '▣', shipping: '⇢', customers: '◉', discounts: '%', company: '▤' };
+    const symbols = { products: '◇', orders: '✓', invoices: '<svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>', inventory: '▦', sources: '◎', suppliers: '⌁', nirs: '<svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h5M9 12h7m-7 4h7"/><path d="m9 8 1.2 1.2L12.7 7"/></svg>', payments: '▣', automations: '<svg viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 10-13h-7Z"/></svg>', shipping: '⇢', customers: '◉', discounts: '%', company: '▤' };
     return `<div class="shop-commerce-page"><button type="button" class="shop-back-btn" data-shop-open="shop-dashboard" aria-label="Înapoi la Panoul SHOP" title="Panou SHOP"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><header class="shop-commerce-head shop-commerce-hero" data-commerce-kind="${kind}"><span class="shop-commerce-hero-glow"></span><div class="shop-commerce-title"><span>G-TROTS SHOP CRM</span><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="shop-commerce-hero-symbol" aria-hidden="true">${symbols[kind] || '◇'}</div><div class="shop-commerce-head-actions"><button type="button" class="shop-commerce-refresh" data-commerce-refresh="${contentId}" title="Reincarca" aria-label="Reincarca datele"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0 2 5"/><path d="M20 4v7h-7"/></svg></button>${hasAdd ? `<button type="button" class="shop-commerce-add" data-commerce-add="${contentId}" ${contentId === 'shop-company-content' ? 'hidden' : ''}>${contentId === 'shop-nirs-content' ? '<span class="shop-nir-add-icon">+</span> NIR nou' : '+ Adauga'}</button>` : ''}</div></header><main id="${contentId}" class="shop-commerce-content"><div class="shop-commerce-loading">Se incarca...</div></main></div>`;
   }
   function dashboardCard(target, tone, kicker, title, description) {
@@ -298,7 +302,7 @@
 
   function wire() {
     mountNirStornoInvoiceFields();
-    const loaders = { 'shop-dashboard': loadDashboard, 'shop-products': loadProducts, 'shop-orders': loadOrders, 'shop-invoices': loadInvoices, 'shop-inventory': loadInventory, 'shop-sources': loadSourcesPage, 'shop-suppliers': loadSuppliers, 'shop-nirs': loadNirs, 'shop-payments': loadPayments, 'shop-shipping': loadShippingPage, 'shop-customers': loadCustomers, 'shop-discounts': loadPromotions, 'shop-company': loadCompanies, 'shop-invoice-configurator': loadInvoiceConfigurator };
+    const loaders = { 'shop-dashboard': loadDashboard, 'shop-products': loadProducts, 'shop-orders': loadOrders, 'shop-invoices': loadInvoices, 'shop-inventory': loadInventory, 'shop-sources': loadSourcesPage, 'shop-suppliers': loadSuppliers, 'shop-nirs': loadNirs, 'shop-payments': loadPayments, 'shop-automations': loadInvoiceAutomations, 'shop-shipping': loadShippingPage, 'shop-customers': loadCustomers, 'shop-discounts': loadPromotions, 'shop-company': loadCompanies, 'shop-invoice-configurator': loadInvoiceConfigurator };
     window.addEventListener('tab-change', event => {
       loaders[event.detail]?.();
     });
@@ -310,7 +314,7 @@
     });
     document.querySelectorAll('[data-commerce-close]').forEach(button => button.addEventListener('click', () => closeModal(button.dataset.commerceClose)));
     document.querySelectorAll('.shop-commerce-overlay').forEach(overlay => overlay.addEventListener('mousedown', event => { if (event.target === overlay) closeModal(overlay.id); }));
-    document.querySelectorAll('[data-commerce-refresh]').forEach(button => button.addEventListener('click', () => ({ 'shop-products-content': loadProducts, 'shop-orders-content': loadOrders, 'shop-invoices-content': loadInvoices, 'shop-inventory-content': loadInventory, 'shop-sources-content': loadSourcesPage, 'shop-suppliers-content': loadSuppliers, 'shop-nirs-content': loadNirs, 'shop-shipping-content': loadShippingPage, 'shop-customers-content': loadCustomers, 'shop-discounts-content': loadPromotions, 'shop-company-content': loadCompanies })[button.dataset.commerceRefresh]?.()));
+    document.querySelectorAll('[data-commerce-refresh]').forEach(button => button.addEventListener('click', () => ({ 'shop-products-content': loadProducts, 'shop-orders-content': loadOrders, 'shop-invoices-content': loadInvoices, 'shop-inventory-content': loadInventory, 'shop-sources-content': loadSourcesPage, 'shop-suppliers-content': loadSuppliers, 'shop-nirs-content': loadNirs, 'shop-automations-content': loadInvoiceAutomations, 'shop-shipping-content': loadShippingPage, 'shop-customers-content': loadCustomers, 'shop-discounts-content': loadPromotions, 'shop-company-content': loadCompanies })[button.dataset.commerceRefresh]?.()));
     document.querySelectorAll('[data-commerce-add]').forEach(button => button.addEventListener('click', () => ({ 'shop-products-content': openProduct, 'shop-sources-content': openSource, 'shop-suppliers-content': openSupplier, 'shop-nirs-content': createNir, 'shop-shipping-content': openShipping, 'shop-discounts-content': openPromotion, 'shop-company-content': openCompany })[button.dataset.commerceAdd]?.()));
     $('shop-nir-registry-download-confirm')?.addEventListener('click', () => void downloadNirRegistry());
     document.querySelectorAll('[data-nir-registry-content]').forEach(button => button.addEventListener('click', () => {
@@ -1613,7 +1617,10 @@
       const updated = await window.SHOP_API.updateOrder(state.editingOrder.id, { status, payment_status: $('shop-order-payment-status').value, admin_notes: $('shop-order-admin-notes').value.trim(), notify_customer: Boolean($('shop-order-notify')?.checked), address: $('shop-order-address')?.value.trim(), city: $('shop-order-city')?.value.trim(), county: $('shop-order-county')?.value.trim(), postal_code: $('shop-order-postal-code')?.value.trim() });
       closeModal('shop-order-modal');
       const email = updated.email_notification;
-      toast(email?.requested ? (email.sent ? `Comanda a fost actualizată, iar clientul a fost notificat la ${email.recipient}.` : `Status salvat. E-mailul nu a plecat: ${email.error || 'verifică SMTP.'}`) : 'Comanda a fost actualizată.', email?.requested && !email.sent ? 'error' : 'success');
+      const automation = updated.invoice_automation;
+      const orderMessage = email?.requested ? (email.sent ? `Clientul a primit e-mailul comenzii la ${email.recipient}.` : `E-mailul comenzii nu a plecat: ${email.error || 'verifică SMTP.'}`) : 'Comanda a fost actualizată.';
+      const automationMessage = automation?.processed ? (automation.status === 'completed' ? (automation.email_sent ? ` ${updated.invoice?.display_number || 'Factura'} a fost emisă și trimisă separat.` : ` ${updated.invoice?.display_number || 'Factura'} a fost emisă automat.`) : ` Factura automată nu s-a finalizat: ${automation.error || 'poate fi reluată.'}`) : '';
+      toast(`${orderMessage}${automationMessage}`, (email?.requested && !email.sent) || automation?.status === 'failed' ? 'error' : 'success');
       await loadOrders();
     } catch (error) { toast(error.message, 'error'); }
     finally { button.disabled = false; }
@@ -1998,6 +2005,123 @@
         } catch (error) { toast(error.message, 'error'); }
       });
     } catch (error) { failure('shop-payments-content', error); }
+  }
+
+  function automationRule(key, title, description, enabled, disabled = false) {
+    return `<label class="shop-automation-rule ${enabled ? 'is-active' : ''} ${disabled ? 'is-disabled' : ''}" data-automation-rule="${esc(key)}">
+      <span class="shop-automation-rule-icon" aria-hidden="true">${key.includes('email') ? '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 8 8 6 8-6"/></svg>' : '<svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>'}</span>
+      <span class="shop-automation-rule-copy"><span><strong>${esc(title)}</strong><em class="${disabled ? 'locked' : ''}">${enabled && !disabled ? 'ACTIVĂ' : disabled ? 'NECESITĂ EMITEREA' : ''}</em></span><small>${esc(disabled ? 'Devine disponibilă după activarea emiterii automate.' : description)}</small></span>
+      <span class="shop-automation-switch"><input type="checkbox" data-automation-setting="${esc(key)}" ${enabled ? 'checked' : ''} ${disabled ? 'disabled' : ''}/><i aria-hidden="true"></i></span>
+    </label>`;
+  }
+
+  function syncAutomationControls(content) {
+    [['card_issue_enabled', 'card_email_enabled'], ['cod_issue_enabled', 'cod_email_enabled']].forEach(([issueKey, emailKey]) => {
+      const issue = content.querySelector(`[data-automation-setting="${issueKey}"]`);
+      const email = content.querySelector(`[data-automation-setting="${emailKey}"]`);
+      if (!issue || !email) return;
+      email.disabled = !issue.checked;
+      if (!issue.checked) email.checked = false;
+      const emailRule = email.closest('.shop-automation-rule');
+      emailRule?.classList.toggle('is-disabled', email.disabled);
+      emailRule?.classList.toggle('is-active', email.checked && !email.disabled);
+    });
+    content.querySelectorAll('[data-automation-setting]').forEach(input => {
+      const rule = input.closest('.shop-automation-rule');
+      rule?.classList.toggle('is-active', input.checked && !input.disabled);
+      const badge = rule?.querySelector('.shop-automation-rule-copy em');
+      if (badge) {
+        badge.textContent = input.disabled ? 'NECESITĂ EMITEREA' : input.checked ? 'ACTIVĂ' : '';
+        badge.classList.toggle('locked', input.disabled);
+      }
+    });
+  }
+
+  function automationPayload(content) {
+    const value = key => Boolean(content.querySelector(`[data-automation-setting="${key}"]`)?.checked);
+    return {
+      card_issue_enabled: value('card_issue_enabled'),
+      card_email_enabled: value('card_email_enabled'),
+      cod_issue_enabled: value('cod_issue_enabled'),
+      cod_email_enabled: value('cod_email_enabled'),
+    };
+  }
+
+  function automationSaveStatus(content, mode) {
+    const status = content.querySelector('[data-automation-save-status]');
+    if (!status) return;
+    status.classList.toggle('is-saving', mode === 'saving');
+    status.classList.toggle('is-error', mode === 'error');
+    const title = status.querySelector('strong');
+    if (title) title.textContent = mode === 'saving' ? 'Se salvează automat…' : mode === 'error' ? 'Modificarea nu s-a salvat' : 'Setări salvate automat';
+  }
+
+  function queueInvoiceAutomationSave(content) {
+    const payload = automationPayload(content);
+    const revision = ++invoiceAutomationSaveRevision;
+    state.invoiceAutomationSaving = true;
+    automationSaveStatus(content, 'saving');
+    invoiceAutomationSaveQueue = invoiceAutomationSaveQueue.catch(() => undefined).then(async () => {
+      try {
+        state.invoiceAutomationSettings = await window.SHOP_API.updateInvoiceAutomationSettings(payload);
+        if (revision === invoiceAutomationSaveRevision) automationSaveStatus(content, 'saved');
+      } catch (error) {
+        if (revision === invoiceAutomationSaveRevision) {
+          Object.entries(state.invoiceAutomationSettings || {}).forEach(([key, value]) => {
+            const input = content.querySelector(`[data-automation-setting="${key}"]`);
+            if (input) input.checked = Boolean(value);
+          });
+          syncAutomationControls(content);
+          automationSaveStatus(content, 'error');
+          toast(error.message || 'Modificarea nu s-a putut salva.', 'error');
+        }
+      } finally {
+        if (revision === invoiceAutomationSaveRevision) state.invoiceAutomationSaving = false;
+      }
+    });
+  }
+
+  function renderInvoiceAutomations() {
+    const content = $('shop-automations-content');
+    if (!content) return;
+    const settings = { card_issue_enabled: false, card_email_enabled: false, cod_issue_enabled: false, cod_email_enabled: false, ...(state.invoiceAutomationSettings || {}) };
+    const updated = settings.updated_at ? dateTime(settings.updated_at) : 'Configurație nouă';
+    content.innerHTML = `<section class="shop-automation-settings" aria-label="Automatizări emitere facturi">
+      <section class="shop-automation-intro">
+        <span class="shop-automation-intro-glow" aria-hidden="true"></span>
+        <span class="shop-automation-intro-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 10-13h-7Z"/></svg></span>
+        <span class="shop-automation-intro-copy"><small>EMITERE FACTURI</small><strong>Reguli executate direct pe server</strong><p>Funcționează și când aplicația de desktop sau telefonul sunt închise.</p></span>
+        <span class="shop-automation-server"><i></i>SERVER ACTIV<small>${esc(updated)}</small></span>
+      </section>
+      <header class="shop-automation-section-head"><span><small>DECLANȘATOARE DUPĂ PLATĂ</small><strong>Alege când se emite și se trimite factura</strong></span><em>4 REGULI</em></header>
+      <div class="shop-automation-groups">
+        <section class="shop-automation-group card">
+          <header><span class="shop-automation-group-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h4"/></svg></span><span><small>PLATĂ ONLINE</small><strong>Card</strong><p>După plata acceptată și confirmarea comenzii.</p></span></header>
+          ${automationRule('card_issue_enabled', 'Emite factura automat', 'Factura este creată numai după confirmarea plății și a comenzii.', settings.card_issue_enabled)}
+          ${automationRule('card_email_enabled', 'Trimite factura automat pe e-mail', 'Pleacă după e-mailul de confirmare a comenzii, într-o operațiune separată.', settings.card_email_enabled, !settings.card_issue_enabled)}
+        </section>
+        <section class="shop-automation-group cod">
+          <header><span class="shop-automation-group-icon"><svg viewBox="0 0 24 24"><path d="M4 9.5 12 4l8 5.5v8.2a2.3 2.3 0 0 1-2.3 2.3H6.3A2.3 2.3 0 0 1 4 17.7Z"/><path d="M8 13h8M9.5 16h5"/></svg></span><span><small>PLATĂ LA LIVRARE</small><strong>Ramburs</strong><p>Când comanda intră în starea În procesare (Nouă).</p></span></header>
+          ${automationRule('cod_issue_enabled', 'Emite factura automat', 'Factura este creată imediat pentru noua comandă ramburs.', settings.cod_issue_enabled)}
+          ${automationRule('cod_email_enabled', 'Trimite factura automat pe e-mail', 'Pleacă după confirmarea de primire a comenzii, într-o operațiune separată.', settings.cod_email_enabled, !settings.cod_issue_enabled)}
+        </section>
+      </div>
+      <section class="shop-automation-safety"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 20 6v6c0 5-3.4 8-8 9-4.6-1-8-4-8-9V6l8-3Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg></span><div><strong>Protecție împotriva duplicatelor</strong><p>Confirmarea comenzii și e-mailul facturii sunt operațiuni consecutive și independente. O eroare la una nu o anulează pe cealaltă, iar reluarea nu emite încă o factură.</p></div></section>
+      <footer class="shop-automation-actions"><span data-automation-save-status class="${state.invoiceAutomationSaving ? 'is-saving' : ''}"><i></i><strong>${state.invoiceAutomationSaving ? 'Se salvează automat…' : 'Setări salvate automat'}</strong><small>Orice schimbare se aplică imediat · fără reîncărcarea paginii</small></span></footer>
+    </section>`;
+
+    content.querySelectorAll('[data-automation-setting]').forEach(input => input.addEventListener('change', () => {
+      syncAutomationControls(content);
+      queueInvoiceAutomationSave(content);
+    }));
+  }
+
+  async function loadInvoiceAutomations() {
+    loading('shop-automations-content', 'Se încarcă automatizările...');
+    try {
+      state.invoiceAutomationSettings = await window.SHOP_API.getInvoiceAutomationSettings();
+      renderInvoiceAutomations();
+    } catch (error) { failure('shop-automations-content', error); }
   }
 
   async function loadShippingPage() { loading('shop-shipping-content', 'Se incarca livrarile...'); try { const shipping = await window.SHOP_API.listShippingMethods(); state.shipping = Array.isArray(shipping) ? shipping : []; renderShipping(); } catch (error) { failure('shop-shipping-content', error); } }

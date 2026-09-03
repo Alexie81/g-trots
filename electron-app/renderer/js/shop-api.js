@@ -208,6 +208,8 @@
     deleteInvoice: (id) => call('deleteInvoice', { method: 'DELETE' }, id),
     getPaymentSettings: () => call('getPaymentSettings'),
     updatePaymentSettings: (payload) => call('updatePaymentSettings', json('PUT', payload)),
+    getInvoiceAutomationSettings: () => call('getInvoiceAutomationSettings'),
+    updateInvoiceAutomationSettings: (payload) => call('updateInvoiceAutomationSettings', json('PUT', payload)),
     getInvoiceThemeSettings: () => call('getInvoiceThemeSettings'),
     updateInvoiceThemeSettings: (settings) => call('updateInvoiceThemeSettings', json('PUT', typeof settings === 'string' ? { theme: settings } : settings)),
     listCompanySettings: () => call('listCompanySettings'),

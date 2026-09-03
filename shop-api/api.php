@@ -18,6 +18,7 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
 require_once __DIR__ . '/order-emails.php';
 require_once __DIR__ . '/invoice-service.php';
+require_once __DIR__ . '/invoice-automation.php';
 require_once __DIR__ . '/stripe.php';
 require_once __DIR__ . '/gomag.php';
 require_once __DIR__ . '/nir-domain.php';
@@ -197,7 +198,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026090303;
+    $schemaVersion = 2026090304;
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_schema_meta (
             meta_key VARCHAR(80) NOT NULL PRIMARY KEY,
@@ -1015,6 +1016,37 @@ function ensureShopSchema(PDO $db): void {
     if (!$db->query("SHOW COLUMNS FROM shop_invoice_settings LIKE 'default_notes'")->fetch()) {
         $db->exec("ALTER TABLE shop_invoice_settings ADD COLUMN default_notes TEXT NULL AFTER due_days");
     }
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_invoice_automation_settings (
+            id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+            card_issue_enabled TINYINT(1) NOT NULL DEFAULT 0,
+            card_email_enabled TINYINT(1) NOT NULL DEFAULT 0,
+            cod_issue_enabled TINYINT(1) NOT NULL DEFAULT 0,
+            cod_email_enabled TINYINT(1) NOT NULL DEFAULT 0,
+            updated_by VARCHAR(180) NULL,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec("INSERT IGNORE INTO shop_invoice_automation_settings (id) VALUES (1)");
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_invoice_automation_runs (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            order_id CHAR(36) NOT NULL,
+            payment_flow VARCHAR(20) NOT NULL,
+            invoice_id CHAR(36) NULL,
+            issue_requested TINYINT(1) NOT NULL DEFAULT 1,
+            email_requested TINYINT(1) NOT NULL DEFAULT 0,
+            email_sent TINYINT(1) NOT NULL DEFAULT 0,
+            status VARCHAR(20) NOT NULL DEFAULT 'processing',
+            attempts SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+            last_error VARCHAR(500) NULL,
+            processed_at DATETIME NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE INDEX uq_shop_invoice_automation_order_flow (order_id, payment_flow),
+            INDEX idx_shop_invoice_automation_status (status, updated_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_invoice_theme_assignments (
             document_key VARCHAR(80) NOT NULL PRIMARY KEY,
@@ -4422,6 +4454,10 @@ try {
                 error_log('[G-Trots Stripe checkout] ' . $error->getMessage());
                 throw new InvalidArgumentException('Plata cu cardul nu a putut fi initializata. Incearca din nou.');
             }
+        } elseif (($order['payment_method'] ?? '') === 'cash_on_delivery') {
+            // Confirmarea de primire a comenzii este trimisă în createPublicOrder.
+            // Factura și e-mailul ei pornesc abia după finalizarea acelui pas.
+            $order['invoice_automation'] = GtrotsInvoiceAutomation::processOrder($db, (string)$order['id'], $config);
         }
         unset($order['vat_rate'], $order['vat_total'], $order['net_total']);
         jsonResponse($order, 201);
@@ -4716,6 +4752,15 @@ try {
 
     if ($action === 'getInvoiceThemeSettings' && $method === 'GET') {
         jsonResponse(GtrotsInvoiceThemeStore::settings($db));
+    }
+
+    if ($action === 'getInvoiceAutomationSettings' && $method === 'GET') {
+        jsonResponse(GtrotsInvoiceAutomation::settings($db));
+    }
+
+    if ($action === 'updateInvoiceAutomationSettings' && in_array($method, ['PUT', 'PATCH'], true)) {
+        $actor = (string)($currentUser['display_name'] ?? $currentUser['username'] ?? 'Administrator');
+        jsonResponse(GtrotsInvoiceAutomation::update($db, $body, $actor));
     }
 
     if ($action === 'updateInvoiceThemeSettings' && in_array($method, ['PUT', 'PATCH'], true)) {
@@ -5888,6 +5933,16 @@ try {
             ];
         } else {
             $order['email_notification'] = ['requested' => false, 'sent' => false];
+        }
+        $automation = GtrotsInvoiceAutomation::processOrder($db, $id, $config);
+        $order['invoice_automation'] = $automation;
+        if (($automation['status'] ?? '') === 'completed') {
+            $emailNotification = $order['email_notification'] ?? null;
+            $refreshed = $db->prepare('SELECT o.*' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ?');
+            $refreshed->execute([$id]);
+            $order = orderRow($db, $refreshed->fetch(), $config, true);
+            if ($emailNotification !== null) $order['email_notification'] = $emailNotification;
+            $order['invoice_automation'] = $automation;
         }
         jsonResponse($order);
     }

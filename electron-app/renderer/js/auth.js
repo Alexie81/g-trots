@@ -121,7 +121,7 @@
     }
   }
 
-  function renderAuthState() {
+  function renderAuthState(notifyModules = true) {
     if (overlay) {
       if (isLoggedIn()) {
         overlay.classList.remove('auth-entered');
@@ -143,9 +143,11 @@
     }
     if (logoutBtn) logoutBtn.style.display = isLoggedIn() ? 'inline-flex' : 'none';
     updateAdminVisibility();
-    window.dispatchEvent(new CustomEvent('auth-change', {
-      detail: { token: authToken, user: authUser },
-    }));
+    if (notifyModules) {
+      window.dispatchEvent(new CustomEvent('auth-change', {
+        detail: { token: authToken, user: authUser },
+      }));
+    }
   }
 
   function hideStartupLoader() {
@@ -198,7 +200,10 @@
     if (!authToken) return null;
     const freshUser = await window.API.getCurrentUser(authToken);
     persist(authToken, freshUser);
-    renderAuthState();
+    // Verificarea periodică a sesiunii actualizează contul și permisiunile în
+    // fundal. Nu notificăm modulele, fiindcă acestea ar reconstrui pagina
+    // vizibilă, ar reseta controalele și ar produce un flash la fiecare 2 minute.
+    renderAuthState(false);
     return freshUser;
   }
 

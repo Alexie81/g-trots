@@ -559,6 +559,11 @@ function stripeApplyCheckoutSession(PDO $db, array $session, ?array $config = nu
         $emailResult = gtSendOrderStatusEmail($emailOrder, $config, 'confirmed');
         updateOrderHistoryEmail($db, $historyId, $emailResult);
     }
+    if ($saved && $config && class_exists('GtrotsInvoiceAutomation')) {
+        // E-mailul de confirmare a comenzii de mai sus se încheie înainte să
+        // emităm și, opțional, să expediem factura. Erorile rămân independente.
+        $saved['invoice_automation'] = GtrotsInvoiceAutomation::processOrder($db, (string)$saved['id'], $config);
+    }
     return $saved;
 }
 

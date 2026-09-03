@@ -44,7 +44,7 @@ export default function AppStartupLoader({
       entering={FadeIn.duration(180)}
       exiting={FadeOut.duration(360)}
       style={[appAuroraStyles.screen, styles.screen, overlay && styles.overlay]}>
-      <StatusBar style="light" backgroundColor={Colors.bg} />
+      <StatusBar style="light" />
       <AppAuroraGlows />
       <Animated.View
         entering={ZoomIn.duration(420).springify().damping(18).stiffness(135)}

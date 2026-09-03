@@ -72,7 +72,7 @@ export default function MobileLoginGate({ children }: { children: React.ReactNod
 
   return (
     <AppAuroraBackground>
-      <StatusBar style="light" backgroundColor={Colors.bg} />
+      <StatusBar style="light" />
       <KeyboardAvoidingView
         style={styles.keyboard}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}

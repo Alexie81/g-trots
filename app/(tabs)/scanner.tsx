@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.orange + '3D',
   },
-  scanOverlay: { ...StyleSheet.absoluteFillObject },
+  scanOverlay: { ...StyleSheet.absoluteFill },
   scannerTopBar: {
     position: 'absolute',
     zIndex: 5,
@@ -472,9 +472,9 @@ const styles = StyleSheet.create({
   scannerLineWrap: { position: 'absolute', zIndex: 2, top: 0, left: 13, right: 13, height: 4 },
   scannerLine: { height: 3, borderRadius: 3 },
   scannerGlow: { position: 'absolute', top: -7, left: 22, right: 22, height: 17, backgroundColor: Colors.orange + '26', borderRadius: 12 },
-  cameraStarting: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  cameraStarting: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 6,
     backgroundColor: 'rgba(0,0,0,0.66)',
     alignItems: 'center',

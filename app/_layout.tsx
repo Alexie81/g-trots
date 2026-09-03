@@ -90,7 +90,7 @@ function ModuleAwareApp() {
         <Stack.Screen name="service-sheet/[id]" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="+not-found" />
       </Stack>
-      <StatusBar style="light" backgroundColor="#080706" />
+      <StatusBar style="light" />
     </>
   );
 }

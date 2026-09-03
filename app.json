@@ -9,12 +9,6 @@
     "scheme": "gtrots",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0A0A0A",
-    "splash": {
-      "image": "./assets/images/logo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0A0A0A"
-    },
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "icon": "./assets/images/logo.png",
@@ -29,11 +23,6 @@
         "backgroundColor": "#0A0A0A"
       },
       "softwareKeyboardLayoutMode": "resize"
-    },
-    "notification": {
-      "icon": "./assets/images/notification-icon.png",
-      "color": "#FF6B00",
-      "iosDisplayInForeground": true
     },
     "web": {
       "bundler": "metro",
@@ -75,7 +64,17 @@
         }
       ],
       "expo-secure-store",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-sharing",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/logo.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0A0A0A"
+        }
+      ],
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true

@@ -85,7 +85,7 @@ export const appAuroraStyles = StyleSheet.create({
     backgroundColor: 'rgba(255,154,61,0.10)',
   },
   softVignette: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.20)',
   },
 });

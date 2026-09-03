@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFDFC',
   },
   canvasHint: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 7,

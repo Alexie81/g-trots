@@ -18,6 +18,7 @@ import { Colors } from '@/constants/colors';
 
 type Props = {
   children: React.ReactNode;
+  header?: React.ReactNode;
   visible: boolean;
   onClose: () => void;
   style?: StyleProp<ViewStyle>;
@@ -26,6 +27,7 @@ type Props = {
 
 export default function SwipeDownSheet({
   children,
+  header,
   visible,
   onClose,
   style,
@@ -44,42 +46,47 @@ export default function SwipeDownSheet({
   };
 
   const panResponder = useMemo(
-    () => PanResponder.create({
-      onStartShouldSetPanResponder: () => !disabled,
-      onMoveShouldSetPanResponder: (_event, gestureState) =>
-        !disabled
-        && Math.abs(gestureState.dy) > 3
-        && Math.abs(gestureState.dy) > Math.abs(gestureState.dx),
-      onPanResponderGrant: () => {
-        startY.value = translateY.value;
-      },
-      onPanResponderMove: (_event, gestureState) => {
-        translateY.value = Math.max(0, startY.value + gestureState.dy);
-      },
-      onPanResponderRelease: (_event, gestureState) => {
-        const currentY = Math.max(0, startY.value + gestureState.dy);
-        if (gestureState.vy > 0.65 || currentY > 70) {
-          translateY.value = withTiming(height, { duration: 210 }, (finished) => {
-            if (finished) runOnJS(close)();
+    () => {
+      const isDownwardDrag = (dy: number, dx: number) =>
+        !disabled && dy > 3 && dy > Math.abs(dx);
+
+      return PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_event, gestureState) =>
+          isDownwardDrag(gestureState.dy, gestureState.dx),
+        onMoveShouldSetPanResponderCapture: (_event, gestureState) =>
+          isDownwardDrag(gestureState.dy, gestureState.dx),
+        onPanResponderGrant: () => {
+          startY.value = translateY.value;
+        },
+        onPanResponderMove: (_event, gestureState) => {
+          translateY.value = Math.max(0, startY.value + gestureState.dy);
+        },
+        onPanResponderRelease: (_event, gestureState) => {
+          const currentY = Math.max(0, startY.value + gestureState.dy);
+          if (gestureState.vy > 0.65 || currentY > 70) {
+            translateY.value = withTiming(height, { duration: 210 }, (finished) => {
+              if (finished) runOnJS(close)();
+            });
+            return;
+          }
+          translateY.value = withSpring(0, {
+            damping: 22,
+            stiffness: 230,
+            mass: 0.85,
           });
-          return;
-        }
-        translateY.value = withSpring(0, {
-          damping: 22,
-          stiffness: 230,
-          mass: 0.85,
-        });
-      },
-      onPanResponderTerminate: () => {
-        translateY.value = withSpring(0, {
-          damping: 22,
-          stiffness: 230,
-          mass: 0.85,
-        });
-      },
-      onPanResponderTerminationRequest: () => false,
-      onShouldBlockNativeResponder: () => true,
-    }),
+        },
+        onPanResponderTerminate: () => {
+          translateY.value = withSpring(0, {
+            damping: 22,
+            stiffness: 230,
+            mass: 0.85,
+          });
+        },
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
+      });
+    },
     [disabled, height, startY, translateY]
   );
 
@@ -89,9 +96,10 @@ export default function SwipeDownSheet({
 
   return (
     <Animated.View style={[style, animatedStyle]}>
-      <View style={styles.handleHitArea} {...panResponder.panHandlers}>
-        <View style={styles.handle} />
-      </View>
+      {header ? <View style={styles.headerDragArea} {...panResponder.panHandlers}>
+        <View style={styles.headerHandleHitArea}><View style={styles.handle} /></View>
+        {header}
+      </View> : <View style={styles.handleHitArea} {...panResponder.panHandlers}><View style={styles.handle} /></View>}
       {children}
     </Animated.View>
   );
@@ -103,6 +111,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: 6,
+  },
+  headerDragArea: {
+    width: '100%',
+  },
+  headerHandleHitArea: {
+    minHeight: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 5,
   },
   handle: {
     width: 44,

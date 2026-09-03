@@ -13728,6 +13728,16 @@ body::after {
 .shop-commerce-hero .shop-commerce-title span { color: var(--hero-accent); }
 .shop-commerce-hero .shop-commerce-title h1 { font-size: clamp(34px, 4vw, 52px); }
 .shop-commerce-hero-symbol { position: absolute; z-index: 0; right: 120px; top: 50%; width: 112px; height: 112px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--hero-accent) 28%, transparent); border-radius: 34px; color: var(--hero-accent); background: color-mix(in srgb, var(--hero-accent) 10%, transparent); font-size: 52px; font-weight: 300; transform: translateY(-50%) rotate(-8deg); box-shadow: 0 20px 50px color-mix(in srgb, var(--hero-accent) 13%, transparent); }
+.shop-commerce-hero[data-commerce-kind="invoices"] .shop-commerce-hero-symbol svg {
+  width: 52px;
+  height: 52px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .shop-commerce-hero .shop-commerce-refresh { color: var(--hero-accent); background: rgba(10,10,12,.42); }
 
 .shop-commerce-table.products tbody tr { cursor: pointer; }

@@ -246,7 +246,7 @@ function gtSmtpCommand($socket, string $command, array $expectedCodes): string {
     return $response;
 }
 
-function gtSmtpSend(array $config, string $recipient, string $subject, string $html): void {
+function gtSmtpSend(array $config, string $recipient, string $subject, string $html, array $attachments = []): void {
     $host = trim((string)($config['smtp_host'] ?? ''));
     $port = (int)($config['smtp_port'] ?? 465);
     $encryption = strtolower(trim((string)($config['smtp_encryption'] ?? 'ssl')));
@@ -290,10 +290,28 @@ function gtSmtpSend(array $config, string $recipient, string $subject, string $h
             'Subject: ' . $encodedSubject,
             'Message-ID: <' . bin2hex(random_bytes(12)) . '@g-trots.ro>',
             'MIME-Version: 1.0',
-            'Content-Type: text/html; charset=UTF-8',
-            'Content-Transfer-Encoding: base64',
         ];
-        $message = implode("\r\n", $headers) . "\r\n\r\n" . chunk_split(base64_encode($html), 76, "\r\n");
+        if ($attachments) {
+            $boundary = '=_gtrots_' . bin2hex(random_bytes(18));
+            $headers[] = 'Content-Type: multipart/mixed; boundary="' . $boundary . '"';
+            $parts = ['--' . $boundary, 'Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', rtrim(chunk_split(base64_encode($html), 76, "\r\n"))];
+            foreach ($attachments as $attachment) {
+                $fileName = preg_replace('/[^A-Za-z0-9._-]+/', '-', basename((string)($attachment['file_name'] ?? 'document.pdf'))) ?: 'document.pdf';
+                $mimeType = trim((string)($attachment['mime_type'] ?? 'application/octet-stream')) ?: 'application/octet-stream';
+                $parts[] = '--' . $boundary;
+                $parts[] = 'Content-Type: ' . $mimeType . '; name="' . $fileName . '"';
+                $parts[] = 'Content-Transfer-Encoding: base64';
+                $parts[] = 'Content-Disposition: attachment; filename="' . $fileName . '"';
+                $parts[] = '';
+                $parts[] = rtrim(chunk_split(base64_encode((string)($attachment['content'] ?? '')), 76, "\r\n"));
+            }
+            $parts[] = '--' . $boundary . '--';
+            $message = implode("\r\n", $headers) . "\r\n\r\n" . implode("\r\n", $parts);
+        } else {
+            $headers[] = 'Content-Type: text/html; charset=UTF-8';
+            $headers[] = 'Content-Transfer-Encoding: base64';
+            $message = implode("\r\n", $headers) . "\r\n\r\n" . chunk_split(base64_encode($html), 76, "\r\n");
+        }
         $message = preg_replace('/(?m)^\./', '..', $message) ?? $message;
         fwrite($socket, $message . "\r\n.\r\n");
         gtSmtpCommand($socket, '', [250]);

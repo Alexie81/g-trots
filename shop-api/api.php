@@ -17,6 +17,7 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
 require_once __DIR__ . '/order-emails.php';
+require_once __DIR__ . '/invoice-service.php';
 require_once __DIR__ . '/stripe.php';
 require_once __DIR__ . '/gomag.php';
 require_once __DIR__ . '/nir-domain.php';
@@ -196,7 +197,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026090202;
+    $schemaVersion = 2026090302;
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_schema_meta (
             meta_key VARCHAR(80) NOT NULL PRIMARY KEY,
@@ -1018,6 +1019,39 @@ function ensureShopSchema(PDO $db): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_invoice_sequences (
+            series VARCHAR(60) NOT NULL PRIMARY KEY,
+            last_number BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_invoices (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            order_id CHAR(36) NOT NULL,
+            series VARCHAR(60) NOT NULL,
+            invoice_number VARCHAR(120) NOT NULL,
+            document_status VARCHAR(20) NOT NULL DEFAULT 'unpaid',
+            theme VARCHAR(20) NOT NULL,
+            issue_date DATE NOT NULL,
+            due_date DATE NULL,
+            currency CHAR(3) NOT NULL DEFAULT 'RON',
+            total DECIMAL(12,2) NOT NULL DEFAULT 0,
+            buyer_name VARCHAR(180) NOT NULL DEFAULT '',
+            buyer_cui VARCHAR(60) NULL,
+            payload_json LONGTEXT NOT NULL,
+            issued_by VARCHAR(180) NULL,
+            email_sent_at DATETIME NULL,
+            email_last_error VARCHAR(500) NULL,
+            issued_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE INDEX uq_shop_invoice_order (order_id),
+            UNIQUE INDEX uq_shop_invoice_number (series, invoice_number),
+            INDEX idx_shop_invoice_issue_date (issue_date, issued_at),
+            INDEX idx_shop_invoice_status (document_status, issued_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_company_settings (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             legal_name VARCHAR(180) NOT NULL DEFAULT '',
@@ -1434,12 +1468,19 @@ function ensureShopSchema(PDO $db): void {
     $inventoryMovementColumns = [
         'warehouse_id' => 'CHAR(36) NULL AFTER product_id',
         'nir_document_id' => 'CHAR(36) NULL AFTER order_id',
+        'sales_invoice_id' => 'CHAR(36) NULL AFTER nir_document_id',
+        'sales_invoice_line_id' => 'CHAR(36) NULL AFTER sales_invoice_id',
         'nir_line_id' => 'CHAR(36) NULL AFTER nir_document_id',
         'inventory_cost_layer_id' => 'CHAR(36) NULL AFTER nir_line_id',
         'accounting_quantity_delta' => 'DECIMAL(18,4) NULL AFTER quantity_delta',
         'accounting_quantity_after' => 'DECIMAL(18,4) NULL AFTER quantity_after',
         'inventory_unit_cost_ron' => 'DECIMAL(18,6) NULL AFTER accounting_quantity_after',
         'inventory_cost_total_ron' => 'DECIMAL(18,2) NULL AFTER inventory_unit_cost_ron',
+        'sale_unit_price_ron' => 'DECIMAL(18,6) NULL AFTER inventory_cost_total_ron',
+        'sale_total_ron' => 'DECIMAL(18,2) NULL AFTER sale_unit_price_ron',
+        'fifo_status' => "VARCHAR(20) NULL AFTER sale_total_ron",
+        'fifo_quantity_allocated' => 'DECIMAL(18,4) NULL AFTER fifo_status',
+        'fifo_quantity_pending' => 'DECIMAL(18,4) NULL AFTER fifo_quantity_allocated',
         'reception_date' => 'DATE NULL AFTER inventory_cost_total_ron',
         'reversal_of_movement_id' => 'CHAR(36) NULL AFTER reception_date',
     ];
@@ -1450,6 +1491,8 @@ function ensureShopSchema(PDO $db): void {
     }
     foreach ([
         'idx_shop_inventory_nir' => '(nir_document_id, nir_line_id)',
+        'idx_shop_inventory_sales_invoice' => '(sales_invoice_id, product_id)',
+        'idx_shop_inventory_fifo_pending' => '(fifo_status, product_id, created_at)',
         'idx_shop_inventory_fifo_layer' => '(inventory_cost_layer_id)',
         'idx_shop_inventory_accounting' => '(product_id, warehouse_id, reception_date)',
     ] as $indexName => $columns) {
@@ -3546,6 +3589,10 @@ function orderRow(PDO $db, array $row, ?array $config = null, bool $withHistory 
         ? round($row['total'] * $row['vat_rate'] / 100, 2)
         : 0.0;
     $row['net_total'] = (float)($row['net_total'] ?? max(0, $row['total'] - $row['vat_total']));
+    $row['invoice'] = GtrotsInvoiceService::orderSummary($row);
+    foreach (['issued_invoice_id', 'issued_invoice_series', 'issued_invoice_number', 'issued_invoice_theme', 'issued_invoice_date', 'issued_invoice_at'] as $invoiceColumn) {
+        unset($row[$invoiceColumn]);
+    }
     if ($withHistory) $row['status_history'] = orderStatusHistory($db, (string)$row['id']);
     return $row;
 }
@@ -3695,8 +3742,6 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
         ]);
         reservePromotionUsage($db, $promotion, $customer, $deviceHash, $orderId);
         $insertItem = $db->prepare('INSERT INTO shop_order_items (id, order_id, product_id, product_name, product_sku, quantity, unit_price, line_total, discount_total, discounted_unit_price, discounted_line_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        $updateStock = $db->prepare('UPDATE shop_products SET stock_quantity = stock_quantity - ? WHERE id = ?');
-        $insertMovement = $db->prepare('INSERT INTO shop_inventory_movements (id, product_id, order_id, movement_type, quantity_delta, quantity_after, note) VALUES (?, ?, ?, ?, ?, ?, ?)');
         foreach ($resolvedItems as $index => $item) {
             $product = $item['product'];
             $quotedItem = $quotedItems[$index] ?? [];
@@ -3706,11 +3751,6 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
                 (float)($quotedItem['discounted_unit_price'] ?? $item['unit_price']),
                 (float)($quotedItem['discounted_line_total'] ?? $item['line_total']),
             ]);
-            if ($product['stock_mode'] === 'tracked') {
-                $nextQuantity = (int)$product['stock_quantity'] - $item['quantity'];
-                $updateStock->execute([$item['quantity'], $product['id']]);
-                $insertMovement->execute([uuidV4(), $product['id'], $orderId, 'sale', -$item['quantity'], $nextQuantity, 'Rezervare automata pentru ' . $orderNumber]);
-            }
         }
         $historyId = recordOrderStatusHistory(
             $db,
@@ -4664,6 +4704,37 @@ try {
         jsonResponse(GtrotsInvoiceThemeStore::pin($db, $body, $actor), 201);
     }
 
+    if ($action === 'issueInvoice' && $method === 'POST') {
+        $orderId = trim((string)($_GET['id'] ?? $body['order_id'] ?? ''));
+        $invoice = GtrotsInvoiceService::issue($db, $orderId, $currentUser, $config);
+        $wasExisting = !empty($invoice['existing']);
+        if (boolValue($body['send_email'] ?? false)) {
+            $notification = GtrotsInvoiceService::sendEmail($db, (string)$invoice['id'], $config);
+            $invoice = GtrotsInvoiceService::get($db, (string)$invoice['id']);
+            $invoice['existing'] = $wasExisting;
+            $invoice['email_notification'] = $notification;
+        } else {
+            $invoice['email_notification'] = ['requested' => false, 'sent' => false];
+        }
+        jsonResponse($invoice, $wasExisting ? 200 : 201);
+    }
+
+    if ($action === 'listInvoices' && $method === 'GET') {
+        jsonResponse(GtrotsInvoiceService::list($db));
+    }
+
+    if ($action === 'getInvoice' && $method === 'GET') {
+        jsonResponse(GtrotsInvoiceService::get($db, trim((string)($_GET['id'] ?? ''))));
+    }
+
+    if ($action === 'downloadInvoice' && $method === 'GET') {
+        jsonResponse(GtrotsInvoiceService::download($db, trim((string)($_GET['id'] ?? '')), trim((string)($_GET['format'] ?? 'pdf'))));
+    }
+
+    if ($action === 'sendInvoiceEmail' && $method === 'POST') {
+        jsonResponse(GtrotsInvoiceService::sendEmail($db, trim((string)($_GET['id'] ?? $body['invoice_id'] ?? '')), $config));
+    }
+
     if ($action === 'nirPermissions' && $method === 'GET') {
         jsonResponse(['permissions' => shopNirPermissions($currentUser)]);
     }
@@ -5606,12 +5677,36 @@ try {
 
     if ($action === 'listInventoryMovements' && $method === 'GET') {
         $productId = trim((string)($_GET['id'] ?? $_GET['product_id'] ?? ''));
-        $stmt = $db->prepare('SELECT im.*, p.name AS product_name, o.order_number FROM shop_inventory_movements im INNER JOIN shop_products p ON p.id = im.product_id LEFT JOIN shop_orders o ON o.id = im.order_id WHERE (? = "" OR im.product_id = ?) ORDER BY im.created_at DESC LIMIT 300');
+        $stmt = $db->prepare('SELECT im.*, p.name AS product_name, o.order_number, i.series AS invoice_series, i.invoice_number FROM shop_inventory_movements im INNER JOIN shop_products p ON p.id = im.product_id LEFT JOIN shop_orders o ON o.id = im.order_id LEFT JOIN shop_invoices i ON i.id = im.sales_invoice_id WHERE (? = "" OR im.product_id = ?) ORDER BY im.created_at DESC LIMIT 300');
         $stmt->execute([$productId, $productId]);
         $rows = $stmt->fetchAll();
+        $invoiceIds = array_values(array_unique(array_filter(array_map(static fn(array $row): string => trim((string)($row['sales_invoice_id'] ?? '')), $rows))));
+        $allocationsByInvoiceAndProduct = [];
+        if ($invoiceIds) {
+            $placeholders = implode(',', array_fill(0, count($invoiceIds), '?'));
+            $fifo = $db->prepare(
+                "SELECT c.source_document_id AS sales_invoice_id, c.product_id, c.quantity, c.unit_cost_ron, c.total_cost_ron,
+                        l.id AS layer_id, l.reception_date, l.source_reference, l.invoice_number_snapshot,
+                        n.nir_number, s.id AS supplier_id, s.name AS supplier_name, s.alias AS supplier_alias
+                 FROM shop_inventory_layer_consumptions c
+                 INNER JOIN shop_inventory_cost_layers l ON l.id = c.inventory_cost_layer_id
+                 LEFT JOIN shop_nir_documents n ON n.id = l.nir_document_id
+                 LEFT JOIN shop_suppliers s ON s.id = l.supplier_id
+                 WHERE c.source_document_type = 'SALES_INVOICE' AND c.reversed_at IS NULL AND c.source_document_id IN ({$placeholders})
+                 ORDER BY l.reception_date ASC, l.created_at ASC, l.id ASC"
+            );
+            $fifo->execute($invoiceIds);
+            foreach ($fifo->fetchAll() as $allocation) {
+                $allocation['supplier_display_name'] = shopNirSupplierDisplayName($allocation, 'Furnizor nespecificat');
+                $key = (string)$allocation['sales_invoice_id'] . ':' . (string)$allocation['product_id'];
+                $allocationsByInvoiceAndProduct[$key][] = $allocation;
+            }
+        }
         foreach ($rows as &$row) {
             $row['quantity_delta'] = (int)$row['quantity_delta'];
             $row['quantity_after'] = (int)$row['quantity_after'];
+            $key = trim((string)($row['sales_invoice_id'] ?? '')) . ':' . (string)$row['product_id'];
+            $row['fifo_allocations'] = $allocationsByInvoiceAndProduct[$key] ?? [];
         }
         jsonResponse($rows);
     }
@@ -5644,13 +5739,13 @@ try {
     }
 
     if ($action === 'listOrders' && $method === 'GET') {
-        $rows = $db->query('SELECT * FROM shop_orders ORDER BY created_at DESC LIMIT 500')->fetchAll();
+        $rows = $db->query('SELECT o.*' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o' . GtrotsInvoiceService::orderJoinSql('o') . ' ORDER BY o.created_at DESC LIMIT 500')->fetchAll();
         jsonResponse(array_map(fn(array $row): array => orderRow($db, $row, $config), $rows));
     }
 
     if ($action === 'getOrder' && $method === 'GET') {
         $id = trim((string)($_GET['id'] ?? ''));
-        $stmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ? OR order_number = ? LIMIT 1');
+        $stmt = $db->prepare('SELECT o.*' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? OR o.order_number = ? LIMIT 1');
         $stmt->execute([$id, $id]);
         $row = $stmt->fetch();
         if (!$row) jsonResponse(['error' => 'Comanda nu exista.'], 404);
@@ -5683,6 +5778,14 @@ try {
             $mainStatusFlow = ['new', 'confirmed', 'processing', 'shipped', 'completed'];
             $terminalStatuses = ['refunded', 'cancelled'];
             $currentStatus = (string)$current['status'];
+            if (in_array($status, $terminalStatuses, true) && !in_array($currentStatus, $terminalStatuses, true)) {
+                $issuedInvoice = $db->prepare('SELECT series, invoice_number FROM shop_invoices WHERE order_id = ? LIMIT 1');
+                $issuedInvoice->execute([$id]);
+                $invoice = $issuedInvoice->fetch();
+                if ($invoice) {
+                    throw new InvalidArgumentException('Comanda are deja factura ' . trim((string)$invoice['series'] . ' ' . (string)$invoice['invoice_number']) . '. Pentru anulare sau rambursare este necesară o factură de storno, nu anularea directă a comenzii.');
+                }
+            }
             if ($status !== $currentStatus && in_array($currentStatus, $terminalStatuses, true)) {
                 throw new InvalidArgumentException('O comandă rambursată sau anulată nu mai poate reveni în fluxul de procesare.');
             }
@@ -5698,6 +5801,9 @@ try {
                 $items->execute([$id]);
                 foreach ($items->fetchAll() as $item) {
                     if (empty($item['product_id'])) continue;
+                    $posted = $db->prepare("SELECT id FROM shop_inventory_movements WHERE order_id = ? AND product_id = ? AND movement_type = 'sale' LIMIT 1");
+                    $posted->execute([$id, $item['product_id']]);
+                    if (!$posted->fetchColumn()) continue;
                     $productStmt = $db->prepare('SELECT * FROM shop_products WHERE id = ? FOR UPDATE');
                     $productStmt->execute([$item['product_id']]);
                     $product = $productStmt->fetch();
@@ -5727,7 +5833,7 @@ try {
             if ($db->inTransaction()) $db->rollBack();
             throw $error;
         }
-        $stmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ?');
+        $stmt = $db->prepare('SELECT o.*' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ?');
         $stmt->execute([$id]);
         $order = orderRow($db, $stmt->fetch(), $config, true);
         if ($notifyCustomer && $statusChanged && $historyId) {

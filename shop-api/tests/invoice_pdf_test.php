@@ -15,6 +15,12 @@ $base = [
     'is_demo' => true,
 ];
 
+$deliveryBase = $base;
+$deliveryBase['items'][] = [
+    'name' => 'Serviciu de livrare – Curier rapid', 'sku' => 'TRANSPORT', 'unit' => 'serv.', 'quantity' => 1,
+    'unit_price' => 19.99, 'discount_percent' => 0, 'vat_rate' => 21,
+];
+
 $failures = [];
 $expect = static function (bool $condition, string $message) use (&$failures): void {
     if (!$condition) $failures[] = $message;
@@ -73,6 +79,12 @@ foreach ($labels as $status => [$label, $due]) {
         $expect(str_ends_with(rtrim($pdf), '%%EOF'), $case . ': PDF incomplet.');
     }
 }
+
+$deliveryHtml = GtrotsInvoicePdf::html(array_replace($deliveryBase, ['status' => 'unpaid', 'theme' => 'purple']));
+$expect(str_contains($deliveryHtml, 'class="product-thumb-placeholder delivery-thumb"'), 'Serviciul de livrare trebuie să aibă pictogramă de curier.');
+$expect(str_contains($deliveryHtml, 'alt="Serviciu de livrare"'), 'Pictograma de curier trebuie să fie identificabilă în factură.');
+$expect(str_contains($deliveryHtml, '>Adresă</b>') && !str_contains($deliveryHtml, '>Sediu</b>'), 'Datele părților trebuie etichetate cu Adresă, nu Sediu.');
+$expect(!str_contains($deliveryHtml, 'Livrare 01.09.2026'), 'Data livrării nu trebuie repetată în antetul facturii.');
 
 try {
     GtrotsInvoicePdf::html(array_replace($base, ['status' => 'necunoscut']));

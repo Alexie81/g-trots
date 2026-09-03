@@ -129,7 +129,7 @@ foreach ([
     $expect(str_contains($service, $needle), $label);
 }
 foreach ([
-    'versiune de schemă ridicată pentru migrare' => '$schemaVersion = 2026090202',
+    'versiune de schemă ridicată pentru migrare' => '$schemaVersion = 2026090302',
     'endpoint nou și alias legacy' => "['reverseNir', 'stornoNir']",
     'normalizare status legacy' => "status = 'confirmed', reversed_at = NULL, reversed_by = NULL WHERE status = 'reversed'",
     'normalizare serie REV/STO' => "d.nir_number LIKE 'REV-%' OR d.nir_number LIKE 'STO-%'",

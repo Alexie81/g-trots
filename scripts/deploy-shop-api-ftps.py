@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from ftplib import FTP_TLS
+from getpass import getpass
 from pathlib import Path
 import os
 import ssl
@@ -13,7 +14,11 @@ REMOTE_ROOT = "/g-trots.ro/shop-api"
 FILES = (
     "api.php",
     "api-v2.php",
+    "order-emails.php",
     "invoice-theme.php",
+    "invoice-service.php",
+    "invoice-xlsx.php",
+    "invoice-pdf.php",
     "nir-domain.php",
     "nir-service.php",
     "nir-bundle.php",
@@ -29,8 +34,13 @@ def connect() -> FTP_TLS:
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
     ftp = FTP_TLS(context=context, timeout=90)
-    ftp.connect(os.environ["GT_FTP_HOST"], int(os.environ.get("GT_FTP_PORT", "21")))
-    ftp.login(os.environ["GT_FTP_USER"], os.environ["GT_FTP_PASS"])
+    host = os.environ.get("GT_FTP_HOST", "ftp.cab-it.ro")
+    username = os.environ.get("GT_FTP_USER", "")
+    password = os.environ.get("GT_FTP_PASS", "") or getpass("Parola FTPS: ")
+    if not username:
+        raise RuntimeError("Lipsește utilizatorul FTPS (GT_FTP_USER).")
+    ftp.connect(host, int(os.environ.get("GT_FTP_PORT", "21")))
+    ftp.login(username, password)
     ftp.prot_p()
     ftp.set_pasv(True)
     ftp.cwd(REMOTE_ROOT)
@@ -63,23 +73,27 @@ def main() -> None:
             temporary_names[name] = temporary
             print(f"Verificat: {name} ({remote_size} bytes)", flush=True)
 
+        remote_files = set(ftp.nlst())
         for name in FILES:
             backup = f"{name}.bak-codex-alias-{timestamp}"
-            ftp.rename(name, backup)
-            backups[name] = backup
+            if name in remote_files:
+                ftp.rename(name, backup)
+                backups[name] = backup
             try:
                 ftp.rename(temporary_names[name], name)
                 activated.append(name)
                 print(f"Publicat: {name}", flush=True)
             except Exception:
-                ftp.rename(backup, name)
-                backups.pop(name, None)
+                if name in backups:
+                    ftp.rename(backup, name)
+                    backups.pop(name, None)
                 raise
     except Exception:
         for name in reversed(activated):
             try:
-                ftp.rename(name, temporary_names[name])
-                ftp.rename(backups[name], name)
+                ftp.delete(name)
+                if name in backups:
+                    ftp.rename(backups[name], name)
             except Exception:
                 pass
         raise

@@ -1495,9 +1495,11 @@ function shopNirConfirm(PDO $db, string $id, array $body, array $user): array {
                  last_confirmed_at = NOW(), updated_by = ?, row_version = row_version + 1
              WHERE id = ? AND supplier_id = ? AND product_id = ? AND is_active = 1'
         );
+        $receivedProductIds = [];
         foreach ($prepared['lines'] as $line) {
             if (empty($line['is_stock_item'])) continue;
             $productId = (string)$line['product_id'];
+            $receivedProductIds[$productId] = true;
             $productLock->execute([$productId]);
             $product = $productLock->fetch();
             if (!$product) throw new InvalidArgumentException('Un produs asociat nu mai există.');
@@ -1540,10 +1542,12 @@ function shopNirConfirm(PDO $db, string $id, array $body, array $user): array {
         );
         $confirm->execute([$nirNumber, $validation['fingerprint'], $actor['name'], $actor['name'], $id, $expectedVersion]);
         if ($confirm->rowCount() !== 1) throw new ShopNirHttpException('NIR-ul a fost modificat simultan și nu a fost confirmat.', 409, ['conflict' => true]);
+        $fifoReconciliation = shopNirReconcilePendingInvoiceFifo($db, array_keys($receivedProductIds));
         shopNirAudit($db, $user, 'NIR_CONFIRMED', 'NirDocument', $id, ['status' => 'draft'], ['status' => 'confirmed', 'nir_number' => $nirNumber, 'totals' => $totals]);
         $outbox = $db->prepare('INSERT INTO shop_domain_outbox (id, event_type, aggregate_type, aggregate_id, payload_json) VALUES (?, "NirConfirmed", "NirDocument", ?, ?)');
         $outbox->execute([uuidV4(), $id, json_encode(['nir_id' => $id, 'nir_number' => $nirNumber], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
         $result = shopNirFetchDocument($db, $id, $user);
+        $result['fifo_reconciliation'] = $fifoReconciliation;
         $db->prepare('UPDATE shop_nir_idempotency SET response_json = ?, completed_at = NOW() WHERE idempotency_key = ?')->execute([json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $idempotencyKey]);
         $db->commit();
         return $result;
@@ -2265,22 +2269,39 @@ function shopNirFifoPreviewForProduct(PDO $db, string $productId, array $body, a
  * Internal future integration point. It is deliberately not exposed as an HTTP
  * action until the sales-invoice module owns a confirmed source document.
  */
-function shopNirConsumeFifo(PDO $db, string $productId, string $warehouseId, $quantity, string $sourceDocumentType, string $sourceDocumentId, string $sourceLineId, string $idempotencyKey): array {
+function shopNirConsumeFifoAvailable(PDO $db, string $productId, string $warehouseId, $quantity, string $sourceDocumentType, string $sourceDocumentId, string $sourceLineId, string $idempotencyKey, bool $requireFull = false): array {
     if (!$db->inTransaction()) throw new RuntimeException('Consumarea FIFO trebuie apelată într-o tranzacție a documentului sursă.');
     if ($sourceDocumentId === '' || $sourceLineId === '' || $idempotencyKey === '') throw new InvalidArgumentException('Documentul sursă și cheia de idempotency sunt obligatorii.');
-    $existing = $db->prepare('SELECT * FROM shop_inventory_layer_consumptions WHERE source_document_type = ? AND source_line_id = ? ORDER BY created_at, id');
-    $existing->execute([$sourceDocumentType, $sourceLineId]);
+    $requestedScaled = shopNirDecimalToScaled($quantity, 4, 'Cantitatea solicitată');
+    if ($requestedScaled <= 0) throw new InvalidArgumentException('Cantitatea solicitată trebuie să fie mai mare decât zero.');
+    $existing = $db->prepare('SELECT * FROM shop_inventory_layer_consumptions WHERE source_document_type = ? AND source_document_id = ? AND source_line_id = ? AND reversed_at IS NULL ORDER BY created_at, id');
+    $existing->execute([$sourceDocumentType, $sourceDocumentId, $sourceLineId]);
     $existingRows = $existing->fetchAll();
-    if ($existingRows) return ['idempotent_replay' => true, 'consumptions' => $existingRows];
+    $alreadyAllocatedScaled = array_reduce($existingRows, static fn(int $sum, array $row): int => $sum + shopNirDecimalToScaled($row['quantity'] ?? 0, 4), 0);
+    if ($alreadyAllocatedScaled > $requestedScaled) throw new RuntimeException('Alocările FIFO existente depășesc cantitatea documentului sursă.');
+    $remainingRequestScaled = $requestedScaled - $alreadyAllocatedScaled;
+    if ($remainingRequestScaled === 0) {
+        $existingCostScaled = array_reduce($existingRows, static fn(int $sum, array $row): int => $sum + shopNirDecimalToScaled($row['total_cost_ron'] ?? 0, 2), 0);
+        return [
+            'idempotent_replay' => true,
+            'available' => true,
+            'allocated_quantity' => shopNirScaledToDecimal($requestedScaled, 4),
+            'shortage_quantity' => '0.0000',
+            'total_cost_ron' => shopNirScaledToDecimal($existingCostScaled, 2),
+            'consumptions' => $existingRows,
+        ];
+    }
+    $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
+    $lockSuffix = $driver === 'sqlite' ? '' : ' FOR UPDATE';
     $layerStmt = $db->prepare(
         'SELECT * FROM shop_inventory_cost_layers
          WHERE product_id = ? AND warehouse_id = ? AND is_reversed = 0 AND remaining_quantity > 0
-         ORDER BY reception_date ASC, created_at ASC, id ASC FOR UPDATE'
+         ORDER BY reception_date ASC, created_at ASC, id ASC' . $lockSuffix
     );
     $layerStmt->execute([$productId, $warehouseId]);
     $layers = $layerStmt->fetchAll();
-    $preview = shopNirFifoPreview($layers, $quantity);
-    if (!$preview['available']) throw new ShopNirHttpException('Stoc FIFO insuficient pentru documentul sursă.', 409, ['preview' => $preview]);
+    $preview = shopNirFifoPreview($layers, shopNirScaledToDecimal($remainingRequestScaled, 4));
+    if ($requireFull && !$preview['available']) throw new ShopNirHttpException('Stoc FIFO insuficient pentru documentul sursă.', 409, ['preview' => $preview]);
     $byId = [];
     foreach ($layers as $layer) $byId[(string)$layer['id']] = $layer;
     $insert = $db->prepare(
@@ -2290,16 +2311,76 @@ function shopNirConsumeFifo(PDO $db, string $productId, string $warehouseId, $qu
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     $update = $db->prepare('UPDATE shop_inventory_cost_layers SET remaining_quantity = remaining_quantity - ?, status = CASE WHEN remaining_quantity - ? <= 0 THEN "consumed" ELSE "partially_consumed" END, row_version = row_version + 1 WHERE id = ? AND remaining_quantity >= ?');
-    $consumptions = [];
+    $newConsumptions = [];
     foreach ($preview['allocations'] as $allocation) {
         $layer = $byId[(string)$allocation['layer_id']];
         $consumptionId = uuidV4();
         $insert->execute([$consumptionId, $layer['id'], $productId, $warehouseId, $sourceDocumentType, $sourceDocumentId, $sourceLineId, $allocation['quantity'], $allocation['unit_cost_ron'], $allocation['cost_ron'], $idempotencyKey]);
         $update->execute([$allocation['quantity'], $allocation['quantity'], $layer['id'], $allocation['quantity']]);
         if ($update->rowCount() !== 1) throw new ShopNirHttpException('Lotul FIFO a fost consumat simultan. Reîncearcă documentul.', 409);
-        $consumptions[] = ['id' => $consumptionId] + $allocation;
+        $newConsumptions[] = ['id' => $consumptionId] + $allocation;
     }
-    return ['idempotent_replay' => false, 'preview' => $preview, 'consumptions' => $consumptions];
+    $consumptions = array_merge($existingRows, $newConsumptions);
+    $allocatedScaled = array_reduce($consumptions, static fn(int $sum, array $row): int => $sum + shopNirDecimalToScaled($row['quantity'] ?? 0, 4), 0);
+    $totalCostScaled = array_reduce($consumptions, static fn(int $sum, array $row): int => $sum + shopNirDecimalToScaled($row['cost_ron'] ?? $row['total_cost_ron'] ?? 0, 2), 0);
+    $shortageScaled = max(0, $requestedScaled - $allocatedScaled);
+    return [
+        'idempotent_replay' => !$newConsumptions,
+        'available' => $shortageScaled === 0,
+        'allocated_quantity' => shopNirScaledToDecimal($allocatedScaled, 4),
+        'shortage_quantity' => shopNirScaledToDecimal($shortageScaled, 4),
+        'total_cost_ron' => shopNirScaledToDecimal($totalCostScaled, 2),
+        'preview' => $preview,
+        'consumptions' => $consumptions,
+    ];
+}
+
+function shopNirConsumeFifo(PDO $db, string $productId, string $warehouseId, $quantity, string $sourceDocumentType, string $sourceDocumentId, string $sourceLineId, string $idempotencyKey): array {
+    return shopNirConsumeFifoAvailable($db, $productId, $warehouseId, $quantity, $sourceDocumentType, $sourceDocumentId, $sourceLineId, $idempotencyKey, true);
+}
+
+/**
+ * Completează ieșirile facturate înaintea NIR-ului, în ordinea emiterii lor.
+ * Factura și stocul rămân definitive; aici se atașează numai proveniența și
+ * costul real atunci când lotul de achiziție devine disponibil.
+ */
+function shopNirReconcilePendingInvoiceFifo(PDO $db, array $productIds): array {
+    if (!$db->inTransaction()) throw new RuntimeException('Reconcilierea FIFO trebuie apelată în tranzacția NIR-ului.');
+    $productIds = array_values(array_unique(array_filter(array_map(static fn($id): string => trim((string)$id), $productIds))));
+    if (!$productIds) return ['movements_reconciled' => 0, 'movements_pending' => 0];
+    $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
+    $lockSuffix = $driver === 'sqlite' ? '' : ' FOR UPDATE';
+    $placeholders = implode(',', array_fill(0, count($productIds), '?'));
+    $stmt = $db->prepare(
+        "SELECT im.*, i.issue_date, i.issued_at
+         FROM shop_inventory_movements im
+         INNER JOIN shop_invoices i ON i.id = im.sales_invoice_id
+         WHERE im.movement_type = 'sale' AND im.sales_invoice_id IS NOT NULL
+           AND im.fifo_status IN ('pending', 'partial') AND im.fifo_quantity_pending > 0
+           AND im.product_id IN ({$placeholders})
+         ORDER BY i.issue_date ASC, i.issued_at ASC, im.created_at ASC, im.id ASC" . $lockSuffix
+    );
+    $stmt->execute($productIds);
+    $warehouseId = trim((string)($db->query('SELECT default_warehouse_id FROM shop_nir_settings WHERE id = 1 LIMIT 1')->fetchColumn() ?: ''));
+    if ($warehouseId === '') return ['movements_reconciled' => 0, 'movements_pending' => count($stmt->fetchAll())];
+    $update = $db->prepare('UPDATE shop_inventory_movements SET fifo_status = ?, fifo_quantity_allocated = ?, fifo_quantity_pending = ?, inventory_unit_cost_ron = ?, inventory_cost_total_ron = ? WHERE id = ?');
+    $reconciled = 0;
+    $pending = 0;
+    foreach ($stmt->fetchAll() as $movement) {
+        $requested = abs((float)($movement['accounting_quantity_delta'] ?? $movement['quantity_delta'] ?? 0));
+        if ($requested <= 0) continue;
+        $lineId = trim((string)($movement['sales_invoice_line_id'] ?? '')) ?: (string)$movement['id'];
+        $invoiceId = (string)$movement['sales_invoice_id'];
+        $fifo = shopNirConsumeFifoAvailable($db, (string)$movement['product_id'], $warehouseId, $requested, 'SALES_INVOICE', $invoiceId, $lineId, 'invoice:' . $invoiceId . ':' . $lineId, false);
+        $allocated = (float)($fifo['allocated_quantity'] ?? 0);
+        $shortage = (float)($fifo['shortage_quantity'] ?? max(0, $requested - $allocated));
+        $cost = round((float)($fifo['total_cost_ron'] ?? 0), 2);
+        $unitCost = $allocated > 0 ? round($cost / $allocated, 6) : null;
+        $status = $shortage <= 0.00005 ? 'allocated' : ($allocated > 0 ? 'partial' : 'pending');
+        $update->execute([$status, $allocated, $shortage, $unitCost, $allocated > 0 ? $cost : null, (string)$movement['id']]);
+        if ($status === 'allocated') $reconciled++; else $pending++;
+    }
+    return ['movements_reconciled' => $reconciled, 'movements_pending' => $pending];
 }
 
 function shopNirOpeningBalanceReport(PDO $db, array $user): array {

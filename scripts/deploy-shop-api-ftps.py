@@ -17,6 +17,7 @@ FILES = (
     "order-emails.php",
     "invoice-theme.php",
     "invoice-service.php",
+    "invoice-ubl.php",
     "invoice-xlsx.php",
     "invoice-pdf.php",
     "nir-domain.php",

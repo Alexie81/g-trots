@@ -109,7 +109,13 @@ final class GtrotsInvoiceService
         $payload = json_decode((string)($invoice['payload_json'] ?? ''), true, 512, JSON_THROW_ON_ERROR);
         if (!is_array($payload)) throw new RuntimeException('Datele facturii nu mai sunt disponibile.');
         $result['payload'] = self::detailPayload($db, $invoice, self::refreshPayloadState($invoice, $payload));
-        if (self::storageEnabled($config)) $result['pdf_url'] = self::storedDocument($db, $invoice, 'pdf', $config)['public_url'];
+        // Fișa trebuie să fie instantanee. Generarea PDF/XLSX rămâne în
+        // emitere, download și obținerea linkului, nu pe ruta de detaliu.
+        if (self::storageEnabled($config)) {
+            $stored = self::storageSettings($invoice, $config, 'pdf');
+            $path = (string)$stored['directory'] . DIRECTORY_SEPARATOR . (string)$stored['stored_name'];
+            if (is_file($path) && (int)@filesize($path) > 0) $result['pdf_url'] = (string)$stored['public_url'];
+        }
         return $result;
     }
 

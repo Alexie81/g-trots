@@ -146,6 +146,8 @@ invoiceAssert(str_contains($xlsx, 'PLĂTITĂ'), 'XLSX-ul trebuie sa reflecte sta
 
 $storageDirectory = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'gtrots-invoice-storage-' . bin2hex(random_bytes(5));
 $storageConfig = ['website_base_url' => 'https://g-trots.ro', 'invoice_storage_dir' => $storageDirectory, 'api_key' => 'test-secret'];
+$fastDetail = GtrotsInvoiceService::get($db, $first['id'], $storageConfig);
+invoiceAssert(isset($fastDetail['payload']) && !is_dir($storageDirectory) && !isset($fastDetail['pdf_url']), 'Deschiderea fișei nu trebuie să genereze documente sau să blocheze interfața.');
 $publicLink = GtrotsInvoiceService::publicLink($db, $first['id'], $storageConfig);
 invoiceAssert(str_starts_with((string)$publicLink['url'], 'https://g-trots.ro/fact/factura-gt-001-'), 'Linkul public trebuie să folosească zona /fact și un token neghicibil.');
 $storedDownload = GtrotsInvoiceService::download($db, $first['id'], 'pdf', $storageConfig);

@@ -21,8 +21,9 @@ import { ArrowLeft, BadgeCheck, Ban, BellRing, Check, ChevronRight, CircleCheckB
 import Svg, { Path } from 'react-native-svg';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
-import { shopApi, ShopOrder, ShopProductStats } from '@/services/shopApi';
+import { shopApi, shopOrderCustomerDisplayName, ShopOrder, ShopOrderPage, ShopProductStats } from '@/services/shopApi';
 import ShopPagination from '@/components/ShopPagination';
+import { runWhenIdle } from '@/utils/runWhenIdle';
 
 const orderStatuses = [
   { value: 'new', label: 'În procesare (Nouă)', shortLabel: 'Nouă', description: 'Comanda a fost primită și a intrat în procesare.', color: '#38BDF8', icon: Clock3 },
@@ -30,6 +31,9 @@ const orderStatuses = [
   { value: 'processing', label: 'În pregătire', description: 'Produsele sunt pregătite pentru expediere.', color: '#FB923C', icon: PackageOpen },
   { value: 'shipped', label: 'Predată curierului', description: 'Pachetul a plecat către client.', color: '#A78BFA', icon: Truck },
   { value: 'completed', label: 'Livrată', description: 'Comanda a ajuns la destinație.', color: '#22C55E', icon: CircleCheckBig },
+  { value: 'return_requested', label: 'Retur solicitat', description: 'Cererea de retur a fost înregistrată intern și așteaptă verificarea.', color: '#F472B6', icon: RotateCcw },
+  { value: 'return_refused', label: 'Retur refuzat', description: 'Solicitarea a fost verificată și refuzată. Acest pas poate fi sărit.', color: '#FB7185', icon: Ban },
+  { value: 'return_confirmed', label: 'Retur confirmat', description: 'Returul a fost aprobat intern și poate continua către rambursare.', color: '#2DD4BF', icon: PackageCheck },
   { value: 'refunded', label: 'Rambursată', description: 'Comanda a fost returnată și rambursată.', color: '#F59E0B', icon: RotateCcw },
   { value: 'cancelled', label: 'Comandă anulată', description: 'Comanda nu mai este procesată.', color: '#FB7185', icon: Ban },
 ] satisfies { value: ShopOrder['status']; label: string; shortLabel?: string; description: string; color: string; icon: typeof Clock3 }[];
@@ -69,56 +73,85 @@ function dateTime(value: string) {
   return `${day} · ${time}`;
 }
 
-function normalizeSearch(value: unknown) {
-  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-}
-
 function isCompanyOrder(order: ShopOrder) {
   return order.customer_type === 'company' || Boolean(String(order.company_name || order.company_cui || order.company_registration_number || '').trim());
 }
 
-function orderSearchText(order: ShopOrder) {
-  const created = parseShopDate(order.created_at);
-  const status = orderStatuses.find((item) => item.value === order.status);
-  const payment = paymentStatuses.find((item) => item.value === order.payment_status);
-  const createdLabels = Number.isNaN(created.getTime()) ? [] : [
-    created.toLocaleDateString('ro-RO'),
-    created.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' }),
-    created.toLocaleString('ro-RO'),
-  ];
-  return normalizeSearch([
-    order.order_number,
-    order.customer_name,
-    order.customer_phone,
-    order.customer_email,
-    order.customer_type,
-    isCompanyOrder(order) ? 'pj persoana juridica firma' : 'pf persoana fizica',
-    order.company_name,
-    order.company_cui,
-    order.company_registration_number,
-    order.company_address,
-    order.created_at,
-    ...createdLabels,
-    order.status,
-    status?.label,
-    status?.shortLabel,
-    order.payment_method,
-    order.payment_method === 'card' ? 'card online plata cu cardul' : 'ramburs la curier plata ramburs numerar cash',
-    order.payment_status,
-    payment?.label,
-  ].join(' '));
+const mainOrderFlow: ShopOrder['status'][] = ['new', 'confirmed', 'processing', 'shipped', 'completed', 'return_requested', 'return_refused', 'return_confirmed'];
+const terminalOrderStatuses: ShopOrder['status'][] = ['refunded', 'cancelled'];
+type OrderStatusFilter = 'all' | 'returned' | ShopOrder['status'];
+const emptyOrderSummary = {
+  orders_count: 0,
+  new_count: 0,
+  processing_count: 0,
+  returns_count: 0,
+  returns_total: 0,
+  collected: 0,
+  pending_cash: 0,
+  financial_total: 0,
+};
+
+type OrdersListRequest = {
+  page: number;
+  page_size: number;
+  q?: string;
+  status?: string;
+  payment_method?: string;
+  payment_status?: string;
+};
+type OrdersSnapshot = { result: ShopOrderPage; cachedAt: number };
+const ORDERS_SNAPSHOT_TTL_MS = 20_000;
+const ORDERS_SNAPSHOT_TOKEN_LIMIT = 2;
+const ORDERS_SNAPSHOT_QUERY_LIMIT = 4;
+const ordersSnapshots = new Map<string, Map<string, OrdersSnapshot>>();
+
+function ordersSnapshotKey(request: OrdersListRequest) {
+  return JSON.stringify([
+    request.page,
+    request.page_size,
+    request.q || '',
+    request.status || '',
+    request.payment_method || '',
+    request.payment_status || '',
+  ]);
 }
 
-const mainOrderFlow: ShopOrder['status'][] = ['new', 'confirmed', 'processing', 'shipped', 'completed'];
-const terminalOrderStatuses: ShopOrder['status'][] = ['refunded', 'cancelled'];
+function readOrdersSnapshot(token: string, request: OrdersListRequest) {
+  if (!token) return undefined;
+  const tokenCache = ordersSnapshots.get(token);
+  const key = ordersSnapshotKey(request);
+  const snapshot = tokenCache?.get(key);
+  if (!tokenCache || !snapshot) return undefined;
+  tokenCache.delete(key);
+  tokenCache.set(key, snapshot);
+  ordersSnapshots.delete(token);
+  ordersSnapshots.set(token, tokenCache);
+  return snapshot;
+}
 
-function isStatusTransitionLocked(current: ShopOrder['status'], candidate: ShopOrder['status']) {
-  if (candidate === current) return false;
-  if (terminalOrderStatuses.includes(current)) return true;
-  if (terminalOrderStatuses.includes(candidate)) return false;
-  const currentIndex = mainOrderFlow.indexOf(current);
-  const candidateIndex = mainOrderFlow.indexOf(candidate);
-  return currentIndex >= 0 && candidateIndex >= 0 && candidateIndex < currentIndex;
+function rememberOrdersSnapshot(token: string, request: OrdersListRequest, result: ShopOrderPage) {
+  if (!token) return;
+  let tokenCache = ordersSnapshots.get(token);
+  if (!tokenCache) tokenCache = new Map();
+  const key = ordersSnapshotKey(request);
+  tokenCache.delete(key);
+  while (tokenCache.size >= ORDERS_SNAPSHOT_QUERY_LIMIT) {
+    const oldest = tokenCache.keys().next().value;
+    if (!oldest) break;
+    tokenCache.delete(oldest);
+  }
+  tokenCache.set(key, { result, cachedAt: Date.now() });
+  ordersSnapshots.delete(token);
+  while (ordersSnapshots.size >= ORDERS_SNAPSHOT_TOKEN_LIMIT) {
+    const oldestToken = ordersSnapshots.keys().next().value;
+    if (!oldestToken) break;
+    ordersSnapshots.delete(oldestToken);
+  }
+  ordersSnapshots.set(token, tokenCache);
+}
+
+function clearOrdersSnapshots(token: string) {
+  if (token) ordersSnapshots.delete(token);
 }
 
 function whatsappPhone(value: string) {
@@ -152,26 +185,42 @@ function WhatsAppLogo({ size = 17, color = '#51D88A' }: { size?: number; color?:
 export default function ShopOrdersManager({ initialStatusFilter = 'all', initialOrderId = null, onInitialOrderHandled, onOpenInvoice }: { initialStatusFilter?: 'all' | ShopOrder['status']; initialOrderId?: string | null; onInitialOrderHandled?: () => void; onOpenInvoice?: (invoiceId: string) => void }) {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
-  const [orders, setOrders] = useState<ShopOrder[]>([]);
+  const initialRequest = useMemo<OrdersListRequest>(() => ({
+    page: 1,
+    page_size: 10,
+    status: initialStatusFilter === 'all' ? undefined : initialStatusFilter,
+  }), [initialStatusFilter]);
+  const initialSnapshot = useMemo(() => readOrdersSnapshot(token || '', initialRequest), [initialRequest, token]);
+  const [orders, setOrders] = useState<ShopOrder[]>(() => initialSnapshot?.result.orders || []);
+  const [ordersTotal, setOrdersTotal] = useState(() => initialSnapshot?.result.total || 0);
+  const [orderSummary, setOrderSummary] = useState(() => initialSnapshot?.result.summary || emptyOrderSummary);
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<'all' | ShopOrder['status']>(initialStatusFilter);
+  const [statusFilter, setStatusFilter] = useState<OrderStatusFilter>(initialStatusFilter);
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<'all' | 'card' | 'cash'>('all');
   const [paymentStateFilter, setPaymentStateFilter] = useState<'all' | ShopOrder['payment_status']>('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !initialSnapshot);
+  const [loadedOnce, setLoadedOnce] = useState(() => Boolean(initialSnapshot));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<ShopOrder | null>(null);
   const [status, setStatus] = useState<ShopOrder['status']>('new');
   const [paymentStatus, setPaymentStatus] = useState<ShopOrder['payment_status']>('pending');
   const [adminNotes, setAdminNotes] = useState('');
+  const [cancellationReason, setCancellationReason] = useState('');
+  const [returnReason, setReturnReason] = useState('');
+  const [returnBankIban, setReturnBankIban] = useState('');
+  const [returnAccountHolder, setReturnAccountHolder] = useState('');
   const [notifyCustomer, setNotifyCustomer] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailErrorMessage, setDetailErrorMessage] = useState('');
   const [invoiceBusy, setInvoiceBusy] = useState<string | null>(null);
   const [invoicePromptOrder, setInvoicePromptOrder] = useState<ShopOrder | null>(null);
   const [invoiceSendEmail, setInvoiceSendEmail] = useState(false);
+  const [invoiceSendReturnEmail, setInvoiceSendReturnEmail] = useState(false);
   const [deliveryEditing, setDeliveryEditing] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryCity, setDeliveryCity] = useState('');
@@ -181,43 +230,76 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
   const [productPanel, setProductPanel] = useState<ShopProductStats | null>(null);
   const [productPanelLoading, setProductPanelLoading] = useState(false);
   const [productPanelError, setProductPanelError] = useState('');
-  const productPanelProgress = useRef(new Animated.Value(0)).current;
+  const [productPanelProgress] = useState(() => new Animated.Value(0));
   const productRequestId = useRef(0);
+  const ordersRequestId = useRef(0);
+  const detailRequestId = useRef(0);
   const initialOpenedOrderId = useRef<string | null>(null);
+  const initialLoadEffect = useRef(true);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedQuery(query.trim()), 240);
+    return () => clearTimeout(timeout);
+  }, [query]);
+
+  const load = useCallback(async (options: { showLoading?: boolean; silent?: boolean } = {}) => {
     if (!token) return;
-    setLoading(true);
-    setError('');
+    const requestId = ++ordersRequestId.current;
+    const showLoading = options.showLoading ?? true;
+    if (showLoading) setLoading(true);
+    if (!options.silent) setError('');
     try {
-      const nextOrders = await shopApi.listOrders(token);
-      setOrders(Array.isArray(nextOrders) ? nextOrders : []);
+      const request: OrdersListRequest = {
+        page,
+        page_size: pageSize,
+        q: debouncedQuery || undefined,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+        payment_method: paymentMethodFilter === 'all' ? undefined : paymentMethodFilter,
+        payment_status: paymentStateFilter === 'all' ? undefined : paymentStateFilter,
+      };
+      const result = await shopApi.listOrders(token, request);
+      if (requestId !== ordersRequestId.current) return;
+      rememberOrdersSnapshot(token, request, result);
+      setOrders(Array.isArray(result.orders) ? result.orders : []);
+      setOrdersTotal(Number(result.total || 0));
+      setOrderSummary(result.summary || emptyOrderSummary);
+      setError('');
+      if (Number(result.page || 1) !== page) setPage(Number(result.page || 1));
     }
-    catch (loadError) { setError(loadError instanceof Error ? loadError.message : 'Comenzile nu au putut fi incarcate.'); }
-    finally { setLoading(false); }
-  }, [token]);
+    catch (loadError) {
+      if (requestId === ordersRequestId.current && !options.silent) setError(loadError instanceof Error ? loadError.message : 'Comenzile nu au putut fi incarcate.');
+    }
+    finally {
+      if (requestId === ordersRequestId.current) {
+        setLoading(false);
+        setLoadedOnce(true);
+      }
+    }
+  }, [debouncedQuery, page, pageSize, paymentMethodFilter, paymentStateFilter, statusFilter, token]);
 
-  useEffect(() => { void load(); }, [load]);
-
-  const financials = useMemo(() => {
-    const active = orders.filter((order) => !terminalOrderStatuses.includes(order.status));
-    const collected = active.filter((order) => order.payment_status === 'paid').reduce((sum, order) => sum + Number(order.total || 0), 0);
-    const pendingCash = active.filter((order) => order.payment_method !== 'card' && order.payment_status === 'pending').reduce((sum, order) => sum + Number(order.total || 0), 0);
-    return { collected, pendingCash, total: collected + pendingCash };
-  }, [orders]);
-
-  const filtered = useMemo(() => {
-    const term = normalizeSearch(query.trim());
-    return orders.filter((order) => {
-      if (term && !orderSearchText(order).includes(term)) return false;
-      if (statusFilter !== 'all' && order.status !== statusFilter) return false;
-      if (paymentMethodFilter === 'card' && order.payment_method !== 'card') return false;
-      if (paymentMethodFilter === 'cash' && order.payment_method === 'card') return false;
-      if (paymentStateFilter !== 'all' && order.payment_status !== paymentStateFilter) return false;
-      return true;
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- Reîncarcă datele externe când pagina sau filtrele se schimbă.
+  useEffect(() => {
+    const firstRun = initialLoadEffect.current;
+    initialLoadEffect.current = false;
+    if (!firstRun || !initialSnapshot) {
+      void load();
+      return;
+    }
+    if (Date.now() - initialSnapshot.cachedAt <= ORDERS_SNAPSHOT_TTL_MS) return;
+    let interactionTask: ReturnType<typeof runWhenIdle> | null = null;
+    const frame = requestAnimationFrame(() => {
+      interactionTask = runWhenIdle(() => {
+        void load({ showLoading: false, silent: true });
+      });
     });
-  }, [orders, paymentMethodFilter, paymentStateFilter, query, statusFilter]);
+    return () => {
+      cancelAnimationFrame(frame);
+      interactionTask?.cancel();
+    };
+  }, [initialSnapshot, load]);
+
   const activeFilterCount = Number(statusFilter !== 'all') + Number(paymentMethodFilter !== 'all') + Number(paymentStateFilter !== 'all');
+  const hasActiveSearch = Boolean(query.trim()) || activeFilterCount > 0;
   const resetFilters = () => {
     setQuery('');
     setStatusFilter('all');
@@ -225,36 +307,64 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
     setPaymentStateFilter('all');
     setPage(1);
   };
-  const safePage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
-  const pagedOrders = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const pagedOrders = orders;
 
-  const open = async (order: ShopOrder) => {
+  const applyOrderToEditor = useCallback((order: ShopOrder) => {
     setSelected(order);
     setStatus(order.status);
     setPaymentStatus(order.payment_status);
     setAdminNotes(order.admin_notes || '');
+    setCancellationReason(order.customer_cancellation_reason || '');
+    setReturnReason(order.return_reason || '');
+    setReturnBankIban(order.return_bank_iban || '');
+    setReturnAccountHolder(order.return_bank_account_holder || '');
     setNotifyCustomer(false);
     setDeliveryEditing(false);
     setDeliveryAddress(order.address || '');
     setDeliveryCity(order.city || '');
     setDeliveryCounty(order.county || '');
     setDeliveryPostalCode(order.postal_code || '');
+  }, []);
+
+  const openOrder = useCallback(async (orderId: string, preview?: ShopOrder) => {
+    const requestId = ++detailRequestId.current;
+    if (preview) applyOrderToEditor(preview);
     if (!token) return;
+    setDetailErrorMessage('');
     setDetailLoading(true);
     try {
-      const detailed = await shopApi.getOrder(token, order.id);
-      setSelected(detailed);
-      setStatus(detailed.status);
-      setPaymentStatus(detailed.payment_status);
-      setAdminNotes(detailed.admin_notes || '');
-      setDeliveryAddress(detailed.address || '');
-      setDeliveryCity(detailed.city || '');
-      setDeliveryCounty(detailed.county || '');
-      setDeliveryPostalCode(detailed.postal_code || '');
+      const detailed = await shopApi.getOrder(token, orderId);
+      if (requestId !== detailRequestId.current) return;
+      applyOrderToEditor(detailed);
     } catch (detailError) {
-      Alert.alert('Detaliile nu s-au putut actualiza', detailError instanceof Error ? detailError.message : 'Încearcă din nou.');
-    } finally { setDetailLoading(false); }
-  };
+      if (requestId !== detailRequestId.current) return;
+      const message = detailError instanceof Error ? detailError.message : 'Încearcă din nou.';
+      setDetailErrorMessage(message);
+      if (!preview) Alert.alert('Detaliile nu s-au putut actualiza', message);
+    } finally {
+      if (requestId === detailRequestId.current) setDetailLoading(false);
+    }
+  }, [applyOrderToEditor, token]);
+
+  const open = useCallback((order: ShopOrder) => {
+    void openOrder(order.id, order);
+  }, [openOrder]);
+
+  const closeOrder = useCallback(() => {
+    detailRequestId.current += 1;
+    setDetailLoading(false);
+    setDetailErrorMessage('');
+    setSelected(null);
+    setAdminNotes('');
+    setCancellationReason('');
+    setReturnReason('');
+    setReturnBankIban('');
+    setReturnAccountHolder('');
+    setDeliveryAddress('');
+    setDeliveryCity('');
+    setDeliveryCounty('');
+    setDeliveryPostalCode('');
+  }, []);
 
   const openProductPanel = useCallback(async (productId: string) => {
     if (!token || !productId) return;
@@ -289,33 +399,66 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
   useEffect(() => {
     if (!initialOrderId || loading || initialOpenedOrderId.current === initialOrderId) return;
     const order = orders.find((item) => item.id === initialOrderId);
-    if (!order) return;
     initialOpenedOrderId.current = initialOrderId;
     onInitialOrderHandled?.();
-    void open(order);
-  }, [initialOrderId, loading, onInitialOrderHandled, orders]);
+    void openOrder(initialOrderId, order);
+  }, [initialOrderId, loading, onInitialOrderHandled, openOrder, orders]);
 
   const save = async () => {
     if (!token || !selected || saving) return;
+    const normalizedReturnIban = returnBankIban.trim().toUpperCase().replace(/\s+/g, '');
+    const normalizedSavedReturnIban = String(selected.return_bank_iban || '').trim().toUpperCase().replace(/\s+/g, '');
+    const hasChanges = status !== selected.status
+      || paymentStatus !== selected.payment_status
+      || adminNotes.trim() !== String(selected.admin_notes || '').trim()
+      || deliveryAddress.trim() !== String(selected.address || '').trim()
+      || deliveryCity.trim() !== String(selected.city || '').trim()
+      || deliveryCounty.trim() !== String(selected.county || '').trim()
+      || deliveryPostalCode.trim() !== String(selected.postal_code || '').trim()
+      || returnReason.trim() !== String(selected.return_reason || '').trim()
+      || returnAccountHolder.trim() !== String(selected.return_bank_account_holder || '').trim()
+      || normalizedReturnIban !== normalizedSavedReturnIban;
+    if (!hasChanges) {
+      Alert.alert('Nicio modificare', 'Comanda este deja salvată. Nu a fost trimis niciun e-mail.');
+      return;
+    }
     if (!deliveryAddress.trim() || !deliveryCity.trim() || !deliveryCounty.trim()) {
       Alert.alert('Date de livrare incomplete', 'Adresa, localitatea și județul sunt obligatorii.');
       return;
     }
     if (status === 'cancelled' && selected.status !== 'cancelled') {
-      const proceed = await new Promise<boolean>((resolve) => Alert.alert('Anulezi comanda?', 'Produsele cu stoc urmarit vor fi adaugate inapoi in stoc.', [{ text: 'Renunta', style: 'cancel', onPress: () => resolve(false) }, { text: 'Anuleaza comanda', style: 'destructive', onPress: () => resolve(true) }]));
+      if (cancellationReason.trim().length < 3) {
+        Alert.alert('Motiv obligatoriu', 'Scrie motivul anulării, de cel puțin 3 caractere.');
+        return;
+      }
+      const proceed = await new Promise<boolean>((resolve) => Alert.alert('Anulezi comanda?', 'Anularea se salvează imediat, clientul este notificat automat, iar factura și stocul sunt corectate după regulile fiscale.', [{ text: 'Renunță', style: 'cancel', onPress: () => resolve(false) }, { text: 'Anulează comanda', style: 'destructive', onPress: () => resolve(true) }]));
       if (!proceed) return;
     }
+    const isNewReturnFlow = (['return_requested', 'return_refused', 'return_confirmed', 'refunded'] as ShopOrder['status'][]).includes(status)
+      && !selected.return_reason;
+    if (isNewReturnFlow) {
+      if (returnReason.trim().length < 3 || returnAccountHolder.trim().length < 3 || !returnBankIban.trim()) {
+        Alert.alert('Date de retur incomplete', 'Completează motivul, titularul contului și IBAN-ul pentru rambursare.');
+        return;
+      }
+    }
     setSaving(true);
+    ordersRequestId.current += 1;
     try {
-      const updated = await shopApi.updateOrder(token, selected.id, { status, payment_status: paymentStatus, admin_notes: adminNotes.trim(), notify_customer: notifyCustomer, address: deliveryAddress.trim(), city: deliveryCity.trim(), county: deliveryCounty.trim(), postal_code: deliveryPostalCode.trim() });
-      setOrders((current) => current.map((order) => order.id === updated.id ? updated : order));
+      const returnTarget = (['return_requested', 'return_refused', 'return_confirmed', 'refunded'] as ShopOrder['status'][]).includes(status);
+      const updated = await shopApi.updateOrder(token, selected.id, { status, payment_status: paymentStatus, admin_notes: adminNotes.trim(), notify_customer: status !== selected.status && (status === 'cancelled' ? true : notifyCustomer), cancellation_reason: status === 'cancelled' ? cancellationReason.trim() : undefined, return_reason: returnTarget ? returnReason.trim() : undefined, return_bank_iban: returnTarget ? normalizedReturnIban : undefined, return_bank_account_holder: returnTarget ? returnAccountHolder.trim() : undefined, address: deliveryAddress.trim(), city: deliveryCity.trim(), county: deliveryCounty.trim(), postal_code: deliveryPostalCode.trim() });
       setSelected(updated);
       setDeliveryEditing(false);
       setDeliveryAddress(updated.address || '');
       setDeliveryCity(updated.city || '');
       setDeliveryCounty(updated.county || '');
       setDeliveryPostalCode(updated.postal_code || '');
+      setCancellationReason(updated.customer_cancellation_reason || '');
+      setReturnReason(updated.return_reason || '');
+      setReturnBankIban(updated.return_bank_iban || '');
+      setReturnAccountHolder(updated.return_bank_account_holder || '');
       setNotifyCustomer(false);
+      await load();
       const email = updated.email_notification;
       const automation = updated.invoice_automation;
       const orderMessage = email?.requested
@@ -328,31 +471,47 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
             : `\n\n${updated.invoice?.display_number || 'Factura'} a fost emisă automat și este disponibilă în Facturi emise.`
           : `\n\nFactura automată nu s-a finalizat: ${automation.error || 'poate fi reluată în siguranță.'}`
         : '';
+      const returnConfirmationMessage = updated.return_confirmation
+        ? updated.return_confirmation.return_invoice
+          ? updated.return_confirmation.return_invoice_email?.sent
+            ? `\n\n${updated.return_confirmation.return_invoice.display_number || 'Factura de retur'} a fost emisă automat, conține referința facturii pozitive și a comenzii și a fost trimisă separat clientului.`
+            : `\n\n${updated.return_confirmation.return_invoice.display_number || 'Factura de retur'} a fost emisă, dar PDF-ul nu a putut fi trimis: ${updated.return_confirmation.return_invoice_email?.error || 'verifică setările SMTP.'}`
+          : '\n\nNu a fost emisă o factură de retur, deoarece comanda nu avea o factură pozitivă.'
+        : '';
       Alert.alert(
-        automation?.processed ? 'Comandă și factură actualizate' : 'Comanda actualizată',
-        `${orderMessage}${automationMessage}`
+        automation?.processed || updated.return_confirmation?.return_invoice ? 'Comandă și factură actualizate' : 'Comanda actualizată',
+        `${orderMessage}${automationMessage}${returnConfirmationMessage}`
       );
     } catch (saveError) {
       Alert.alert('Nu s-a putut salva', saveError instanceof Error ? saveError.message : 'Incearca din nou.');
     } finally { setSaving(false); }
   };
 
-  const issueInvoice = async (order: ShopOrder, sendEmail: boolean) => {
+  const issueInvoice = async (order: ShopOrder, sendEmail: boolean, sendReturnEmail: boolean) => {
     if (!token || invoiceBusy) return;
     setInvoiceBusy(order.id);
     try {
-      const invoice = await shopApi.issueInvoice(token, order.id, sendEmail);
+      const invoice = await shopApi.issueInvoice(token, order.id, sendEmail, sendReturnEmail);
+      clearOrdersSnapshots(token);
       const applyInvoice = (item: ShopOrder) => item.id === order.id ? { ...item, invoice } : item;
       setOrders((current) => current.map(applyInvoice));
       setSelected((current) => current ? applyInvoice(current) : current);
       setInvoicePromptOrder(null);
       setInvoiceSendEmail(false);
+      setInvoiceSendReturnEmail(false);
       const notification = invoice.email_notification;
+      const pairedMessage = invoice.return_invoice
+        ? invoice.return_invoice_email?.sent
+          ? `\n\n${invoice.return_invoice.display_number} a fost emisă automat ca factură de retur, cu referință la ${invoice.display_number} și la comanda ${order.order_number}, apoi trimisă clientului.`
+          : invoice.return_invoice_email?.requested === false
+            ? `\n\n${invoice.return_invoice.display_number} a fost emisă cu referințele complete și nu a fost trimisă pe e-mail, conform selecției tale.`
+            : `\n\n${invoice.return_invoice.display_number} a fost emisă cu referințele complete, dar PDF-ul de retur nu a putut fi trimis: ${invoice.return_invoice_email?.error || 'verifică setările SMTP.'}`
+        : '';
       Alert.alert(
-        invoice.existing ? 'Factura exista deja' : 'Factura a fost emisă',
-        sendEmail
+        invoice.paired_documents ? 'Documentele au fost emise' : invoice.existing ? 'Factura exista deja' : 'Factura a fost emisă',
+        (sendEmail
           ? (notification?.sent ? `${invoice.display_number} a fost trimisă la ${notification.recipient || invoice.customer_email}.` : `${invoice.display_number} a fost emisă, dar e-mailul nu a plecat: ${notification?.error || 'verifică setările SMTP.'}`)
-          : `${invoice.display_number} este disponibilă în Facturi emise.`
+          : `${invoice.display_number} este disponibilă în Facturi emise.`) + pairedMessage
       );
     } catch (issueError) {
       Alert.alert('Factura nu a putut fi emisă', issueError instanceof Error ? issueError.message : 'Încearcă din nou.');
@@ -361,25 +520,31 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
 
   const chooseInvoiceAction = (order: ShopOrder) => {
     if (order.invoice) {
-      setSelected(null);
+      closeOrder();
       onOpenInvoice?.(order.invoice.id);
+      return;
+    }
+    if (order.status === 'cancelled' || order.status === 'refunded') {
+      Alert.alert('Emiterea nu este permisă', 'Nu poți emite o factură normală pentru o comandă anulată sau rambursată.');
       return;
     }
     setInvoicePromptOrder(order);
     setInvoiceSendEmail(false);
+    setInvoiceSendReturnEmail(false);
   };
 
-  if (loading) return <View style={styles.state}><ActivityIndicator color={Colors.orange} /><Text style={styles.stateText}>Se incarca comenzile...</Text></View>;
+  if (loading && !loadedOnce) return <View style={styles.state}><ActivityIndicator color={Colors.orange} /><Text style={styles.stateText}>Se incarca comenzile...</Text></View>;
   if (error) return <View style={styles.state}><Text style={styles.error}>{error}</Text><TouchableOpacity style={styles.retry} onPress={() => void load()}><Text style={styles.retryText}>Incearca din nou</Text></TouchableOpacity></View>;
 
   return (
     <View style={styles.wrap}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroller} contentContainerStyle={styles.stats}>
-        <OrderMetricCard icon={Clock3} color="#38BDF8" label="În procesare" value={String(orders.filter((order) => order.status === 'new').length)} help="Comenzi noi" />
-        <OrderMetricCard icon={PackageOpen} color="#FB923C" label="În pregătire" value={String(orders.filter((order) => order.status === 'processing').length)} help="Se pregătesc" />
-        <OrderMetricCard icon={WalletCards} color="#A78BFA" label="Total" value={money(financials.total)} help="Încasat + ramburs" />
-        <OrderMetricCard icon={CreditCard} color="#34D399" label="Încasat" value={money(financials.collected)} help="Plăți încasate" />
-        <OrderMetricCard icon={HandCoins} color="#FBBF24" label="De încasat" value={money(financials.pendingCash)} help="Ramburs în așteptare" />
+        <OrderMetricCard icon={Clock3} color="#38BDF8" label="În procesare" value={String(orderSummary.new_count)} help="Comenzi noi" />
+        <OrderMetricCard icon={PackageOpen} color="#FB923C" label="În pregătire" value={String(orderSummary.processing_count)} help="Se pregătesc" />
+        <OrderMetricCard icon={RotateCcw} color="#F472B6" label={`Retururi · ${orderSummary.returns_count || 0}`} value={money(orderSummary.returns_total || 0)} help="Facturi de retur emise" />
+        <OrderMetricCard icon={WalletCards} color="#A78BFA" label="Total" value={money(orderSummary.financial_total)} help="Încasat + ramburs" />
+        <OrderMetricCard icon={CreditCard} color="#34D399" label="Încasat" value={money(orderSummary.collected)} help="Plăți încasate" />
+        <OrderMetricCard icon={HandCoins} color="#FBBF24" label="De încasat" value={money(orderSummary.pending_cash)} help="Ramburs în așteptare" />
       </ScrollView>
       <View style={styles.actions}>
         <View style={styles.search}><Search size={17} color={Colors.textMuted} /><TextInput value={query} onChangeText={(value) => { setQuery(value); setPage(1); }} placeholder="Client, dată, oră, telefon, status, plată sau număr" placeholderTextColor={Colors.textMuted} style={styles.searchInput} /></View>
@@ -390,10 +555,11 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
         <TouchableOpacity style={styles.refresh} onPress={() => void load()}><RefreshCw size={18} color={Colors.textSecondary} /></TouchableOpacity>
       </View>
       {filtersOpen ? <View style={styles.filtersPanel}>
-        <View style={styles.filtersHead}><View><Text style={styles.filtersTitle}>Filtre comenzi</Text><Text style={styles.filtersResult}>{filtered.length} {filtered.length === 1 ? 'rezultat' : 'rezultate'}</Text></View><TouchableOpacity onPress={resetFilters} disabled={!query && activeFilterCount === 0}><Text style={[styles.resetFilters, !query && activeFilterCount === 0 && styles.resetFiltersDisabled]}>Resetează</Text></TouchableOpacity></View>
+        <View style={styles.filtersHead}><View><Text style={styles.filtersTitle}>Filtre comenzi</Text><Text style={styles.filtersResult}>{ordersTotal} {ordersTotal === 1 ? 'rezultat' : 'rezultate'}</Text></View><TouchableOpacity onPress={resetFilters} disabled={!query && activeFilterCount === 0}><Text style={[styles.resetFilters, !query && activeFilterCount === 0 && styles.resetFiltersDisabled]}>Resetează</Text></TouchableOpacity></View>
         <Text style={styles.filterGroupLabel}>STATUS COMANDĂ</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsContent}>
           <FilterChip label="Toate" active={statusFilter === 'all'} onPress={() => { setStatusFilter('all'); setPage(1); }} />
+          <FilterChip label="Returnate" active={statusFilter === 'returned'} color="#F472B6" onPress={() => { setStatusFilter('returned'); setPage(1); }} />
           {orderStatuses.map((item) => <FilterChip key={item.value} label={item.label} active={statusFilter === item.value} color={item.color} onPress={() => { setStatusFilter(item.value); setPage(1); }} />)}
         </ScrollView>
         <Text style={styles.filterGroupLabel}>METODĂ DE PLATĂ</Text>
@@ -404,23 +570,24 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
           {paymentStatuses.map((item) => <FilterChip key={item.value} label={item.label} active={paymentStateFilter === item.value} color={item.value === 'paid' ? '#34D399' : item.value === 'failed' ? '#FB7185' : '#FBBF24'} onPress={() => { setPaymentStateFilter(item.value); setPage(1); }} />)}
         </ScrollView>
       </View> : null}
-      {filtered.length ? pagedOrders.map((order) => {
+      {pagedOrders.length ? pagedOrders.map((order) => {
         const statusMeta = orderStatuses.find((item) => item.value === order.status) || orderStatuses[0];
-        return <TouchableOpacity key={order.id} style={styles.orderCard} activeOpacity={0.76} onPress={() => void open(order)}>
+        return <TouchableOpacity key={order.id} style={styles.orderCard} activeOpacity={0.76} onPress={() => open(order)}>
           <View style={styles.orderCardMain}><View style={[styles.orderIcon, { backgroundColor: `${statusMeta.color}15` }]}><ShoppingCart size={22} color={statusMeta.color} /></View>
-            <View style={styles.orderCopy}><View style={styles.orderTop}><View style={styles.orderIdentity}><Text style={styles.orderNumber}>{order.order_number}</Text><View style={[styles.customerTypeBadge, isCompanyOrder(order) && styles.customerTypeBadgeCompany]}><Text style={[styles.customerTypeBadgeText, isCompanyOrder(order) && styles.customerTypeBadgeTextCompany]}>{isCompanyOrder(order) ? 'PJ' : 'PF'}</Text></View></View><Text style={[styles.status, { color: statusMeta.color }]}>{(statusMeta.shortLabel || statusMeta.label).toUpperCase()}</Text></View><Text style={styles.customer}>{order.customer_name} · {order.customer_phone}</Text></View>
+            <View style={styles.orderCopy}><View style={styles.orderTop}><View style={styles.orderIdentity}><Text style={styles.orderNumber}>{order.order_number}</Text><View style={[styles.customerTypeBadge, isCompanyOrder(order) && styles.customerTypeBadgeCompany]}><Text style={[styles.customerTypeBadgeText, isCompanyOrder(order) && styles.customerTypeBadgeTextCompany]}>{isCompanyOrder(order) ? 'PJ' : 'PF'}</Text></View></View><Text style={[styles.status, { color: statusMeta.color }]}>{(statusMeta.shortLabel || statusMeta.label).toUpperCase()}</Text></View><Text style={styles.customer}>{shopOrderCustomerDisplayName(order)} · {order.customer_phone}</Text></View>
             <View style={styles.orderArrow}><ChevronRight size={19} color="#FFFFFF" strokeWidth={2.5} /></View>
           </View>
           <View style={styles.orderBottom}><View style={styles.orderDateMeta}><Clock3 size={13} color="#AAA39C" /><Text numberOfLines={1} style={styles.orderDate}>{dateTime(order.created_at)}</Text></View><View style={[styles.paymentMethodChip, order.payment_method === 'card' ? styles.paymentMethodCard : styles.paymentMethodCash]}>{order.payment_method === 'card' ? <CreditCard size={12} color="#C4B5FD" /> : <HandCoins size={12} color="#7DD3FC" />}<Text style={[styles.paymentMethodText, order.payment_method === 'card' ? styles.paymentMethodCardText : styles.paymentMethodCashText]}>{order.payment_method === 'card' ? 'Card' : 'Ramburs'}</Text></View><Text style={styles.orderTotal}>{money(order.total)}</Text><TouchableOpacity disabled={Boolean(invoiceBusy)} accessibilityLabel={order.invoice ? `Deschide factura ${order.invoice.display_number}` : 'Emite factura'} style={[styles.invoiceQuick, order.invoice && styles.invoiceQuickIssued]} onPress={(event) => { event.stopPropagation(); chooseInvoiceAction(order); }}>{invoiceBusy === order.id || invoiceBusy === order.invoice?.id ? <ActivityIndicator size="small" color={order.invoice ? '#34D399' : Colors.orange} /> : <FileCheck2 size={18} color={order.invoice ? '#34D399' : Colors.orange} />}</TouchableOpacity></View>
         </TouchableOpacity>;
-      }) : <View style={styles.empty}><PackageCheck size={34} color="#38BDF8" /><Text style={styles.emptyTitle}>{orders.length ? 'Nicio comandă găsită' : 'Nicio comandă'}</Text><Text style={styles.emptyText}>{orders.length ? 'Schimbă căutarea sau resetează filtrele.' : 'Comenzile trimise de pe site vor apărea automat aici.'}</Text>{orders.length ? <TouchableOpacity style={styles.emptyReset} onPress={resetFilters}><Text style={styles.emptyResetText}>Resetează filtrele</Text></TouchableOpacity> : null}</View>}
-      <ShopPagination page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} onPageSizeChange={setPageSize} />
+      }) : <View style={styles.empty}><PackageCheck size={34} color="#38BDF8" /><Text style={styles.emptyTitle}>{hasActiveSearch ? 'Nicio comandă găsită' : 'Nicio comandă'}</Text><Text style={styles.emptyText}>{hasActiveSearch ? 'Schimbă căutarea sau resetează filtrele.' : 'Comenzile trimise de pe site vor apărea automat aici.'}</Text>{hasActiveSearch ? <TouchableOpacity style={styles.emptyReset} onPress={resetFilters}><Text style={styles.emptyResetText}>Resetează filtrele</Text></TouchableOpacity> : null}</View>}
+      <ShopPagination page={page} pageSize={pageSize} total={ordersTotal} onPageChange={setPage} onPageSizeChange={setPageSize} />
 
-      <Modal visible={Boolean(selected)} animationType="slide" onRequestClose={() => productPanelId ? closeProductPanel() : (!saving && setSelected(null))}>
+      <Modal visible={Boolean(selected)} animationType="slide" onRequestClose={() => productPanelId ? closeProductPanel() : (!saving && closeOrder())}>
         <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
-          <View style={styles.modalHeader}><TouchableOpacity style={styles.close} onPress={() => setSelected(null)}><X size={21} color={Colors.textSecondary} /></TouchableOpacity><View style={styles.modalHeaderCopy}><Text style={styles.modalKicker}>COMANDA SHOP</Text><Text style={styles.modalTitle}>{selected?.order_number}</Text></View><TouchableOpacity style={[styles.save, saving && styles.disabled]} onPress={() => void save()} disabled={saving}>{saving ? <ActivityIndicator color={Colors.white} /> : <><Save size={17} color={Colors.white} /><Text style={styles.saveText}>Salveaza</Text></>}</TouchableOpacity></View>
+          <View style={styles.modalHeader}><TouchableOpacity style={styles.close} onPress={closeOrder}><X size={21} color={Colors.textSecondary} /></TouchableOpacity><View style={styles.modalHeaderCopy}><Text style={styles.modalKicker}>COMANDA SHOP</Text><Text style={styles.modalTitle}>{selected?.order_number}</Text></View><TouchableOpacity style={[styles.save, (saving || detailLoading || Boolean(detailErrorMessage)) && styles.disabled]} onPress={() => void save()} disabled={saving || detailLoading || Boolean(detailErrorMessage)}>{saving ? <ActivityIndicator color={Colors.white} /> : <><Save size={17} color={Colors.white} /><Text style={styles.saveText}>Salveaza</Text></>}</TouchableOpacity></View>
           {selected ? <ScrollView contentContainerStyle={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 20) + 30 }]} showsVerticalScrollIndicator={false}>
             {detailLoading ? <View style={styles.detailLoading}><ActivityIndicator color={Colors.orange} /><Text style={styles.detailLoadingText}>Actualizăm istoricul comenzii...</Text></View> : null}
+            {!detailLoading && detailErrorMessage ? <View style={[styles.detailLoading, styles.detailError]}><Text style={styles.detailErrorText}>Detaliile complete nu s-au încărcat.</Text><TouchableOpacity style={styles.detailRetry} onPress={() => void openOrder(selected.id, selected)}><RefreshCw size={13} color="#FFFFFF" /><Text style={styles.detailRetryText}>Reîncearcă</Text></TouchableOpacity></View> : null}
             <ClientInfoBlock order={selected} />
             <DeliveryInfoBlock order={selected} editing={deliveryEditing} onToggle={() => { if (deliveryEditing) { setDeliveryAddress(selected.address || ''); setDeliveryCity(selected.city || ''); setDeliveryCounty(selected.county || ''); setDeliveryPostalCode(selected.postal_code || ''); } setDeliveryEditing((current) => !current); }} address={deliveryAddress} city={deliveryCity} county={deliveryCounty} postalCode={deliveryPostalCode} onAddressChange={setDeliveryAddress} onCityChange={setDeliveryCity} onCountyChange={setDeliveryCounty} onPostalCodeChange={setDeliveryPostalCode} />
             <Text style={styles.sectionLabel}>PRODUSE</Text>
@@ -439,29 +606,35 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
               <View style={styles.invoicePanelCopy}><Text style={styles.invoicePanelKicker}>FACTURĂ FISCALĂ</Text><Text style={styles.invoicePanelTitle}>{selected.invoice ? selected.invoice.display_number : 'Factura nu este emisă'}</Text><Text style={styles.invoicePanelText}>{selected.invoice ? `${selected.invoice.status === 'paid' ? 'Plătită' : 'Neplătită'} · tema ${selected.invoice.theme} · ${selected.invoice.total.toLocaleString('ro-RO')} ${selected.invoice.currency}` : 'Poți emite documentul simplu sau îl poți trimite imediat pe e-mail clientului.'}</Text></View>
               <TouchableOpacity disabled={Boolean(invoiceBusy)} style={[styles.invoicePanelButton, selected.invoice && styles.invoicePanelButtonIssued]} onPress={() => chooseInvoiceAction(selected)}>{invoiceBusy === selected.id || invoiceBusy === selected.invoice?.id ? <ActivityIndicator size="small" color="#FFFFFF" /> : selected.invoice ? <><FileCheck2 size={16} color="#FFFFFF" /><Text style={styles.invoicePanelButtonText}>Vezi factura</Text></> : <><Send size={16} color="#FFFFFF" /><Text style={styles.invoicePanelButtonText}>Emite</Text></>}</TouchableOpacity>
             </View>
+            {(['return_requested', 'return_refused', 'return_confirmed', 'refunded'] as ShopOrder['status'][]).includes(selected.status) && selected.return_invoice ? <View style={[styles.invoicePanel, styles.invoicePanelIssued, { borderColor: '#2DD4BF66', backgroundColor: '#142522' }]}>
+              <View style={[styles.invoicePanelIcon, { backgroundColor: '#2DD4BF1C' }]}><RotateCcw size={22} color="#2DD4BF" /></View>
+              <View style={styles.invoicePanelCopy}><Text style={[styles.invoicePanelKicker, { color: '#5EEAD4' }]}>FACTURĂ DE RETUR</Text><Text style={styles.invoicePanelTitle}>{selected.return_invoice.display_number}</Text><Text style={styles.invoicePanelText}>Referință la {selected.invoice?.display_number || 'factura pozitivă'} și comanda {selected.order_number} · {selected.return_invoice.spv_status === 'sent' ? 'trimisă în SPV' : 'SPV în așteptare'}</Text></View>
+              <TouchableOpacity style={[styles.invoicePanelButton, styles.invoicePanelButtonIssued, { backgroundColor: '#168A7C' }]} onPress={() => { closeOrder(); onOpenInvoice?.(selected.return_invoice!.id); }}><FileCheck2 size={16} color="#FFFFFF" /><Text style={styles.invoicePanelButtonText}>Vezi returul</Text></TouchableOpacity>
+            </View> : null}
             <Text style={styles.sectionLabel}>EVOLUȚIA COMENZII</Text>
             <OrderStatusTimeline order={selected} />
             <Text style={styles.sectionLabel}>STATUS COMANDA</Text>
             <View style={styles.statusPicker}>{orderStatuses.map((item, index) => {
               const StatusIcon = item.icon;
               const active = status === item.value;
-              const locked = isStatusTransitionLocked(selected.status, item.value);
               return <View key={item.value} style={styles.statusTrackRow}>
                 <View style={styles.statusTrackRail}><View style={[styles.statusTrackDot, active && { borderColor: item.color, backgroundColor: item.color }]}>{active ? <Check size={12} color="#15110D" strokeWidth={3} /> : <Text style={styles.statusTrackIndex}>{String(index + 1).padStart(2, '0')}</Text>}</View>{index < orderStatuses.length - 1 ? <View style={styles.statusTrackLine} /> : null}</View>
-                <TouchableOpacity disabled={locked} activeOpacity={0.76} style={[styles.statusOption, active && { borderColor: item.color, backgroundColor: `${item.color}12` }, locked && styles.statusOptionLocked]} onPress={() => { setStatus(item.value); if (item.value === selected.status) setNotifyCustomer(false); }}>
+                <TouchableOpacity activeOpacity={0.76} style={[styles.statusOption, active && { borderColor: item.color, backgroundColor: `${item.color}12` }]} onPress={() => { setStatus(item.value); if (item.value === 'cancelled' && item.value !== selected.status) setNotifyCustomer(true); else if (item.value === selected.status) setNotifyCustomer(false); }}>
                   <View style={[styles.statusOptionIcon, { backgroundColor: `${item.color}18` }]}><StatusIcon size={17} color={item.color} /></View>
-                  <View style={styles.statusOptionCopy}><Text style={[styles.statusOptionTitle, active && { color: item.color }]}>{item.label}</Text><Text style={styles.statusOptionText}>{locked ? 'Etapă finalizată · nu se poate reveni' : item.description}</Text></View>
+                  <View style={styles.statusOptionCopy}><Text style={[styles.statusOptionTitle, active && { color: item.color }]}>{item.label}</Text><Text style={styles.statusOptionText}>{item.description}</Text></View>
                   <View style={[styles.radio, active && { borderColor: item.color, backgroundColor: item.color }]}>{active ? <Check size={12} color="#14110F" strokeWidth={3} /> : null}</View>
                 </TouchableOpacity>
               </View>;
             })}</View>
+            {status === 'cancelled' ? <View style={styles.cancellationReasonCard}><View style={styles.cancellationReasonHead}><Ban size={17} color="#FB7185" /><View><Text style={styles.cancellationReasonKicker}>MOTIV OBLIGATORIU</Text><Text style={styles.cancellationReasonTitle}>{selected.status === 'cancelled' ? 'Motivul anulării' : 'De ce anulăm comanda?'}</Text></View></View><TextInput editable={selected.status !== 'cancelled'} value={cancellationReason} onChangeText={setCancellationReason} multiline maxLength={1000} placeholder="Scrie motivul transmis clientului..." placeholderTextColor="#716970" style={[styles.cancellationReasonInput, selected.status === 'cancelled' && styles.cancellationReasonInputLocked]} /><Text style={styles.cancellationReasonHelp}>{selected.status === 'cancelled' ? 'Motiv salvat în istoricul comenzii.' : 'Anularea manuală poate fi făcută și după predarea către curier. Clientul primește automat confirmarea pe e-mail.'}</Text></View> : null}
+            {(['return_requested', 'return_refused', 'return_confirmed', 'refunded'] as ShopOrder['status'][]).includes(status) ? <View style={styles.returnRequestCard}><View style={styles.cancellationReasonHead}><RotateCcw size={18} color="#F472B6" /><View><Text style={styles.returnRequestKicker}>DATE RETUR</Text><Text style={styles.cancellationReasonTitle}>{selected.return_reason ? 'Datele returului' : 'Completează returul'}</Text></View></View><TextInput editable={!selected.return_reason} value={returnReason} onChangeText={setReturnReason} multiline maxLength={1000} placeholder="Motivul returului..." placeholderTextColor="#716970" style={[styles.cancellationReasonInput, !!selected.return_reason && styles.cancellationReasonInputLocked]} /><TextInput editable={!selected.return_reason} value={returnAccountHolder} onChangeText={setReturnAccountHolder} maxLength={180} placeholder="Numele titularului contului" placeholderTextColor="#716970" style={[styles.returnRequestInput, !!selected.return_reason && styles.cancellationReasonInputLocked]} /><TextInput editable={!selected.return_reason} autoCapitalize="characters" value={returnBankIban} onChangeText={(value) => setReturnBankIban(value.toUpperCase())} maxLength={40} placeholder="IBAN pentru rambursare" placeholderTextColor="#716970" style={[styles.returnRequestInput, !!selected.return_reason && styles.cancellationReasonInputLocked]} /><View style={styles.returnAmounts}><View><Text style={styles.returnAmountLabel}>COST RETUR CURIER</Text><Text style={styles.returnAmountCost}>−{money(Number(selected.return_shipping_cost ?? selected.configured_return_shipping_cost ?? 0))}</Text></View><View style={styles.returnAmountRight}><Text style={styles.returnAmountLabel}>ESTIMARE RESTITUIRE</Text><Text style={styles.returnAmountValue}>{money(Number(selected.return_refund_amount ?? Math.max(0, Number(selected.total || 0) - Number(selected.configured_return_shipping_cost || 0))))}</Text></View></View><Text style={styles.returnRequestHelp}>Poți selecta direct orice status. Pașii intermediari și regulile fiscale sunt aplicate automat la salvare.</Text></View> : null}
             <TouchableOpacity
               activeOpacity={0.78}
-              disabled={!selected.customer_email || status === selected.status}
-              style={[styles.notifyCard, notifyCustomer && styles.notifyCardActive, (!selected.customer_email || status === selected.status) && styles.notifyCardDisabled]}
+              disabled={status === 'cancelled' || !selected.customer_email || status === selected.status}
+              style={[styles.notifyCard, notifyCustomer && styles.notifyCardActive, (status === 'cancelled' || !selected.customer_email || status === selected.status) && styles.notifyCardDisabled]}
               onPress={() => setNotifyCustomer((current) => !current)}>
               <View style={styles.notifyIcon}><BellRing size={19} color={notifyCustomer ? '#15110D' : Colors.orange} /></View>
-              <View style={styles.notifyCopy}><Text style={styles.notifyTitle}>Trimite actualizarea pe e-mail</Text><Text style={styles.notifyText}>{!selected.customer_email ? 'Comanda nu are o adresă de e-mail.' : status === selected.status ? 'Selectează un status diferit pentru a putea notifica clientul.' : `Clientul va primi rezumatul și linkul de urmărire la ${selected.customer_email}.`}</Text></View>
+              <View style={styles.notifyCopy}><Text style={styles.notifyTitle}>{status === 'return_requested' ? 'Trimite confirmarea solicitării' : status === 'return_confirmed' ? 'Trimite confirmarea returului' : status === 'cancelled' ? 'Confirmare automată pe e-mail' : 'Trimite actualizarea pe e-mail'}</Text><Text style={styles.notifyText}>{!selected.customer_email ? 'Comanda nu are o adresă de e-mail.' : status === 'return_requested' ? `Clientul va primi e-mailul „Am primit solicitarea ta de retur” la ${selected.customer_email}.` : status === 'return_confirmed' ? `Clientul va primi confirmarea aprobării returului la ${selected.customer_email}. Factura de retur, dacă există o factură pozitivă, se trimite automat separat.` : status === 'cancelled' ? `Confirmarea anulării va fi trimisă automat la ${selected.customer_email}.` : status === selected.status ? 'Selectează un status diferit pentru a putea notifica clientul.' : `Clientul va primi rezumatul și linkul de urmărire la ${selected.customer_email}.`}</Text></View>
               <View style={[styles.checkbox, notifyCustomer && styles.checkboxActive]}>{notifyCustomer ? <Check size={13} color="#15110D" strokeWidth={3} /> : <Mail size={13} color={Colors.textMuted} />}</View>
             </TouchableOpacity>
             <Text style={styles.sectionLabel}>STATUS PLATA · {selected.payment_method === 'card' ? 'CARD' : 'RAMBURS'}</Text>
@@ -494,14 +667,17 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
         <Pressable style={styles.invoicePromptBackdrop} onPress={() => !invoiceBusy && setInvoicePromptOrder(null)}>
           <Pressable style={styles.invoicePrompt} onPress={(event) => event.stopPropagation()}>
             <View style={styles.invoicePromptGlow} />
+            <ScrollView bounces={false} showsVerticalScrollIndicator={false} contentContainerStyle={styles.invoicePromptScroll}>
             <View style={styles.invoicePromptHead}><View style={styles.invoicePromptLogo}><FileCheck2 size={26} color="#FFB36B" /></View><TouchableOpacity disabled={Boolean(invoiceBusy)} style={styles.invoicePromptClose} onPress={() => setInvoicePromptOrder(null)}><X size={18} color={Colors.textSecondary} /></TouchableOpacity></View>
             <Text style={styles.invoicePromptEyebrow}>DOCUMENT FISCAL · TEMĂ FIXATĂ</Text>
-            <Text style={styles.invoicePromptTitle}>Emite factura</Text>
-            <Text style={styles.invoicePromptSubtitle}>Factura va prelua datele, produsele și prețurile comenzii, apoi va scădea stocul. FIFO va lega ieșirea de costurile reale de achiziție disponibile.</Text>
+            <Text style={styles.invoicePromptTitle}>{invoicePromptOrder?.status === 'return_confirmed' ? 'Emite factura și returul' : 'Emite factura'}</Text>
+            <Text style={styles.invoicePromptSubtitle}>{invoicePromptOrder?.status === 'return_confirmed' ? 'Se emit împreună factura pozitivă și factura de retur. Returul va indica explicit factura pozitivă și comanda, iar tu alegi separat ce PDF-uri trimiți clientului.' : 'Factura va prelua datele, produsele și prețurile comenzii, apoi va scădea stocul. FIFO va lega ieșirea de costurile reale de achiziție disponibile.'}</Text>
             <View style={styles.invoicePromptSummary}><View><Text style={styles.invoicePromptSummaryLabel}>COMANDĂ</Text><Text style={styles.invoicePromptSummaryValue}>{invoicePromptOrder?.order_number}</Text></View><View style={styles.invoicePromptSummaryRight}><Text style={styles.invoicePromptSummaryLabel}>TOTAL</Text><Text style={styles.invoicePromptSummaryTotal}>{invoicePromptOrder ? money(invoicePromptOrder.total) : ''}</Text></View></View>
-            <TouchableOpacity activeOpacity={0.78} disabled={!invoicePromptOrder?.customer_email || Boolean(invoiceBusy)} onPress={() => setInvoiceSendEmail((value) => !value)} style={[styles.invoiceEmailSwitch, invoiceSendEmail && styles.invoiceEmailSwitchActive, !invoicePromptOrder?.customer_email && styles.invoiceEmailSwitchDisabled]}><View style={[styles.invoiceEmailIcon, invoiceSendEmail && styles.invoiceEmailIconActive]}><Mail size={21} color={invoiceSendEmail ? '#FFFFFF' : '#FFB36B'} /></View><View style={styles.invoiceEmailCopy}><View style={styles.invoiceEmailTitleRow}><Text style={styles.invoiceEmailTitle}>Trimite factura și pe e-mail</Text><View style={[styles.invoiceEmailBadge, invoiceSendEmail && styles.invoiceEmailBadgeActive]}><Text style={[styles.invoiceEmailBadgeText, invoiceSendEmail && styles.invoiceEmailBadgeTextActive]}>{invoiceSendEmail ? 'ACTIV' : 'OPȚIONAL'}</Text></View></View><Text numberOfLines={2} style={styles.invoiceEmailText}>{invoicePromptOrder?.customer_email ? `Atașăm PDF-ul și XLSX-ul la ${invoicePromptOrder.customer_email}` : 'Comanda nu are o adresă de e-mail validă.'}</Text></View><View pointerEvents="none" style={styles.invoiceEmailControl}><Text style={[styles.invoiceEmailState, invoiceSendEmail && styles.invoiceEmailStateActive]}>{invoiceSendEmail ? 'DA' : 'NU'}</Text><Switch value={invoiceSendEmail} trackColor={{ false: '#5A545D', true: '#F07922' }} thumbColor="#FFFFFF" ios_backgroundColor="#5A545D" /></View></TouchableOpacity>
-            <View style={styles.invoicePromptNotice}><BadgeCheck size={17} color="#34D399" /><Text style={styles.invoicePromptNoticeText}>Numărul și tema rămân aceleași la orice regenerare ulterioară.</Text></View>
-            <View style={styles.invoicePromptActions}><TouchableOpacity disabled={Boolean(invoiceBusy)} style={styles.invoicePromptCancel} onPress={() => setInvoicePromptOrder(null)}><Text style={styles.invoicePromptCancelText}>Renunță</Text></TouchableOpacity><TouchableOpacity disabled={Boolean(invoiceBusy)} style={styles.invoicePromptConfirm} onPress={() => invoicePromptOrder && void issueInvoice(invoicePromptOrder, invoiceSendEmail)}>{invoiceBusy ? <ActivityIndicator color="#FFFFFF" /> : <><FileCheck2 size={18} color="#FFFFFF" /><Text style={styles.invoicePromptConfirmText}>{invoiceSendEmail ? 'Emite și trimite' : 'Emite factura'}</Text></>}</TouchableOpacity></View>
+            <TouchableOpacity activeOpacity={0.78} disabled={!invoicePromptOrder?.customer_email || Boolean(invoiceBusy)} onPress={() => setInvoiceSendEmail((value) => !value)} style={[styles.invoiceEmailSwitch, invoiceSendEmail && styles.invoiceEmailSwitchActive, !invoicePromptOrder?.customer_email && styles.invoiceEmailSwitchDisabled]}><View style={[styles.invoiceEmailIcon, invoiceSendEmail && styles.invoiceEmailIconActive]}><Mail size={21} color={invoiceSendEmail ? '#FFFFFF' : '#FFB36B'} /></View><View style={styles.invoiceEmailCopy}><View style={styles.invoiceEmailTitleRow}><Text style={styles.invoiceEmailTitle}>{invoicePromptOrder?.status === 'return_confirmed' ? 'Trimite factura pozitivă' : 'Trimite factura și pe e-mail'}</Text><View style={[styles.invoiceEmailBadge, invoiceSendEmail && styles.invoiceEmailBadgeActive]}><Text style={[styles.invoiceEmailBadgeText, invoiceSendEmail && styles.invoiceEmailBadgeTextActive]}>{invoiceSendEmail ? 'ACTIV' : 'OPȚIONAL'}</Text></View></View><Text numberOfLines={2} style={styles.invoiceEmailText}>{invoicePromptOrder?.customer_email ? `Atașăm doar PDF-ul la ${invoicePromptOrder.customer_email}` : 'Comanda nu are o adresă de e-mail validă.'}</Text></View><View pointerEvents="none" style={styles.invoiceEmailControl}><Text style={[styles.invoiceEmailState, invoiceSendEmail && styles.invoiceEmailStateActive]}>{invoiceSendEmail ? 'DA' : 'NU'}</Text><Switch value={invoiceSendEmail} trackColor={{ false: '#5A545D', true: '#F07922' }} thumbColor="#FFFFFF" ios_backgroundColor="#5A545D" /></View></TouchableOpacity>
+            {invoicePromptOrder?.status === 'return_confirmed' ? <TouchableOpacity activeOpacity={0.78} disabled={!invoicePromptOrder.customer_email || Boolean(invoiceBusy)} onPress={() => setInvoiceSendReturnEmail((value) => !value)} style={[styles.invoiceEmailSwitch, invoiceSendReturnEmail && styles.invoiceEmailSwitchActive, !invoicePromptOrder.customer_email && styles.invoiceEmailSwitchDisabled]}><View style={[styles.invoiceEmailIcon, invoiceSendReturnEmail && styles.invoiceEmailIconActive]}><RotateCcw size={21} color={invoiceSendReturnEmail ? '#FFFFFF' : '#2DD4BF'} /></View><View style={styles.invoiceEmailCopy}><View style={styles.invoiceEmailTitleRow}><Text style={styles.invoiceEmailTitle}>Trimite factura de retur</Text><View style={[styles.invoiceEmailBadge, invoiceSendReturnEmail && styles.invoiceEmailBadgeActive]}><Text style={[styles.invoiceEmailBadgeText, invoiceSendReturnEmail && styles.invoiceEmailBadgeTextActive]}>{invoiceSendReturnEmail ? 'ACTIV' : 'OPȚIONAL'}</Text></View></View><Text numberOfLines={2} style={styles.invoiceEmailText}>PDF separat, trimis la aceeași adresă a clientului.</Text></View><View pointerEvents="none" style={styles.invoiceEmailControl}><Text style={[styles.invoiceEmailState, invoiceSendReturnEmail && styles.invoiceEmailStateActive]}>{invoiceSendReturnEmail ? 'DA' : 'NU'}</Text><Switch value={invoiceSendReturnEmail} trackColor={{ false: '#5A545D', true: '#0F766E' }} thumbColor="#FFFFFF" ios_backgroundColor="#5A545D" /></View></TouchableOpacity> : null}
+            <View style={styles.invoicePromptNotice}><BadgeCheck size={17} color="#34D399" /><Text style={styles.invoicePromptNoticeText}>{invoicePromptOrder?.status === 'return_confirmed' ? 'Ambele documente folosesc seria activă și numere consecutive. Cele două comutatoare de e-mail sunt complet independente.' : 'Numărul și tema rămân aceleași la orice regenerare ulterioară.'}</Text></View>
+            <View style={styles.invoicePromptActions}><TouchableOpacity disabled={Boolean(invoiceBusy)} style={styles.invoicePromptCancel} onPress={() => setInvoicePromptOrder(null)}><Text style={styles.invoicePromptCancelText}>Renunță</Text></TouchableOpacity><TouchableOpacity disabled={Boolean(invoiceBusy)} style={styles.invoicePromptConfirm} onPress={() => invoicePromptOrder && void issueInvoice(invoicePromptOrder, invoiceSendEmail, invoiceSendReturnEmail)}>{invoiceBusy ? <ActivityIndicator color="#FFFFFF" /> : <><FileCheck2 size={18} color="#FFFFFF" /><Text style={styles.invoicePromptConfirmText}>{invoicePromptOrder?.status === 'return_confirmed' ? 'Emite ambele' : invoiceSendEmail ? 'Emite și trimite' : 'Emite factura'}</Text></>}</TouchableOpacity></View>
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -549,7 +725,7 @@ function ProductPanelContent({ stats }: { stats: ShopProductStats }) {
 
     <View style={styles.productInfoCard}>
       <View style={styles.productInfoHead}><Text style={styles.productInfoKicker}>ISTORIC RECENT</Text><Text style={styles.productInfoTitle}>Comenzi și vânzări</Text></View>
-      {stats.orders.length ? stats.orders.slice(0, 5).map((sale) => <View key={sale.id} style={styles.productSaleRow}><View style={styles.productSaleIcon}><ShoppingCart size={15} color="#38BDF8" /></View><View style={styles.productSaleCopy}><Text style={styles.productSaleOrder}>{sale.order_number}</Text><Text style={styles.productSaleMeta}>{sale.customer_name || 'Client'} · {dateTime(sale.created_at)}</Text></View><View style={styles.productSaleTotal}><Text style={styles.productSaleQty}>{sale.quantity}×</Text><Text style={styles.productSaleValue}>{money(sale.line_total)}</Text></View></View>) : <View style={styles.productPanelEmpty}><ShoppingCart size={18} color={Colors.textMuted} /><Text style={styles.productPanelEmptyText}>Produsul nu apare încă în nicio comandă.</Text></View>}
+      {stats.orders.length ? stats.orders.slice(0, 5).map((sale) => <View key={sale.id} style={styles.productSaleRow}><View style={styles.productSaleIcon}><ShoppingCart size={15} color="#38BDF8" /></View><View style={styles.productSaleCopy}><Text style={styles.productSaleOrder}>{sale.order_number}</Text><Text style={styles.productSaleMeta}>{sale.customer_display_name || sale.customer_name || 'Client'} · {dateTime(sale.created_at)}</Text></View><View style={styles.productSaleTotal}><Text style={styles.productSaleQty}>{sale.quantity}×</Text><Text style={styles.productSaleValue}>{money(sale.line_total)}</Text></View></View>) : <View style={styles.productPanelEmpty}><ShoppingCart size={18} color={Colors.textMuted} /><Text style={styles.productPanelEmptyText}>Produsul nu apare încă în nicio comandă.</Text></View>}
     </View>
 
     <View style={styles.productInfoCard}>
@@ -568,7 +744,7 @@ function ProductPanelRow({ label, value, strong = false, positive = false }: { l
 }
 
 function OrderStatusTimeline({ order }: { order: ShopOrder }) {
-  const reveal = useRef(new Animated.Value(0)).current;
+  const [reveal] = useState(() => new Animated.Value(0));
   const history = Array.isArray(order.status_history) ? order.status_history : [];
   const terminalCurrent = terminalOrderStatuses.includes(order.status) ? orderStatuses.find((item) => item.value === order.status) : null;
   const visible = orderStatuses.filter((item) => mainOrderFlow.includes(item.value)).concat(terminalCurrent ? [terminalCurrent] : []);
@@ -630,12 +806,12 @@ function ClientInfoBlock({ order }: { order: ShopOrder }) {
   const companyOrder = isCompanyOrder(order);
   return <View style={styles.info}>
     <View style={styles.infoHead}><View style={styles.infoTitleWithBadge}><Text style={styles.infoTitle}>CLIENT</Text><View style={[styles.customerTypeBadge, companyOrder && styles.customerTypeBadgeCompany]}><Text style={[styles.customerTypeBadgeText, companyOrder && styles.customerTypeBadgeTextCompany]}>{companyOrder ? 'PJ' : 'PF'}</Text></View></View><Text style={styles.infoHeadHint}>{companyOrder ? 'PERSOANĂ JURIDICĂ' : 'PERSOANĂ FIZICĂ'}</Text></View>
-    <DetailInfoRow label="Nume" value={order.customer_name} strong />
+    <DetailInfoRow label={companyOrder ? 'Denumire firmă' : 'Nume'} value={shopOrderCustomerDisplayName(order)} strong />
+    {companyOrder ? <DetailInfoRow label="Persoană de contact" value={order.customer_contact_name || order.customer_name} /> : null}
     <DetailInfoRow label="Telefon" value={order.customer_phone} />
     <DetailInfoRow label="E-mail" value={order.customer_email || 'Fără e-mail'} />
     {companyOrder ? <View style={styles.companyDetails}>
       <Text style={styles.companyDetailsTitle}>DATE FISCALE</Text>
-      <DetailInfoRow label="Denumire firmă" value={order.company_name} strong />
       <DetailInfoRow label="CUI / CIF" value={order.company_cui} />
       <DetailInfoRow label="Registrul Comerțului" value={order.company_registration_number} />
       <DetailInfoRow label="Sediu social" value={order.company_address} />
@@ -655,8 +831,12 @@ function DeliveryInfoBlock({ order, editing, onToggle, address, city, county, po
   return <View style={styles.info}>
     <View style={styles.infoHead}><Text style={styles.infoTitle}>LIVRARE</Text><TouchableOpacity style={[styles.deliveryEditButton, editing && styles.deliveryEditButtonActive]} onPress={onToggle}>{editing ? <X size={14} color={Colors.orange} /> : <Pencil size={14} color={Colors.textPrimary} />}<Text style={[styles.deliveryEditButtonText, editing && styles.deliveryEditButtonTextActive]}>{editing ? 'Anulează' : 'Editează'}</Text></TouchableOpacity></View>
     {editing ? <><DeliveryEditRow label="Adresă completă" value={address} onChangeText={onAddressChange} strong /><DeliveryEditRow label="Localitate" value={city} onChangeText={onCityChange} /><DeliveryEditRow label="Județ" value={county} onChangeText={onCountyChange} /><DeliveryEditRow label="Cod poștal" value={postalCode} onChangeText={onPostalCodeChange} /><Text style={styles.deliveryEditHelper}>Salvează modificările folosind butonul „Salvează” din partea de sus.</Text></> : <><DetailInfoRow label="Adresă completă" value={order.address} strong /><DetailInfoRow label="Localitate" value={order.city} /><DetailInfoRow label="Județ" value={order.county} /><DetailInfoRow label="Cod poștal" value={order.postal_code} /></>}
-    <DetailInfoRow label="Metodă" value={order.shipping_method_name} />
+    <DetailInfoRow label="Metodă livrare" value={order.shipping_method_name} />
     <DetailInfoRow label="Cost livrare" value={money(order.shipping_cost)} />
+    <View style={[styles.orderPaymentRow, order.payment_method === 'card' ? styles.orderPaymentRowCard : styles.orderPaymentRowCash]}>
+      <View style={[styles.orderPaymentIcon, order.payment_method === 'card' ? styles.orderPaymentIconCard : styles.orderPaymentIconCash]}>{order.payment_method === 'card' ? <CreditCard size={18} color="#C4B5FD" /> : <HandCoins size={18} color="#7DD3FC" />}</View>
+      <View style={styles.orderPaymentCopy}><Text style={styles.orderPaymentLabel}>METODĂ DE PLATĂ</Text><Text style={styles.orderPaymentValue}>{order.payment_method === 'card' ? 'Card online' : 'Ramburs la curier'}</Text></View>
+    </View>
   </View>;
 }
 
@@ -682,7 +862,7 @@ const styles = StyleSheet.create({
   productDescriptionCard: { borderWidth: 1, borderColor: 'rgba(251,146,60,.2)', borderRadius: 21, padding: 14, backgroundColor: 'rgba(251,146,60,.055)', marginTop: 10 }, productDescriptionKicker: { color: '#FB923C', fontFamily: 'Inter-Bold', fontSize: 6.5, letterSpacing: 0.8 }, productDescriptionTitle: { color: '#F2ECE7', fontFamily: 'Inter-Bold', fontSize: 12, marginTop: 4 }, productDescriptionText: { color: '#A59DA4', fontFamily: 'Inter-Regular', fontSize: 9.5, lineHeight: 16, marginTop: 7 },
   productSaleRow: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#302F36', paddingVertical: 8 }, productSaleIcon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: 'rgba(56,189,248,.1)' }, productSaleCopy: { flex: 1, minWidth: 0 }, productSaleOrder: { color: '#EEE9E4', fontFamily: 'Inter-Bold', fontSize: 9.5 }, productSaleMeta: { color: '#7E7880', fontFamily: 'Inter-Regular', fontSize: 7.5, marginTop: 3 }, productSaleTotal: { alignItems: 'flex-end', gap: 2 }, productSaleQty: { color: '#38BDF8', fontFamily: 'Inter-Bold', fontSize: 7.5 }, productSaleValue: { color: '#EEE9E4', fontFamily: 'Inter-Bold', fontSize: 9.5 },
   productReview: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#302F36', paddingVertical: 11 }, productReviewTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, productReviewName: { color: '#EEE9E4', fontFamily: 'Inter-Bold', fontSize: 9.5 }, productReviewRating: { flexDirection: 'row', alignItems: 'center', gap: 4 }, productReviewRatingText: { color: '#FBBF24', fontFamily: 'Inter-Bold', fontSize: 8 }, productReviewText: { color: '#999199', fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 14, marginTop: 6 }, productPanelEmpty: { minHeight: 82, alignItems: 'center', justifyContent: 'center', gap: 7 }, productPanelEmptyText: { color: '#817A82', fontFamily: 'Inter-Regular', fontSize: 9, textAlign: 'center' },
-  detailLoading: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, borderRadius: 15, backgroundColor: Colors.orangeDim, marginBottom: 9 }, detailLoadingText: { color: Colors.orange, fontFamily: 'Inter-SemiBold', fontSize: 9 },
+  detailLoading: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, borderRadius: 15, backgroundColor: Colors.orangeDim, marginBottom: 9 }, detailLoadingText: { color: Colors.orange, fontFamily: 'Inter-SemiBold', fontSize: 9 }, detailError: { justifyContent: 'space-between', borderWidth: 1, borderColor: '#7A3946', paddingHorizontal: 11, backgroundColor: '#321D23' }, detailErrorText: { flex: 1, color: '#FDA4AF', fontFamily: 'Inter-SemiBold', fontSize: 9 }, detailRetry: { minHeight: 30, flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 10, paddingHorizontal: 10, backgroundColor: '#B94759' }, detailRetryText: { color: '#FFFFFF', fontFamily: 'Inter-Bold', fontSize: 8 },
   info: { borderWidth: 1, borderColor: '#302D34', borderRadius: 20, padding: 15, backgroundColor: '#1B1B1F', marginBottom: 9 },
   infoHead: { minHeight: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#343137', paddingBottom: 8, marginBottom: 4 },
   infoTitle: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.9 }, infoTitleWithBadge: { flexDirection: 'row', alignItems: 'center', gap: 7 }, companyDetails: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#3B383E', paddingTop: 8, marginTop: 8 }, companyDetailsTitle: { color: '#6EE7B7', fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8, marginBottom: 2 },
@@ -698,6 +878,10 @@ const styles = StyleSheet.create({
   deliveryEditButtonTextActive: { color: Colors.orange },
   deliveryEditRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#2D2A30', paddingVertical: 6 },
   deliveryInput: { flex: 1, minHeight: 38, borderWidth: 1, borderColor: '#49454F', borderRadius: 11, paddingHorizontal: 10, color: Colors.textPrimary, backgroundColor: '#161519', fontFamily: 'Inter-SemiBold', fontSize: 10, textAlign: 'right' },
+  orderPaymentRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 16, padding: 10, marginTop: 10 },
+  orderPaymentRowCard: { borderColor: '#4C416A', backgroundColor: '#29233B' }, orderPaymentRowCash: { borderColor: '#24556B', backgroundColor: '#182E3A' },
+  orderPaymentIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 13 }, orderPaymentIconCard: { backgroundColor: '#A78BFA18' }, orderPaymentIconCash: { backgroundColor: '#38BDF818' },
+  orderPaymentCopy: { flex: 1, minWidth: 0 }, orderPaymentLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8 }, orderPaymentValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 12, marginTop: 3 },
   deliveryInputStrong: { fontFamily: 'Inter-Bold', fontSize: 11 },
   deliveryEditHelper: { color: '#FFAD70', fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 12, borderRadius: 10, padding: 9, backgroundColor: Colors.orangeDim, marginTop: 8 },
   contactActions: { flexDirection: 'row', gap: 8, paddingTop: 12 },
@@ -717,9 +901,11 @@ const styles = StyleSheet.create({
   grandTotalLabel: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 13 },
   grandTotalValue: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 17, fontVariant: ['tabular-nums'] },
   invoicePanel: { minHeight: 108, flexDirection: 'row', alignItems: 'center', gap: 11, borderWidth: 1, borderColor: '#6B461F', borderRadius: 22, padding: 13, backgroundColor: '#241C15', marginTop: 10 }, invoicePanelIssued: { borderColor: '#235C48', backgroundColor: '#15241F' }, invoicePanelIcon: { width: 46, height: 46, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: '#FFFFFF0A' }, invoicePanelCopy: { flex: 1, minWidth: 0 }, invoicePanelKicker: { color: '#FFAD70', fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.9 }, invoicePanelTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 13, marginTop: 4 }, invoicePanelText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8.5, lineHeight: 13, marginTop: 4 }, invoicePanelButton: { minWidth: 84, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 15, paddingHorizontal: 12, backgroundColor: Colors.orange }, invoicePanelButtonIssued: { backgroundColor: '#14865A' }, invoicePanelButtonText: { color: '#FFFFFF', fontFamily: 'Inter-Bold', fontSize: 9 },
-  invoicePromptBackdrop: { flex: 1, justifyContent: 'center', padding: 18, backgroundColor: '#080709D9' }, invoicePrompt: { width: '100%', maxWidth: 510, alignSelf: 'center', overflow: 'hidden', borderWidth: 1, borderColor: '#6B4625', borderRadius: 31, padding: 20, backgroundColor: '#211C19', shadowColor: '#000000', shadowOpacity: 0.5, shadowRadius: 28, shadowOffset: { width: 0, height: 18 }, elevation: 14 }, invoicePromptGlow: { position: 'absolute', width: 190, height: 190, borderRadius: 999, right: -80, top: -95, backgroundColor: '#FF8A0010' }, invoicePromptHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, invoicePromptLogo: { width: 54, height: 54, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#754A24', borderRadius: 18, backgroundColor: '#352316' }, invoicePromptClose: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: '#FFFFFF0A' }, invoicePromptEyebrow: { color: '#FFAD70', fontFamily: 'Inter-Bold', fontSize: 7.5, letterSpacing: 1, marginTop: 18 }, invoicePromptTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 25, letterSpacing: -0.5, marginTop: 6 }, invoicePromptSubtitle: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 16, marginTop: 8 }, invoicePromptSummary: { minHeight: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderWidth: 1, borderColor: '#443B35', borderRadius: 19, padding: 14, backgroundColor: '#181719', marginTop: 16 }, invoicePromptSummaryRight: { alignItems: 'flex-end' }, invoicePromptSummaryLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8 }, invoicePromptSummaryValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 12, marginTop: 4 }, invoicePromptSummaryTotal: { color: '#FFAD70', fontFamily: 'Inter-Bold', fontSize: 15, marginTop: 4 }, invoiceEmailSwitch: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#514942', borderRadius: 22, paddingHorizontal: 13, paddingVertical: 12, backgroundColor: '#19181A', marginTop: 11, shadowColor: '#000000', shadowOpacity: 0.2, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 2 }, invoiceEmailSwitchActive: { borderColor: '#F07922', backgroundColor: '#302117' }, invoiceEmailSwitchDisabled: { opacity: 0.48 }, invoiceEmailIcon: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#6A4931', borderRadius: 16, backgroundColor: '#39271A' }, invoiceEmailIconActive: { borderColor: '#FF9A42', backgroundColor: '#E86F19' }, invoiceEmailCopy: { flex: 1, minWidth: 0 }, invoiceEmailTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }, invoiceEmailTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 12.5 }, invoiceEmailBadge: { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: '#FFFFFF0A' }, invoiceEmailBadgeActive: { backgroundColor: '#FF8A0024' }, invoiceEmailBadgeText: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 6, letterSpacing: 0.55 }, invoiceEmailBadgeTextActive: { color: '#FFC18A' }, invoiceEmailText: { color: '#AAA1A7', fontFamily: 'Inter-Regular', fontSize: 8.5, lineHeight: 13, marginTop: 5 }, invoiceEmailControl: { alignItems: 'center', gap: 4 }, invoiceEmailState: { color: '#8E878F', fontFamily: 'Inter-Bold', fontSize: 6.5, letterSpacing: 0.6 }, invoiceEmailStateActive: { color: '#FFB36B' }, invoicePromptNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, padding: 11, backgroundColor: '#34D3990B', marginTop: 10 }, invoicePromptNoticeText: { flex: 1, color: '#9EDBC4', fontFamily: 'Inter-SemiBold', fontSize: 8.5, lineHeight: 13 }, invoicePromptActions: { flexDirection: 'row', gap: 9, marginTop: 15 }, invoicePromptCancel: { flex: 0.8, minHeight: 50, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#48434B', borderRadius: 17, backgroundColor: '#2A272D' }, invoicePromptCancelText: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 10 }, invoicePromptConfirm: { flex: 1.3, minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 17, backgroundColor: Colors.orange, shadowColor: Colors.orange, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 4 }, invoicePromptConfirmText: { color: '#FFFFFF', fontFamily: 'Inter-Bold', fontSize: 10 },
+  invoicePromptBackdrop: { flex: 1, justifyContent: 'center', padding: 18, backgroundColor: '#080709D9' }, invoicePrompt: { width: '100%', maxWidth: 510, maxHeight: '94%', alignSelf: 'center', overflow: 'hidden', borderWidth: 1, borderColor: '#6B4625', borderRadius: 31, padding: 20, backgroundColor: '#211C19', shadowColor: '#000000', shadowOpacity: 0.5, shadowRadius: 28, shadowOffset: { width: 0, height: 18 }, elevation: 14 }, invoicePromptScroll: { paddingBottom: 2 }, invoicePromptGlow: { position: 'absolute', width: 190, height: 190, borderRadius: 999, right: -80, top: -95, backgroundColor: '#FF8A0010' }, invoicePromptHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, invoicePromptLogo: { width: 54, height: 54, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#754A24', borderRadius: 18, backgroundColor: '#352316' }, invoicePromptClose: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: '#FFFFFF0A' }, invoicePromptEyebrow: { color: '#FFAD70', fontFamily: 'Inter-Bold', fontSize: 7.5, letterSpacing: 1, marginTop: 18 }, invoicePromptTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 25, letterSpacing: -0.5, marginTop: 6 }, invoicePromptSubtitle: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 16, marginTop: 8 }, invoicePromptSummary: { minHeight: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderWidth: 1, borderColor: '#443B35', borderRadius: 19, padding: 14, backgroundColor: '#181719', marginTop: 16 }, invoicePromptSummaryRight: { alignItems: 'flex-end' }, invoicePromptSummaryLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8 }, invoicePromptSummaryValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 12, marginTop: 4 }, invoicePromptSummaryTotal: { color: '#FFAD70', fontFamily: 'Inter-Bold', fontSize: 15, marginTop: 4 }, invoiceEmailSwitch: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#514942', borderRadius: 22, paddingHorizontal: 13, paddingVertical: 12, backgroundColor: '#19181A', marginTop: 11, shadowColor: '#000000', shadowOpacity: 0.2, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 2 }, invoiceEmailSwitchActive: { borderColor: '#F07922', backgroundColor: '#302117' }, invoiceEmailSwitchDisabled: { opacity: 0.48 }, invoiceEmailIcon: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#6A4931', borderRadius: 16, backgroundColor: '#39271A' }, invoiceEmailIconActive: { borderColor: '#FF9A42', backgroundColor: '#E86F19' }, invoiceEmailCopy: { flex: 1, minWidth: 0 }, invoiceEmailTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }, invoiceEmailTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 12.5 }, invoiceEmailBadge: { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: '#FFFFFF0A' }, invoiceEmailBadgeActive: { backgroundColor: '#FF8A0024' }, invoiceEmailBadgeText: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 6, letterSpacing: 0.55 }, invoiceEmailBadgeTextActive: { color: '#FFC18A' }, invoiceEmailText: { color: '#AAA1A7', fontFamily: 'Inter-Regular', fontSize: 8.5, lineHeight: 13, marginTop: 5 }, invoiceEmailControl: { alignItems: 'center', gap: 4 }, invoiceEmailState: { color: '#8E878F', fontFamily: 'Inter-Bold', fontSize: 6.5, letterSpacing: 0.6 }, invoiceEmailStateActive: { color: '#FFB36B' }, invoicePromptNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, padding: 11, backgroundColor: '#34D3990B', marginTop: 10 }, invoicePromptNoticeText: { flex: 1, color: '#9EDBC4', fontFamily: 'Inter-SemiBold', fontSize: 8.5, lineHeight: 13 }, invoicePromptActions: { flexDirection: 'row', gap: 9, marginTop: 15 }, invoicePromptCancel: { flex: 0.8, minHeight: 50, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#48434B', borderRadius: 17, backgroundColor: '#2A272D' }, invoicePromptCancelText: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 10 }, invoicePromptConfirm: { flex: 1.3, minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 17, backgroundColor: Colors.orange, shadowColor: Colors.orange, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 4 }, invoicePromptConfirmText: { color: '#FFFFFF', fontFamily: 'Inter-Bold', fontSize: 10 },
   timeline: { overflow: 'hidden', borderRadius: 22, padding: 14, backgroundColor: '#1B1B1F' }, timelineRow: { flexDirection: 'row', alignItems: 'stretch', gap: 11 }, timelineRail: { width: 38, alignItems: 'center' }, timelineDot: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#403C43', borderRadius: 12, backgroundColor: '#242228' }, timelineDotCurrent: { shadowColor: '#FF7A00', shadowOpacity: 0.28, shadowRadius: 9, shadowOffset: { width: 0, height: 4 }, elevation: 3 }, timelineLine: { width: 2, flex: 1, minHeight: 30, borderRadius: 99, backgroundColor: '#343138', marginVertical: 4 }, timelineCard: { flex: 1, minHeight: 78, borderWidth: 1, borderColor: 'transparent', borderRadius: 17, padding: 12, marginBottom: 8, backgroundColor: '#232126' }, timelineTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }, timelineTitle: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 11 }, timelineCurrent: { fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8 }, timelineDescription: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 14, marginTop: 4 }, timelineMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }, timelineDate: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 8 }, timelineMail: { flexDirection: 'row', alignItems: 'center', gap: 4 }, timelineMailText: { color: '#34D399', fontFamily: 'Inter-Bold', fontSize: 6, letterSpacing: 0.45 }, timelinePending: { color: Colors.textMuted, fontFamily: 'Inter-SemiBold', fontSize: 7, marginTop: 8 },
   statusPicker: { overflow: 'hidden', borderWidth: 1, borderColor: '#37343B', borderRadius: 22, padding: 12, backgroundColor: '#1B1B1F' }, statusTrackRow: { minHeight: 64, flexDirection: 'row', alignItems: 'stretch', gap: 9 }, statusTrackRail: { width: 28, alignItems: 'center' }, statusTrackDot: { width: 27, height: 27, alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderWidth: 1, borderColor: '#4A4650', borderRadius: 10, backgroundColor: '#29272D' }, statusTrackIndex: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7 }, statusTrackLine: { width: 2, flex: 1, minHeight: 25, borderRadius: 99, backgroundColor: '#37343B', marginVertical: 3 }, statusOption: { flex: 1, minHeight: 55, flexDirection: 'row', alignItems: 'center', gap: 9, alignSelf: 'flex-start', borderWidth: 1, borderColor: '#36333A', borderRadius: 16, padding: 8, backgroundColor: '#211F24', marginBottom: 7 }, statusOptionLocked: { opacity: 0.46 }, statusOptionIcon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 12 }, statusOptionCopy: { flex: 1, minWidth: 0 }, statusOptionTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 }, statusOptionText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 12, marginTop: 2 }, radio: { width: 21, height: 21, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#5A555E', borderRadius: 99 },
   notifyCard: { minHeight: 84, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#433B32', borderRadius: 20, padding: 12, backgroundColor: '#211D18', marginTop: 10 }, notifyCardActive: { borderColor: Colors.orange, backgroundColor: '#2A1C11' }, notifyCardDisabled: { opacity: 0.5 }, notifyIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: Colors.orangeDim }, notifyCopy: { flex: 1, minWidth: 0 }, notifyTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 }, notifyText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 13, marginTop: 4 }, checkbox: { width: 25, height: 25, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#554E47', borderRadius: 8, backgroundColor: '#171513' }, checkboxActive: { borderColor: Colors.orange, backgroundColor: Colors.orange },
+  cancellationReasonCard: { borderWidth: 1, borderColor: '#633740', borderRadius: 21, padding: 13, backgroundColor: '#26171B', marginTop: 10 }, cancellationReasonHead: { flexDirection: 'row', alignItems: 'center', gap: 9 }, cancellationReasonKicker: { color: '#FB7185', fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8 }, cancellationReasonTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 11, marginTop: 2 }, cancellationReasonInput: { minHeight: 94, borderWidth: 1, borderColor: '#59434A', borderRadius: 15, padding: 12, color: Colors.textPrimary, backgroundColor: '#171316', fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 15, textAlignVertical: 'top', marginTop: 11 }, cancellationReasonInputLocked: { opacity: 0.72 }, cancellationReasonHelp: { color: '#AA8991', fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 13, marginTop: 8 },
+  returnRequestCard: { borderWidth: 1, borderColor: '#65405D', borderRadius: 21, padding: 13, backgroundColor: '#251923', marginTop: 10 }, returnRequestKicker: { color: '#F472B6', fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8 }, returnRequestInput: { minHeight: 50, borderWidth: 1, borderColor: '#59434F', borderRadius: 15, paddingHorizontal: 12, color: Colors.textPrimary, backgroundColor: '#171316', fontFamily: 'Inter-Regular', fontSize: 10, marginTop: 9 }, returnAmounts: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, borderTopWidth: 1, borderTopColor: '#4A3444', paddingTop: 12, marginTop: 12 }, returnAmountRight: { alignItems: 'flex-end' }, returnAmountLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 6.5, letterSpacing: 0.65 }, returnAmountCost: { color: '#FB7185', fontFamily: 'Inter-Bold', fontSize: 12, marginTop: 4 }, returnAmountValue: { color: '#6EE7B7', fontFamily: 'Inter-Bold', fontSize: 13, marginTop: 4 }, returnRequestHelp: { color: '#B794AC', fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 13, marginTop: 9 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, chip: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: '#413D45', borderRadius: 999, paddingHorizontal: 12, backgroundColor: '#1B1B1F' }, chipActive: { borderColor: Colors.orange, backgroundColor: Colors.orangeDim }, chipText: { color: Colors.textSecondary, fontFamily: 'Inter-SemiBold', fontSize: 9 }, chipTextActive: { color: Colors.orange }, notes: { minHeight: 100, borderWidth: 1, borderColor: '#49454F', borderRadius: 15, padding: 13, color: Colors.textPrimary, backgroundColor: '#161519', fontFamily: 'Inter-Regular', fontSize: 11, textAlignVertical: 'top' },
 });

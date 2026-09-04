@@ -8,7 +8,7 @@ export type AppModule = 'service' | 'shop';
 type AppModuleContextValue = {
   activeModule: AppModule | null;
   initializing: boolean;
-  selectModule: (module: AppModule) => Promise<void>;
+  selectModule: (module: AppModule) => void;
 };
 
 const AppModuleContext = createContext<AppModuleContextValue | null>(null);
@@ -36,9 +36,9 @@ export function AppModuleProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const selectModule = useCallback(async (module: AppModule) => {
+  const selectModule = useCallback((module: AppModule) => {
     setActiveModule(module);
-    await SecureStore.setItemAsync(APP_MODULE_STORAGE_KEY, module).catch(() => {});
+    void SecureStore.setItemAsync(APP_MODULE_STORAGE_KEY, module).catch(() => {});
   }, []);
 
   const value = useMemo(

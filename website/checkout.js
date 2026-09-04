@@ -698,6 +698,8 @@
               total: Number(order.total ?? totals.total),
               vatPayer: Boolean(order.vat_payer ?? totals.vatPayer),
               customerName: String(order.customer_name || fields.customer_name || ""),
+              customerContactName: String(order.customer_contact_name || order.customer_name || fields.customer_name || ""),
+              customerDisplayName: String(order.customer_display_name || (fields.customer_type === "company" ? fields.company_name : fields.customer_name) || ""),
               customerPhone: String(order.customer_phone || fields.customer_phone || ""),
               customerEmail: String(order.customer_email || fields.customer_email || ""),
               customerType: String(order.customer_type || fields.customer_type || "individual"),

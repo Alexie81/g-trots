@@ -81,6 +81,24 @@ export type MobileAppUpdateInfo = {
   message?: string;
 };
 
+export type PagedResult<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_more: boolean;
+  prefetch_pages?: {
+    items: T[];
+    page: number;
+    has_more: boolean;
+  }[];
+};
+
+function pagedPrefetchCount(pageSize: number) {
+  const safePageSize = Math.min(100, Math.max(10, Math.trunc(pageSize || 10)));
+  return Math.max(0, Math.min(4, Math.floor(100 / safePageSize) - 1));
+}
+
 export class ApiRequestError extends Error {
   status: number;
 
@@ -103,19 +121,150 @@ function isTransientApiError(error: unknown): boolean {
 let runtimeConfigPromise: Promise<RuntimeApiConfig> | null = null;
 const referenceCache = new Map<string, { expiresAt: number; value?: unknown; promise?: Promise<unknown> }>();
 const inflightGetRequests = new Map<string, Promise<unknown>>();
+const legacyClientsTableCache = new Map<string, Client[]>();
+const legacyServiceTableCache = new Map<string, ServiceSheet[]>();
+const clientsTablePageCache = new Map<string, PagedResult<Client>>();
+const serviceTablePageCache = new Map<string, PagedResult<ServiceSheet>>();
+const clientsTablePageRequests = new Map<string, Promise<PagedResult<Client> | Client[]>>();
+const serviceTablePageRequests = new Map<string, Promise<PagedResult<ServiceSheet> | ServiceSheet[]>>();
+let referenceCacheGeneration = 0;
+let tableCacheGeneration = 0;
+
+function clearTableCaches() {
+  // Cererile deja pornite continua pentru consumatorul lor, dar nu mai pot fi
+  // reutilizate dupa o mutatie. `finally` sterge doar propria instanta.
+  inflightGetRequests.clear();
+  legacyClientsTableCache.clear();
+  legacyServiceTableCache.clear();
+  clientsTablePageCache.clear();
+  serviceTablePageCache.clear();
+  clientsTablePageRequests.clear();
+  serviceTablePageRequests.clear();
+  tableCacheGeneration += 1;
+}
+
+function clearReferenceCaches() {
+  referenceCacheGeneration += 1;
+  referenceCache.clear();
+  inflightGetRequests.clear();
+}
+
+function actionInvalidatesTables(action: string) {
+  return action === 'login'
+    || action === 'adminLogin'
+    || action === 'logout'
+    || action === 'markQrUsed'
+    || action === 'saveSystemDatabaseInfo'
+    || /(Client|ServiceSheet|Profile|Collaborator|Expense|User)/.test(action);
+}
+
+function tablePageKey(authToken: string, kind: 'clients' | 'service', query: Record<string, unknown>) {
+  return JSON.stringify([
+    authToken,
+    kind,
+    query.search || '',
+    query.profileId || '',
+    query.clientId || '',
+    query.lifecycle || '',
+    query.paymentStatus || '',
+    query.filterColumn || '',
+    query.dateFrom || '',
+    query.dateTo || '',
+    query.sortBy || '',
+    query.sortDir || '',
+    query.page || 1,
+    query.pageSize || 10,
+  ]);
+}
+
+function readTablePage<T>(cache: Map<string, PagedResult<T>>, key: string) {
+  const cached = cache.get(key);
+  if (!cached) return undefined;
+  cache.delete(key);
+  cache.set(key, cached);
+  return cached;
+}
+
+function rememberTableWindow<T>(
+  cache: Map<string, PagedResult<T>>,
+  authToken: string,
+  kind: 'clients' | 'service',
+  query: Record<string, unknown>,
+  result: PagedResult<T>
+) {
+  const pageSize = Math.max(Number(query.pageSize || result.page_size || 10), 10);
+  const limit = Math.max(5, Math.min(12, Math.floor(500 / pageSize)));
+  const remember = (pageQuery: Record<string, unknown>, value: PagedResult<T>) => {
+    const key = tablePageKey(authToken, kind, pageQuery);
+    if (cache.has(key)) cache.delete(key);
+    while (cache.size >= limit) {
+      const oldest = cache.keys().next().value;
+      if (!oldest) break;
+      cache.delete(oldest);
+    }
+    cache.set(key, value);
+  };
+  // Pastram fereastra doar pe pagina principala; paginile sintetice nu o
+  // recopiaza. Astfel, primul ecran poate importa tot blocul intr-un singur pas.
+  remember(query, result);
+  result.prefetch_pages?.forEach((prefetched) => remember(
+    { ...query, page: prefetched.page },
+    {
+      ...result,
+      items: prefetched.items,
+      page: prefetched.page,
+      has_more: prefetched.has_more,
+      prefetch_pages: undefined,
+    }
+  ));
+}
+
+function rememberLegacyTable<T>(cache: Map<string, T[]>, key: string, rows: T[]) {
+  if (!cache.has(key) && cache.size >= 4) {
+    const oldest = cache.keys().next().value;
+    if (oldest) cache.delete(oldest);
+  }
+  cache.set(key, rows);
+  return rows;
+}
+
+function legacyClientsTableKey(authToken: string, query: ClientsTableQuery) {
+  return JSON.stringify([authToken, query.search || '', query.profileId || '']);
+}
+
+function legacyServiceTableKey(authToken: string, query: ServiceSheetsQuery) {
+  return JSON.stringify([
+    authToken,
+    query.search || '',
+    query.clientId || '',
+    query.filterColumn || '',
+    query.dateFrom || '',
+    query.dateTo || '',
+    query.paymentStatus || '',
+    query.sortBy || '',
+    query.sortDir || '',
+  ]);
+}
 
 async function cachedReference<T>(key: string, loader: () => Promise<T>, ttlMs = 60000): Promise<T> {
   const now = Date.now();
   const cached = referenceCache.get(key);
   if (cached?.value !== undefined && cached.expiresAt > now) return cached.value as T;
   if (cached?.promise) return cached.promise as Promise<T>;
-  const promise = loader()
+  const generation = referenceCacheGeneration;
+  let promise: Promise<T>;
+  promise = loader()
     .then((value) => {
-      referenceCache.set(key, { value, expiresAt: Date.now() + ttlMs });
+      const current = referenceCache.get(key);
+      if (generation === referenceCacheGeneration && current?.promise === promise) {
+        referenceCache.set(key, { value, expiresAt: Date.now() + ttlMs });
+      } else if (current?.promise === promise) {
+        referenceCache.delete(key);
+      }
       return value;
     })
     .catch((error) => {
-      referenceCache.delete(key);
+      if (referenceCache.get(key)?.promise === promise) referenceCache.delete(key);
       throw error;
     });
   referenceCache.set(key, { promise, expiresAt: now + ttlMs });
@@ -123,6 +272,8 @@ async function cachedReference<T>(key: string, loader: () => Promise<T>, ttlMs =
 }
 
 function invalidateReferenceCache(...prefixes: string[]) {
+  referenceCacheGeneration += 1;
+  inflightGetRequests.clear();
   for (const key of referenceCache.keys()) {
     if (prefixes.some((prefix) => key.startsWith(prefix))) referenceCache.delete(key);
   }
@@ -182,7 +333,8 @@ export async function saveRuntimeApiConfig(config: RuntimeApiConfig): Promise<Ru
   if (!next.apiKey) throw new Error('API Key este obligatoriu.');
   await SecureStore.setItemAsync(API_CONFIG_STORAGE_KEY, JSON.stringify(next));
   runtimeConfigPromise = Promise.resolve(next);
-  referenceCache.clear();
+  clearReferenceCaches();
+  clearTableCaches();
   return next;
 }
 
@@ -282,7 +434,9 @@ async function call<T>(
 ): Promise<T> {
   const config = await getRuntimeApiConfig();
   if (method.toUpperCase() !== 'GET') {
-    return callWithConfig<T>(config, action, method, body, params);
+    const result = await callWithConfig<T>(config, action, method, body, params);
+    if (actionInvalidatesTables(action)) clearTableCaches();
+    return result;
   }
 
   const sortedParams = Object.entries(params || {})
@@ -294,7 +448,9 @@ async function call<T>(
   if (existing) return existing as Promise<T>;
 
   const request = callReadWithRecovery<T>(config, action, params)
-    .finally(() => inflightGetRequests.delete(requestKey));
+    .finally(() => {
+      if (inflightGetRequests.get(requestKey) === request) inflightGetRequests.delete(requestKey);
+    });
   inflightGetRequests.set(requestKey, request);
   return request;
 }
@@ -467,6 +623,86 @@ export async function getClients(search?: string, profileId?: string, authToken?
   if (profileId) p.profileId = profileId;
   if (authToken) p.authToken = authToken;
   return call<Client[]>('getClients', 'GET', undefined, p);
+}
+
+export type ClientsTableQuery = {
+  search?: string;
+  profileId?: string;
+  lifecycle?: 'active' | 'finalized';
+  sortBy?: 'created_at' | 'name';
+  sortDir?: 'asc' | 'desc';
+  page?: number;
+  pageSize?: number;
+};
+
+export async function getClientsPage(
+  authToken: string,
+  query: ClientsTableQuery = {},
+  preferLegacyCache = false
+): Promise<PagedResult<Client>> {
+  const pageCacheKey = tablePageKey(authToken, 'clients', query as Record<string, unknown>);
+  const cachedPage = preferLegacyCache ? readTablePage(clientsTablePageCache, pageCacheKey) : undefined;
+  if (cachedPage) return cachedPage;
+  const generation = tableCacheGeneration;
+  const legacyKey = legacyClientsTableKey(authToken, query);
+  const cachedLegacy = preferLegacyCache ? legacyClientsTableCache.get(legacyKey) : undefined;
+  const params: Record<string, string> = {
+    authToken,
+    table: '1',
+    prefetchPages: String(pagedPrefetchCount(query.pageSize || 10)),
+    cacheBust: String(Date.now()),
+  };
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== '') params[key] = String(value);
+  });
+  let pageRequest = clientsTablePageRequests.get(pageCacheKey);
+  if (!cachedLegacy && !pageRequest) {
+    pageRequest = call<PagedResult<Client> | Client[]>('getClients', 'GET', undefined, params);
+    clientsTablePageRequests.set(pageCacheKey, pageRequest);
+    void pageRequest.finally(() => {
+      if (clientsTablePageRequests.get(pageCacheKey) === pageRequest) clientsTablePageRequests.delete(pageCacheKey);
+    }).catch(() => {});
+  }
+  const result = cachedLegacy ?? await pageRequest!;
+  if (!Array.isArray(result)) {
+    if (generation === tableCacheGeneration) {
+      rememberTableWindow(clientsTablePageCache, authToken, 'clients', query as Record<string, unknown>, result);
+    }
+    return result;
+  }
+  const compactRows = cachedLegacy ?? rememberLegacyTable(
+    legacyClientsTableCache,
+    legacyKey,
+    result.map((client) => ({
+      ...client,
+      collaborator_costs: [],
+      expense_costs: [],
+      participants: [],
+      activity_logs: [],
+    }))
+  );
+  const lifecycleRows = query.lifecycle
+    ? compactRows.filter((client) => query.lifecycle === 'finalized'
+      ? Boolean(client.is_finalized) && client.finalization_source === 'manual'
+      : !(Boolean(client.is_finalized) && client.finalization_source === 'manual'))
+    : compactRows;
+  const orderedRows = [...lifecycleRows].sort((left, right) => {
+    if (query.sortBy === 'name') {
+      const comparison = String(left.name || '').localeCompare(String(right.name || ''), 'ro', { sensitivity: 'base' });
+      return query.sortDir === 'asc' ? comparison : -comparison;
+    }
+    const comparison = new Date(left.created_at || 0).getTime() - new Date(right.created_at || 0).getTime();
+    return query.sortDir === 'asc' ? comparison : -comparison;
+  });
+  const page = Math.max(query.page || 1, 1);
+  const pageSize = Math.max(query.pageSize || 40, 1);
+  const start = (page - 1) * pageSize;
+  const items = orderedRows.slice(start, start + pageSize);
+  const pagedResult = { items, total: orderedRows.length, page, page_size: pageSize, has_more: start + items.length < orderedRows.length };
+  if (generation === tableCacheGeneration) {
+    rememberTableWindow(clientsTablePageCache, authToken, 'clients', query as Record<string, unknown>, pagedResult);
+  }
+  return pagedResult;
 }
 
 export async function getClientById(id: string, authToken?: string) {
@@ -756,12 +992,15 @@ export async function saveCompanySettings(authToken: string, settings: CompanySe
 
 export type ServiceSheetsQuery = {
   search?: string;
+  filterColumn?: 'sheet_number' | 'client' | 'phone' | 'created_at' | 'updated_at' | 'total_price';
   clientId?: string;
   dateFrom?: string;
   dateTo?: string;
   paymentStatus?: PaymentStatus;
-  sortBy?: 'sheet_number' | 'client' | 'created_at' | 'updated_at' | 'total_price';
+  sortBy?: 'sheet_number' | 'client' | 'phone' | 'created_at' | 'updated_at' | 'total_price';
   sortDir?: 'asc' | 'desc';
+  page?: number;
+  pageSize?: number;
 };
 
 function serviceSheetBody(authToken: string, form: ServiceSheetFormData) {
@@ -828,6 +1067,61 @@ export async function getServiceSheets(authToken: string, query: ServiceSheetsQu
     if (value !== undefined && value !== null && String(value).trim() !== '') params[key] = String(value);
   });
   return call<ServiceSheet[]>('getServiceSheets', 'GET', undefined, params);
+}
+
+export async function getServiceSheetsPage(
+  authToken: string,
+  query: ServiceSheetsQuery = {},
+  preferLegacyCache = false
+): Promise<PagedResult<ServiceSheet>> {
+  const pageCacheKey = tablePageKey(authToken, 'service', query as Record<string, unknown>);
+  const cachedPage = preferLegacyCache ? readTablePage(serviceTablePageCache, pageCacheKey) : undefined;
+  if (cachedPage) return cachedPage;
+  const generation = tableCacheGeneration;
+  const legacyKey = legacyServiceTableKey(authToken, query);
+  const cachedLegacy = preferLegacyCache ? legacyServiceTableCache.get(legacyKey) : undefined;
+  const params: Record<string, string> = {
+    authToken,
+    table: '1',
+    prefetchPages: String(pagedPrefetchCount(query.pageSize || 10)),
+    cacheBust: String(Date.now()),
+  };
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== '') params[key] = String(value);
+  });
+  let pageRequest = serviceTablePageRequests.get(pageCacheKey);
+  if (!cachedLegacy && !pageRequest) {
+    pageRequest = call<PagedResult<ServiceSheet> | ServiceSheet[]>('getServiceSheets', 'GET', undefined, params);
+    serviceTablePageRequests.set(pageCacheKey, pageRequest);
+    void pageRequest.finally(() => {
+      if (serviceTablePageRequests.get(pageCacheKey) === pageRequest) serviceTablePageRequests.delete(pageCacheKey);
+    }).catch(() => {});
+  }
+  const result = cachedLegacy ?? await pageRequest!;
+  if (!Array.isArray(result)) {
+    if (generation === tableCacheGeneration) {
+      rememberTableWindow(serviceTablePageCache, authToken, 'service', query as Record<string, unknown>, result);
+    }
+    return result;
+  }
+  const compactRows = cachedLegacy ?? rememberLegacyTable(
+    legacyServiceTableCache,
+    legacyKey,
+    result.map((sheet) => ({
+      ...sheet,
+      client_signature: null,
+      expense_costs: [],
+    }))
+  );
+  const page = Math.max(query.page || 1, 1);
+  const pageSize = Math.max(query.pageSize || 40, 1);
+  const start = (page - 1) * pageSize;
+  const items = compactRows.slice(start, start + pageSize);
+  const pagedResult = { items, total: compactRows.length, page, page_size: pageSize, has_more: start + items.length < compactRows.length };
+  if (generation === tableCacheGeneration) {
+    rememberTableWindow(serviceTablePageCache, authToken, 'service', query as Record<string, unknown>, pagedResult);
+  }
+  return pagedResult;
 }
 
 export async function getServiceSheetById(id: string, authToken: string, financialEntry = false) {

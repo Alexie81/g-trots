@@ -17,9 +17,9 @@ export default function ModuleSwitcher() {
   const [visible, setVisible] = useState(false);
   const current = moduleOptions.find((option) => option.id === activeModule) || moduleOptions[0];
 
-  const choose = async (module: AppModule) => {
+  const choose = (module: AppModule) => {
     setVisible(false);
-    await selectModule(module);
+    selectModule(module);
   };
 
   return (

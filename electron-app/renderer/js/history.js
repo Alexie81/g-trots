@@ -3,6 +3,12 @@
   let allEvents = [];
   let selected = null;
   let bulkDeleteMode = 'range';
+  let historyLoadedAt = 0;
+  let historyLoadRevision = 0;
+  let historyLoading = false;
+  let historyIdleHandle = null;
+  let historyToken = window.AUTH?.getToken?.() || '';
+  const HISTORY_TTL_MS = 30000;
 
   const listEl = document.getElementById('history-list');
   const detailEl = document.getElementById('history-detail');
@@ -353,17 +359,24 @@
     });
   }
 
-  async function load() {
+  async function load(options = {}) {
     if (!window.AUTH?.isAdmin?.()) {
       listEl.innerHTML = '<div class="loading">Istoricul este disponibil doar pentru admin.</div>';
       detailEl.innerHTML = '<div class="empty-state">Autentifica-te ca admin</div>';
       return;
     }
+    if (historyLoading && options?.quiet) return;
+    const quiet = Boolean(options?.quiet && allEvents.length);
+    const revision = ++historyLoadRevision;
+    historyLoading = true;
     const selectedId = selected?.id || null;
     const previousScrollTop = listEl.scrollTop;
-    listEl.innerHTML = '<div class="loading">Se incarca...</div>';
+    if (!quiet) listEl.innerHTML = '<div class="loading">Se incarca...</div>';
     try {
-      allEvents = await window.API.getClientActivityHistory(window.AUTH.getToken());
+      const nextEvents = await window.API.getClientActivityHistory(window.AUTH.getToken());
+      if (revision !== historyLoadRevision) return;
+      allEvents = nextEvents;
+      historyLoadedAt = Date.now();
       const events = filter(allEvents);
       selected = (selectedId && events.find((event) => event.id === selectedId)) || events[0] || null;
       renderList(events, { scrollTop: previousScrollTop });
@@ -373,9 +386,33 @@
         detailEl.innerHTML = '<div class="empty-state">Nu exista modificari pentru filtrul curent</div>';
       }
     } catch (error) {
-      listEl.innerHTML = `<div class="loading" style="color:var(--error)">${escapeHtml(error.message)}</div>`;
-      detailEl.innerHTML = '<div class="empty-state">Nu s-a putut incarca istoricul</div>';
+      if (revision !== historyLoadRevision) return;
+      if (!quiet) {
+        listEl.innerHTML = `<div class="loading" style="color:var(--error)">${escapeHtml(error.message)}</div>`;
+        detailEl.innerHTML = '<div class="empty-state">Nu s-a putut incarca istoricul</div>';
+      }
+    } finally {
+      if (revision === historyLoadRevision) historyLoading = false;
     }
+  }
+
+  function cancelScheduledHistoryLoad() {
+    if (historyIdleHandle === null) return;
+    if ('cancelIdleCallback' in window) window.cancelIdleCallback(historyIdleHandle);
+    else clearTimeout(historyIdleHandle);
+    historyIdleHandle = null;
+  }
+
+  function scheduleHistoryLoad(quiet) {
+    cancelScheduledHistoryLoad();
+    const run = () => {
+      historyIdleHandle = null;
+      if (!document.getElementById('tab-history')?.classList.contains('active')) return;
+      void load({ quiet });
+    };
+    historyIdleHandle = 'requestIdleCallback' in window
+      ? window.requestIdleCallback(run, { timeout: 700 })
+      : window.setTimeout(run, 40);
   }
 
   function confirmHistoryDelete(title, message, confirmLabel) {
@@ -590,11 +627,27 @@
   });
 
   window.addEventListener('tab-change', ({ detail }) => {
-    if (detail === 'history') load();
+    if (detail !== 'history') {
+      cancelScheduledHistoryLoad();
+      return;
+    }
+    if (allEvents.length && Date.now() - historyLoadedAt < HISTORY_TTL_MS) return;
+    scheduleHistoryLoad(allEvents.length > 0);
   });
 
-  window.addEventListener('auth-change', () => {
-    if (document.getElementById('tab-history')?.classList.contains('active')) load();
+  window.addEventListener('auth-change', (event) => {
+    const nextToken = String(event.detail?.token || '');
+    if (nextToken !== historyToken) {
+      historyToken = nextToken;
+      historyLoadRevision += 1;
+      historyLoading = false;
+      historyLoadedAt = 0;
+      allEvents = [];
+      selected = null;
+      listEl.innerHTML = '<div class="loading">Istoricul nu a fost incarcat.</div>';
+      detailEl.innerHTML = '<div class="empty-state">Selectati o modificare</div>';
+    }
+    if (nextToken && document.getElementById('tab-history')?.classList.contains('active')) scheduleHistoryLoad(false);
   });
 
   window.HISTORY_LOAD = load;

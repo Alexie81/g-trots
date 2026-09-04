@@ -23,7 +23,7 @@ import FinancialPriceControls from '@/components/FinancialPriceControls';
 import { useAuth } from '@/contexts/AuthContext';
 import QrCodeViewer from '@/components/QrCodeViewer';
 import WhatsAppPresetPicker from '@/components/WhatsAppPresetPicker';
-import { createExpenseCategory, getClientById, updateClient, deleteClient, finalizeClient, getProfiles, getCollaborators, getExpenseCategories, getPricePresets, getServiceSheets, getOrCreateServiceSheetForClient } from '@/services/api';
+import { createExpenseCategory, getClientById, updateClient, deleteClient, finalizeClient, getProfiles, getCollaborators, getExpenseCategories, getPricePresets, getServiceSheetsPage, getOrCreateServiceSheetForClient } from '@/services/api';
 import type { Profile, Collaborator, ExpenseCategory, ClientFormData, ClientStatus, Client, PricePreset } from '@/types';
 import { QrCode, CheckCircle, Clock, Lock, CircleDollarSign, Trash2, History, UserCheck, MessageCircle, ChevronDown, ChevronUp, ChevronRight, FileText, Building2, Info, X } from 'lucide-react-native';
 import { calculateCollaboratorDistribution } from '@/utils/collaboratorFinancials';
@@ -306,9 +306,9 @@ export default function EditClientScreen() {
     setError('');
     setOpeningServiceSheet(true);
     try {
-      const existing = await getServiceSheets(token, { clientId: client.id });
-      if (existing.length > 0) {
-        router.push({ pathname: '/service-sheet/[id]', params: { id: existing[0].id } });
+      const existing = await getServiceSheetsPage(token, { clientId: client.id, page: 1, pageSize: 10 });
+      if (existing.items.length > 0) {
+        router.push({ pathname: '/service-sheet/[id]', params: { id: existing.items[0].id } });
         return;
       }
       setNewSheetWithCompanyDetails(false);

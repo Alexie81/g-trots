@@ -19,7 +19,11 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 require_once __DIR__ . '/order-emails.php';
 require_once __DIR__ . '/invoice-service.php';
 require_once __DIR__ . '/invoice-automation.php';
+require_once __DIR__ . '/spv-service.php';
 require_once __DIR__ . '/stripe.php';
+require_once __DIR__ . '/order-cancellation.php';
+require_once __DIR__ . '/order-return.php';
+require_once __DIR__ . '/order-return-confirmation.php';
 require_once __DIR__ . '/gomag.php';
 require_once __DIR__ . '/nir-domain.php';
 require_once __DIR__ . '/nir-service.php';
@@ -38,6 +42,7 @@ function shopConfig(): array {
         'db_name' => 'cabitro_g-trots-shop',
         'db_user' => '',
         'db_pass' => '',
+        'auth_db_name' => '',
         'auth_api_url' => 'https://g-trots.ro/trotty-api/api.php',
         'public_base_url' => 'https://g-trots.ro/shop-api',
         'website_base_url' => 'https://g-trots.ro',
@@ -60,6 +65,20 @@ function shopConfig(): array {
         // Client IDs are public identifiers used by Google Identity Services.
         // The OAuth client secret is intentionally never stored in this application.
         'google_client_id' => '540664392313-id3lsk8ah1u9j8k5oagt3153t62albqp.apps.googleusercontent.com',
+        // Secretele OAuth ANAF se definesc numai în config.local.php pe server.
+        // Nu sunt expuse niciodată aplicațiilor mobile/desktop.
+        'anaf_oauth_client_id' => '',
+        'anaf_oauth_client_secret' => '',
+        'spv_encryption_key' => '',
+        'anaf_oauth_callback_url' => 'https://g-trots.ro/shop-api/anaf-oauth-callback.php',
+        'anaf_oauth_authorize_url' => 'https://logincert.anaf.ro/anaf-oauth2/v1/authorize',
+        'anaf_oauth_token_url' => 'https://logincert.anaf.ro/anaf-oauth2/v1/token',
+        'anaf_oauth_revoke_url' => 'https://logincert.anaf.ro/anaf-oauth2/v1/revoke',
+        'anaf_oauth_test_url' => 'https://api.anaf.ro/TestOauth/jaxrs/hello?name=G-Trots',
+        'anaf_invoice_validation_url' => 'https://webservicesp.anaf.ro/prod/FCTEL/rest/validare/FACT1',
+        'anaf_credit_note_validation_url' => 'https://webservicesp.anaf.ro/prod/FCTEL/rest/validare/FCN',
+        'anaf_efactura_test_url' => 'https://webserviceapl.anaf.ro/test/FCTEL/rest',
+        'anaf_efactura_production_url' => 'https://webserviceapl.anaf.ro/prod/FCTEL/rest',
     ];
 
     $config = $defaults;
@@ -73,6 +92,7 @@ function shopConfig(): array {
                 'db_host' => (string)($shared['db_host'] ?? 'localhost'),
                 'db_user' => (string)($shared['db_user'] ?? ''),
                 'db_pass' => (string)($shared['db_pass'] ?? ''),
+                'auth_db_name' => (string)($shared['db_name'] ?? ''),
             ]);
         }
     }
@@ -198,16 +218,23 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026090304;
-    $db->exec(
-        "CREATE TABLE IF NOT EXISTS shop_schema_meta (
-            meta_key VARCHAR(80) NOT NULL PRIMARY KEY,
-            meta_value VARCHAR(120) NOT NULL,
-            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-    );
-    $stmt = $db->prepare('SELECT meta_value FROM shop_schema_meta WHERE meta_key = ? LIMIT 1');
-    $stmt->execute(['schema_version']);
+    $schemaVersion = 2026090404;
+    // Ruta normala face doar SELECT-ul indexat. Un CREATE TABLE IF NOT EXISTS la
+    // fiecare request tot cere verificari de metadata si poate astepta lock-uri.
+    try {
+        $stmt = $db->prepare('SELECT meta_value FROM shop_schema_meta WHERE meta_key = ? LIMIT 1');
+        $stmt->execute(['schema_version']);
+    } catch (PDOException $error) {
+        $db->exec(
+            "CREATE TABLE IF NOT EXISTS shop_schema_meta (
+                meta_key VARCHAR(80) NOT NULL PRIMARY KEY,
+                meta_value VARCHAR(120) NOT NULL,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+        $stmt = $db->prepare('SELECT meta_value FROM shop_schema_meta WHERE meta_key = ? LIMIT 1');
+        $stmt->execute(['schema_version']);
+    }
     if ((int)$stmt->fetchColumn() >= $schemaVersion) return;
 
     $lockName = 'g-trots-shop-schema-migration';
@@ -513,6 +540,7 @@ function ensureShopSchema(PDO $db): void {
             name VARCHAR(120) NOT NULL,
             description VARCHAR(500) NULL,
             cost DECIMAL(12,2) NOT NULL DEFAULT 0,
+            return_cost DECIMAL(12,2) NOT NULL DEFAULT 0,
             free_above DECIMAL(12,2) NULL,
             eta_label VARCHAR(120) NULL,
             is_active TINYINT(1) NOT NULL DEFAULT 1,
@@ -522,6 +550,9 @@ function ensureShopSchema(PDO $db): void {
             INDEX idx_shop_shipping_active (is_active, sort_order)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+    if (!$db->query("SHOW COLUMNS FROM shop_shipping_methods LIKE 'return_cost'")->fetch()) {
+        $db->exec("ALTER TABLE shop_shipping_methods ADD COLUMN return_cost DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER cost");
+    }
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_suppliers (
             id CHAR(36) NOT NULL PRIMARY KEY,
@@ -648,6 +679,8 @@ function ensureShopSchema(PDO $db): void {
             status VARCHAR(30) NOT NULL DEFAULT 'draft',
             supplier_id CHAR(36) NULL,
             warehouse_id CHAR(36) NOT NULL,
+            reception_location_id CHAR(36) NULL,
+            reception_location VARCHAR(500) NULL,
             supplier_invoice_series VARCHAR(60) NULL,
             supplier_invoice_number VARCHAR(120) NULL,
             supplier_invoice_date DATE NULL,
@@ -660,6 +693,13 @@ function ensureShopSchema(PDO $db): void {
             exchange_rate_date DATE NULL,
             notes TEXT NULL,
             source_type VARCHAR(30) NOT NULL DEFAULT 'manual',
+            operation_type VARCHAR(30) NOT NULL DEFAULT 'supplier_receipt',
+            order_id CHAR(36) NULL,
+            sales_invoice_id CHAR(36) NULL,
+            return_invoice_id CHAR(36) NULL,
+            customer_name VARCHAR(255) NULL,
+            customer_email VARCHAR(255) NULL,
+            return_reason TEXT NULL,
             external_identifier VARCHAR(180) NULL,
             source_file_hash CHAR(64) NULL,
             duplicate_fingerprint CHAR(64) NULL,
@@ -688,16 +728,27 @@ function ensureShopSchema(PDO $db): void {
             INDEX idx_shop_nir_status_date (status, reception_date),
             INDEX idx_shop_nir_supplier_date (supplier_id, reception_date),
             INDEX idx_shop_nir_invoice (supplier_invoice_number, supplier_invoice_date),
-            INDEX idx_shop_nir_reversal (reversal_of_id)
+            INDEX idx_shop_nir_reversal (reversal_of_id),
+            INDEX idx_shop_nir_order (order_id),
+            UNIQUE INDEX uq_shop_nir_return_invoice (return_invoice_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     $nirDocumentColumns = [
         'temporary_number' => "VARCHAR(80) NOT NULL DEFAULT '' AFTER id",
+        'reception_location_id' => 'CHAR(36) NULL AFTER warehouse_id',
+        'reception_location' => 'VARCHAR(500) NULL AFTER reception_location_id',
         'supplier_invoice_series' => 'VARCHAR(60) NULL AFTER warehouse_id',
         'nir_date' => 'DATE NULL AFTER supplier_invoice_date',
         'nir_time' => 'TIME NULL AFTER nir_date',
         'reception_time' => 'TIME NULL AFTER reception_date',
         'exchange_rate_date' => 'DATE NULL AFTER exchange_rate',
+        'operation_type' => "VARCHAR(30) NOT NULL DEFAULT 'supplier_receipt' AFTER source_type",
+        'order_id' => 'CHAR(36) NULL AFTER operation_type',
+        'sales_invoice_id' => 'CHAR(36) NULL AFTER order_id',
+        'return_invoice_id' => 'CHAR(36) NULL AFTER sales_invoice_id',
+        'customer_name' => 'VARCHAR(255) NULL AFTER return_invoice_id',
+        'customer_email' => 'VARCHAR(255) NULL AFTER customer_name',
+        'return_reason' => 'TEXT NULL AFTER customer_email',
         'external_identifier' => 'VARCHAR(180) NULL AFTER source_type',
         'source_file_hash' => 'CHAR(64) NULL AFTER external_identifier',
         'total_difference_ron' => 'DECIMAL(18,2) NOT NULL DEFAULT 0 AFTER inventory_cost_total_ron',
@@ -747,6 +798,13 @@ function ensureShopSchema(PDO $db): void {
     if (!$db->query("SHOW INDEX FROM shop_nir_documents WHERE Key_name = 'idx_shop_nir_reception_date'")->fetch()) {
         $db->exec('ALTER TABLE shop_nir_documents ADD INDEX idx_shop_nir_reception_date (reception_date, reception_time, id)');
     }
+    if (!$db->query("SHOW INDEX FROM shop_nir_documents WHERE Key_name = 'idx_shop_nir_order'")->fetch()) {
+        $db->exec('ALTER TABLE shop_nir_documents ADD INDEX idx_shop_nir_order (order_id)');
+    }
+    if (!$db->query("SHOW INDEX FROM shop_nir_documents WHERE Key_name = 'uq_shop_nir_return_invoice'")->fetch()) {
+        $db->exec('ALTER TABLE shop_nir_documents ADD UNIQUE INDEX uq_shop_nir_return_invoice (return_invoice_id)');
+    }
+    $db->exec("UPDATE shop_nir_documents SET operation_type = CASE WHEN source_type = 'reversal' OR reversal_of_id IS NOT NULL THEN 'supplier_return' WHEN source_type = 'customer_return' THEN 'customer_return' ELSE 'supplier_receipt' END WHERE operation_type IS NULL OR operation_type = '' OR (operation_type = 'supplier_receipt' AND (source_type = 'reversal' OR reversal_of_id IS NOT NULL OR source_type = 'customer_return'))");
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_nir_lines (
             id CHAR(36) NOT NULL PRIMARY KEY,
@@ -1075,6 +1133,8 @@ function ensureShopSchema(PDO $db): void {
             order_id CHAR(36) NOT NULL,
             series VARCHAR(60) NOT NULL,
             invoice_number VARCHAR(120) NOT NULL,
+            invoice_type VARCHAR(20) NOT NULL DEFAULT 'invoice',
+            original_invoice_id CHAR(36) NULL,
             document_status VARCHAR(20) NOT NULL DEFAULT 'unpaid',
             theme VARCHAR(20) NOT NULL,
             issue_date DATE NOT NULL,
@@ -1092,13 +1152,16 @@ function ensureShopSchema(PDO $db): void {
             spv_submission_id VARCHAR(180) NULL,
             issued_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE INDEX uq_shop_invoice_order (order_id),
+            UNIQUE INDEX uq_shop_invoice_order_type (order_id, invoice_type),
             UNIQUE INDEX uq_shop_invoice_number (series, invoice_number),
+            INDEX idx_shop_invoice_original (original_invoice_id),
             INDEX idx_shop_invoice_issue_date (issue_date, issued_at),
             INDEX idx_shop_invoice_status (document_status, issued_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     foreach ([
+        'invoice_type' => "VARCHAR(20) NOT NULL DEFAULT 'invoice' AFTER invoice_number",
+        'original_invoice_id' => 'CHAR(36) NULL AFTER invoice_type',
         'spv_status' => "VARCHAR(20) NOT NULL DEFAULT 'not_sent' AFTER email_last_error",
         'spv_sent_at' => 'DATETIME NULL AFTER spv_status',
         'spv_submission_id' => 'VARCHAR(180) NULL AFTER spv_sent_at',
@@ -1107,6 +1170,32 @@ function ensureShopSchema(PDO $db): void {
             $db->exec("ALTER TABLE shop_invoices ADD COLUMN {$column} {$definition}");
         }
     }
+    if ($db->query("SHOW INDEX FROM shop_invoices WHERE Key_name = 'uq_shop_invoice_order'")->fetch()) {
+        $db->exec('ALTER TABLE shop_invoices DROP INDEX uq_shop_invoice_order');
+    }
+    if (!$db->query("SHOW INDEX FROM shop_invoices WHERE Key_name = 'uq_shop_invoice_order_type'")->fetch()) {
+        $db->exec('ALTER TABLE shop_invoices ADD UNIQUE INDEX uq_shop_invoice_order_type (order_id, invoice_type)');
+    }
+    if (!$db->query("SHOW INDEX FROM shop_invoices WHERE Key_name = 'idx_shop_invoice_original'")->fetch()) {
+        $db->exec('ALTER TABLE shop_invoices ADD INDEX idx_shop_invoice_original (original_invoice_id)');
+    }
+
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_spv_outbox (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            invoice_id CHAR(36) NOT NULL,
+            document_kind VARCHAR(30) NOT NULL DEFAULT 'invoice',
+            status VARCHAR(30) NOT NULL DEFAULT 'awaiting_configuration',
+            attempts INT UNSIGNED NOT NULL DEFAULT 0,
+            last_error VARCHAR(500) NULL,
+            queued_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            sent_at DATETIME NULL,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE INDEX uq_shop_spv_outbox_invoice (invoice_id),
+            INDEX idx_shop_spv_outbox_status (status, queued_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    GtrotsSpvService::ensureSchema($db);
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_company_settings (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -1147,6 +1236,30 @@ function ensureShopSchema(PDO $db): void {
     $db->exec("ALTER TABLE shop_company_settings MODIFY id INT UNSIGNED NOT NULL AUTO_INCREMENT");
     $db->exec("INSERT IGNORE INTO shop_company_settings (id, is_default) VALUES (1, 1)");
     $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_company_receipt_locations (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            company_id INT UNSIGNED NOT NULL,
+            name VARCHAR(180) NOT NULL,
+            address VARCHAR(255) NOT NULL DEFAULT '',
+            city VARCHAR(120) NOT NULL DEFAULT '',
+            county VARCHAR(120) NOT NULL DEFAULT '',
+            postal_code VARCHAR(30) NOT NULL DEFAULT '',
+            is_default TINYINT(1) NOT NULL DEFAULT 0,
+            sort_order INT UNSIGNED NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_shop_receipt_location_company (company_id, is_default, sort_order)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "INSERT INTO shop_company_receipt_locations (id, company_id, name, is_default, sort_order)
+         SELECT UUID(), c.id, 'Gestiune principală', 1, 0
+         FROM shop_company_settings c
+         WHERE c.is_default = 1
+           AND NOT EXISTS (SELECT 1 FROM shop_company_receipt_locations r WHERE r.company_id = c.id)
+         ORDER BY c.id ASC LIMIT 1"
+    );
+    $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_orders (
             id CHAR(36) NOT NULL PRIMARY KEY,
             order_number VARCHAR(40) NOT NULL UNIQUE,
@@ -1168,6 +1281,18 @@ function ensureShopSchema(PDO $db): void {
             postal_code VARCHAR(30) NULL,
             customer_notes TEXT NULL,
             admin_notes TEXT NULL,
+            return_reason TEXT NULL,
+            return_bank_iban VARCHAR(64) NULL,
+            return_bank_account_holder VARCHAR(180) NULL,
+            return_shipping_cost DECIMAL(12,2) NULL,
+            return_refund_amount DECIMAL(12,2) NULL,
+            return_requested_at DATETIME NULL,
+            return_request_source VARCHAR(30) NULL,
+            return_request_email_sent_at DATETIME NULL,
+            return_request_email_error VARCHAR(500) NULL,
+            return_confirmed_at DATETIME NULL,
+            return_confirmation_email_sent_at DATETIME NULL,
+            return_confirmation_email_error VARCHAR(500) NULL,
             shipping_method_id CHAR(36) NULL,
             shipping_method_name VARCHAR(120) NOT NULL,
             subtotal DECIMAL(12,2) NOT NULL,
@@ -1265,6 +1390,41 @@ function ensureShopSchema(PDO $db): void {
     $db->exec("UPDATE shop_orders SET tracking_token = LOWER(REPLACE(UUID(), '-', '')) WHERE tracking_token IS NULL OR tracking_token = ''");
     if (!$db->query("SHOW INDEX FROM shop_orders WHERE Key_name = 'idx_shop_orders_tracking_token'")->fetch()) {
         $db->exec('ALTER TABLE shop_orders ADD UNIQUE INDEX idx_shop_orders_tracking_token (tracking_token)');
+    }
+    $orderCancellationColumns = [
+        'customer_cancellation_reason' => 'TEXT NULL AFTER admin_notes',
+        'customer_cancelled_at' => 'DATETIME NULL AFTER customer_cancellation_reason',
+        'cancellation_source' => 'VARCHAR(30) NULL AFTER customer_cancelled_at',
+        'cancellation_invoice_action' => 'VARCHAR(40) NULL AFTER cancellation_source',
+        'return_invoice_id' => 'CHAR(36) NULL AFTER cancellation_invoice_action',
+        'refund_status' => "VARCHAR(30) NOT NULL DEFAULT 'none' AFTER return_invoice_id",
+        'refund_due_at' => 'DATE NULL AFTER refund_status',
+        'cancellation_email_sent_at' => 'DATETIME NULL AFTER refund_due_at',
+        'cancellation_email_error' => 'VARCHAR(500) NULL AFTER cancellation_email_sent_at',
+    ];
+    foreach ($orderCancellationColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_orders LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_orders ADD COLUMN {$column} {$definition}");
+        }
+    }
+    $orderReturnColumns = [
+        'return_reason' => 'TEXT NULL AFTER admin_notes',
+        'return_bank_iban' => 'VARCHAR(64) NULL AFTER return_reason',
+        'return_bank_account_holder' => 'VARCHAR(180) NULL AFTER return_bank_iban',
+        'return_shipping_cost' => 'DECIMAL(12,2) NULL AFTER return_bank_account_holder',
+        'return_refund_amount' => 'DECIMAL(12,2) NULL AFTER return_shipping_cost',
+        'return_requested_at' => 'DATETIME NULL AFTER return_refund_amount',
+        'return_request_source' => 'VARCHAR(30) NULL AFTER return_requested_at',
+        'return_request_email_sent_at' => 'DATETIME NULL AFTER return_request_source',
+        'return_request_email_error' => 'VARCHAR(500) NULL AFTER return_request_email_sent_at',
+        'return_confirmed_at' => 'DATETIME NULL AFTER return_request_email_error',
+        'return_confirmation_email_sent_at' => 'DATETIME NULL AFTER return_confirmed_at',
+        'return_confirmation_email_error' => 'VARCHAR(500) NULL AFTER return_confirmation_email_sent_at',
+    ];
+    foreach ($orderReturnColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_orders LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_orders ADD COLUMN {$column} {$definition}");
+        }
     }
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_stripe_events (
@@ -1647,10 +1807,66 @@ function verifyBoomagImportKey(array $config, array $body = []): void {
     }
 }
 
-function validateAuthToken(array $config, array $body): array {
+function validateAuthToken(PDO $db, array $config, array $body): array {
     $token = requestHeader('X-Auth-Token');
     if ($token === '') $token = trim((string)($_GET['authToken'] ?? ($body['auth_token'] ?? '')));
     if ($token === '') jsonResponse(['error' => 'Sesiunea utilizatorului lipseste.'], 401);
+
+    // API-ul SHOP si API-ul principal folosesc acelasi server MySQL. Validarea
+    // locala elimina un request HTTP complet din fiecare navigare de manager.
+    // Daca instalarea nu permite acces cross-database, pastram fallback-ul HTTP.
+    $authDbName = trim((string)($config['auth_db_name'] ?? ''));
+    if ($authDbName !== '') {
+        try {
+            $authDb = safeDbName($authDbName);
+            $stmt = $db->prepare(
+                "SELECT u.*, s.platform AS session_platform, s.expires_at AS session_expires_at
+                 FROM {$authDb}.app_sessions s
+                 INNER JOIN {$authDb}.app_users u ON u.id = s.user_id
+                 WHERE s.token_hash = ? AND s.expires_at > NOW() AND u.is_active = 1
+                 LIMIT 1"
+            );
+            $tokenHash = hash('sha256', $token);
+            $stmt->execute([$tokenHash]);
+            $user = $stmt->fetch();
+            if (!$user) {
+                jsonResponse(['error' => 'Sesiunea a expirat. Autentifica-te din nou.'], 401);
+            }
+            $sessionPlatform = (string)($user['session_platform'] ?? '');
+            $platformAccess = (string)($user['platform_access'] ?? '');
+            if ($platformAccess !== 'both' && $platformAccess !== $sessionPlatform) {
+                jsonResponse(['error' => 'Contul nu mai are acces la aceasta platforma.'], 403);
+            }
+            try {
+                $db->prepare(
+                    "UPDATE {$authDb}.app_sessions
+                     SET expires_at = DATE_ADD(NOW(), INTERVAL 30 DAY)
+                     WHERE token_hash = ? AND expires_at < DATE_ADD(NOW(), INTERVAL 7 DAY)"
+                )->execute([$tokenHash]);
+            } catch (PDOException $refreshError) {
+                // SELECT-ul a validat deja sesiunea; lipsa permisiunii de UPDATE
+                // nu trebuie sa reactiveze traseul HTTP lent.
+            }
+            return [
+                'id' => (string)$user['id'],
+                'username' => (string)$user['username'],
+                'display_name' => (string)$user['display_name'],
+                'role' => (string)$user['role'],
+                'platform_access' => $platformAccess,
+                'support_chat_access' => (bool)($user['support_chat_access'] ?? false),
+                'client_panel_access' => array_key_exists('client_panel_access', $user) ? (bool)$user['client_panel_access'] : true,
+                'client_edit_access' => (bool)($user['client_edit_access'] ?? false),
+                'service_sheet_access' => array_key_exists('service_sheet_access', $user) ? (bool)$user['service_sheet_access'] : true,
+                'client_financial_access' => array_key_exists('client_financial_access', $user) ? (bool)$user['client_financial_access'] : true,
+                'is_active' => true,
+                'created_at' => (string)($user['created_at'] ?? ''),
+                'updated_at' => (string)($user['updated_at'] ?? ''),
+            ];
+        } catch (Throwable $error) {
+            // Configuratiile mai vechi sau utilizatorii MySQL fara drepturi pe
+            // baza principala continua prin validarea HTTP existenta.
+        }
+    }
 
     $url = (string)$config['auth_api_url'] . '?action=getCurrentUser&authToken=' . rawurlencode($token);
     $headers = ['X-API-Key: ' . (string)$config['api_key'], 'Accept: application/json'];
@@ -1795,13 +2011,18 @@ function customerAddressPayload(array $body): array {
 function customerOrderResponse(array $order): array {
     $allowed = [
         'id', 'order_number', 'status', 'payment_status', 'payment_method', 'customer_name', 'customer_email',
-        'customer_phone', 'customer_type', 'company_name', 'company_cui', 'company_registration_number', 'company_address',
+        'customer_phone', 'customer_type', 'customer_contact_name', 'customer_display_name', 'company_name', 'company_cui', 'company_registration_number', 'company_address',
         'address', 'city', 'county', 'postal_code', 'customer_notes', 'shipping_method_name',
-        'subtotal', 'discount_total', 'promotion_code', 'promotion_scope', 'shipping_cost', 'total', 'vat_payer', 'currency', 'tracking_token', 'items', 'status_history', 'created_at', 'updated_at'
+        'subtotal', 'discount_total', 'promotion_code', 'promotion_scope', 'shipping_cost', 'total', 'vat_payer', 'currency', 'tracking_token', 'items', 'status_history',
+        'return_reason', 'return_shipping_cost', 'return_refund_amount', 'return_requested_at', 'return_request_source', 'return_bank_account_holder', 'created_at', 'updated_at'
     ];
     $response = array_intersect_key($order, array_flip($allowed));
-    $response['status_label'] = (string)gtOrderStatusMeta((string)($order['status'] ?? 'new'))['label'];
+    $response['status'] = publicOrderStatus((string)($order['status'] ?? 'new'));
+    $response['status_label'] = (string)gtOrderStatusMeta((string)$response['status'])['label'];
+    $response['status_history'] = publicOrderHistory((array)($response['status_history'] ?? []));
     $response['tracking_url'] = '/urmarire-comanda?token=' . rawurlencode((string)($order['tracking_token'] ?? ''));
+    $response['can_request_return'] = GtrotsOrderReturnRequest::canRequestStatus((string)($order['status'] ?? ''));
+    $response['return_bank_iban_masked'] = GtrotsOrderReturnRequest::maskIban((string)($order['return_bank_iban'] ?? ''));
     $response['items'] = array_map(fn(array $item): array => [
         'product_id' => (string)($item['product_id'] ?? ''),
         'product_name' => (string)($item['product_name'] ?? ''),
@@ -1817,7 +2038,7 @@ function customerOrderResponse(array $order): array {
     $response['status_history'] = array_map(fn(array $entry): array => [
         'to_status' => (string)($entry['to_status'] ?? ''),
         'created_at' => (string)($entry['created_at'] ?? ''),
-    ], (array)($order['status_history'] ?? []));
+    ], (array)($response['status_history'] ?? []));
     return $response;
 }
 
@@ -3118,8 +3339,50 @@ function companySettingsPayload(array $body): array {
     ];
 }
 
+function receiptLocationRow(array $row): array {
+    $row['company_id'] = (int)($row['company_id'] ?? 0);
+    $row['is_default'] = (bool)($row['is_default'] ?? false);
+    $row['sort_order'] = (int)($row['sort_order'] ?? 0);
+    return $row;
+}
+
+function receiptLocationDisplay(array $row): string {
+    $address = implode(', ', array_values(array_filter([
+        trim((string)($row['address'] ?? '')),
+        trim((string)($row['city'] ?? '')),
+        trim((string)($row['county'] ?? '')),
+        trim((string)($row['postal_code'] ?? '')),
+    ])));
+    $name = trim((string)($row['name'] ?? '')) ?: 'Gestiune principală';
+    return mb_substr($name . ($address !== '' ? ' — ' . $address : ''), 0, 500);
+}
+
+function receiptLocationPayload(array $body): array {
+    $field = static fn(string $key, int $max): string => mb_substr(trim((string)($body[$key] ?? '')), 0, $max);
+    $name = $field('name', 180);
+    if ($name === '') throw new InvalidArgumentException('Denumirea punctului de recepție este obligatorie.');
+    return [
+        'company_id' => max(1, (int)($body['company_id'] ?? 1)),
+        'name' => $name,
+        'address' => $field('address', 255),
+        'city' => $field('city', 120),
+        'county' => $field('county', 120),
+        'postal_code' => $field('postal_code', 30),
+        'is_default' => boolValue($body['is_default'] ?? false),
+        'sort_order' => max(0, (int)($body['sort_order'] ?? 0)),
+    ];
+}
+
+function receiptLocationList(PDO $db, int $companyId = 0): array {
+    if ($companyId <= 0) $companyId = (int)($db->query('SELECT id FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetchColumn() ?: 1);
+    $stmt = $db->prepare('SELECT * FROM shop_company_receipt_locations WHERE company_id = ? ORDER BY is_default DESC, sort_order ASC, name ASC, id ASC');
+    $stmt->execute([$companyId]);
+    return array_map('receiptLocationRow', $stmt->fetchAll());
+}
+
 function shippingRow(array $row): array {
     $row['cost'] = (float)$row['cost'];
+    $row['return_cost'] = (float)($row['return_cost'] ?? 0);
     $row['free_above'] = $row['free_above'] === null ? null : (float)$row['free_above'];
     $row['sort_order'] = (int)$row['sort_order'];
     $row['is_active'] = (bool)$row['is_active'];
@@ -3603,40 +3866,61 @@ function updateOrderHistoryEmail(PDO $db, string $historyId, array $result): voi
     }
 }
 
-function orderRow(PDO $db, array $row, ?array $config = null, bool $withHistory = false): array {
-    $items = $db->prepare(
-        'SELECT oi.*,
-                p.slug AS product_slug,
-                (SELECT image_path FROM shop_product_images pi WHERE pi.product_id = oi.product_id ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS image_path
-         FROM shop_order_items oi
-         LEFT JOIN shop_products p ON p.id = oi.product_id
-         WHERE oi.order_id = ?
-         ORDER BY oi.id ASC'
-    );
-    $items->execute([(string)$row['id']]);
-    $row['items'] = array_map(function (array $item) use ($config): array {
-        $item['quantity'] = (int)$item['quantity'];
-        $item['unit_price'] = (float)$item['unit_price'];
-        $item['line_total'] = (float)$item['line_total'];
-        $item['discount_total'] = (float)($item['discount_total'] ?? 0);
-        $item['discounted_unit_price'] = $item['discount_total'] > 0
-            ? (float)($item['discounted_unit_price'] ?? $item['unit_price'])
-            : $item['unit_price'];
-        $item['discounted_line_total'] = $item['discount_total'] > 0
-            ? (float)($item['discounted_line_total'] ?? $item['line_total'])
-            : $item['line_total'];
-        $imagePath = trim((string)($item['image_path'] ?? ''));
-        $item['image_url'] = $imagePath !== '' && $config
-            ? (preg_match('#^https?://#i', $imagePath) ? $imagePath : rtrim((string)$config['public_base_url'], '/') . '/' . ltrim($imagePath, '/'))
-            : ($config ? legacyProductImageUrl(['slug' => (string)($item['product_slug'] ?? '')], $config) : '');
-        unset($item['image_path']);
-        unset($item['product_slug']);
-        return $item;
-    }, $items->fetchAll());
+function publicOrderStatus(string $status): string {
+    return $status;
+}
+
+function publicOrderHistory(array $history): array {
+    return array_values(array_filter($history, static fn(array $entry): bool => !in_array(
+        (string)($entry['to_status'] ?? ''),
+        ['return_requested', 'return_refused', 'return_confirmed'],
+        true
+    )));
+}
+
+function orderRow(PDO $db, array $row, ?array $config = null, bool $withHistory = false, bool $withItems = true): array {
+    if ($withItems) {
+        $items = $db->prepare(
+            'SELECT oi.*,
+                    p.slug AS product_slug,
+                    (SELECT image_path FROM shop_product_images pi WHERE pi.product_id = oi.product_id ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS image_path
+             FROM shop_order_items oi
+             LEFT JOIN shop_products p ON p.id = oi.product_id
+             WHERE oi.order_id = ?
+             ORDER BY oi.id ASC'
+        );
+        $items->execute([(string)$row['id']]);
+        $row['items'] = array_map(function (array $item) use ($config): array {
+            $item['quantity'] = (int)$item['quantity'];
+            $item['unit_price'] = (float)$item['unit_price'];
+            $item['line_total'] = (float)$item['line_total'];
+            $item['discount_total'] = (float)($item['discount_total'] ?? 0);
+            $item['discounted_unit_price'] = $item['discount_total'] > 0
+                ? (float)($item['discounted_unit_price'] ?? $item['unit_price'])
+                : $item['unit_price'];
+            $item['discounted_line_total'] = $item['discount_total'] > 0
+                ? (float)($item['discounted_line_total'] ?? $item['line_total'])
+                : $item['line_total'];
+            $imagePath = trim((string)($item['image_path'] ?? ''));
+            $item['image_url'] = $imagePath !== '' && $config
+                ? (preg_match('#^https?://#i', $imagePath) ? $imagePath : rtrim((string)$config['public_base_url'], '/') . '/' . ltrim($imagePath, '/'))
+                : ($config ? legacyProductImageUrl(['slug' => (string)($item['product_slug'] ?? '')], $config) : '');
+            unset($item['image_path']);
+            unset($item['product_slug']);
+            return $item;
+        }, $items->fetchAll());
+    } else {
+        $row['items'] = [];
+    }
     $row['subtotal'] = (float)$row['subtotal'];
     $row['discount_total'] = (float)($row['discount_total'] ?? 0);
     $row['shipping_cost'] = (float)$row['shipping_cost'];
     $row['total'] = (float)$row['total'];
+    $row['configured_return_shipping_cost'] = (float)($row['configured_return_shipping_cost'] ?? 0);
+    $returnShippingCost = $row['return_shipping_cost'] ?? null;
+    $returnRefundAmount = $row['return_refund_amount'] ?? null;
+    $row['return_shipping_cost'] = $returnShippingCost === null ? null : (float)$returnShippingCost;
+    $row['return_refund_amount'] = $returnRefundAmount === null ? null : (float)$returnRefundAmount;
     $row['vat_payer'] = (bool)($row['vat_payer'] ?? false);
     $row['vat_rate'] = (float)($row['vat_rate'] ?? 0);
     // Păstrăm aceeași regulă și pentru comenzile deja existente: cota salvată pe comandă
@@ -3645,8 +3929,12 @@ function orderRow(PDO $db, array $row, ?array $config = null, bool $withHistory 
         ? round($row['total'] * $row['vat_rate'] / 100, 2)
         : 0.0;
     $row['net_total'] = (float)($row['net_total'] ?? max(0, $row['total'] - $row['vat_total']));
+    $row['customer_type'] = (string)(($row['customer_type'] ?? 'individual') === 'company' ? 'company' : 'individual');
+    $row['customer_contact_name'] = (string)($row['customer_name'] ?? '');
+    $row['customer_display_name'] = gtOrderCustomerDisplayName($row);
     $row['invoice'] = GtrotsInvoiceService::orderSummary($row);
-    foreach (['issued_invoice_id', 'issued_invoice_series', 'issued_invoice_number', 'issued_invoice_theme', 'issued_invoice_date', 'issued_invoice_at'] as $invoiceColumn) {
+    $row['return_invoice'] = GtrotsInvoiceService::orderReturnSummary($row);
+    foreach (['issued_invoice_id', 'issued_invoice_series', 'issued_invoice_number', 'issued_invoice_theme', 'issued_invoice_spv_status', 'issued_invoice_spv_sent_at', 'issued_invoice_date', 'issued_invoice_at', 'return_invoice_join_id', 'return_invoice_join_series', 'return_invoice_join_number', 'return_invoice_join_original_id', 'return_invoice_join_theme', 'return_invoice_join_spv_status', 'return_invoice_join_spv_sent_at', 'return_invoice_join_date', 'return_invoice_join_total', 'return_invoice_join_currency', 'return_invoice_join_email_sent_at', 'return_invoice_join_at'] as $invoiceColumn) {
         unset($row[$invoiceColumn]);
     }
     if ($withHistory) $row['status_history'] = orderStatusHistory($db, (string)$row['id']);
@@ -3668,14 +3956,33 @@ function publicTrackingOrder(array $order): array {
     $history = array_map(fn(array $entry): array => [
         'to_status' => (string)($entry['to_status'] ?? ''),
         'created_at' => (string)($entry['created_at'] ?? ''),
-    ], (array)($order['status_history'] ?? []));
+    ], publicOrderHistory((array)($order['status_history'] ?? [])));
+    $publicStatus = publicOrderStatus((string)$order['status']);
     return [
         'order_number' => (string)$order['order_number'],
-        'status' => (string)$order['status'],
-        'status_label' => (string)gtOrderStatusMeta((string)$order['status'])['label'],
+        'status' => $publicStatus,
+        'status_label' => (string)gtOrderStatusMeta($publicStatus)['label'],
         'payment_status' => (string)$order['payment_status'],
         'payment_method' => (string)$order['payment_method'],
+        'can_cancel' => GtrotsOrderCancellation::canCancelStatus((string)$order['status']),
+        'can_request_return' => GtrotsOrderReturnRequest::canRequestStatus((string)$order['status']),
+        'cancellation_reason' => (string)($order['customer_cancellation_reason'] ?? ''),
+        'cancelled_at' => (string)($order['customer_cancelled_at'] ?? ''),
+        'cancellation_source' => (string)($order['cancellation_source'] ?? ''),
+        'cancellation_invoice_action' => (string)($order['cancellation_invoice_action'] ?? ''),
+        'refund_status' => (string)($order['refund_status'] ?? 'none'),
+        'refund_due_at' => (string)($order['refund_due_at'] ?? ''),
+        'return_reason' => (string)($order['return_reason'] ?? ''),
+        'return_shipping_cost' => ($order['return_shipping_cost'] ?? null) === null ? null : (float)$order['return_shipping_cost'],
+        'configured_return_shipping_cost' => (float)($order['configured_return_shipping_cost'] ?? 0),
+        'return_refund_amount' => ($order['return_refund_amount'] ?? null) === null ? null : (float)$order['return_refund_amount'],
+        'return_requested_at' => (string)($order['return_requested_at'] ?? ''),
+        'return_request_source' => (string)($order['return_request_source'] ?? ''),
+        'return_bank_account_holder' => (string)($order['return_bank_account_holder'] ?? ''),
+        'return_bank_iban_masked' => GtrotsOrderReturnRequest::maskIban((string)($order['return_bank_iban'] ?? '')),
         'customer_name' => (string)($order['customer_name'] ?? ''),
+        'customer_contact_name' => (string)($order['customer_contact_name'] ?? $order['customer_name'] ?? ''),
+        'customer_display_name' => (string)($order['customer_display_name'] ?? gtOrderCustomerDisplayName($order)),
         'customer_email' => (string)($order['customer_email'] ?? ''),
         'customer_phone' => (string)($order['customer_phone'] ?? ''),
         'customer_type' => (string)(($order['customer_type'] ?? 'individual') === 'company' ? 'company' : 'individual'),
@@ -4428,18 +4735,52 @@ try {
         $email = strtolower(trim((string)($_GET['email'] ?? '')));
         if ($token !== '') {
             if (!preg_match('/^[a-f0-9]{32,64}$/', $token)) throw new InvalidArgumentException('Linkul de urmărire nu este valid.');
-            $stmt = $db->prepare('SELECT * FROM shop_orders WHERE tracking_token = ? LIMIT 1');
+            $stmt = $db->prepare('SELECT o.*, COALESCE(sm.return_cost, 0) AS configured_return_shipping_cost FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id WHERE o.tracking_token = ? LIMIT 1');
             $stmt->execute([$token]);
         } else {
             if ($orderNumber === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 throw new InvalidArgumentException('Completează codul comenzii și adresa de e-mail folosită la comandă.');
             }
-            $stmt = $db->prepare('SELECT * FROM shop_orders WHERE UPPER(order_number) = ? AND LOWER(customer_email) = ? LIMIT 1');
+            $stmt = $db->prepare('SELECT o.*, COALESCE(sm.return_cost, 0) AS configured_return_shipping_cost FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id WHERE UPPER(o.order_number) = ? AND LOWER(o.customer_email) = ? LIMIT 1');
             $stmt->execute([$orderNumber, $email]);
         }
         $order = $stmt->fetch();
         if (!$order) jsonResponse(['error' => 'Nu am găsit o comandă pentru datele introduse. Verifică informațiile și încearcă din nou.'], 404);
         jsonResponse(publicTrackingOrder(orderRow($db, $order, $config, true)));
+    }
+
+    if ($action === 'customerCancelOrder' && $method === 'POST') {
+        $cancellation = GtrotsOrderCancellation::cancelByCustomer($db, [
+            'token' => strtolower(trim((string)($body['token'] ?? ''))),
+            'order_number' => strtoupper(trim((string)($body['order_number'] ?? ''))),
+            'email' => mb_strtolower(trim((string)($body['email'] ?? ''))),
+        ], (string)($body['reason'] ?? ''), $config);
+        $savedId = (string)($cancellation['order']['id'] ?? '');
+        $stmt = $db->prepare('SELECT o.*' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? LIMIT 1');
+        $stmt->execute([$savedId]);
+        $saved = $stmt->fetch();
+        if (!$saved) throw new RuntimeException('Comanda anulată nu a putut fi recitită.');
+        $cancellation['order'] = publicTrackingOrder(orderRow($db, $saved, $config, true));
+        jsonResponse($cancellation);
+    }
+
+    if ($action === 'customerRequestReturn' && $method === 'POST') {
+        $request = GtrotsOrderReturnRequest::requestByCustomer($db, [
+            'token' => strtolower(trim((string)($body['token'] ?? ''))),
+            'order_number' => strtoupper(trim((string)($body['order_number'] ?? ''))),
+            'email' => mb_strtolower(trim((string)($body['email'] ?? ''))),
+        ], [
+            'reason' => (string)($body['reason'] ?? ''),
+            'bank_iban' => (string)($body['bank_iban'] ?? ''),
+            'bank_account_holder' => (string)($body['bank_account_holder'] ?? ''),
+        ], $config);
+        $savedId = (string)($request['order']['id'] ?? '');
+        $stmt = $db->prepare('SELECT o.*, COALESCE(sm.return_cost, 0) AS configured_return_shipping_cost' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? LIMIT 1');
+        $stmt->execute([$savedId]);
+        $saved = $stmt->fetch();
+        if (!$saved) throw new RuntimeException('Solicitarea de retur nu a putut fi recitită.');
+        $request['order'] = publicTrackingOrder(orderRow($db, $saved, $config, true));
+        jsonResponse($request);
     }
 
     if ($action === 'createPublicOrder' && $method === 'POST') {
@@ -4748,7 +5089,61 @@ try {
         jsonResponse($product);
     }
 
-    $currentUser = validateAuthToken($config, $body);
+    $currentUser = validateAuthToken($db, $config, $body);
+    // Pe PHP-FPM, răspunsul ajunge întâi la aplicație, iar coada SPV este
+    // procesată apoi în fundal. Navigarea rămâne rapidă pe telefon și desktop.
+    GtrotsSpvService::scheduleWorkerAfterResponse($db, $config);
+
+    if ($action === 'getSpvConnection' && $method === 'GET') {
+        GtrotsSpvService::reconcileOutbox($db);
+        jsonResponse(GtrotsSpvService::status($db, $config));
+    }
+
+    if ($action === 'beginSpvOAuth' && $method === 'POST') {
+        $actor = (string)($currentUser['display_name'] ?? $currentUser['username'] ?? 'Administrator');
+        jsonResponse(GtrotsSpvService::beginOAuth($db, $config, $actor), 201);
+    }
+
+    if ($action === 'testSpvConnection' && $method === 'POST') {
+        jsonResponse(GtrotsSpvService::testConnection($db, $config));
+    }
+
+    if ($action === 'updateSpvSettings' && in_array($method, ['PUT', 'PATCH'], true)) {
+        $actor = (string)($currentUser['display_name'] ?? $currentUser['username'] ?? 'Administrator');
+        jsonResponse(GtrotsSpvService::updateSettings($db, $body, $actor, $config));
+    }
+
+    if ($action === 'disconnectSpv' && $method === 'POST') {
+        jsonResponse(GtrotsSpvService::disconnect($db, $config));
+    }
+
+    if ($action === 'sendInvoiceToSpv' && $method === 'POST') {
+        jsonResponse(GtrotsSpvService::sendManual($db, $config, trim((string)($_GET['id'] ?? $body['invoice_id'] ?? ''))));
+    }
+
+    if ($action === 'runSpvWorker' && $method === 'POST') {
+        jsonResponse(GtrotsSpvService::runWorker($db, $config, max(1, min(20, (int)($body['limit'] ?? 5)))));
+    }
+
+    if ($action === 'getShopNotificationSummary' && $method === 'GET') {
+        jsonResponse(GtrotsSpvService::notificationSummary($db));
+    }
+
+    if ($action === 'listShopNotifications' && $method === 'GET') {
+        jsonResponse(GtrotsSpvService::notifications(
+            $db,
+            (int)($_GET['limit'] ?? 50),
+            !isset($_GET['unread_only']) || (string)$_GET['unread_only'] !== '0'
+        ));
+    }
+
+    if ($action === 'createTestShopNotification' && $method === 'POST') {
+        jsonResponse(GtrotsSpvService::createTestNotification($db, (string)($body['kind'] ?? 'test')), 201);
+    }
+
+    if ($action === 'markShopNotificationRead' && $method === 'POST') {
+        jsonResponse(GtrotsSpvService::markNotification($db, trim((string)($_GET['id'] ?? $body['id'] ?? '')), !empty($body['all'])));
+    }
 
     if ($action === 'getInvoiceThemeSettings' && $method === 'GET') {
         jsonResponse(GtrotsInvoiceThemeStore::settings($db));
@@ -4775,15 +5170,31 @@ try {
 
     if ($action === 'issueInvoice' && $method === 'POST') {
         $orderId = trim((string)($_GET['id'] ?? $body['order_id'] ?? ''));
+        $orderStatusStmt = $db->prepare('SELECT status FROM shop_orders WHERE id = ? LIMIT 1');
+        $orderStatusStmt->execute([$orderId]);
+        $orderStatus = $orderStatusStmt->fetchColumn();
+        if ($orderStatus === false) throw new InvalidArgumentException('Comanda nu există.');
         $invoice = GtrotsInvoiceService::issue($db, $orderId, $currentUser, $config);
         $wasExisting = !empty($invoice['existing']);
         if (boolValue($body['send_email'] ?? false)) {
-            $notification = GtrotsInvoiceService::sendEmail($db, (string)$invoice['id'], $config);
+            $notification = GtrotsInvoiceService::sendEmailOnce($db, (string)$invoice['id'], $config);
             $invoice = GtrotsInvoiceService::get($db, (string)$invoice['id'], $config);
             $invoice['existing'] = $wasExisting;
             $invoice['email_notification'] = $notification;
         } else {
             $invoice['email_notification'] = ['requested' => false, 'sent' => false];
+        }
+        if ((string)$orderStatus === 'return_confirmed') {
+            $paired = GtrotsOrderReturnConfirmation::ensureReturnInvoice(
+                $db,
+                $orderId,
+                $config,
+                (array)$currentUser,
+                boolValue($body['send_return_email'] ?? false)
+            );
+            $invoice['paired_documents'] = true;
+            $invoice['return_invoice'] = $paired['return_invoice'] ?? null;
+            $invoice['return_invoice_email'] = $paired['return_invoice_email'] ?? ['sent' => false];
         }
         jsonResponse($invoice, $wasExisting ? 200 : 201);
     }
@@ -4809,7 +5220,7 @@ try {
     }
 
     if ($action === 'markInvoiceSpvSent' && $method === 'POST') {
-        jsonResponse(GtrotsInvoiceService::markSpvSent($db, trim((string)($_GET['id'] ?? $body['invoice_id'] ?? '')), (string)($body['submission_id'] ?? '')));
+        jsonResponse(['error' => 'Starea SPV poate fi confirmată numai de răspunsul ANAF.'], 410);
     }
 
     if ($action === 'deleteInvoice' && $method === 'DELETE') {
@@ -5115,7 +5526,7 @@ try {
         $promotion = $stmt->fetch();
         if (!$promotion) jsonResponse(['error' => 'Reducerea nu există.'], 404);
         $orders = $db->prepare(
-            "SELECT id, order_number, status, customer_name, customer_email, subtotal, discount_total, total, created_at
+            "SELECT id, order_number, status, customer_name, customer_type, company_name, customer_email, subtotal, discount_total, total, created_at
              FROM shop_orders
              WHERE promotion_id = ? AND discount_total > 0
              ORDER BY created_at DESC
@@ -5123,6 +5534,7 @@ try {
         );
         $orders->execute([$id]);
         $applications = array_map(static function (array $order): array {
+            $order['customer_display_name'] = gtOrderCustomerDisplayName($order);
             $order['subtotal'] = (float)$order['subtotal'];
             $order['discount_total'] = (float)$order['discount_total'];
             $order['total'] = (float)$order['total'];
@@ -5250,7 +5662,7 @@ try {
         $summary->execute([$product['id']]);
         $sales = $summary->fetch() ?: [];
         $orders = $db->prepare(
-            'SELECT o.id, o.order_number, o.status, o.payment_status, o.customer_name, o.created_at,
+            'SELECT o.id, o.order_number, o.status, o.payment_status, o.customer_name, o.customer_type, o.company_name, o.created_at,
                     oi.quantity, oi.unit_price, oi.line_total
              FROM shop_order_items oi
              INNER JOIN shop_orders o ON o.id = oi.order_id
@@ -5259,6 +5671,7 @@ try {
         );
         $orders->execute([$product['id']]);
         $orderRows = array_map(function (array $row): array {
+            $row['customer_display_name'] = gtOrderCustomerDisplayName($row);
             $row['quantity'] = (int)$row['quantity'];
             $row['unit_price'] = (float)$row['unit_price'];
             $row['line_total'] = (float)$row['line_total'];
@@ -5282,32 +5695,297 @@ try {
     }
 
     if ($action === 'getDashboardStats' && $method === 'GET') {
-        $summary = $db->query(
-            'SELECT COUNT(DISTINCT o.id) AS orders_count,
-                    COUNT(DISTINCT CASE WHEN o.status = "new" THEN o.id END) AS new_orders_count,
-                    COALESCE(SUM(CASE
-                        WHEN o.payment_status = "paid" AND o.status NOT IN ("cancelled", "refunded") THEN oi.line_total
+        $period = (string)($_GET['period'] ?? '7d');
+        $requestedGranularity = strtolower(trim((string)($_GET['granularity'] ?? '')));
+        if (!in_array($requestedGranularity, ['', 'hour', 'day', 'week', 'month'], true)) $requestedGranularity = '';
+        $allowedPeriods = [
+            '24h', 'today', 'yesterday', '7d', '14d', '28d', '30d', '3m', '6m', '12m', '16m',
+            'current_week_sun', 'current_week_mon', 'previous_week_sun', 'previous_week_mon',
+            'current_month', 'previous_month', 'current_year', 'previous_year', 'all', 'custom',
+        ];
+        if (!in_array($period, $allowedPeriods, true)) $period = '7d';
+        $now = new DateTimeImmutable('now');
+        $today = $now->setTime(0, 0);
+        $endExclusive = $today->modify('+1 day');
+        if ($period === '24h') {
+            $rangeStart = $now->modify('-23 hours')->setTime((int)$now->format('H'), 0);
+            $endExclusive = $now->setTime((int)$now->format('H'), 0)->modify('+1 hour');
+        } elseif ($period === 'today') {
+            $rangeStart = $today;
+        } elseif ($period === 'yesterday') {
+            $rangeStart = $today->modify('-1 day');
+            $endExclusive = $today;
+        } elseif ($period === 'custom') {
+            $startInput = (string)($_GET['start_date'] ?? '');
+            $endInput = (string)($_GET['end_date'] ?? '');
+            $startDate = DateTimeImmutable::createFromFormat('!Y-m-d', $startInput);
+            $endDate = DateTimeImmutable::createFromFormat('!Y-m-d', $endInput);
+            if (!$startDate || !$endDate || $startDate->format('Y-m-d') !== $startInput || $endDate->format('Y-m-d') !== $endInput || $startDate > $endDate) {
+                jsonResponse(['error' => 'Intervalul de date nu este valid.'], 422);
+            }
+            $rangeStart = $startDate;
+            $endExclusive = $endDate->modify('+1 day');
+        } elseif (in_array($period, ['7d', '14d', '28d', '30d', '3m', '6m', '12m', '16m'], true)) {
+            $periodDays = ['7d' => 7, '14d' => 14, '28d' => 28, '30d' => 30, '3m' => 92, '6m' => 183, '12m' => 366, '16m' => 488];
+            $days = $periodDays[$period];
+            $rangeStart = $today->modify('-' . ($days - 1) . ' days');
+        } elseif ($period === 'current_week_sun' || $period === 'previous_week_sun') {
+            $currentWeekStart = $today->modify('-' . (int)$today->format('w') . ' days');
+            $rangeStart = $period === 'current_week_sun' ? $currentWeekStart : $currentWeekStart->modify('-7 days');
+            if ($period === 'previous_week_sun') $endExclusive = $currentWeekStart;
+        } elseif ($period === 'current_week_mon' || $period === 'previous_week_mon') {
+            $currentWeekStart = $today->modify('-' . ((int)$today->format('N') - 1) . ' days');
+            $rangeStart = $period === 'current_week_mon' ? $currentWeekStart : $currentWeekStart->modify('-7 days');
+            if ($period === 'previous_week_mon') $endExclusive = $currentWeekStart;
+        } elseif ($period === 'current_month') {
+            $rangeStart = $today->modify('first day of this month');
+        } elseif ($period === 'previous_month') {
+            $rangeStart = $today->modify('first day of previous month');
+            $endExclusive = $today->modify('first day of this month');
+        } elseif ($period === 'current_year') {
+            $rangeStart = $today->setDate((int)$today->format('Y'), 1, 1);
+        } elseif ($period === 'previous_year') {
+            $currentYear = (int)$today->format('Y');
+            $rangeStart = $today->setDate($currentYear - 1, 1, 1);
+            $endExclusive = $today->setDate($currentYear, 1, 1);
+        } else {
+            $firstOrderCreatedAt = $db->query('SELECT MIN(created_at) FROM shop_orders')->fetchColumn();
+            $firstOrderDate = is_string($firstOrderCreatedAt) && $firstOrderCreatedAt !== ''
+                ? DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $firstOrderCreatedAt)
+                : false;
+            $rangeStart = $firstOrderDate ?: $today;
+        }
+        $rangeDays = max(1, (int)$rangeStart->setTime(0, 0)->diff($endExclusive->setTime(0, 0))->days);
+        $hourlyPeriod = in_array($period, ['24h', 'today', 'yesterday'], true);
+        $weeklyPeriod = in_array($period, ['current_week_sun', 'current_week_mon', 'previous_week_sun', 'previous_week_mon'], true);
+        $monthlyPeriod = in_array($period, ['current_month', 'previous_month', 'current_year', 'previous_year', 'all'], true);
+        $automaticGranularity = $hourlyPeriod ? 'hour' : ($rangeDays > 120 ? 'month' : 'day');
+        $granularity = $automaticGranularity;
+        if ($requestedGranularity !== '') {
+            $requestedGranularityAllowed = ($requestedGranularity === 'hour' && $hourlyPeriod)
+                || ($requestedGranularity === 'day' && $rangeDays <= 730)
+                || ($requestedGranularity === 'week' && $rangeDays <= 730 && ($rangeDays >= 7 || $weeklyPeriod))
+                || ($requestedGranularity === 'month' && ($rangeDays >= 28 || $monthlyPeriod));
+            if ($requestedGranularityAllowed) $granularity = $requestedGranularity;
+        }
+        $weekStartsOnSunday = in_array($period, ['current_week_sun', 'previous_week_sun'], true);
+        $rangeStartSql = $rangeStart->format('Y-m-d H:i:s');
+        $rangeEndSql = $endExclusive->format('Y-m-d H:i:s');
+        // Indicatorii financiari sunt conduși de documentele emise, nu de
+        // statusul curent al comenzii. Astfel, o factură de retur scade exact
+        // o dată vânzarea, iar ștergerea legală a unei facturi o elimină și din
+        // statistici fără corecții suplimentare după status.
+        $ordersSummaryStatement = $db->prepare(
+            'SELECT COUNT(*) AS orders_count
+             FROM shop_orders
+             WHERE created_at >= ? AND created_at < ?'
+        );
+        $ordersSummaryStatement->execute([$rangeStartSql, $rangeEndSql]);
+        $summary = $ordersSummaryStatement->fetch() ?: [];
+
+        $invoiceSummaryStatement = $db->prepare(
+            'SELECT COALESCE(SUM(CASE WHEN invoice_type = "invoice" THEN ABS(total) ELSE 0 END), 0) AS gross_revenue,
+                    COALESCE(SUM(CASE WHEN invoice_type = "return" THEN ABS(total) ELSE 0 END), 0) AS returns_total,
+                    SUM(CASE WHEN invoice_type = "return" THEN 1 ELSE 0 END) AS returns_count
+             FROM shop_invoices
+             WHERE issued_at >= ? AND issued_at < ?'
+        );
+        $invoiceSummaryStatement->execute([$rangeStartSql, $rangeEndSql]);
+        $invoiceSummary = $invoiceSummaryStatement->fetch() ?: [];
+
+        // Costul vânzărilor folosește FIFO-ul documentat pe mișcări. Intrarea
+        // returului inversează costul ieșirii; NIR-urile furnizorului rămân
+        // achiziții/stoc și nu devin cheltuială până la vânzarea mărfii.
+        $costSummaryStatement = $db->prepare(
+            'SELECT COALESCE(SUM(CASE
+                        WHEN movement_type = "sale" THEN ABS(COALESCE(inventory_cost_total_ron, 0))
+                        WHEN movement_type IN ("return", "RETURN_IN") THEN -ABS(COALESCE(inventory_cost_total_ron, 0))
                         ELSE 0
-                    END), 0) AS revenue,
-                    COALESCE(SUM(CASE
-                        WHEN o.payment_status = "paid" AND o.status NOT IN ("cancelled", "refunded") THEN oi.quantity * COALESCE(p.cost_price, 0)
+                    END), 0) AS cost_of_goods_sold
+             FROM shop_inventory_movements
+             WHERE created_at >= ? AND created_at < ?'
+        );
+        $costSummaryStatement->execute([$rangeStartSql, $rangeEndSql]);
+        $costSummary = $costSummaryStatement->fetch() ?: [];
+
+        $acquisitionSummaryStatement = $db->prepare(
+            'SELECT COALESCE(SUM(CASE
+                        WHEN operation_type = "supplier_receipt" THEN ABS(inventory_cost_total_ron)
+                        WHEN operation_type = "supplier_return" THEN -ABS(inventory_cost_total_ron)
                         ELSE 0
                     END), 0) AS acquisitions
+             FROM shop_nir_documents
+             WHERE status = "confirmed"
+               AND operation_type IN ("supplier_receipt", "supplier_return")
+               AND COALESCE(confirmed_at, created_at) >= ? AND COALESCE(confirmed_at, created_at) < ?'
+        );
+        $acquisitionSummaryStatement->execute([$rangeStartSql, $rangeEndSql]);
+        $acquisitionSummary = $acquisitionSummaryStatement->fetch() ?: [];
+
+        $bucketExpressionFor = static function (string $field) use ($granularity, $weekStartsOnSunday): string {
+            if ($granularity === 'hour') return 'DATE_FORMAT(' . $field . ', "%Y-%m-%d %H:00:00")';
+            if ($granularity === 'week') {
+                $weekOffsetExpression = $weekStartsOnSunday ? 'MOD(WEEKDAY(' . $field . ') + 1, 7)' : 'WEEKDAY(' . $field . ')';
+                return 'DATE(DATE_SUB(' . $field . ', INTERVAL ' . $weekOffsetExpression . ' DAY))';
+            }
+            if ($granularity === 'month') return 'DATE_FORMAT(' . $field . ', "%Y-%m-01")';
+            return 'DATE(' . $field . ')';
+        };
+        $orderBucketExpression = $bucketExpressionFor('o.created_at');
+        $invoiceBucketExpression = $bucketExpressionFor('i.issued_at');
+        $movementBucketExpression = $bucketExpressionFor('m.created_at');
+        $nirBucketExpression = $bucketExpressionFor('COALESCE(n.confirmed_at, n.created_at)');
+
+        $ordersDailyStatement = $db->prepare(
+            'SELECT ' . $orderBucketExpression . ' AS day, COUNT(*) AS orders_count
              FROM shop_orders o
-             LEFT JOIN shop_order_items oi ON oi.order_id = o.id
-             LEFT JOIN shop_products p ON p.id = oi.product_id'
-        )->fetch() ?: [];
-        $recentRows = $db->query('SELECT * FROM shop_orders WHERE status = "new" ORDER BY created_at DESC LIMIT 8')->fetchAll();
-        $revenue = round((float)($summary['revenue'] ?? 0), 2);
-        $acquisitions = round((float)($summary['acquisitions'] ?? 0), 2);
+             WHERE o.created_at >= ? AND o.created_at < ?
+             GROUP BY ' . $orderBucketExpression . '
+             ORDER BY day ASC'
+        );
+        $ordersDailyStatement->execute([$rangeStartSql, $rangeEndSql]);
+        $invoicesDailyStatement = $db->prepare(
+            'SELECT ' . $invoiceBucketExpression . ' AS day,
+                    COALESCE(SUM(CASE WHEN i.invoice_type = "invoice" THEN ABS(i.total) ELSE 0 END), 0) AS gross_revenue,
+                    COALESCE(SUM(CASE WHEN i.invoice_type = "return" THEN ABS(i.total) ELSE 0 END), 0) AS returns_total,
+                    SUM(CASE WHEN i.invoice_type = "return" THEN 1 ELSE 0 END) AS returns_count
+             FROM shop_invoices i
+             WHERE i.issued_at >= ? AND i.issued_at < ?
+             GROUP BY ' . $invoiceBucketExpression . '
+             ORDER BY day ASC'
+        );
+        $invoicesDailyStatement->execute([$rangeStartSql, $rangeEndSql]);
+        $costsDailyStatement = $db->prepare(
+            'SELECT ' . $movementBucketExpression . ' AS day,
+                    COALESCE(SUM(CASE
+                        WHEN m.movement_type = "sale" THEN ABS(COALESCE(m.inventory_cost_total_ron, 0))
+                        WHEN m.movement_type IN ("return", "RETURN_IN") THEN -ABS(COALESCE(m.inventory_cost_total_ron, 0))
+                        ELSE 0
+                    END), 0) AS cost_of_goods_sold
+             FROM shop_inventory_movements m
+             WHERE m.created_at >= ? AND m.created_at < ?
+             GROUP BY ' . $movementBucketExpression . '
+             ORDER BY day ASC'
+        );
+        $costsDailyStatement->execute([$rangeStartSql, $rangeEndSql]);
+        $acquisitionsDailyStatement = $db->prepare(
+            'SELECT ' . $nirBucketExpression . ' AS day,
+                    COALESCE(SUM(CASE
+                        WHEN n.operation_type = "supplier_receipt" THEN ABS(n.inventory_cost_total_ron)
+                        WHEN n.operation_type = "supplier_return" THEN -ABS(n.inventory_cost_total_ron)
+                        ELSE 0
+                    END), 0) AS acquisitions
+             FROM shop_nir_documents n
+             WHERE n.status = "confirmed"
+               AND n.operation_type IN ("supplier_receipt", "supplier_return")
+               AND COALESCE(n.confirmed_at, n.created_at) >= ? AND COALESCE(n.confirmed_at, n.created_at) < ?
+             GROUP BY ' . $nirBucketExpression . '
+             ORDER BY day ASC'
+        );
+        $acquisitionsDailyStatement->execute([$rangeStartSql, $rangeEndSql]);
+        $dailyByDate = [];
+        foreach ($ordersDailyStatement->fetchAll() as $dailyRow) {
+            $day = (string)$dailyRow['day'];
+            $dailyByDate[$day] = ['orders_count' => (int)$dailyRow['orders_count']];
+        }
+        foreach ($invoicesDailyStatement->fetchAll() as $dailyRow) {
+            $day = (string)$dailyRow['day'];
+            $dailyByDate[$day] = array_merge($dailyByDate[$day] ?? [], $dailyRow);
+        }
+        foreach ($costsDailyStatement->fetchAll() as $dailyRow) {
+            $day = (string)$dailyRow['day'];
+            $dailyByDate[$day] = array_merge($dailyByDate[$day] ?? [], $dailyRow);
+        }
+        foreach ($acquisitionsDailyStatement->fetchAll() as $dailyRow) {
+            $day = (string)$dailyRow['day'];
+            $dailyByDate[$day] = array_merge($dailyByDate[$day] ?? [], $dailyRow);
+        }
+        $dailyStats = [];
+        if ($granularity === 'month') {
+            $cursor = $rangeStart->modify('first day of this month')->setTime(0, 0);
+        } elseif ($granularity === 'week') {
+            $weekOffset = $weekStartsOnSunday ? (int)$rangeStart->format('w') : (int)$rangeStart->format('N') - 1;
+            $cursor = $rangeStart->setTime(0, 0)->modify('-' . $weekOffset . ' days');
+        } elseif ($granularity === 'day') {
+            $cursor = $rangeStart->setTime(0, 0);
+        } else {
+            $cursor = $rangeStart->setTime((int)$rangeStart->format('H'), 0);
+        }
+        while ($cursor < $endExclusive) {
+            $day = $granularity === 'hour' ? $cursor->format('Y-m-d H:00:00') : $cursor->format('Y-m-d');
+            $daily = $dailyByDate[$day] ?? [];
+            $dailyGrossRevenue = round((float)($daily['gross_revenue'] ?? 0), 2);
+            $dailyReturnsTotal = round((float)($daily['returns_total'] ?? 0), 2);
+            $dailyRevenue = round($dailyGrossRevenue - $dailyReturnsTotal, 2);
+            $dailyAcquisitions = round((float)($daily['acquisitions'] ?? 0), 2);
+            $dailyCostOfGoodsSold = round((float)($daily['cost_of_goods_sold'] ?? 0), 2);
+            $dailyStats[] = [
+                'date' => $day,
+                'orders_count' => (int)($daily['orders_count'] ?? 0),
+                'gross_revenue' => $dailyGrossRevenue,
+                'returns_count' => (int)($daily['returns_count'] ?? 0),
+                'returns_total' => $dailyReturnsTotal,
+                'revenue' => $dailyRevenue,
+                'acquisitions' => $dailyAcquisitions,
+                'cost_of_goods_sold' => $dailyCostOfGoodsSold,
+                'profit' => round($dailyRevenue - $dailyCostOfGoodsSold, 2),
+            ];
+            if ($granularity === 'hour') {
+                $cursor = $cursor->modify('+1 hour');
+            } elseif ($granularity === 'day') {
+                $cursor = $cursor->modify('+1 day');
+            } elseif ($granularity === 'week') {
+                $cursor = $cursor->modify('+1 week');
+            } else {
+                $cursor = $cursor->modify('first day of next month')->setTime(0, 0);
+            }
+        }
+        // Dashboardul foloseste doar rezumatul. Nu mai hidratam produsele,
+        // istoricul si factura pentru fiecare comanda (era un N+1 costisitor).
+        $recentRows = $db->query(
+            'SELECT id, order_number, status, payment_status, payment_method,
+                    customer_name, customer_type, company_name, total, currency, created_at
+             FROM shop_orders
+             WHERE status = "new"
+             ORDER BY created_at DESC
+             LIMIT 8'
+        )->fetchAll();
+        $newOrdersCount = (int)$db->query('SELECT COUNT(*) FROM shop_orders WHERE status = "new"')->fetchColumn();
+        $grossRevenue = round((float)($invoiceSummary['gross_revenue'] ?? 0), 2);
+        $returnsTotal = round((float)($invoiceSummary['returns_total'] ?? 0), 2);
+        $revenue = round($grossRevenue - $returnsTotal, 2);
+        $acquisitions = round((float)($acquisitionSummary['acquisitions'] ?? 0), 2);
+        $costOfGoodsSold = round((float)($costSummary['cost_of_goods_sold'] ?? 0), 2);
         jsonResponse([
             'revenue' => $revenue,
+            'gross_revenue' => $grossRevenue,
+            'returns_count' => (int)($invoiceSummary['returns_count'] ?? 0),
+            'returns_total' => $returnsTotal,
             'orders_count' => (int)($summary['orders_count'] ?? 0),
-            'new_orders_count' => (int)($summary['new_orders_count'] ?? 0),
+            'new_orders_count' => $newOrdersCount,
             'acquisitions' => $acquisitions,
-            'profit' => round($revenue - $acquisitions, 2),
+            'cost_of_goods_sold' => $costOfGoodsSold,
+            'profit' => round($revenue - $costOfGoodsSold, 2),
             'products_count' => (int)$db->query('SELECT COUNT(*) FROM shop_products')->fetchColumn(),
-            'recent_orders' => array_map(fn(array $row): array => orderRow($db, $row, $config), $recentRows),
+            'daily_stats' => $dailyStats,
+            'range' => [
+                'period' => $period,
+                'start' => $rangeStart->format('Y-m-d'),
+                'end' => $endExclusive->modify('-1 second')->format('Y-m-d'),
+                'granularity' => $granularity,
+            ],
+            'recent_orders' => array_map(static fn(array $row): array => [
+                'id' => (string)$row['id'],
+                'order_number' => (string)$row['order_number'],
+                'status' => (string)$row['status'],
+                'payment_status' => (string)$row['payment_status'],
+                'payment_method' => (string)$row['payment_method'],
+                'customer_name' => (string)$row['customer_name'],
+                'customer_display_name' => gtOrderCustomerDisplayName($row),
+                'total' => (float)$row['total'],
+                'currency' => (string)$row['currency'],
+                'created_at' => (string)$row['created_at'],
+            ], $recentRows),
         ]);
     }
 
@@ -5819,14 +6497,133 @@ try {
         jsonResponse(findProduct($db, $id, $config));
     }
 
+    if ($action === 'listOrdersPage' && $method === 'GET') {
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $pageSize = max(5, min(50, (int)($_GET['page_size'] ?? 10)));
+        $query = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 180);
+        $status = trim((string)($_GET['status'] ?? ''));
+        $paymentMethod = trim((string)($_GET['payment_method'] ?? ''));
+        $paymentStatus = trim((string)($_GET['payment_status'] ?? ''));
+        $allowedStatuses = ['new', 'confirmed', 'processing', 'shipped', 'completed', 'return_requested', 'return_refused', 'return_confirmed', 'refunded', 'cancelled'];
+        $allowedPaymentStatuses = ['pending', 'paid', 'failed', 'refunded'];
+        $where = [];
+        $params = [];
+
+        if ($status === 'returned') {
+            $where[] = 'o.status IN ("return_confirmed", "refunded")';
+        } elseif (in_array($status, $allowedStatuses, true)) {
+            $where[] = 'o.status = ?';
+            $params[] = $status;
+        }
+        if ($paymentMethod === 'card') {
+            $where[] = 'o.payment_method = "card"';
+        } elseif ($paymentMethod === 'cash') {
+            $where[] = 'o.payment_method <> "card"';
+        }
+        if (in_array($paymentStatus, $allowedPaymentStatuses, true)) {
+            $where[] = 'o.payment_status = ?';
+            $params[] = $paymentStatus;
+        }
+        if ($query !== '') {
+            $where[] = 'LOWER(CONCAT_WS(" ",
+                o.order_number, o.customer_name, o.customer_phone, o.customer_email, o.customer_type,
+                o.company_name, o.company_cui, o.company_registration_number, o.company_address,
+                o.created_at, DATE_FORMAT(o.created_at, "%d.%m.%Y"), DATE_FORMAT(o.created_at, "%d/%m/%Y"), DATE_FORMAT(o.created_at, "%H:%i"),
+                o.status,
+                CASE o.status
+                    WHEN "new" THEN "in procesare noua comenzi noi"
+                    WHEN "confirmed" THEN "confirmata"
+                    WHEN "processing" THEN "in pregatire"
+                    WHEN "shipped" THEN "predata curierului"
+                    WHEN "completed" THEN "livrata"
+                    WHEN "return_requested" THEN "retur solicitat cerere retur"
+                    WHEN "return_refused" THEN "retur refuzat respins"
+                    WHEN "return_confirmed" THEN "retur confirmat aprobat"
+                    WHEN "refunded" THEN "rambursata"
+                    WHEN "cancelled" THEN "comanda anulata"
+                    ELSE ""
+                END,
+                o.payment_method,
+                CASE WHEN o.payment_method = "card" THEN "card online plata cu cardul" ELSE "ramburs la curier plata ramburs numerar cash" END,
+                o.payment_status,
+                CASE o.payment_status WHEN "pending" THEN "in asteptare" WHEN "paid" THEN "platita" WHEN "failed" THEN "esuata" WHEN "refunded" THEN "rambursata" ELSE "" END,
+                CASE WHEN o.customer_type = "company" OR COALESCE(o.company_name, "") <> "" OR COALESCE(o.company_cui, "") <> "" OR COALESCE(o.company_registration_number, "") <> "" THEN "pj persoana juridica firma" ELSE "pf persoana fizica" END
+            )) LIKE LOWER(?)';
+            $params[] = '%' . $query . '%';
+        }
+
+        $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+        $db->beginTransaction();
+        try {
+            $count = $db->prepare('SELECT COUNT(*) FROM shop_orders o' . $whereSql);
+            $count->execute($params);
+            $total = (int)$count->fetchColumn();
+            $totalPages = max(1, (int)ceil($total / $pageSize));
+            $page = min($page, $totalPages);
+            $offset = ($page - 1) * $pageSize;
+
+            $ordersStatement = $db->prepare(
+                'SELECT o.*' . GtrotsInvoiceService::orderJoinColumns() .
+                ' FROM shop_orders o' . GtrotsInvoiceService::orderJoinSql('o') .
+                $whereSql . ' ORDER BY o.created_at DESC, o.id DESC LIMIT ' . $pageSize . ' OFFSET ' . $offset
+            );
+            $ordersStatement->execute($params);
+            $rows = $ordersStatement->fetchAll();
+
+            $summary = $db->query(
+                'SELECT COUNT(*) AS orders_count,
+                        SUM(CASE WHEN status = "new" THEN 1 ELSE 0 END) AS new_count,
+                        SUM(CASE WHEN status = "processing" THEN 1 ELSE 0 END) AS processing_count,
+                        COALESCE(SUM(CASE WHEN status NOT IN ("cancelled", "refunded") AND payment_status = "paid" THEN total ELSE 0 END), 0) AS collected,
+                        COALESCE(SUM(CASE WHEN status NOT IN ("cancelled", "refunded") AND payment_method <> "card" AND payment_status = "pending" THEN total ELSE 0 END), 0) AS pending_cash
+                 FROM shop_orders'
+            )->fetch() ?: [];
+            $returnsSummary = $db->query(
+                'SELECT COUNT(*) AS returns_count,
+                        COALESCE(SUM(ABS(i.total)), 0) AS returns_total,
+                        COALESCE(SUM(CASE
+                            WHEN o.status NOT IN ("cancelled", "refunded") AND o.payment_status = "paid" THEN ABS(i.total)
+                            ELSE 0
+                        END), 0) AS collected_return_deduction
+                 FROM shop_invoices i
+                 INNER JOIN shop_orders o ON o.id = i.order_id
+                 WHERE i.invoice_type = "return"'
+            )->fetch() ?: [];
+            $db->commit();
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
+        $collected = round((float)($summary['collected'] ?? 0) - (float)($returnsSummary['collected_return_deduction'] ?? 0), 2);
+        $pendingCash = round((float)($summary['pending_cash'] ?? 0), 2);
+
+        jsonResponse([
+            'orders' => array_map(fn(array $row): array => orderRow($db, $row, $config, false, false), $rows),
+            'total' => $total,
+            'page' => $page,
+            'page_size' => $pageSize,
+            'total_pages' => $totalPages,
+            'summary' => [
+                'orders_count' => (int)($summary['orders_count'] ?? 0),
+                'new_count' => (int)($summary['new_count'] ?? 0),
+                'processing_count' => (int)($summary['processing_count'] ?? 0),
+                'returns_count' => (int)($returnsSummary['returns_count'] ?? 0),
+                'returns_total' => round((float)($returnsSummary['returns_total'] ?? 0), 2),
+                'collected' => $collected,
+                'pending_cash' => $pendingCash,
+                'financial_total' => round($collected + $pendingCash, 2),
+            ],
+        ]);
+    }
+
     if ($action === 'listOrders' && $method === 'GET') {
-        $rows = $db->query('SELECT o.*' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o' . GtrotsInvoiceService::orderJoinSql('o') . ' ORDER BY o.created_at DESC LIMIT 500')->fetchAll();
+        $rows = $db->query('SELECT o.*' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o' . GtrotsInvoiceService::orderJoinSql('o') . ' ORDER BY o.created_at DESC, o.id DESC LIMIT 500')->fetchAll();
         jsonResponse(array_map(fn(array $row): array => orderRow($db, $row, $config), $rows));
     }
 
     if ($action === 'getOrder' && $method === 'GET') {
         $id = trim((string)($_GET['id'] ?? ''));
-        $stmt = $db->prepare('SELECT o.*' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? OR o.order_number = ? LIMIT 1');
+        $stmt = $db->prepare('SELECT o.*, COALESCE(sm.return_cost, 0) AS configured_return_shipping_cost' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? OR o.order_number = ? LIMIT 1');
         $stmt->execute([$id, $id]);
         $row = $stmt->fetch();
         if (!$row) jsonResponse(['error' => 'Comanda nu exista.'], 404);
@@ -5835,12 +6632,107 @@ try {
 
     if ($action === 'updateOrder' && in_array($method, ['PUT', 'PATCH'], true)) {
         $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
-        $statuses = ['new', 'confirmed', 'processing', 'shipped', 'completed', 'refunded', 'cancelled'];
+        $statuses = ['new', 'confirmed', 'processing', 'shipped', 'completed', 'return_requested', 'return_refused', 'return_confirmed', 'refunded', 'cancelled'];
         $paymentStatuses = ['pending', 'paid', 'failed', 'refunded'];
         $status = trim((string)($body['status'] ?? ''));
         $paymentStatus = trim((string)($body['payment_status'] ?? ''));
         $notifyCustomer = boolValue($body['notify_customer'] ?? false);
         if (!in_array($status, $statuses, true) || !in_array($paymentStatus, $paymentStatuses, true)) throw new InvalidArgumentException('Statusul comenzii nu este valid.');
+        $currentOrderStatusStmt = $db->prepare('SELECT status FROM shop_orders WHERE id = ? LIMIT 1');
+        $currentOrderStatusStmt->execute([$id]);
+        $currentOrderStatus = $currentOrderStatusStmt->fetchColumn();
+        if ($currentOrderStatus === false) throw new InvalidArgumentException('Comanda nu există.');
+        $requestedStatusChanged = $status !== (string)$currentOrderStatus;
+        // Nu retrimitem niciodată e-mailul aceluiași status doar pentru că
+        // formularul a fost salvat din nou (important mai ales la Anulată).
+        if (!$requestedStatusChanged) $notifyCustomer = false;
+        $returnDetails = [
+            'reason' => (string)($body['return_reason'] ?? ''),
+            'bank_iban' => (string)($body['return_bank_iban'] ?? ''),
+            'bank_account_holder' => (string)($body['return_bank_account_holder'] ?? ''),
+        ];
+        $directReturnConfirmation = null;
+        if ($status === 'cancelled' && $requestedStatusChanged) {
+            $cancellation = GtrotsOrderCancellation::cancelByStaff(
+                $db,
+                $id,
+                (string)($body['cancellation_reason'] ?? ''),
+                $config,
+                (array)$currentUser
+            );
+            $stmt = $db->prepare('SELECT o.*' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? LIMIT 1');
+            $stmt->execute([$id]);
+            $saved = $stmt->fetch();
+            if (!$saved) throw new RuntimeException('Comanda anulată nu a putut fi recitită.');
+            $order = orderRow($db, $saved, $config, true);
+            $order['cancellation'] = [
+                'invoice_action' => (string)($cancellation['invoice_action'] ?? 'none'),
+                'released_number' => (string)($cancellation['released_number'] ?? ''),
+                'return_invoice' => $cancellation['return_invoice'] ?? null,
+                'return_invoice_email' => $cancellation['return_invoice_email'] ?? null,
+            ];
+            $order['email_notification'] = array_merge(['requested' => true], (array)($cancellation['cancellation_email'] ?? []));
+            jsonResponse($order);
+        }
+        if ($status === 'return_requested') {
+            $currentStatusStmt = $db->prepare('SELECT status FROM shop_orders WHERE id = ? LIMIT 1');
+            $currentStatusStmt->execute([$id]);
+            $currentStatus = $currentStatusStmt->fetchColumn();
+            if ($currentStatus === false) throw new InvalidArgumentException('Comanda nu există.');
+            if ((string)$currentStatus !== 'return_requested') {
+                $request = GtrotsOrderReturnRequest::requestByStaff($db, $id, [
+                    'reason' => $returnDetails['reason'],
+                    'bank_iban' => $returnDetails['bank_iban'],
+                    'bank_account_holder' => $returnDetails['bank_account_holder'],
+                ], $config, (array)$currentUser, $notifyCustomer);
+                $stmt = $db->prepare('SELECT o.*, COALESCE(sm.return_cost, 0) AS configured_return_shipping_cost' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? LIMIT 1');
+                $stmt->execute([$id]);
+                $saved = $stmt->fetch();
+                if (!$saved) throw new RuntimeException('Solicitarea de retur nu a putut fi recitită.');
+                $order = orderRow($db, $saved, $config, true);
+                $email = (array)($request['email_notification'] ?? []);
+                $order['email_notification'] = array_merge(['requested' => $notifyCustomer], $email);
+                jsonResponse($order);
+            }
+        }
+        if ($status === 'return_confirmed') {
+            $currentStatusStmt = $db->prepare('SELECT status FROM shop_orders WHERE id = ? LIMIT 1');
+            $currentStatusStmt->execute([$id]);
+            $currentStatus = $currentStatusStmt->fetchColumn();
+            if ($currentStatus === false) throw new InvalidArgumentException('Comanda nu există.');
+            if (!in_array((string)$currentStatus, ['return_requested', 'return_refused', 'return_confirmed'], true)) {
+                GtrotsOrderReturnRequest::requestByStaff($db, $id, $returnDetails, $config, (array)$currentUser, false);
+                $currentStatus = 'return_requested';
+            }
+            if ((string)$currentStatus !== 'return_confirmed') {
+                $confirmation = GtrotsOrderReturnConfirmation::confirm($db, $id, $config, (array)$currentUser, $notifyCustomer);
+                $stmt = $db->prepare('SELECT o.*, COALESCE(sm.return_cost, 0) AS configured_return_shipping_cost' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? LIMIT 1');
+                $stmt->execute([$id]);
+                $saved = $stmt->fetch();
+                if (!$saved) throw new RuntimeException('Confirmarea returului nu a putut fi recitită.');
+                $order = orderRow($db, $saved, $config, true);
+                $order['return_confirmation'] = [
+                    'invoice_action' => (string)($confirmation['invoice_action'] ?? 'none_no_positive_invoice'),
+                    'return_invoice' => $confirmation['return_invoice'] ?? null,
+                    'return_invoice_email' => $confirmation['return_invoice_email'] ?? null,
+                ];
+                $order['email_notification'] = array_merge(['requested' => $notifyCustomer], (array)($confirmation['status_email'] ?? []));
+                jsonResponse($order);
+            }
+        }
+        if ($status === 'refunded') {
+            $currentStatusStmt = $db->prepare('SELECT status FROM shop_orders WHERE id = ? LIMIT 1');
+            $currentStatusStmt->execute([$id]);
+            $currentStatus = $currentStatusStmt->fetchColumn();
+            if ($currentStatus === false) throw new InvalidArgumentException('Comanda nu există.');
+            if (!in_array((string)$currentStatus, ['return_requested', 'return_refused', 'return_confirmed', 'refunded'], true)) {
+                GtrotsOrderReturnRequest::requestByStaff($db, $id, $returnDetails, $config, (array)$currentUser, false);
+                $currentStatus = 'return_requested';
+            }
+            if (in_array((string)$currentStatus, ['return_requested', 'return_refused'], true)) {
+                $directReturnConfirmation = GtrotsOrderReturnConfirmation::confirm($db, $id, $config, (array)$currentUser, false);
+            }
+        }
         $historyId = null;
         $statusChanged = false;
         $paymentChanged = false;
@@ -5857,46 +6749,27 @@ try {
             if ($address === '' || $city === '' || $county === '') {
                 throw new InvalidArgumentException('Adresa, localitatea și județul sunt obligatorii pentru livrare.');
             }
-            $mainStatusFlow = ['new', 'confirmed', 'processing', 'shipped', 'completed'];
             $terminalStatuses = ['refunded', 'cancelled'];
             $currentStatus = (string)$current['status'];
-            if (in_array($status, $terminalStatuses, true) && !in_array($currentStatus, $terminalStatuses, true)) {
-                $issuedInvoice = $db->prepare('SELECT series, invoice_number FROM shop_invoices WHERE order_id = ? LIMIT 1');
+            if ($status === 'refunded' && !in_array($currentStatus, $terminalStatuses, true)) {
+                $issuedInvoice = $db->prepare("SELECT series, invoice_number FROM shop_invoices WHERE order_id = ? AND invoice_type = 'invoice' LIMIT 1");
                 $issuedInvoice->execute([$id]);
                 $invoice = $issuedInvoice->fetch();
                 if ($invoice) {
-                    throw new InvalidArgumentException('Comanda are deja factura ' . trim((string)$invoice['series'] . ' ' . (string)$invoice['invoice_number']) . '. Pentru anulare sau rambursare este necesară o factură de storno, nu anularea directă a comenzii.');
+                    $returnInvoiceStmt = $db->prepare("SELECT id FROM shop_invoices WHERE order_id = ? AND invoice_type = 'return' LIMIT 1");
+                    $returnInvoiceStmt->execute([$id]);
+                    if (!$returnInvoiceStmt->fetchColumn()) {
+                        throw new InvalidArgumentException('Comanda are deja factura ' . trim((string)$invoice['series'] . ' ' . (string)$invoice['invoice_number']) . '. Rambursarea poate fi finalizată numai după emiterea facturii de retur.');
+                    }
                 }
-            }
-            if ($status !== $currentStatus && in_array($currentStatus, $terminalStatuses, true)) {
-                throw new InvalidArgumentException('O comandă rambursată sau anulată nu mai poate reveni în fluxul de procesare.');
-            }
-            $currentIndex = array_search($currentStatus, $mainStatusFlow, true);
-            $nextIndex = array_search($status, $mainStatusFlow, true);
-            if ($status !== $currentStatus && $currentIndex !== false && $nextIndex !== false && $nextIndex < $currentIndex) {
-                throw new InvalidArgumentException('Statusul comenzii nu poate reveni la o etapă anterioară.');
             }
             if ($status === 'refunded') $paymentStatus = 'refunded';
             $statusChanged = $status !== (string)$current['status'];
             $paymentChanged = $paymentStatus !== (string)$current['payment_status'];
             if (in_array($status, $terminalStatuses, true) && !in_array($currentStatus, $terminalStatuses, true)) {
-                $items = $db->prepare('SELECT * FROM shop_order_items WHERE order_id = ?');
-                $items->execute([$id]);
-                foreach ($items->fetchAll() as $item) {
-                    if (empty($item['product_id'])) continue;
-                    $posted = $db->prepare("SELECT id FROM shop_inventory_movements WHERE order_id = ? AND product_id = ? AND movement_type = 'sale' LIMIT 1");
-                    $posted->execute([$id, $item['product_id']]);
-                    if (!$posted->fetchColumn()) continue;
-                    $productStmt = $db->prepare('SELECT * FROM shop_products WHERE id = ? FOR UPDATE');
-                    $productStmt->execute([$item['product_id']]);
-                    $product = $productStmt->fetch();
-                    if (!$product || $product['stock_mode'] !== 'tracked') continue;
-                    $next = (int)$product['stock_quantity'] + (int)$item['quantity'];
-                    $db->prepare('UPDATE shop_products SET stock_quantity = ? WHERE id = ?')->execute([$next, $product['id']]);
-                    $movement = $db->prepare('INSERT INTO shop_inventory_movements (id, product_id, order_id, movement_type, quantity_delta, quantity_after, note, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-                    $movementNote = $status === 'refunded' ? 'Stoc returnat prin rambursarea comenzii' : 'Stoc returnat prin anularea comenzii';
-                    $movement->execute([uuidV4(), $product['id'], $id, 'return', (int)$item['quantity'], $next, $movementNote, (string)($currentUser['display_name'] ?? $currentUser['username'] ?? '')]);
-                }
+                // Statusurile terminale nu au voie să modifice stocul. Intrarea
+                // returului este creată exclusiv, o singură dată, împreună cu
+                // factura de retur în GtrotsInvoiceService::issueReturn().
                 releasePromotionUsage($db, $id);
             }
             $update = $db->prepare('UPDATE shop_orders SET status = ?, payment_status = ?, admin_notes = ?, address = ?, city = ?, county = ?, postal_code = ? WHERE id = ?');
@@ -5920,6 +6793,13 @@ try {
         $stmt = $db->prepare('SELECT o.*' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ?');
         $stmt->execute([$id]);
         $order = orderRow($db, $stmt->fetch(), $config, true);
+        if (is_array($directReturnConfirmation)) {
+            $order['return_confirmation'] = [
+                'invoice_action' => (string)($directReturnConfirmation['invoice_action'] ?? 'none_no_positive_invoice'),
+                'return_invoice' => $directReturnConfirmation['return_invoice'] ?? null,
+                'return_invoice_email' => $directReturnConfirmation['return_invoice_email'] ?? null,
+            ];
+        }
         if ($notifyCustomer && $statusChanged && $historyId) {
             $emailResult = gtSendOrderStatusEmail($order, $config, $status);
             updateOrderHistoryEmail($db, $historyId, $emailResult);
@@ -5938,16 +6818,100 @@ try {
         $order['invoice_automation'] = $automation;
         if (($automation['status'] ?? '') === 'completed') {
             $emailNotification = $order['email_notification'] ?? null;
+            $returnConfirmation = $order['return_confirmation'] ?? null;
             $refreshed = $db->prepare('SELECT o.*' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ?');
             $refreshed->execute([$id]);
             $order = orderRow($db, $refreshed->fetch(), $config, true);
             if ($emailNotification !== null) $order['email_notification'] = $emailNotification;
+            if ($returnConfirmation !== null) $order['return_confirmation'] = $returnConfirmation;
             $order['invoice_automation'] = $automation;
         }
         jsonResponse($order);
     }
 
     if ($action === 'getPaymentSettings' && $method === 'GET') jsonResponse(paymentSettings($db, $config));
+
+    if ($action === 'listReceiptLocations' && $method === 'GET') {
+        jsonResponse(receiptLocationList($db, max(0, (int)($_GET['company_id'] ?? 0))));
+    }
+
+    if ($action === 'createReceiptLocation' && $method === 'POST') {
+        $location = receiptLocationPayload($body);
+        $companyCheck = $db->prepare('SELECT id FROM shop_company_settings WHERE id = ?');
+        $companyCheck->execute([$location['company_id']]);
+        if (!$companyCheck->fetchColumn()) jsonResponse(['error' => 'Firma nu există.'], 404);
+        $db->beginTransaction();
+        try {
+            $count = $db->prepare('SELECT COUNT(*) FROM shop_company_receipt_locations WHERE company_id = ? FOR UPDATE');
+            $count->execute([$location['company_id']]);
+            $makeDefault = $location['is_default'] || (int)$count->fetchColumn() === 0;
+            if ($makeDefault) $db->prepare('UPDATE shop_company_receipt_locations SET is_default = 0 WHERE company_id = ?')->execute([$location['company_id']]);
+            $id = uuidV4();
+            $stmt = $db->prepare('INSERT INTO shop_company_receipt_locations (id, company_id, name, address, city, county, postal_code, is_default, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt->execute([$id, $location['company_id'], $location['name'], $location['address'], $location['city'], $location['county'], $location['postal_code'], $makeDefault ? 1 : 0, $location['sort_order']]);
+            $db->commit();
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
+        $stmt = $db->prepare('SELECT * FROM shop_company_receipt_locations WHERE id = ?');
+        $stmt->execute([$id]);
+        jsonResponse(receiptLocationRow($stmt->fetch()), 201);
+    }
+
+    if ($action === 'updateReceiptLocation' && in_array($method, ['PUT', 'PATCH'], true)) {
+        $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
+        $currentStmt = $db->prepare('SELECT * FROM shop_company_receipt_locations WHERE id = ?');
+        $currentStmt->execute([$id]);
+        $current = $currentStmt->fetch();
+        if (!$current) jsonResponse(['error' => 'Punctul de recepție nu există.'], 404);
+        $location = receiptLocationPayload($body + ['company_id' => (int)$current['company_id']]);
+        $location['company_id'] = (int)$current['company_id'];
+        $db->beginTransaction();
+        try {
+            $makeDefault = $location['is_default'];
+            if ($makeDefault) $db->prepare('UPDATE shop_company_receipt_locations SET is_default = 0 WHERE company_id = ?')->execute([$location['company_id']]);
+            $stmt = $db->prepare('UPDATE shop_company_receipt_locations SET name = ?, address = ?, city = ?, county = ?, postal_code = ?, is_default = ?, sort_order = ? WHERE id = ?');
+            $stmt->execute([$location['name'], $location['address'], $location['city'], $location['county'], $location['postal_code'], $makeDefault ? 1 : 0, $location['sort_order'], $id]);
+            if (!$makeDefault && (bool)$current['is_default']) {
+                $fallback = $db->prepare('SELECT id FROM shop_company_receipt_locations WHERE company_id = ? AND id <> ? ORDER BY sort_order ASC, name ASC, id ASC LIMIT 1');
+                $fallback->execute([$location['company_id'], $id]);
+                $fallbackId = $fallback->fetchColumn();
+                if ($fallbackId) $db->prepare('UPDATE shop_company_receipt_locations SET is_default = 1 WHERE id = ?')->execute([$fallbackId]);
+                else $db->prepare('UPDATE shop_company_receipt_locations SET is_default = 1 WHERE id = ?')->execute([$id]);
+            }
+            $db->commit();
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
+        $stmt = $db->prepare('SELECT * FROM shop_company_receipt_locations WHERE id = ?');
+        $stmt->execute([$id]);
+        jsonResponse(receiptLocationRow($stmt->fetch()));
+    }
+
+    if ($action === 'deleteReceiptLocation' && $method === 'DELETE') {
+        $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
+        $db->beginTransaction();
+        try {
+            $stmt = $db->prepare('SELECT * FROM shop_company_receipt_locations WHERE id = ? FOR UPDATE');
+            $stmt->execute([$id]);
+            $current = $stmt->fetch();
+            if (!$current) jsonResponse(['error' => 'Punctul de recepție nu există.'], 404);
+            $count = $db->prepare('SELECT COUNT(*) FROM shop_company_receipt_locations WHERE company_id = ?');
+            $count->execute([(int)$current['company_id']]);
+            if ((int)$count->fetchColumn() <= 1) throw new InvalidArgumentException('Trebuie să rămână cel puțin un punct de recepție.');
+            $db->prepare('DELETE FROM shop_company_receipt_locations WHERE id = ?')->execute([$id]);
+            if ((bool)$current['is_default']) {
+                $db->prepare('UPDATE shop_company_receipt_locations SET is_default = 1 WHERE company_id = ? ORDER BY sort_order ASC, name ASC, id ASC LIMIT 1')->execute([(int)$current['company_id']]);
+            }
+            $db->commit();
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
+        jsonResponse(['success' => true]);
+    }
 
     if ($action === 'listCompanySettings' && $method === 'GET') jsonResponse(companySettingsList($db, $config));
 
@@ -6034,8 +6998,8 @@ try {
         $name = mb_substr(trim((string)($body['name'] ?? '')), 0, 120);
         if ($name === '') throw new InvalidArgumentException('Numele livrarii este obligatoriu.');
         $id = uuidV4();
-        $stmt = $db->prepare('INSERT INTO shop_shipping_methods (id, name, description, cost, free_above, eta_label, is_active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([$id, $name, mb_substr(trim((string)($body['description'] ?? '')), 0, 500), moneyValue($body['cost'] ?? 0, 'Costul livrarii'), moneyValue($body['free_above'] ?? null, 'Pragul de gratuitate', true), mb_substr(trim((string)($body['eta_label'] ?? '')), 0, 120), boolValue($body['is_active'] ?? true, true) ? 1 : 0, (int)($body['sort_order'] ?? 0)]);
+        $stmt = $db->prepare('INSERT INTO shop_shipping_methods (id, name, description, cost, return_cost, free_above, eta_label, is_active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt->execute([$id, $name, mb_substr(trim((string)($body['description'] ?? '')), 0, 500), moneyValue($body['cost'] ?? 0, 'Costul livrarii'), moneyValue($body['return_cost'] ?? 0, 'Costul returului'), moneyValue($body['free_above'] ?? null, 'Pragul de gratuitate', true), mb_substr(trim((string)($body['eta_label'] ?? '')), 0, 120), boolValue($body['is_active'] ?? true, true) ? 1 : 0, (int)($body['sort_order'] ?? 0)]);
         $stmt = $db->prepare('SELECT * FROM shop_shipping_methods WHERE id = ?');
         $stmt->execute([$id]);
         jsonResponse(shippingRow($stmt->fetch()), 201);
@@ -6045,8 +7009,8 @@ try {
         $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
         $name = mb_substr(trim((string)($body['name'] ?? '')), 0, 120);
         if ($name === '') throw new InvalidArgumentException('Numele livrarii este obligatoriu.');
-        $stmt = $db->prepare('UPDATE shop_shipping_methods SET name = ?, description = ?, cost = ?, free_above = ?, eta_label = ?, is_active = ?, sort_order = ? WHERE id = ?');
-        $stmt->execute([$name, mb_substr(trim((string)($body['description'] ?? '')), 0, 500), moneyValue($body['cost'] ?? 0, 'Costul livrarii'), moneyValue($body['free_above'] ?? null, 'Pragul de gratuitate', true), mb_substr(trim((string)($body['eta_label'] ?? '')), 0, 120), boolValue($body['is_active'] ?? true, true) ? 1 : 0, (int)($body['sort_order'] ?? 0), $id]);
+        $stmt = $db->prepare('UPDATE shop_shipping_methods SET name = ?, description = ?, cost = ?, return_cost = ?, free_above = ?, eta_label = ?, is_active = ?, sort_order = ? WHERE id = ?');
+        $stmt->execute([$name, mb_substr(trim((string)($body['description'] ?? '')), 0, 500), moneyValue($body['cost'] ?? 0, 'Costul livrarii'), moneyValue($body['return_cost'] ?? 0, 'Costul returului'), moneyValue($body['free_above'] ?? null, 'Pragul de gratuitate', true), mb_substr(trim((string)($body['eta_label'] ?? '')), 0, 120), boolValue($body['is_active'] ?? true, true) ? 1 : 0, (int)($body['sort_order'] ?? 0), $id]);
         if ($stmt->rowCount() === 0) {
             $exists = $db->prepare('SELECT id FROM shop_shipping_methods WHERE id = ?');
             $exists->execute([$id]);

@@ -12,6 +12,12 @@
   const searchEl = document.getElementById('clients-search');
   const addClientBtn = document.getElementById('clients-add-btn');
   const refreshBtn = document.getElementById('clients-refresh-btn');
+  const pagePrevBtn = document.getElementById('clients-page-prev');
+  const pageNextBtn = document.getElementById('clients-page-next');
+  const pageLabelEl = document.getElementById('clients-page-label');
+  const pageSizeSelectEl = document.getElementById('clients-page-size-select');
+  const pageSizeValueEl = document.getElementById('clients-page-size-value');
+  const pageSizeButtons = Array.from(document.querySelectorAll('[data-clients-page-size]'));
   const lifecycleFilterButtons = Array.from(document.querySelectorAll('[data-client-lifecycle-filter]'));
   const qrModal = document.getElementById('qr-modal');
   const qrModalClose = document.getElementById('qr-modal-close');
@@ -34,11 +40,35 @@
   let pendingSelectClientId = null;
   let clientDeleteResolver = null;
   let clientsLoadInFlight = false;
+  let clientsLoadRevision = 0;
   let clientsRealtimeTimer = null;
   let clientSearchTimer = null;
   let clientsDataVersion = '';
   let clientsHaveLoaded = false;
   let clientLifecycleFilter = '';
+  let clientsPage = 1;
+  let clientsTotal = 0;
+  let clientsHasMore = false;
+  let selectedDetailId = '';
+  let clientsCacheToken = window.AUTH?.getToken?.() || '';
+  let clientsCacheGeneration = 0;
+  let clientsLastFreshAt = 0;
+  let cancelClientsIdleRefresh = null;
+  const CLIENTS_PAGE_SIZE_KEY = 'gtrots.clientsPageSize.v1';
+  const CLIENTS_PAGE_SIZES = [10, 15, 25, 50, 100];
+  const CLIENTS_REVISIT_TTL_MS = 30000;
+  const savedClientsPageSize = Number(localStorage.getItem(CLIENTS_PAGE_SIZE_KEY) || 10);
+  let clientsPageSize = CLIENTS_PAGE_SIZES.includes(savedClientsPageSize) ? savedClientsPageSize : 10;
+  const clientsPageCache = new Map();
+  const clientsPageRequests = new Map();
+
+  function invalidateClientsPageCache() {
+    clientsCacheGeneration += 1;
+    clientsLastFreshAt = 0;
+    cancelScheduledClientsRefresh();
+    clientsPageCache.clear();
+    clientsPageRequests.clear();
+  }
 
   const STATUS_LABEL = {
     interesat: 'Interesat',
@@ -305,7 +335,7 @@
         ? 0
         : displayAmountDueForPayment(client.price, client.predefined_price, due, client.advance_amount);
       const currency = currencyCode(client.currency_code);
-      const participantCount = Array.isArray(client.participants) ? client.participants.length : 0;
+      const participantCount = Number(client.participant_count || (Array.isArray(client.participants) ? client.participants.length : 0));
       const usedQr = qrIsUsed(client);
       const accent = clientCardAccent(client);
       return `
@@ -335,13 +365,92 @@
         </div>
       `;
     }).join('');
+  }
 
-    listEl.querySelectorAll('.client-row').forEach((row) => {
-      row.addEventListener('click', () => {
-        const client = clients.find((item) => item.id === row.dataset.id);
-        if (client) selectClient(client);
+  function updateClientsPager() {
+    const first = clientsTotal ? ((clientsPage - 1) * clientsPageSize) + 1 : 0;
+    const last = Math.min(clientsPage * clientsPageSize, clientsTotal);
+    if (pageLabelEl) pageLabelEl.textContent = clientsTotal ? `${first}–${last} din ${clientsTotal}` : '0 clienți';
+    if (pageSizeValueEl) pageSizeValueEl.textContent = String(clientsPageSize);
+    if (pagePrevBtn) pagePrevBtn.disabled = clientsPage <= 1;
+    if (pageNextBtn) pageNextBtn.disabled = !clientsHasMore;
+    pageSizeButtons.forEach((button) => {
+      const active = Number(button.dataset.clientsPageSize) === clientsPageSize;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+      button.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+  }
+
+  function clientsRequest(page = clientsPage) {
+    return {
+      search: searchEl?.value?.trim() || '',
+      lifecycle: clientLifecycleFilter,
+      sortBy: 'created_at',
+      sortDir: 'desc',
+      page,
+      pageSize: clientsPageSize,
+    };
+  }
+
+  function clientsRequestKey(request) {
+    return JSON.stringify([clientsCacheToken, request.search || '', request.lifecycle || '', request.sortBy || '', request.sortDir || '', request.page || 1, request.pageSize || 10]);
+  }
+
+  function rememberClientsPage(key, value) {
+    if (clientsPageCache.has(key)) clientsPageCache.delete(key);
+    const limit = Math.max(5, Math.min(12, Math.floor(500 / Math.max(clientsPageSize, 10))));
+    while (clientsPageCache.size >= limit) clientsPageCache.delete(clientsPageCache.keys().next().value);
+    clientsPageCache.set(key, value);
+    return value;
+  }
+
+  function rememberClientsWindow(request, result) {
+    rememberClientsPage(clientsRequestKey(request), result);
+    (result?.prefetch_pages || []).forEach((prefetched) => {
+      const prefetchedRequest = { ...request, page: prefetched.page };
+      rememberClientsPage(clientsRequestKey(prefetchedRequest), {
+        ...result,
+        items: prefetched.items,
+        page: prefetched.page,
+        has_more: prefetched.has_more,
+        prefetch_pages: undefined,
       });
     });
+    return result;
+  }
+
+  function fetchClientsPage(request, preferCache = false) {
+    const key = clientsRequestKey(request);
+    if (preferCache && clientsPageCache.has(key)) return Promise.resolve(clientsPageCache.get(key));
+    if (preferCache && clientsPageRequests.has(key)) return clientsPageRequests.get(key);
+    const generation = clientsCacheGeneration;
+    const pending = window.API.getClientsPage(request, preferCache);
+    clientsPageRequests.set(key, pending);
+    void pending.then((result) => {
+      if (generation === clientsCacheGeneration) rememberClientsWindow(request, result);
+    }, () => {}).finally(() => {
+      if (clientsPageRequests.get(key) === pending) clientsPageRequests.delete(key);
+    });
+    return pending;
+  }
+
+  async function selectClientSummary(client) {
+    if (!client?.id) return;
+    selected = client;
+    selectedDetailId = '';
+    markSelectedClient();
+    detailEl.innerHTML = '<div class="loading">Se incarca detaliile clientului...</div>';
+    try {
+      const fresh = await window.API.getClientById(client.id);
+      if (!fresh || selected?.id !== client.id) return;
+      selectedDetailId = fresh.id;
+      selectClient(fresh);
+    } catch (error) {
+      if (selected?.id === client.id) {
+        detailEl.innerHTML = `<div class="error-box">${escapeHtml(error.message || 'Detaliile clientului nu au putut fi incarcate.')}</div>`;
+      }
+    }
   }
 
   function markSelectedClient() {
@@ -353,6 +462,7 @@
 
   function selectClient(client) {
     selected = client;
+    selectedDetailId = client.id;
     markSelectedClient();
 
     const usedQr = qrIsUsed(client);
@@ -1253,6 +1363,7 @@
           : (mode === 'finalize'
             ? await window.API.finalizeClient(token, client.id, payload)
             : await window.API.updateClient(token, client.id, payload));
+        invalidateClientsPageCache();
         close();
         upsertClient(updated);
         selectClient(updated);
@@ -1629,11 +1740,25 @@
     if (!await confirmClientDelete(client)) return;
     try {
       await window.API.deleteClient(window.AUTH?.getToken?.() || '', client.id);
+      // O revalidare pornita inainte de stergere nu mai are voie sa readuca
+      // randul vechi si nici sa blocheze reincarcarea silentioasa de mai jos.
+      clientsLoadRevision += 1;
+      clientsLoadInFlight = false;
+      setRefreshLoading(false);
+      invalidateClientsPageCache();
+      const nextTotal = Math.max(0, clientsTotal - 1);
+      const targetPage = Math.min(clientsPage, Math.max(1, Math.ceil(nextTotal / clientsPageSize)));
       allClients = allClients.filter((item) => item.id !== client.id);
+      if (targetPage !== clientsPage) allClients = [];
+      clientsTotal = nextTotal;
+      clientsPage = targetPage;
+      clientsHasMore = targetPage * clientsPageSize < nextTotal;
       selected = allClients[0] || null;
+      selectedDetailId = '';
       renderList(filter(allClients));
-      if (selected) selectClient(selected);
+      if (selected) selectClientSummary(selected);
       else detailEl.innerHTML = '<div class="empty-state">Selectati un client</div>';
+      updateClientsPager();
       window.BUSINESS_UI?.showToast?.('Client sters.', 'success');
       window.dispatchEvent(new CustomEvent('clients-change'));
     } catch (error) {
@@ -2090,6 +2215,28 @@
     return document.getElementById('tab-clients')?.classList.contains('active');
   }
 
+  function cancelScheduledClientsRefresh() {
+    cancelClientsIdleRefresh?.();
+    cancelClientsIdleRefresh = null;
+  }
+
+  function scheduleClientsIdleRefresh() {
+    cancelScheduledClientsRefresh();
+    if (Date.now() - clientsLastFreshAt < CLIENTS_REVISIT_TTL_MS) return;
+    const refresh = () => {
+      cancelClientsIdleRefresh = null;
+      if (!isClientsTabActive() || isClientActionModalOpen() || clientsLoadInFlight) return;
+      void refreshClientsWithoutDisrupting();
+    };
+    if ('requestIdleCallback' in window) {
+      const handle = window.requestIdleCallback(refresh, { timeout: 800 });
+      cancelClientsIdleRefresh = () => window.cancelIdleCallback?.(handle);
+    } else {
+      const handle = window.setTimeout(refresh, 120);
+      cancelClientsIdleRefresh = () => window.clearTimeout(handle);
+    }
+  }
+
   function isClientActionModalOpen() {
     return Boolean(document.querySelector('.client-action-modal-overlay'));
   }
@@ -2100,39 +2247,53 @@
     refreshBtn.disabled = Boolean(isLoading);
   }
 
+  function stableJsonValue(value) {
+    if (Array.isArray(value)) return value.map(stableJsonValue);
+    if (!value || typeof value !== 'object') return value;
+    return Object.keys(value).sort().reduce((result, key) => {
+      if (value[key] !== undefined) result[key] = stableJsonValue(value[key]);
+      return result;
+    }, {});
+  }
+
   function dataVersion(clients) {
-    return clients
-      .map((client) => [
-        client.id,
-        client.updated_at || client.created_at || '',
-        client.status || '',
-        client.qr_used ? 1 : 0,
-        client.is_finalized ? 1 : 0,
-        client.payment_status || '',
-        client.price || 0,
-        client.predefined_price || 0,
-        client.advance_amount || 0,
-      ].join(':'))
-      .join('|');
+    // Include every field returned for a row so name/contact/profile/count and
+    // future visible fields cannot leave an already-mounted list stale.
+    return JSON.stringify(stableJsonValue(clients));
   }
 
   async function load(options = {}) {
     if (clientsLoadInFlight && options.silent) return;
+    const loadRevision = ++clientsLoadRevision;
     const modalWasOpen = isClientActionModalOpen();
+    const requestedPage = Math.max(Number(options.page || clientsPage || 1), 1);
     clientsLoadInFlight = true;
+    updateClientsPager();
     if (!options.silent) setRefreshLoading(true);
     if (!options.silent) {
-      if (allClients.length) {
-        renderList(filter(allClients));
-      } else {
+      if (!allClients.length) {
         listEl.innerHTML = '<div class="loading">Se incarca...</div>';
       }
     }
     try {
-      const [clients] = await Promise.all([
-        window.API.getClients(),
-        loadPricePresets(),
-      ]);
+      const request = clientsRequest(requestedPage);
+      const cacheKey = clientsRequestKey(request);
+      const cachedResult = options.preferCache ? clientsPageCache.get(cacheKey) : undefined;
+      const servedFromUiCache = cachedResult !== undefined;
+      const result = servedFromUiCache
+        ? cachedResult
+        : await fetchClientsPage(request, options.preferCache);
+      if (loadRevision !== clientsLoadRevision) return;
+      if (!servedFromUiCache) clientsLastFreshAt = Date.now();
+      if (!pricePresets.length) void loadPricePresets();
+      const clients = Array.isArray(result?.items) ? result.items : [];
+      clientsTotal = Number(result?.total || 0);
+      clientsPage = Math.max(Number(result?.page || clientsPage), 1);
+      clientsHasMore = Boolean(result?.has_more);
+      const furthestPrefetchedPage = (result?.prefetch_pages || []).reduce((max, item) => Math.max(max, Number(item.page) || 0), clientsPage);
+      if ((furthestPrefetchedPage * Number(result?.page_size || clientsPageSize)) < clientsTotal) {
+        void fetchClientsPage({ ...request, page: furthestPrefetchedPage + 1 }, true).catch(() => {});
+      }
       const nextVersion = dataVersion(clients);
       const dataChanged = !clientsHaveLoaded || nextVersion !== clientsDataVersion;
       if (dataChanged) {
@@ -2146,20 +2307,25 @@
         const foundClient = allClients.find((client) => client.id === targetClientId) || null;
         if (foundClient) {
           selected = foundClient;
+          selectedDetailId = '';
         } else if (!options.keepMissingSelection) {
-          selected = null;
+          const directClient = await window.API.getClientById(targetClientId).catch(() => null);
+          selected = directClient;
+          selectedDetailId = directClient?.id || '';
         }
         if (!foundClient && !options.silent) {
           window.BUSINESS_UI?.showToast?.('Clientul nu a fost gasit in lista curenta.', 'error');
         }
       } else if (options.selectLatest && !selected) {
         selected = allClients[0] || null;
+        selectedDetailId = '';
       } else if (selected) {
         const freshSelected = allClients.find((client) => client.id === selected.id) || null;
         if (freshSelected) {
-          selected = freshSelected;
+          if (selectedDetailId !== selected.id) selected = freshSelected;
         } else if (!options.keepMissingSelection) {
           selected = null;
+          selectedDetailId = '';
         }
       }
       const listNeedsRender = !options.silent || listEl.querySelector('.loading') || !listEl.children.length;
@@ -2168,11 +2334,13 @@
         renderList(filter(allClients));
       }
       if (selected && !modalWasOpen && shouldRender) {
-        selectClient(selected);
+        if (selectedDetailId === selected.id) selectClient(selected);
+        else selectClientSummary(selected);
       } else if (!selected && !modalWasOpen && !options.keepMissingSelection) {
         detailEl.innerHTML = '<div class="empty-state">Selectati un client</div>';
       }
     } catch (e) {
+      if (loadRevision !== clientsLoadRevision) return;
       if (!options.silent) {
         if (allClients.length) {
           renderList(filter(allClients));
@@ -2182,8 +2350,11 @@
         }
       }
     } finally {
-      clientsLoadInFlight = false;
-      if (!options.silent) setRefreshLoading(false);
+      if (loadRevision === clientsLoadRevision) {
+        clientsLoadInFlight = false;
+        if (!options.silent) setRefreshLoading(false);
+        updateClientsPager();
+      }
     }
   }
 
@@ -2222,19 +2393,50 @@
   searchEl.addEventListener('input', () => {
     if (clientSearchTimer) clearTimeout(clientSearchTimer);
     clientSearchTimer = setTimeout(() => {
-      renderList(filter(allClients));
-    }, 120);
+      clientsPage = 1;
+      load({ page: 1, keepMissingSelection: true });
+    }, 220);
   });
   lifecycleFilterButtons.forEach((button) => {
     button.addEventListener('click', () => {
       const next = button.dataset.clientLifecycleFilter || '';
       clientLifecycleFilter = clientLifecycleFilter === next ? '' : next;
       updateLifecycleFilterButtons();
-      renderList(filter(allClients));
+      clientsPage = 1;
+      load({ page: 1, keepMissingSelection: true });
     });
+  });
+  listEl?.addEventListener('click', (event) => {
+    const row = event.target.closest('.client-row[data-id]');
+    if (!row) return;
+    const client = allClients.find((item) => item.id === row.dataset.id);
+    if (client) selectClientSummary(client);
+  });
+  pagePrevBtn?.addEventListener('click', () => {
+    if (clientsPage <= 1) return;
+    load({ page: clientsPage - 1, keepMissingSelection: true, preferCache: true });
+  });
+  pageNextBtn?.addEventListener('click', () => {
+    if (!clientsHasMore) return;
+    load({ page: clientsPage + 1, keepMissingSelection: true, preferCache: true });
+  });
+  pageSizeButtons.forEach((button) => button.addEventListener('click', () => {
+    pageSizeSelectEl?.removeAttribute('open');
+    const nextSize = Number(button.dataset.clientsPageSize);
+    if (!CLIENTS_PAGE_SIZES.includes(nextSize) || nextSize === clientsPageSize) return;
+    clientsPageSize = nextSize;
+    clientsPage = 1;
+    invalidateClientsPageCache();
+    localStorage.setItem(CLIENTS_PAGE_SIZE_KEY, String(nextSize));
+    updateClientsPager();
+    load({ page: 1, keepMissingSelection: true });
+  }));
+  document.addEventListener('click', (event) => {
+    if (pageSizeSelectEl?.open && !pageSizeSelectEl.contains(event.target)) pageSizeSelectEl.removeAttribute('open');
   });
   addClientBtn?.addEventListener('click', openNewClient);
   refreshBtn?.addEventListener('click', () => load({
+    page: clientsPage,
     selectClientId: selected?.id || '',
     keepMissingSelection: true,
   }));
@@ -2262,18 +2464,22 @@
 
   window.addEventListener('tab-change', ({ detail }) => {
     if (detail === 'clients') {
-      if (allClients.length) {
-        renderList(filter(allClients));
-        if (selected) selectClient(selected);
+      if (!clientsHaveLoaded && !clientsLoadInFlight) {
+        void load({ selectLatest: !selected, preferCache: true });
+      } else {
+        // Panoul rămâne montat între taburi. Nu reconstruim lista și detaliul la
+        // fiecare revenire; o revalidare veche pornește discret când UI-ul e liber.
+        scheduleClientsIdleRefresh();
       }
-      load({ selectLatest: !selected, forceRender: true });
       startClientsRealtimeRefresh();
     } else {
+      cancelScheduledClientsRefresh();
       stopClientsRealtimeRefresh();
     }
   });
 
   window.addEventListener('clients-change', () => {
+    invalidateClientsPageCache();
     if (isClientsTabActive()) refreshClientsWithoutDisrupting();
   });
 
@@ -2281,8 +2487,68 @@
     pricePresets = Array.isArray(event.detail) ? event.detail : pricePresets;
   });
 
-  window.addEventListener('auth-change', () => {
-    if (selected) selectClient(selected);
+  window.addEventListener('api-config-change', () => {
+    const currentToken = String(window.AUTH?.getToken?.() || '');
+    clientsCacheToken = currentToken;
+    clientsLoadRevision += 1;
+    clientsLoadInFlight = false;
+    invalidateClientsPageCache();
+    allClients = [];
+    pricePresets = [];
+    selected = null;
+    selectedDetailId = '';
+    pendingSelectClientId = null;
+    clientsDataVersion = '';
+    clientsHaveLoaded = false;
+    clientsPage = 1;
+    clientsTotal = 0;
+    clientsHasMore = false;
+    setRefreshLoading(false);
+    updateClientsPager();
+    if (listEl) listEl.innerHTML = currentToken
+      ? '<div class="loading">Se incarca...</div>'
+      : '<div class="loading">Autentificare necesara.</div>';
+    if (detailEl) detailEl.innerHTML = '<div class="empty-state">Selectati un client</div>';
+    if (currentToken && isClientsTabActive() && window.AUTH?.canViewClientPanel?.()) {
+      void load({ page: 1, selectLatest: true, forceRender: true });
+    }
+  });
+
+  window.addEventListener('auth-change', (event) => {
+    const nextToken = String(event.detail?.token || '');
+    if (nextToken !== clientsCacheToken) {
+      clientsCacheToken = nextToken;
+      clientsLoadRevision += 1;
+      clientsLoadInFlight = false;
+      invalidateClientsPageCache();
+      allClients = [];
+      pricePresets = [];
+      selected = null;
+      selectedDetailId = '';
+      pendingSelectClientId = null;
+      clientsDataVersion = '';
+      clientsHaveLoaded = false;
+      clientsPage = 1;
+      clientsTotal = 0;
+      clientsHasMore = false;
+      setRefreshLoading(false);
+      updateClientsPager();
+      if (listEl) listEl.innerHTML = nextToken
+        ? '<div class="loading">Se incarca...</div>'
+        : '<div class="loading">Autentificare necesara.</div>';
+      if (detailEl) detailEl.innerHTML = '<div class="empty-state">Selectati un client</div>';
+      if (nextToken && document.getElementById('tab-clients')?.classList.contains('active') && window.AUTH?.canViewClientPanel?.()) {
+        void load({ page: 1, selectLatest: true, forceRender: true, preferCache: true });
+        startClientsRealtimeRefresh();
+      } else if (!nextToken) {
+        stopClientsRealtimeRefresh();
+      }
+      return;
+    }
+    if (selected) {
+      selectedDetailId = '';
+      selectClientSummary(selected);
+    }
   });
 
   window.CLIENTS_LOAD = load;

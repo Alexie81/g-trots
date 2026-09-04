@@ -281,7 +281,7 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 2-9 12h7l-1 8 10-13h-7Z"/><path d="M18 3v3m-1.5-1.5h3M4 18v3m-1.5-1.5h3"/></svg><span>Automatizări</span>
       </button>
       <button class="nav-btn" data-tab="shop-spv">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a4 4 0 0 1-.7-7.9A6 6 0 0 1 18 11h.5a3.5 3.5 0 0 1 0 7H7Z"/><path d="M12 8v7m0 0-3-3m3 3 3-3"/></svg><span>SPV / e-Factura</span>
+        <span class="shop-nav-anaf-logo" aria-hidden="true"><img src="./assets/anaf-shield.png" alt="" /></span><span>SPV - RO e-Factura</span>
       </button>
       <button class="nav-btn" data-tab="shop-company">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5l8-3 8 3v16"/><path d="M9 21v-5h6v5M8 8h1m3 0h1m3 0h1M8 12h1m3 0h1m3 0h1"/></svg><span>Datele firmei</span>
@@ -338,6 +338,21 @@
             <span class="dropdown-item-icon green"><svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg></span>
             <span><strong>Support Chat</strong><small id="topbar-chat-summary">Niciun mesaj necitit</small></span>
           </button>
+          <button type="button" class="business-dropdown-item shop-notification-menu-item" id="topbar-open-shop-notifications">
+            <span class="dropdown-item-icon orange"><svg viewBox="0 0 24 24"><path d="M5 7h14l-1 13H6L5 7Z"/><path d="M9 9V5a3 3 0 0 1 6 0v4"/></svg></span>
+            <span><strong>Notificări SHOP</strong><small id="topbar-shop-notifications-summary">Se verifică activitatea magazinului…</small></span>
+            <svg class="shop-notification-menu-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
+          </button>
+          <section class="topbar-shop-notifications-panel" id="topbar-shop-notifications-panel" hidden>
+            <header>
+              <div class="topbar-shop-notifications-title">
+                <span aria-hidden="true"><i></i></span>
+                <div><small>CENTRU DE ALERTE</small><strong>Activitate magazin</strong></div>
+              </div>
+              <button type="button" id="topbar-shop-notifications-read-all"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg><span>Toate citite</span></button>
+            </header>
+            <div class="topbar-shop-notifications-list" id="topbar-shop-notifications-list"><small>Se încarcă notificările…</small></div>
+          </section>
           <button type="button" class="business-dropdown-item update-notification-item" id="topbar-open-update" hidden>
             <span class="dropdown-item-icon orange"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></span>
             <span><strong>Actualizare aplicatie</strong><small id="topbar-update-summary">Versiune noua disponibila</small></span>
@@ -418,7 +433,25 @@
       </button>
     </div>
     <div class="clients-layout">
-      <div class="clients-list" id="clients-list"><div class="loading">Se incarca...</div></div>
+      <div class="clients-table-panel">
+        <div class="clients-list" id="clients-list"><div class="loading">Se incarca...</div></div>
+        <div class="table-pager clients-table-pager">
+          <div class="table-page-size">
+            <span>Pe pagină</span>
+            <details class="table-page-select" id="clients-page-size-select">
+              <summary aria-label="Alege numărul de clienți afișați pe pagină"><b id="clients-page-size-value">10</b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></summary>
+              <div class="table-page-select-menu" role="listbox" aria-label="Clienți pe pagină">
+                <button type="button" data-clients-page-size="10"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>10</span></button>
+                <button type="button" data-clients-page-size="15"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>15</span></button>
+                <button type="button" data-clients-page-size="25"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>25</span></button>
+                <button type="button" data-clients-page-size="50"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>50</span></button>
+                <button type="button" data-clients-page-size="100"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>100</span></button>
+              </div>
+            </details>
+          </div>
+          <div class="table-page-navigation"><span id="clients-page-label">0 clienți</span><button type="button" class="btn-ghost table-pager-btn" id="clients-page-prev" aria-label="Pagina precedentă"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><button type="button" class="btn-ghost table-pager-btn" id="clients-page-next" aria-label="Pagina următoare"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></div>
+        </div>
+      </div>
       <div class="client-detail" id="client-detail"><div class="empty-state">Selectati un client</div></div>
     </div>
   </div>
@@ -491,7 +524,6 @@
           <strong>Registru fise de service</strong>
           <small>Click pe rand sau pe iconita de editare pentru adaugare/modificare in modal.</small>
         </div>
-        <span id="service-table-count">0 fise</span>
       </div>
       <div class="table-responsive service-table-responsive">
         <table class="table table-dark table-hover align-middle service-bootstrap-table">
@@ -510,6 +542,22 @@
             <tr><td colspan="7"><div class="loading">Se incarca...</div></td></tr>
           </tbody>
         </table>
+      </div>
+      <div class="table-pager service-table-pager">
+        <div class="table-page-size">
+          <span>Pe pagină</span>
+          <details class="table-page-select" id="service-page-size-select">
+            <summary aria-label="Alege numărul de fișe afișate pe pagină"><b id="service-page-size-value">10</b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></summary>
+            <div class="table-page-select-menu" role="listbox" aria-label="Fișe pe pagină">
+              <button type="button" data-service-page-size="10"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>10</span></button>
+              <button type="button" data-service-page-size="15"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>15</span></button>
+              <button type="button" data-service-page-size="25"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>25</span></button>
+              <button type="button" data-service-page-size="50"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>50</span></button>
+              <button type="button" data-service-page-size="100"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>100</span></button>
+            </div>
+          </details>
+        </div>
+        <div class="table-page-navigation"><span id="service-table-count">0 fișe</span><button type="button" class="btn-ghost table-pager-btn" id="service-page-prev" aria-label="Pagina precedentă"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><button type="button" class="btn-ghost table-pager-btn" id="service-page-next" aria-label="Pagina următoare"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></div>
       </div>
     </div>
 
@@ -1590,15 +1638,7 @@
   <div class="tab-panel shop-tab-panel" id="tab-shop-spv">
     <div class="shop-spv-page">
       <button type="button" class="shop-back-btn" data-shop-open="shop-dashboard" aria-label="Înapoi la Panoul SHOP" title="Panou SHOP"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
-      <section class="shop-spv-hero">
-        <span class="shop-spv-glow" aria-hidden="true"></span>
-        <span class="shop-spv-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 18a4 4 0 0 1-.7-7.9A6 6 0 0 1 18 11h.5a3.5 3.5 0 0 1 0 7H7Z"/><path d="M12 8v7m0 0-3-3m3 3 3-3"/></svg></span>
-        <span class="shop-spv-state"><i></i>ÎN LUCRU</span>
-        <small>CONFIGURARE ANAF</small>
-        <h1>SPV și RO e-Factura</h1>
-        <p>Aici vom configura autentificarea, firmele autorizate și transmiterea facturilor către ANAF.</p>
-      </section>
-      <section class="shop-spv-notice"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 20 6v6c0 5-3.4 8-8 9-4.6-1-8-4-8-9V6l8-3Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg></span><div><strong>Secțiune pregătită</strong><p>Momentan nu se trimit date și nu se solicită niciun certificat. Continuăm când stabilești fluxul dorit.</p></div></section>
+      <div id="shop-spv-content" class="shop-spv-content"><div class="shop-commerce-loading">Se verifică legătura securizată cu ANAF…</div></div>
     </div>
   </div>
 

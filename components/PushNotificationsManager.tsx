@@ -5,7 +5,11 @@ import { useRouter } from 'expo-router';
 import { registerPushToken } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 
-const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
+// `expoGoConfig` este semnalul cel mai stabil pe versiunile Expo recente.
+// Celelalte doua verificari pastreaza compatibilitatea cu versiunile mai vechi.
+const isExpoGo = Boolean(Constants.expoGoConfig)
+  || Constants.appOwnership === 'expo'
+  || Constants.executionEnvironment === 'storeClient';
 let notificationHandlerConfigured = false;
 
 export default function PushNotificationsManager() {
@@ -13,7 +17,9 @@ export default function PushNotificationsManager() {
   const router = useRouter();
 
   useEffect(() => {
-    if (Platform.OS === 'web' || isExpoGo || !token || !user?.id) return undefined;
+    // In modul de dezvoltare aplicatia este deschisa prin Expo Go, unde SDK 53+
+    // nu mai permite incarcarea suportului Android pentru push remote.
+    if (__DEV__ || Platform.OS === 'web' || isExpoGo || !token || !user?.id) return undefined;
 
     let active = true;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;

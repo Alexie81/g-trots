@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -26,6 +26,7 @@ import LogoutConfirmModal from '@/components/logout-confirm-modal';
 import KeyboardAwareScrollView from '@/components/KeyboardAwareScrollView';
 import SwipeDownSheet from '@/components/SwipeDownSheet';
 import { useAuth } from '@/contexts/AuthContext';
+import { runWhenIdle } from '@/utils/runWhenIdle';
 import {
   getProfiles,
   createProfile,
@@ -199,10 +200,49 @@ const mobileCurrentVersion =
   (Constants as any).manifest2?.extra?.expoClient?.version ||
   '1.2.4';
 
+type SettingsSnapshot = {
+  userId: string;
+  role: UserRole;
+  profiles: Profile[];
+  collaborators: Collaborator[];
+  expenses: ExpenseCategory[];
+  pricePresets: PricePreset[];
+  companyForm: CompanySettings;
+  companyMessage: string;
+  users: AppUser[];
+};
+
+const SETTINGS_SNAPSHOT_LIMIT = 2;
+const settingsSnapshots = new Map<string, SettingsSnapshot>();
+
+function readSettingsSnapshot(authToken: string, userId?: string, role?: UserRole) {
+  if (!authToken || !userId || !role) return undefined;
+  const snapshot = settingsSnapshots.get(authToken);
+  if (!snapshot || snapshot.userId !== userId || snapshot.role !== role) return undefined;
+  settingsSnapshots.delete(authToken);
+  settingsSnapshots.set(authToken, snapshot);
+  return snapshot;
+}
+
+function rememberSettingsSnapshot(authToken: string, snapshot: SettingsSnapshot) {
+  if (!authToken) return;
+  if (settingsSnapshots.has(authToken)) settingsSnapshots.delete(authToken);
+  while (settingsSnapshots.size >= SETTINGS_SNAPSHOT_LIMIT) {
+    const oldest = settingsSnapshots.keys().next().value;
+    if (!oldest) break;
+    settingsSnapshots.delete(oldest);
+  }
+  settingsSnapshots.set(authToken, snapshot);
+}
+
 export default function SettingsScreen() {
   const { token, user, logout, refreshUser } = useAuth();
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const initialSnapshot = useMemo(
+    () => readSettingsSnapshot(token, user?.id, user?.role),
+    [token, user?.id, user?.role]
+  );
+  const [profiles, setProfiles] = useState<Profile[]>(() => initialSnapshot?.profiles || []);
+  const [loading, setLoading] = useState(() => !initialSnapshot && user?.role !== 'user');
   const [refreshing, setRefreshing] = useState(false);
 
   const [profileModal, setProfileModal] = useState(false);
@@ -211,33 +251,33 @@ export default function SettingsScreen() {
   const [pError, setPError] = useState('');
   const [pLoading, setPLoading] = useState(false);
   const [expandProfiles, setExpandProfiles] = useState(false);
-  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [collaborators, setCollaborators] = useState<Collaborator[]>(() => initialSnapshot?.collaborators || []);
   const [collaboratorModal, setCollaboratorModal] = useState(false);
   const [editingCollaborator, setEditingCollaborator] = useState<Collaborator | null>(null);
   const [cForm, setCForm] = useState({ name: '', role: '', phone: '', email: '', percentage: '0', color: '#14B8A6' });
   const [cError, setCError] = useState('');
   const [cLoading, setCLoading] = useState(false);
   const [expandCollaborators, setExpandCollaborators] = useState(false);
-  const [expenses, setExpenses] = useState<ExpenseCategory[]>([]);
+  const [expenses, setExpenses] = useState<ExpenseCategory[]>(() => initialSnapshot?.expenses || []);
   const [expenseModal, setExpenseModal] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseCategory | null>(null);
   const [expenseForm, setExpenseForm] = useState({ name: '', color: '#EF4444' });
   const [expenseError, setExpenseError] = useState('');
   const [expenseLoading, setExpenseLoading] = useState(false);
   const [expandExpenses, setExpandExpenses] = useState(false);
-  const [pricePresets, setPricePresets] = useState<PricePreset[]>([]);
+  const [pricePresets, setPricePresets] = useState<PricePreset[]>(() => initialSnapshot?.pricePresets || []);
   const [pricePresetModal, setPricePresetModal] = useState(false);
   const [editingPricePreset, setEditingPricePreset] = useState<PricePreset | null>(null);
   const [pricePresetForm, setPricePresetForm] = useState({ label: '', price: '' });
   const [pricePresetError, setPricePresetError] = useState('');
   const [pricePresetLoading, setPricePresetLoading] = useState(false);
   const [expandPricePresets, setExpandPricePresets] = useState(false);
-  const [companyForm, setCompanyForm] = useState<CompanySettings>(emptyCompanyForm);
+  const [companyForm, setCompanyForm] = useState<CompanySettings>(() => initialSnapshot?.companyForm || emptyCompanyForm());
   const [companySaving, setCompanySaving] = useState(false);
   const [companyError, setCompanyError] = useState('');
-  const [companyMessage, setCompanyMessage] = useState('Datele firmei sunt sincronizate prin API.');
+  const [companyMessage, setCompanyMessage] = useState(() => initialSnapshot?.companyMessage || 'Datele firmei sunt sincronizate prin API.');
   const [expandCompany, setExpandCompany] = useState(false);
-  const [users, setUsers] = useState<AppUser[]>([]);
+  const [users, setUsers] = useState<AppUser[]>(() => initialSnapshot?.users || []);
   const [userModal, setUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
   const [uForm, setUForm] = useState<UserFormState>(emptyUserForm);
@@ -253,8 +293,28 @@ export default function SettingsScreen() {
   const mobileUpdateAlertedVersionRef = useRef(
     (globalThis as GtrotsGlobal).__GTROTS_MOBILE_UPDATE_ALERTED_VERSION || ''
   );
+  const settingsDataReadyRef = useRef(Boolean(initialSnapshot) || user?.role === 'user');
+  const settingsLoadRequestRef = useRef(0);
 
-  const load = async (roleOverride = user?.role) => {
+  useEffect(() => {
+    if (!settingsDataReadyRef.current || !token || !user?.id || !user.role) return;
+    const restricted = user.role === 'user';
+    rememberSettingsSnapshot(token, {
+      userId: user.id,
+      role: user.role,
+      profiles: restricted ? [] : profiles,
+      collaborators: restricted ? [] : collaborators,
+      expenses: restricted ? [] : expenses,
+      pricePresets: restricted ? [] : pricePresets,
+      companyForm: restricted ? emptyCompanyForm() : companyForm,
+      companyMessage: restricted ? 'Datele firmei sunt sincronizate prin API.' : companyMessage,
+      users: user.role === 'admin' ? users : [],
+    });
+  }, [collaborators, companyForm, companyMessage, expenses, pricePresets, profiles, token, user?.id, user?.role, users]);
+
+  const load = useCallback(async (roleOverride = user?.role) => {
+    if (!token || roleOverride === 'user') return false;
+    const requestId = ++settingsLoadRequestRef.current;
     try {
       const [p, c, expenseRows, presetRows, companyInfo, managedUsers] = await Promise.all([
         getProfiles(),
@@ -264,6 +324,8 @@ export default function SettingsScreen() {
         token ? getCompanySettings(token) : Promise.resolve(emptyCompanyForm()),
         roleOverride === 'admin' && token ? getAppUsers(token) : Promise.resolve([]),
       ]);
+      if (requestId !== settingsLoadRequestRef.current) return false;
+      settingsDataReadyRef.current = true;
       setProfiles(p);
       setCollaborators(c);
       setExpenses(expenseRows);
@@ -271,35 +333,51 @@ export default function SettingsScreen() {
       setCompanyForm({ ...emptyCompanyForm(), ...companyInfo });
       setCompanyMessage(companyInfo?.updated_at ? `Ultima actualizare: ${formatAddedAt(companyInfo.updated_at)}` : 'Completeaza si salveaza datele firmei.');
       setUsers(managedUsers);
-    } catch {}
-  };
+      return true;
+    } catch {
+      return false;
+    }
+  }, [token, user?.role]);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      setLoading(true);
-      (async () => {
-        const freshUser = await refreshUser();
-        if (freshUser?.role === 'user') return;
-        await load(freshUser?.role);
-      })().finally(() => {
-        if (active) setLoading(false);
+      const hasSnapshot = settingsDataReadyRef.current;
+      if (!hasSnapshot && user?.role !== 'user') setLoading(true);
+      let interactionTask: ReturnType<typeof runWhenIdle> | null = null;
+      const frame = requestAnimationFrame(() => {
+        interactionTask = runWhenIdle(() => {
+          if (!active) return;
+          void refreshUser();
+          if (user?.role === 'user') {
+            settingsDataReadyRef.current = true;
+            setLoading(false);
+            return;
+          }
+          void load(user?.role).finally(() => {
+            if (active) setLoading(false);
+          });
+        });
       });
       return () => {
         active = false;
+        cancelAnimationFrame(frame);
+        interactionTask?.cancel();
+        settingsLoadRequestRef.current += 1;
       };
-    }, [refreshUser, user?.role])
+    }, [load, refreshUser, user?.role])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    const freshUser = await refreshUser();
-    if (freshUser?.role === 'user') {
+    try {
+      await Promise.allSettled([
+        refreshUser(),
+        user?.role === 'user' ? Promise.resolve(false) : load(user?.role),
+      ]);
+    } finally {
       setRefreshing(false);
-      return;
     }
-    await load(freshUser?.role);
-    setRefreshing(false);
   };
 
   const openNewProfile = () => {
@@ -849,23 +927,23 @@ export default function SettingsScreen() {
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      const timer = setTimeout(() => {
-        if (active) checkMobileUpdate('auto');
-      }, 250);
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      let interactionTask: ReturnType<typeof runWhenIdle> | null = null;
+      const frame = requestAnimationFrame(() => {
+        interactionTask = runWhenIdle(() => {
+          timer = setTimeout(() => {
+            if (active) checkMobileUpdate('auto');
+          }, 1200);
+        });
+      });
       return () => {
         active = false;
-        clearTimeout(timer);
+        cancelAnimationFrame(frame);
+        interactionTask?.cancel();
+        if (timer) clearTimeout(timer);
       };
     }, [checkMobileUpdate])
   );
-
-  if (loading) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator color={Colors.orange} size="large" />
-      </View>
-    );
-  }
 
   const totalPct = profiles.reduce((s, p) => s + p.percentage, 0);
   const sortedUsers = [...users].sort((a, b) =>
@@ -909,6 +987,13 @@ export default function SettingsScreen() {
             colors={[Colors.orange]}
           />
         }>
+
+        {loading ? (
+          <View style={styles.inlineLoader}>
+            <ActivityIndicator color={Colors.orange} size="small" />
+            <Text style={styles.inlineLoaderText}>Se sincronizează setările...</Text>
+          </View>
+        ) : null}
 
         {/* About */}
         <View style={styles.aboutCard}>
@@ -2161,6 +2246,8 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   scroll: { padding: 14, paddingBottom: 60 },
+  inlineLoader: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
+  inlineLoaderText: { color: Colors.textMuted, fontFamily: 'Inter-Medium', fontSize: 11 },
   logoutBtn: {
     width: 38,
     height: 38,

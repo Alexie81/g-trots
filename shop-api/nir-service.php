@@ -173,7 +173,21 @@ function shopNirProductImageUrl($value): ?string {
 }
 
 function shopNirDocumentRow(array $row, bool $canViewCosts = true): array {
-    $row['supplier_display_name'] = shopNirSupplierDisplayName($row, '');
+    $sourceType = mb_strtolower(trim((string)($row['source_type'] ?? '')));
+    $operationType = mb_strtolower(trim((string)($row['operation_type'] ?? '')));
+    if ($sourceType === 'customer_return' || $operationType === 'customer_return') {
+        $row['operation_type'] = 'customer_return';
+        $row['operation_label'] = 'RETUR CLIENT';
+        $row['supplier_display_name'] = trim((string)($row['customer_name'] ?? '')) ?: 'Client';
+    } elseif ($sourceType === 'reversal' || trim((string)($row['reversal_of_id'] ?? '')) !== '' || $operationType === 'supplier_return') {
+        $row['operation_type'] = 'supplier_return';
+        $row['operation_label'] = 'RETUR CĂTRE FURNIZOR';
+        $row['supplier_display_name'] = shopNirSupplierDisplayName($row, 'Furnizor');
+    } else {
+        $row['operation_type'] = 'supplier_receipt';
+        $row['operation_label'] = 'RECEPȚIE FURNIZOR';
+        $row['supplier_display_name'] = shopNirSupplierDisplayName($row, '');
+    }
     $row['row_version'] = (int)$row['row_version'];
     $row['line_count'] = isset($row['line_count']) ? (int)$row['line_count'] : null;
     $row['permissions'] = null;
@@ -280,9 +294,27 @@ function shopNirAttachStornoState(PDO $db, array $documents): array {
     foreach ($documents as &$document) {
         $id = (string)($document['id'] ?? '');
         $originalId = trim((string)($document['reversal_of_id'] ?? ''));
-        $isStornoDocument = $originalId !== '' || mb_strtolower(trim((string)($document['source_type'] ?? ''))) === 'reversal';
+        $sourceType = mb_strtolower(trim((string)($document['source_type'] ?? '')));
+        $operationType = mb_strtolower(trim((string)($document['operation_type'] ?? '')));
+        $isCustomerReturn = $sourceType === 'customer_return' || $operationType === 'customer_return';
+        if ($isCustomerReturn) {
+            $document['document_kind'] = 'customer_return';
+            $document['operation_type'] = 'customer_return';
+            $document['operation_label'] = 'RETUR CLIENT';
+            $document['public_status'] = (string)($document['status'] ?? 'confirmed');
+            $document['status_label'] = (string)($document['status'] ?? '') === 'confirmed' ? 'CONFIRMAT' : strtoupper((string)($document['status'] ?? ''));
+            $document['can_storno'] = false;
+            $document['fully_storned'] = false;
+            $document['partially_storned'] = false;
+            $document['storned_quantity'] = '0.0000';
+            $document['stornable_quantity'] = '0.0000';
+            continue;
+        }
+        $isStornoDocument = $originalId !== '' || $sourceType === 'reversal' || $operationType === 'supplier_return';
         if ($isStornoDocument) {
             $document['document_kind'] = 'storno';
+            $document['operation_type'] = 'supplier_return';
+            $document['operation_label'] = 'RETUR CĂTRE FURNIZOR';
             $document['public_status'] = 'stornat';
             $document['status_label'] = 'STORNAT';
             $document['storno_of_id'] = $originalId ?: null;
@@ -307,6 +339,8 @@ function shopNirAttachStornoState(PDO $db, array $documents): array {
         ];
         if ((string)($document['status'] ?? '') === 'reversed') $item['state'] = 'full';
         $document['document_kind'] = 'nir';
+        $document['operation_type'] = 'supplier_receipt';
+        $document['operation_label'] = 'RECEPȚIE FURNIZOR';
         $document['storno'] = $item;
         $document['storno_state'] = $item['state'];
         $document['fully_storned'] = $item['state'] === 'full';
@@ -465,7 +499,7 @@ function shopNirFetchDocument(PDO $db, string $id, array $user, bool $withDetail
         }
         unset($line);
     }
-    if ($canViewCosts && $withPriceComparisons) $result['lines'] = shopNirAttachPriceComparisons($db, $result['lines'], $document);
+    if ($canViewCosts && $withPriceComparisons && ($result['document_kind'] ?? 'nir') === 'nir') $result['lines'] = shopNirAttachPriceComparisons($db, $result['lines'], $document);
     $attachments = $db->prepare('SELECT id, original_name, mime_type, extension, file_size, sha256, extraction_status, extraction_message, created_at FROM shop_nir_attachments WHERE nir_document_id = ? ORDER BY created_at ASC');
     $attachments->execute([$id]);
     $result['attachments'] = $attachments->fetchAll();
@@ -494,9 +528,9 @@ function shopNirList(PDO $db, array $query, array $user): array {
     if ($to !== '') { $conditions[] = 'n.reception_date <= ?'; $params[] = shopNirDate($to, 'Data de sfârșit'); }
     $search = mb_substr(trim((string)($query['search'] ?? '')), 0, 120);
     if ($search !== '') {
-        $conditions[] = '(n.nir_number LIKE ? OR n.temporary_number LIKE ? OR n.supplier_invoice_number LIKE ? OR s.alias LIKE ? OR s.name LIKE ? OR s.cui LIKE ?)';
+        $conditions[] = '(n.nir_number LIKE ? OR n.temporary_number LIKE ? OR n.supplier_invoice_number LIKE ? OR n.customer_name LIKE ? OR n.external_identifier LIKE ? OR s.alias LIKE ? OR s.name LIKE ? OR s.cui LIKE ?)';
         $like = '%' . $search . '%';
-        array_push($params, $like, $like, $like, $like, $like, $like);
+        array_push($params, $like, $like, $like, $like, $like, $like, $like, $like);
     }
     $where = implode(' AND ', $conditions);
     $countStmt = $db->prepare("SELECT COUNT(*) FROM shop_nir_documents n LEFT JOIN shop_suppliers s ON s.id = n.supplier_id WHERE {$where}");
@@ -1001,6 +1035,17 @@ function shopNirReferenceUpdate(PDO $db, string $id, array $body, array $user): 
     return shopNirReferenceRow($stmt->fetch());
 }
 
+function shopNirReceiptLocationDisplay(array $row): string {
+    $address = implode(', ', array_values(array_filter([
+        trim((string)($row['address'] ?? '')),
+        trim((string)($row['city'] ?? '')),
+        trim((string)($row['county'] ?? '')),
+        trim((string)($row['postal_code'] ?? '')),
+    ])));
+    $name = trim((string)($row['name'] ?? '')) ?: 'Gestiune principală';
+    return mb_substr($name . ($address !== '' ? ' — ' . $address : ''), 0, 500);
+}
+
 function shopNirHeaderPayload(PDO $db, array $body, ?array $current = null): array {
     $settings = shopNirSettings($db);
     $now = new DateTimeImmutable();
@@ -1019,9 +1064,28 @@ function shopNirHeaderPayload(PDO $db, array $body, ?array $current = null): arr
     $exchangeRateDate = $currency === 'RON'
         ? ($supplierInvoiceDate ?: $nirDate)
         : shopNirDate($body['exchange_rate_date'] ?? $current['exchange_rate_date'] ?? '', 'Data cursului', true);
+    $locationId = trim((string)($body['reception_location_id'] ?? $current['reception_location_id'] ?? ''));
+    $locationLabel = trim((string)($body['reception_location'] ?? $current['reception_location'] ?? ''));
+    if ($locationId !== '') {
+        $locationStmt = $db->prepare('SELECT * FROM shop_company_receipt_locations WHERE id = ?');
+        $locationStmt->execute([$locationId]);
+        $location = $locationStmt->fetch();
+        if (!$location) throw new InvalidArgumentException('Punctul de recepție selectat nu mai există. Alege alt punct.');
+        $locationLabel = shopNirReceiptLocationDisplay($location);
+    } elseif ($current === null || $locationLabel === '') {
+        $location = $db->query('SELECT * FROM shop_company_receipt_locations ORDER BY is_default DESC, sort_order ASC, name ASC, id ASC LIMIT 1')->fetch();
+        if ($location) {
+            $locationId = (string)$location['id'];
+            $locationLabel = shopNirReceiptLocationDisplay($location);
+        } else {
+            $locationLabel = 'Gestiune principală';
+        }
+    }
     return [
         'supplier_id' => trim((string)($body['supplier_id'] ?? $current['supplier_id'] ?? '')) ?: null,
         'warehouse_id' => trim((string)($body['warehouse_id'] ?? $current['warehouse_id'] ?? $settings['default_warehouse_id'])),
+        'reception_location_id' => $locationId ?: null,
+        'reception_location' => mb_substr($locationLabel ?: 'Gestiune principală', 0, 500),
         'supplier_invoice_series' => mb_substr(strtoupper(trim((string)($body['supplier_invoice_series'] ?? $current['supplier_invoice_series'] ?? ''))), 0, 60) ?: null,
         'supplier_invoice_number' => mb_substr(trim((string)($body['supplier_invoice_number'] ?? $current['supplier_invoice_number'] ?? '')), 0, 120) ?: null,
         'supplier_invoice_date' => $supplierInvoiceDate,
@@ -1186,15 +1250,15 @@ function shopNirCreateDraft(PDO $db, array $body, array $user): array {
         $prepared = shopNirPrepareLines($db, $rawLines, $header);
         $stmt = $db->prepare(
             'INSERT INTO shop_nir_documents
-             (id, temporary_number, status, supplier_id, warehouse_id, supplier_invoice_series, supplier_invoice_number, supplier_invoice_date,
+             (id, temporary_number, status, supplier_id, warehouse_id, reception_location_id, reception_location, supplier_invoice_series, supplier_invoice_number, supplier_invoice_date,
               nir_date, nir_time, reception_date, reception_time, currency, exchange_rate, exchange_rate_date, notes, source_type, external_identifier, source_file_hash,
               subtotal, vat_total, grand_total, subtotal_ron, vat_total_ron, grand_total_ron, inventory_cost_total_ron, total_difference_ron,
               created_by, updated_by)
-             VALUES (?, ?, "draft", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+             VALUES (?, ?, "draft", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $totals = $prepared['totals'];
         $stmt->execute([
-            $id, $temporaryNumber, $header['supplier_id'], $header['warehouse_id'], $header['supplier_invoice_series'], $header['supplier_invoice_number'], $header['supplier_invoice_date'],
+            $id, $temporaryNumber, $header['supplier_id'], $header['warehouse_id'], $header['reception_location_id'], $header['reception_location'], $header['supplier_invoice_series'], $header['supplier_invoice_number'], $header['supplier_invoice_date'],
             $header['nir_date'], $header['nir_time'], $header['reception_date'], $header['reception_time'], $header['currency'], $header['exchange_rate'], $header['exchange_rate_date'], $header['notes'], $header['source_type'], $header['external_identifier'], $header['source_file_hash'],
             $totals['subtotal'], $totals['vat_total'], $totals['grand_total'], $totals['subtotal_ron'], $totals['vat_total_ron'], $totals['grand_total_ron'], $totals['inventory_cost_total_ron'], $totals['total_difference_ron'],
             $actor['name'], $actor['name'],
@@ -1235,13 +1299,13 @@ function shopNirUpdateDraft(PDO $db, string $id, array $body, array $user): arra
         $totals = $prepared['totals'];
         $actor = shopNirActor($user);
         $update = $db->prepare(
-            'UPDATE shop_nir_documents SET supplier_id = ?, warehouse_id = ?, supplier_invoice_series = ?, supplier_invoice_number = ?, supplier_invoice_date = ?,
+            'UPDATE shop_nir_documents SET supplier_id = ?, warehouse_id = ?, reception_location_id = ?, reception_location = ?, supplier_invoice_series = ?, supplier_invoice_number = ?, supplier_invoice_date = ?,
              nir_date = ?, nir_time = ?, reception_date = ?, reception_time = ?, currency = ?, exchange_rate = ?, exchange_rate_date = ?, notes = ?, source_type = ?, external_identifier = ?, source_file_hash = ?,
              subtotal = ?, vat_total = ?, grand_total = ?, subtotal_ron = ?, vat_total_ron = ?, grand_total_ron = ?, inventory_cost_total_ron = ?, total_difference_ron = ?, updated_by = ?, row_version = row_version + 1
              WHERE id = ? AND row_version = ? AND status = "draft"'
         );
         $update->execute([
-            $header['supplier_id'], $header['warehouse_id'], $header['supplier_invoice_series'], $header['supplier_invoice_number'], $header['supplier_invoice_date'],
+            $header['supplier_id'], $header['warehouse_id'], $header['reception_location_id'], $header['reception_location'], $header['supplier_invoice_series'], $header['supplier_invoice_number'], $header['supplier_invoice_date'],
             $header['nir_date'], $header['nir_time'], $header['reception_date'], $header['reception_time'], $header['currency'], $header['exchange_rate'], $header['exchange_rate_date'], $header['notes'], $header['source_type'], $header['external_identifier'], $header['source_file_hash'],
             $totals['subtotal'], $totals['vat_total'], $totals['grand_total'], $totals['subtotal_ron'], $totals['vat_total_ron'], $totals['grand_total_ron'], $totals['inventory_cost_total_ron'], $totals['total_difference_ron'],
             $actor['name'], $id, (int)$current['row_version'],
@@ -1330,6 +1394,7 @@ function shopNirValidateDocument(PDO $db, string $id): array {
     if ((string)$document['status'] !== 'draft') $errors[] = 'Documentul nu mai este ciornă.';
     if (trim((string)$document['supplier_id']) === '') $errors[] = 'Selectează furnizorul.';
     if (trim((string)$document['warehouse_id']) === '') $errors[] = 'Selectează gestiunea.';
+    if (trim((string)($document['reception_location'] ?? '')) === '') $errors[] = 'Selectează locul recepției.';
     if (trim((string)$document['supplier_invoice_number']) === '') $errors[] = 'Completează numărul facturii furnizorului.';
     if (trim((string)$document['supplier_invoice_date']) === '') $errors[] = 'Completează data facturii.';
     if (trim((string)$document['nir_date']) === '') $errors[] = 'Completează data NIR-ului.';
@@ -1346,6 +1411,11 @@ function shopNirValidateDocument(PDO $db, string $id): array {
     $warehouseCheck = $db->prepare('SELECT is_active FROM shop_warehouses WHERE id = ?');
     $warehouseCheck->execute([(string)$document['warehouse_id']]);
     if (!$warehouseCheck->fetchColumn()) $errors[] = 'Gestiunea nu există sau este inactivă.';
+    if (trim((string)($document['reception_location_id'] ?? '')) !== '') {
+        $locationCheck = $db->prepare('SELECT id FROM shop_company_receipt_locations WHERE id = ?');
+        $locationCheck->execute([(string)$document['reception_location_id']]);
+        if (!$locationCheck->fetchColumn()) $errors[] = 'Punctul de recepție nu mai există. Alege alt punct.';
+    }
 
     $referenceCheck = $db->prepare('SELECT supplier_id, product_id, is_active FROM shop_supplier_product_references WHERE id = ?');
     $comparedLines = shopNirAttachPriceComparisons($db, array_map(static fn(array $line): array => shopNirLineRow($line), $lines), $document);
@@ -1867,14 +1937,14 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
         }
         $insertDoc = $db->prepare(
             'INSERT INTO shop_nir_documents
-             (id, temporary_number, nir_number, status, supplier_id, warehouse_id, supplier_invoice_series, supplier_invoice_number,
+             (id, temporary_number, nir_number, status, supplier_id, warehouse_id, reception_location_id, reception_location, supplier_invoice_series, supplier_invoice_number,
               supplier_invoice_date, nir_date, nir_time, reception_date, reception_time, currency, exchange_rate, exchange_rate_date, notes, source_type,
               subtotal, vat_total, grand_total, subtotal_ron, vat_total_ron, grand_total_ron, inventory_cost_total_ron,
               confirmed_at, confirmed_by, reversal_of_id, created_by, updated_by)
-             VALUES (?, ?, ?, "confirmed", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "reversal", ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)'
+             VALUES (?, ?, ?, "confirmed", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "reversal", ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)'
         );
         $insertDoc->execute([
-            $reversalId, $temporaryNumber, $reversalNumber, $document['supplier_id'], $document['warehouse_id'], $stornoInvoice['supplier_invoice_series'], $stornoInvoice['supplier_invoice_number'],
+            $reversalId, $temporaryNumber, $reversalNumber, $document['supplier_id'], $document['warehouse_id'], $document['reception_location_id'] ?? null, $document['reception_location'] ?? 'Gestiune principală', $stornoInvoice['supplier_invoice_series'], $stornoInvoice['supplier_invoice_number'],
             $stornoInvoice['supplier_invoice_date'], $stornoDocumentDate, (new DateTimeImmutable())->format('H:i:s'), $stornoDocumentDate, (new DateTimeImmutable())->format('H:i:s'), $document['currency'], $document['exchange_rate'], $document['exchange_rate_date'],
             'Stornare ' . ($document['nir_number'] ?? $document['temporary_number'])
                 . ' — factura originală ' . trim((string)($document['supplier_invoice_series'] ?? '') . ' ' . (string)($document['supplier_invoice_number'] ?? ''))
@@ -2919,6 +2989,14 @@ function shopNirExportRows(PDO $db, string $id, array $user): array {
         }
         $supplier = $supplierCache[$supplierId];
     }
+    $isCustomerReturn = mb_strtolower(trim((string)($document['source_type'] ?? ''))) === 'customer_return'
+        || mb_strtolower(trim((string)($document['operation_type'] ?? ''))) === 'customer_return';
+    if ($isCustomerReturn) {
+        $supplier = [
+            'name' => trim((string)($document['customer_name'] ?? '')) ?: 'Client',
+            'email' => trim((string)($document['customer_email'] ?? '')),
+        ];
+    }
     $warehouse = [];
     if (trim((string)($document['warehouse_id'] ?? '')) !== '') {
         $warehouseId = (string)$document['warehouse_id'];
@@ -2954,6 +3032,21 @@ function shopNirExportRows(PDO $db, string $id, array $user): array {
             $relationship['reversal'] = shopNirPdfRelatedDocumentRow($row);
         }
         $relationship['original'] = shopNirPdfRelatedDocumentRow($document);
+    }
+    if ($isCustomerReturn) {
+        $relationship['reason'] = trim((string)($document['return_reason'] ?? '')) ?: trim((string)($document['notes'] ?? ''));
+        $originalInvoiceId = trim((string)($document['sales_invoice_id'] ?? ''));
+        if ($originalInvoiceId !== '') {
+            $originalInvoiceStmt = $db->prepare("SELECT series, invoice_number, issue_date FROM shop_invoices WHERE id = ? AND invoice_type = 'invoice' LIMIT 1");
+            $originalInvoiceStmt->execute([$originalInvoiceId]);
+            if ($originalInvoice = $originalInvoiceStmt->fetch()) {
+                $relationship['original_invoice'] = [
+                    'series' => $originalInvoice['series'] ?? null,
+                    'number' => $originalInvoice['invoice_number'] ?? null,
+                    'date' => $originalInvoice['issue_date'] ?? null,
+                ];
+            }
+        }
     }
 
     $documentIds = array_values(array_unique(array_filter(array_merge([$id], array_keys($relatedRows)))));

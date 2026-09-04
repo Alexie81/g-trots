@@ -1295,6 +1295,9 @@ function ensureCustomExpensesSchema(PDO $db): void {
 }
 
 function ensureAuthTables(PDO $db): void {
+    if (!empty($GLOBALS['gtrots_runtime_schema_ready'][spl_object_id($db)])) {
+        return;
+    }
     $db->exec(
         "CREATE TABLE IF NOT EXISTS `app_users` (
           `id` CHAR(36) NOT NULL PRIMARY KEY,
@@ -1416,6 +1419,9 @@ function ensureAuthTables(PDO $db): void {
 }
 
 function ensureCompanySettingsTable(PDO $db): void {
+    if (!empty($GLOBALS['gtrots_runtime_schema_ready'][spl_object_id($db)])) {
+        return;
+    }
     $db->exec(
         "CREATE TABLE IF NOT EXISTS `company_settings` (
           `id` TINYINT UNSIGNED NOT NULL PRIMARY KEY,
@@ -1499,6 +1505,18 @@ function ensureClientFinancialSchema(PDO $db): void {
     if (!tableExists($db, 'clients')) {
         return;
     }
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS `app_migrations` (
+          `id` VARCHAR(190) NOT NULL PRIMARY KEY,
+          `applied_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $schemaMigrationId = '20260904_clients_table_schema_ready_v2';
+    $migrationStmt = $db->prepare('SELECT 1 FROM app_migrations WHERE id = ? LIMIT 1');
+    $migrationStmt->execute([$schemaMigrationId]);
+    if ($migrationStmt->fetchColumn()) {
+        return;
+    }
 
     if (!columnExists($db, 'clients', 'predefined_price')) {
         execIgnoringDuplicateColumn($db,
@@ -1552,6 +1570,25 @@ function ensureClientFinancialSchema(PDO $db): void {
             );
         }
     }
+    if (!columnExists($db, 'clients', 'updated_at')) {
+        execIgnoringDuplicateColumn($db,
+            'ALTER TABLE clients
+             ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at'
+        );
+    }
+    $indexes = [
+        'idx_clients_created' => 'ALTER TABLE clients ADD KEY idx_clients_created (created_at)',
+        'idx_clients_name' => 'ALTER TABLE clients ADD KEY idx_clients_name (name)',
+        'idx_clients_profile_created' => 'ALTER TABLE clients ADD KEY idx_clients_profile_created (profile_id, created_at)',
+        'idx_clients_lifecycle_created' => 'ALTER TABLE clients ADD KEY idx_clients_lifecycle_created (is_finalized, finalization_source, created_at)',
+        'idx_clients_updated' => 'ALTER TABLE clients ADD KEY idx_clients_updated (updated_at)',
+    ];
+    foreach ($indexes as $index => $sql) {
+        if (!indexExists($db, 'clients', $index)) {
+            execIgnoringDuplicateIndex($db, $sql);
+        }
+    }
+    $db->prepare('INSERT IGNORE INTO app_migrations (id) VALUES (?)')->execute([$schemaMigrationId]);
 }
 
 function ensureWhatsAppPredefinedMessagesTable(PDO $db): void {
@@ -1571,6 +1608,27 @@ function ensureWhatsAppPredefinedMessagesTable(PDO $db): void {
 }
 
 function ensureServiceSheetsTable(PDO $db): void {
+    if (!empty($GLOBALS['gtrots_runtime_schema_ready'][spl_object_id($db)])) {
+        return;
+    }
+    static $ensuredConnections = [];
+    $connectionId = spl_object_id($db);
+    if (!empty($ensuredConnections[$connectionId])) {
+        return;
+    }
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS `app_migrations` (
+          `id` VARCHAR(190) NOT NULL PRIMARY KEY,
+          `applied_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $schemaMigrationId = '20260904_service_table_schema_ready';
+    $schemaStmt = $db->prepare('SELECT 1 FROM app_migrations WHERE id = ? LIMIT 1');
+    $schemaStmt->execute([$schemaMigrationId]);
+    if ($schemaStmt->fetchColumn()) {
+        $ensuredConnections[$connectionId] = true;
+        return;
+    }
     $db->exec(
         "CREATE TABLE IF NOT EXISTS `service_sheets` (
           `id` CHAR(36) NOT NULL PRIMARY KEY,
@@ -1743,6 +1801,13 @@ function ensureServiceSheetsTable(PDO $db): void {
         }
     }
 
+    $backfillMigrationId = '20260904_service_table_backfill_once';
+    $migrationStmt = $db->prepare('SELECT 1 FROM app_migrations WHERE id = ? LIMIT 1');
+    $migrationStmt->execute([$backfillMigrationId]);
+    $runBackfill = !$migrationStmt->fetchColumn();
+
+    if ($runBackfill) {
+
     $db->exec(
         "UPDATE service_sheets
          SET sheet_number = CONCAT('FS-', DATE_FORMAT(COALESCE(created_at, service_date, NOW()), '%Y%m%d'), '-', UPPER(LEFT(REPLACE(id, '-', ''), 6)))
@@ -1796,6 +1861,9 @@ function ensureServiceSheetsTable(PDO $db): void {
              END"
         );
     }
+        syncClientFinancialsFromLatestServiceSheets($db);
+        $db->prepare('INSERT IGNORE INTO app_migrations (id) VALUES (?)')->execute([$backfillMigrationId]);
+    }
 
     $indexes = [
         'uq_service_sheet_number' => 'ALTER TABLE service_sheets ADD UNIQUE KEY uq_service_sheet_number (sheet_number)',
@@ -1805,6 +1873,7 @@ function ensureServiceSheetsTable(PDO $db): void {
         'idx_service_created' => 'ALTER TABLE service_sheets ADD KEY idx_service_created (created_at)',
         'idx_service_updated' => 'ALTER TABLE service_sheets ADD KEY idx_service_updated (updated_at)',
         'idx_service_total' => 'ALTER TABLE service_sheets ADD KEY idx_service_total (total_price)',
+        'idx_service_payment_created' => 'ALTER TABLE service_sheets ADD KEY idx_service_payment_created (payment_status, created_at)',
     ];
     foreach ($indexes as $index => $sql) {
         if (!indexExists($db, 'service_sheets', $index)) {
@@ -1812,7 +1881,8 @@ function ensureServiceSheetsTable(PDO $db): void {
         }
     }
 
-    syncClientFinancialsFromLatestServiceSheets($db);
+    $db->prepare('INSERT IGNORE INTO app_migrations (id) VALUES (?)')->execute([$schemaMigrationId]);
+    $ensuredConnections[$connectionId] = true;
 }
 
 function syncClientFinancialsFromLatestServiceSheets(PDO $db): void {
@@ -2412,7 +2482,6 @@ function currentAuthToken(array $body): string {
 }
 
 function requireAuth(PDO $db, array $body, ?string $platform = null, array $roles = []): array {
-    ensureAuthTables($db);
     $token = currentAuthToken($body);
     if ($token === '') {
         http_response_code(401);
@@ -2586,6 +2655,9 @@ function clientFieldChanges(array $before, array $after): array {
 }
 
 function ensureChatTables(PDO $db): void {
+    if (!empty($GLOBALS['gtrots_runtime_schema_ready'][spl_object_id($db)])) {
+        return;
+    }
     $db->exec(
         "CREATE TABLE IF NOT EXISTS `chat_conversations` (
           `id` CHAR(36) NOT NULL PRIMARY KEY,
@@ -2890,7 +2962,8 @@ function getClientActivity(PDO $db, string $clientId): array {
          FROM client_activity_logs cal
          LEFT JOIN app_users u ON u.id = cal.actor_user_id
          WHERE cal.client_id = ?
-         ORDER BY cal.created_at DESC, cal.id DESC'
+         ORDER BY cal.created_at DESC, cal.id DESC
+         LIMIT 200'
     );
     $stmt->execute([$clientId]);
     return array_map('buildClientActivity', $stmt->fetchAll());
@@ -2991,7 +3064,7 @@ function syncClientFinalizationFromServiceSheets(PDO $db, string $clientId, ?arr
     return;
 }
 
-function buildClient(array $row): array {
+function buildClient(array $row, bool $includeRelations = true): array {
     global $db;
     $effectiveFinalized = effectiveClientIsFinalized($db, $row);
     $clientPrice = (float)($row['price'] ?? 0);
@@ -3039,6 +3112,8 @@ function buildClient(array $row): array {
         'profile_id'          => $row['profile_id'],
         'owner_user_id'       => $row['owner_user_id'] ?? null,
         'created_at'          => $row['created_at'],
+        'updated_at'          => $row['updated_at'] ?? ($row['created_at'] ?? ''),
+        'participant_count'   => (int)($row['participant_count'] ?? 0),
         'profiles'            => null,
     ];
     if (!empty($row['profile_id']) && !empty($row['prof_name'])) {
@@ -3051,10 +3126,10 @@ function buildClient(array $row): array {
             'created_at' => $row['prof_created_at'],
         ];
     }
-    $client['collaborator_costs'] = getClientCollaboratorCosts($db, $row['id']);
-    $client['expense_costs'] = getClientExpenseCosts($db, $row['id']);
-    $client['activity_logs'] = getClientActivity($db, $row['id']);
-    $client['participants'] = getClientParticipants($db, $row['id']);
+    $client['collaborator_costs'] = $includeRelations ? getClientCollaboratorCosts($db, $row['id']) : [];
+    $client['expense_costs'] = $includeRelations ? getClientExpenseCosts($db, $row['id']) : [];
+    $client['activity_logs'] = $includeRelations ? getClientActivity($db, $row['id']) : [];
+    $client['participants'] = $includeRelations ? getClientParticipants($db, $row['id']) : [];
     return $client;
 }
 
@@ -4997,6 +5072,53 @@ function serviceSheetPdfBytesFromTemplateV3(array $sheet): string {
     return $pdf;
 }
 
+function ensureRuntimeSchema(PDO $db): void {
+    static $readyConnections = [];
+    $connectionId = spl_object_id($db);
+    if (!empty($readyConnections[$connectionId])) {
+        return;
+    }
+
+    // Se modifica acest id numai cand apare o migratie noua. Cererile normale
+    // fac astfel un singur lookup indexat, nu DDL si zeci de verificari
+    // INFORMATION_SCHEMA.
+    $runtimeSchemaId = '20260904_runtime_schema_ready_v3';
+    try {
+        $migrationStmt = $db->prepare('SELECT 1 FROM app_migrations WHERE id = ? LIMIT 1');
+        $migrationStmt->execute([$runtimeSchemaId]);
+    } catch (PDOException $error) {
+        $db->exec(
+            "CREATE TABLE IF NOT EXISTS `app_migrations` (
+              `id` VARCHAR(190) NOT NULL PRIMARY KEY,
+              `applied_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+        $migrationStmt = $db->prepare('SELECT 1 FROM app_migrations WHERE id = ? LIMIT 1');
+        $migrationStmt->execute([$runtimeSchemaId]);
+    }
+    if (!$migrationStmt->fetchColumn()) {
+        ensureAuthTables($db);
+        ensureCompanySettingsTable($db);
+        ensurePricePresetsTable($db);
+        ensureClientFinancialSchema($db);
+        ensureClientOwnershipSchema($db);
+        ensureClientAccessSchema($db);
+        ensureClientActivitySchema($db);
+        ensureClientQrStatusConsistency($db);
+        ensurePartnerContactSchema($db);
+        ensureCollaboratorPercentageSchema($db);
+        ensureCustomExpensesSchema($db);
+        ensurePushNotificationTables($db);
+        ensureWhatsAppPredefinedMessagesTable($db);
+        ensureServiceSheetsTable($db);
+        ensureChatTables($db);
+        $db->prepare('INSERT IGNORE INTO app_migrations (id) VALUES (?)')->execute([$runtimeSchemaId]);
+    }
+
+    $readyConnections[$connectionId] = true;
+    $GLOBALS['gtrots_runtime_schema_ready'][$connectionId] = true;
+}
+
 if ($action === 'bootstrapSystem') {
     try {
         echo json_encode(bootstrapSystem($body));
@@ -5026,20 +5148,7 @@ try {
     exit();
 }
 
-ensureAuthTables($db);
-ensureCompanySettingsTable($db);
-ensurePricePresetsTable($db);
-ensureClientFinancialSchema($db);
-ensureClientOwnershipSchema($db);
-ensureClientAccessSchema($db);
-ensureClientActivitySchema($db);
-ensureClientQrStatusConsistency($db);
-ensurePartnerContactSchema($db);
-ensureCollaboratorPercentageSchema($db);
-ensureCustomExpensesSchema($db);
-ensurePushNotificationTables($db);
-ensureWhatsAppPredefinedMessagesTable($db);
-ensureServiceSheetsTable($db);
+ensureRuntimeSchema($db);
 
 try {
 
@@ -6235,10 +6344,11 @@ try {
             echo json_encode(['error' => 'Contul nu are acces la panoul de clienti.']);
             exit();
         }
-        $sql    = $clientJoin . ' WHERE 1=1';
+        $tableMode = boolValue($_GET['table'] ?? 0) === 1;
+        $where = ' WHERE 1=1';
         $params = [];
         if (isScopedClientUser($authUser)) {
-            $sql .= ' AND (c.owner_user_id = ? OR EXISTS (
+            $where .= ' AND (c.owner_user_id = ? OR EXISTS (
                 SELECT 1 FROM client_user_access cua
                 WHERE cua.client_id = c.id AND cua.user_id = ?
             ))';
@@ -6247,20 +6357,89 @@ try {
         }
         if (!empty($_GET['search'])) {
             $s       = '%' . $_GET['search'] . '%';
-            $sql    .= ' AND (c.name LIKE ? OR c.phone LIKE ? OR c.qr_code LIKE ?)';
-            $params  = array_merge($params, [$s, $s, $s]);
+            $where .= ' AND (c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ? OR c.qr_code LIKE ?)';
+            $params = array_merge($params, [$s, $s, $s, $s]);
         }
         if (!empty($_GET['profileId'])) {
-            $sql    .= ' AND c.profile_id = ?';
+            $where .= ' AND c.profile_id = ?';
             $params[] = $_GET['profileId'];
         }
-        $sql .= ' ORDER BY c.created_at DESC';
+        if ($tableMode && in_array(($_GET['lifecycle'] ?? ''), ['active', 'finalized'], true)) {
+            if ($_GET['lifecycle'] === 'finalized') {
+                $where .= " AND COALESCE(c.is_finalized, 0) = 1 AND c.finalization_source = 'manual'";
+            } else {
+                $where .= " AND NOT (COALESCE(c.is_finalized, 0) = 1 AND COALESCE(c.finalization_source, '') = 'manual')";
+            }
+        }
+
+        $sortMap = [
+            'created_at' => 'c.created_at',
+            'name' => 'c.name',
+        ];
+        $sortColumn = $sortMap[$_GET['sortBy'] ?? 'created_at'] ?? 'c.created_at';
+        $sortDir = strtolower((string)($_GET['sortDir'] ?? 'desc')) === 'asc' ? 'ASC' : 'DESC';
+        // Numarul de participanti este necesar numai in lista tabelara compacta.
+        // Evitam subinterogarea pentru detalii, QR si fluxurile legacy, unde ar
+        // adauga lucru inutil fiecarei cereri.
+        $clientListJoin = $tableMode
+            ? str_replace(
+                'SELECT c.*,',
+                'SELECT c.*, (SELECT COUNT(*) FROM client_user_access cua_count WHERE cua_count.client_id = c.id) AS participant_count,',
+                $clientJoin
+            )
+            : $clientJoin;
+        $sql = $clientListJoin . $where . " ORDER BY {$sortColumn} {$sortDir}, c.id DESC";
+
+        if ($tableMode) {
+            $page = max((int)($_GET['page'] ?? 1), 1);
+            $pageSize = min(max((int)($_GET['pageSize'] ?? 40), 10), 100);
+            $prefetchPages = min(max((int)($_GET['prefetchPages'] ?? 0), 0), 4);
+            $countStmt = $db->prepare('SELECT COUNT(*) FROM clients c' . $where);
+            $countStmt->execute($params);
+            $total = (int)$countStmt->fetchColumn();
+            $offset = ($page - 1) * $pageSize;
+            $fetchSize = $pageSize * (1 + $prefetchPages);
+            $sql .= " LIMIT {$fetchSize} OFFSET {$offset}";
+            $stmt = $db->prepare($sql);
+            $stmt->execute($params);
+            $windowItems = array_map(
+                static fn(array $row): array => clientResponseForUser(buildClient($row, false), $authUser),
+                $stmt->fetchAll()
+            );
+            $items = array_slice($windowItems, 0, $pageSize);
+            $prefetched = [];
+            for ($ahead = 1; $ahead <= $prefetchPages; $ahead++) {
+                $aheadItems = array_slice($windowItems, $ahead * $pageSize, $pageSize);
+                if (!$aheadItems) {
+                    break;
+                }
+                $aheadPage = $page + $ahead;
+                $prefetched[] = [
+                    'items' => $aheadItems,
+                    'page' => $aheadPage,
+                    'has_more' => ($aheadPage * $pageSize) < $total,
+                ];
+            }
+            echo json_encode([
+                'items' => $items,
+                'total' => $total,
+                'page' => $page,
+                'page_size' => $pageSize,
+                'has_more' => ($offset + count($items)) < $total,
+                'prefetch_pages' => $prefetched,
+            ]);
+            exit();
+        }
+
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         echo json_encode(array_map(static fn(array $row): array => clientResponseForUser(buildClient($row), $authUser), $stmt->fetchAll()));
 
     } elseif ($action === 'getClientById') {
-        $authUser = currentUserOrNull($db, $body, 'mobile');
+        // Detaliul clientului este folosit atat de aplicatia mobila, cat si de
+        // tabelul paginat din desktop. Drepturile contului sunt deja validate
+        // de requireAuth; nu legam aceasta ruta comuna de o singura platforma.
+        $authUser = currentUserOrNull($db, $body);
         $sql = $clientJoin . ' WHERE c.id = ?';
         $params = [$id];
         if (isScopedClientUser($authUser)) {
@@ -7090,6 +7269,7 @@ try {
         $sortMap = [
             'sheet_number' => 'ss.sheet_number',
             'client' => 'ss.client_name',
+            'phone' => 'ss.client_phone',
             'created_at' => 'ss.created_at',
             'updated_at' => 'ss.updated_at',
             'total_price' => 'COALESCE(NULLIF(ss.final_price, 0), NULLIF(ss.total_price, 0), ss.diagnostic_price, 0)',
@@ -7097,10 +7277,12 @@ try {
         $sortBy = $_GET['sortBy'] ?? 'created_at';
         $sortColumn = $sortMap[$sortBy] ?? 'ss.created_at';
         $sortDir = strtolower((string)($_GET['sortDir'] ?? 'desc')) === 'asc' ? 'ASC' : 'DESC';
-        $sql = 'SELECT ss.* FROM service_sheets ss LEFT JOIN clients c ON c.id = ss.client_id WHERE 1=1';
+        $tableMode = boolValue($_GET['table'] ?? 0) === 1;
+        $fromSql = ' FROM service_sheets ss LEFT JOIN clients c ON c.id = ss.client_id';
+        $where = ' WHERE 1=1';
         $params = [];
         if (isScopedClientUser($authUser)) {
-            $sql .= ' AND ss.client_id IS NOT NULL AND (c.owner_user_id = ? OR EXISTS (
+            $where .= ' AND ss.client_id IS NOT NULL AND (c.owner_user_id = ? OR EXISTS (
                 SELECT 1 FROM client_user_access cua
                 WHERE cua.client_id = ss.client_id AND cua.user_id = ?
             ))';
@@ -7108,31 +7290,108 @@ try {
             $params[] = $authUser['id'];
         }
         if (!empty($_GET['clientId'])) {
-            $sql .= ' AND ss.client_id = ?';
+            $where .= ' AND ss.client_id = ?';
             $params[] = $_GET['clientId'];
         }
         if (!empty($_GET['search'])) {
-            $s = '%' . trim((string)$_GET['search']) . '%';
-            $sql .= ' AND (
-                ss.sheet_number LIKE ? OR ss.client_name LIKE ? OR ss.client_phone LIKE ? OR
-                ss.qr_code LIKE ? OR ss.vehicle_brand_model LIKE ? OR ss.technician_name LIKE ?
-            )';
-            array_push($params, $s, $s, $s, $s, $s, $s);
+            $rawSearch = trim((string)$_GET['search']);
+            $s = '%' . $rawSearch . '%';
+            $filterColumn = (string)($_GET['filterColumn'] ?? '');
+            if ($filterColumn === 'sheet_number') {
+                $where .= ' AND ss.sheet_number LIKE ?';
+                $params[] = $s;
+            } elseif ($filterColumn === 'client') {
+                $where .= ' AND (ss.client_name LIKE ? OR ss.client_email LIKE ?)';
+                array_push($params, $s, $s);
+            } elseif ($filterColumn === 'phone') {
+                $where .= ' AND (ss.client_phone LIKE ? OR ss.qr_code LIKE ?)';
+                array_push($params, $s, $s);
+            } elseif ($filterColumn === 'created_at' || $filterColumn === 'updated_at') {
+                $dateColumn = $filterColumn === 'created_at' ? 'ss.created_at' : 'ss.updated_at';
+                $where .= " AND ({$dateColumn} LIKE ? OR DATE_FORMAT({$dateColumn}, '%d.%m.%Y %H:%i') LIKE ?)";
+                array_push($params, $s, $s);
+            } elseif ($filterColumn === 'total_price') {
+                $moneySearch = preg_replace('/[^0-9,.-]/u', '', $rawSearch) ?: $rawSearch;
+                if (str_contains($moneySearch, ',')) {
+                    $moneySearch = str_replace(['.', ','], ['', '.'], $moneySearch);
+                }
+                $where .= ' AND CAST(COALESCE(NULLIF(ss.final_price, 0), NULLIF(ss.total_price, 0), ss.diagnostic_price, 0) AS CHAR) LIKE ?';
+                $params[] = '%' . $moneySearch . '%';
+            } else {
+                $where .= ' AND (
+                    ss.sheet_number LIKE ? OR ss.client_name LIKE ? OR ss.client_phone LIKE ? OR
+                    ss.qr_code LIKE ? OR ss.vehicle_brand_model LIKE ? OR ss.technician_name LIKE ?
+                )';
+                array_push($params, $s, $s, $s, $s, $s, $s);
+            }
         }
         if (!empty($_GET['dateFrom'])) {
-            $sql .= ' AND ss.created_at >= ?';
+            $where .= ' AND ss.created_at >= ?';
             $params[] = $_GET['dateFrom'] . ' 00:00:00';
         }
         if (!empty($_GET['dateTo'])) {
-            $sql .= ' AND ss.created_at <= ?';
+            $where .= ' AND ss.created_at <= ?';
             $params[] = $_GET['dateTo'] . ' 23:59:59';
         }
         $paymentStatusFilter = normalizePaymentStatus($_GET['paymentStatus'] ?? '');
         if (in_array(($_GET['paymentStatus'] ?? ''), ['incasati', 'de_incasat'], true)) {
-            $sql .= " AND COALESCE(ss.payment_status, 'de_incasat') = ?";
+            $where .= " AND COALESCE(ss.payment_status, 'de_incasat') = ?";
             $params[] = $paymentStatusFilter;
         }
-        $sql .= " ORDER BY {$sortColumn} {$sortDir}, ss.created_at DESC LIMIT 300";
+
+        $selectSql = $tableMode
+            ? 'SELECT ss.id, ss.sheet_number, ss.client_id, ss.qr_code, ss.client_name, ss.client_phone,
+                      ss.client_email, ss.vehicle_brand_model, ss.diagnostic_price, ss.total_price,
+                      ss.advance_amount, ss.currency_code, ss.payment_status, ss.client_package_price,
+                      ss.client_discount, ss.final_price, ss.is_finalized, ss.finalized_at,
+                      ss.client_signed_at, ss.technician_name, ss.created_at, ss.updated_at'
+            : 'SELECT ss.*';
+        $sql = $selectSql . $fromSql . $where . " ORDER BY {$sortColumn} {$sortDir}, ss.created_at DESC, ss.id DESC";
+
+        if ($tableMode) {
+            $page = max((int)($_GET['page'] ?? 1), 1);
+            $pageSize = min(max((int)($_GET['pageSize'] ?? 40), 10), 100);
+            $prefetchPages = min(max((int)($_GET['prefetchPages'] ?? 0), 0), 4);
+            $countStmt = $db->prepare('SELECT COUNT(*)' . $fromSql . $where);
+            $countStmt->execute($params);
+            $total = (int)$countStmt->fetchColumn();
+            $offset = ($page - 1) * $pageSize;
+            $fetchSize = $pageSize * (1 + $prefetchPages);
+            $sql .= " LIMIT {$fetchSize} OFFSET {$offset}";
+            $stmt = $db->prepare($sql);
+            $stmt->execute($params);
+            $windowItems = array_map(static function (array $row) use ($authUser): array {
+                $isFinalized = (bool)($row['is_finalized'] ?? false);
+                $summary = serviceSheetResponseForUser(buildServiceSheet($row), $authUser);
+                $summary['is_finalized'] = $isFinalized;
+                return $summary;
+            }, $stmt->fetchAll());
+            $items = array_slice($windowItems, 0, $pageSize);
+            $prefetched = [];
+            for ($ahead = 1; $ahead <= $prefetchPages; $ahead++) {
+                $aheadItems = array_slice($windowItems, $ahead * $pageSize, $pageSize);
+                if (!$aheadItems) {
+                    break;
+                }
+                $aheadPage = $page + $ahead;
+                $prefetched[] = [
+                    'items' => $aheadItems,
+                    'page' => $aheadPage,
+                    'has_more' => ($aheadPage * $pageSize) < $total,
+                ];
+            }
+            echo json_encode([
+                'items' => $items,
+                'total' => $total,
+                'page' => $page,
+                'page_size' => $pageSize,
+                'has_more' => ($offset + count($items)) < $total,
+                'prefetch_pages' => $prefetched,
+            ]);
+            exit();
+        }
+
+        $sql .= ' LIMIT 300';
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         echo json_encode(array_map(static fn(array $row): array => serviceSheetResponseForUser(buildServiceSheet($row), $authUser), $stmt->fetchAll()));

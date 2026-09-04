@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,400;8..144,500;8..144,600;8..144,700;8..144,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="urmarire-comanda.css?v=20260828-line-promotions-v1">
+  <link rel="stylesheet" href="urmarire-comanda.css?v=20260904-return-v2">
 </head>
 <body>
   <div class="tracking-ambient" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -46,7 +46,31 @@
     <section id="tracking-result" class="tracking-result" hidden></section>
   </main>
 
-  <footer class="tracking-footer"><img src="assets/logo.png" alt=""><p><strong>G-Trots România</strong><span>Ai o întrebare? Scrie-ne la contact@g-trots.ro</span></p><a href="/magazin.html">Continuă cumpărăturile →</a></footer>
-<script src="urmarire-comanda.js?v=20260829-vat-v1" defer></script>
+  <footer class="tracking-footer"><img src="assets/logo.png" alt=""><p><strong>G-Trots România</strong><span>Ai o întrebare? Scrie-ne la contact@g-trots.ro</span></p><div class="tracking-footer-actions"><a href="/magazin.html">Continuă cumpărăturile →</a><button id="tracking-footer-cancel" class="tracking-footer-cancel" type="button" hidden>Anulează comanda</button><button id="tracking-footer-return" class="tracking-footer-return" type="button" hidden>Solicită returul</button></div></footer>
+  <div id="cancellation-modal" class="cancellation-modal" hidden>
+    <button class="cancellation-backdrop" type="button" data-cancel-close aria-label="Închide"></button>
+    <section class="cancellation-sheet" role="dialog" aria-modal="true" aria-labelledby="cancellation-title">
+      <header><span><b>!</b></span><div><small>ANULARE COMANDĂ</small><h2 id="cancellation-title">Spune-ne motivul.</h2></div><button type="button" data-cancel-close aria-label="Închide">×</button></header>
+      <p>Comanda va fi oprită imediat. Anularea nu mai este disponibilă după predarea coletului către curier.</p>
+      <label for="cancellation-reason">Motivul anulării <b>*</b></label>
+      <textarea id="cancellation-reason" maxlength="1000" rows="5" placeholder="De exemplu: am comandat din greșeală produsul..." required></textarea>
+      <span id="cancellation-error" class="cancellation-error" role="alert"></span>
+      <div class="cancellation-actions"><button type="button" data-cancel-close>Renunță</button><button id="cancellation-confirm" type="button">Anulează comanda</button></div>
+    </section>
+  </div>
+  <div id="return-modal" class="return-modal" hidden>
+    <button class="return-backdrop" type="button" data-return-close aria-label="Închide"></button>
+    <section class="return-sheet" role="dialog" aria-modal="true" aria-labelledby="return-title">
+      <header><span>↶</span><div><small>SOLICITARE RETUR</small><h2 id="return-title">Spune-ne detaliile.</h2></div><button type="button" data-return-close aria-label="Închide">×</button></header>
+      <p>După trimitere, cererea va fi înregistrată imediat. Costul returului prin curier va fi scăzut din suma restituită.</p>
+      <label for="return-reason">Motivul returului <b>*</b></label>
+      <textarea id="return-reason" maxlength="1000" rows="4" placeholder="De exemplu: produsul nu corespunde nevoilor mele..." required></textarea>
+      <div class="return-fields"><label for="return-holder">Titularul contului <b>*</b><input id="return-holder" maxlength="180" autocomplete="name" placeholder="Nume și prenume"></label><label for="return-iban">IBAN pentru rambursare <b>*</b><input id="return-iban" maxlength="40" autocomplete="off" placeholder="RO..."></label></div>
+      <div class="return-estimate"><span>Cost retur curier <b id="return-cost">0,00 RON</b></span><span>Estimare restituire <strong id="return-refund">0,00 RON</strong></span></div>
+      <span id="return-error" class="return-error" role="alert"></span>
+      <div class="return-actions"><button type="button" data-return-close>Renunță</button><button id="return-confirm" type="button">Trimite solicitarea</button></div>
+    </section>
+  </div>
+<script src="urmarire-comanda.js?v=20260904-return-v2" defer></script>
 </body>
 </html>

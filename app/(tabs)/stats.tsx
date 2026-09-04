@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -27,6 +27,7 @@ import StatCard from '@/components/StatCard';
 import { useAuth } from '@/contexts/AuthContext';
 import { getStats } from '@/services/api';
 import type { StatsData } from '@/types';
+import { runWhenIdle } from '@/utils/runWhenIdle';
 import {
   Users,
   CircleDollarSign,
@@ -37,6 +38,38 @@ import {
 } from 'lucide-react-native';
 
 type Period = 'today' | 'week' | 'month' | 'year' | 'all';
+
+type StatsSnapshot = {
+  lastPeriod: Period;
+  byPeriod: Partial<Record<Period, StatsData>>;
+};
+
+const STATS_SNAPSHOT_LIMIT = 2;
+const statsSnapshots = new Map<string, StatsSnapshot>();
+
+function readStatsSnapshot(authToken: string) {
+  if (!authToken) return undefined;
+  const snapshot = statsSnapshots.get(authToken);
+  if (!snapshot) return undefined;
+  statsSnapshots.delete(authToken);
+  statsSnapshots.set(authToken, snapshot);
+  return snapshot;
+}
+
+function rememberStatsSnapshot(authToken: string, period: Period, data: StatsData) {
+  if (!authToken) return;
+  const current = statsSnapshots.get(authToken);
+  if (current) statsSnapshots.delete(authToken);
+  while (statsSnapshots.size >= STATS_SNAPSHOT_LIMIT) {
+    const oldest = statsSnapshots.keys().next().value;
+    if (!oldest) break;
+    statsSnapshots.delete(oldest);
+  }
+  statsSnapshots.set(authToken, {
+    lastPeriod: period,
+    byPeriod: { ...current?.byPeriod, [period]: data },
+  });
+}
 
 const PERIODS: { key: Period; label: string }[] = [
   { key: 'today', label: 'Azi' },
@@ -65,12 +98,17 @@ export default function StatsScreen() {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { token, user, refreshUser } = useAuth();
-  const [stats, setStats] = useState<StatsData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const initialSnapshot = useMemo(() => readStatsSnapshot(token), [token]);
+  const initialPeriod = initialSnapshot?.lastPeriod || 'all';
+  const initialStats = initialSnapshot?.byPeriod[initialPeriod] || null;
+  const [stats, setStats] = useState<StatsData | null>(initialStats);
+  const [loading, setLoading] = useState(() => !initialStats && user?.role !== 'user');
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-  const [period, setPeriod] = useState<Period>('all');
+  const [period, setPeriod] = useState<Period>(initialPeriod);
   const [showCollaboratorsModal, setShowCollaboratorsModal] = useState(false);
+  const statsRef = useRef<StatsData | null>(initialStats);
+  const statsRequestRef = useRef(0);
   const collaboratorSheetY = useSharedValue(windowHeight);
   const collaboratorSheetStartY = useSharedValue(0);
   const collapsedSheetY = Math.max(210, Math.min(windowHeight * 0.38, 360));
@@ -151,13 +189,22 @@ export default function StatsScreen() {
     transform: [{ translateY: collaboratorSheetY.value }],
   }));
 
-  const load = useCallback(async (p: Period) => {
+  const load = useCallback(async (p: Period, silent = false) => {
+    if (!token) return null;
+    const requestId = ++statsRequestRef.current;
     try {
-      setError('');
+      if (!silent) setError('');
       const data = await getStats(token, p);
+      if (requestId !== statsRequestRef.current) return null;
+      statsRef.current = data;
       setStats(data);
+      rememberStatsSnapshot(token, p, data);
+      return data;
     } catch {
-      setError('Eroare la incarcarea statisticilor.');
+      if (requestId === statsRequestRef.current && (!silent || !statsRef.current)) {
+        setError('Eroare la incarcarea statisticilor.');
+      }
+      return null;
     }
   }, [token]);
 
@@ -165,47 +212,53 @@ export default function StatsScreen() {
     useCallback(() => {
       if (user?.role === 'user') return;
       let active = true;
-      setLoading(true);
-      (async () => {
-        const freshUser = await refreshUser();
-        if (freshUser?.role === 'user') return;
-        await load(period);
-      })().finally(() => {
-        if (active) setLoading(false);
+      const hasSnapshot = Boolean(statsRef.current);
+      if (!hasSnapshot) setLoading(true);
+      const frame = requestAnimationFrame(() => {
+        const task = runWhenIdle(() => {
+          if (!active) return;
+          void refreshUser();
+          void load(period, hasSnapshot).finally(() => {
+            if (active) setLoading(false);
+          });
+        });
+        interactionTask = task;
       });
+      let interactionTask: ReturnType<typeof runWhenIdle> | null = null;
       return () => {
         active = false;
+        cancelAnimationFrame(frame);
+        interactionTask?.cancel();
+        statsRequestRef.current += 1;
       };
     }, [load, period, refreshUser, user?.role])
   );
 
   const handlePeriod = (p: Period) => {
+    if (p === period) return;
+    const cached = readStatsSnapshot(token)?.byPeriod[p] || null;
+    statsRequestRef.current += 1;
     setPeriod(p);
-    setLoading(true);
-    load(p).finally(() => setLoading(false));
+    statsRef.current = cached;
+    setStats(cached);
+    setError('');
+    setLoading(!cached);
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    const freshUser = await refreshUser();
-    if (freshUser?.role === 'user') {
+    try {
+      await Promise.allSettled([
+        refreshUser(),
+        load(period, Boolean(statsRef.current)),
+      ]);
+    } finally {
       setRefreshing(false);
-      return;
     }
-    await load(period);
-    setRefreshing(false);
   };
 
   if (user?.role === 'user') {
     return <Redirect href="/(tabs)" />;
-  }
-
-  if (loading) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator color={Colors.orange} size="large" />
-      </View>
-    );
   }
 
   const totalCollaboratorCosts = stats?.collaboratorStats.reduce((s, c) => s + c.totalCost, 0) ?? 0;
@@ -249,6 +302,12 @@ export default function StatsScreen() {
             colors={[Colors.orange]}
           />
         }>
+        {loading && !stats ? (
+          <View style={styles.inlineLoader}>
+            <ActivityIndicator color={Colors.orange} size="small" />
+            <Text style={styles.inlineLoaderText}>Se sincronizează statisticile...</Text>
+          </View>
+        ) : null}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         {stats && (
@@ -490,6 +549,8 @@ export default function StatsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   scroll: { padding: 14, paddingBottom: 40 },
+  inlineLoader: { minHeight: 72, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  inlineLoaderText: { color: Colors.textMuted, fontFamily: 'Inter-Medium', fontSize: 11 },
 
   periodWrap: {
     flexDirection: 'row',

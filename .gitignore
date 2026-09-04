@@ -109,6 +109,7 @@ __pycache__/
 
 # generated logs, temporary files and build reports
 *.log
+*.codex-live-backup-*
 tmp/
 output/
 outputs/

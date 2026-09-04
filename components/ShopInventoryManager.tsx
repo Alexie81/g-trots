@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowDownLeft, ArrowUpRight, Boxes, ChevronLeft, ChevronRight, ClipboardList, FileText, History, Package, RefreshCw, Save, Search, X } from 'lucide-react-native';
@@ -7,9 +7,33 @@ import { useAuth } from '@/contexts/AuthContext';
 import { shopApi, ShopInventoryMovement, ShopProduct } from '@/services/shopApi';
 import ShopPagination from '@/components/ShopPagination';
 import ShopProductPicture from '@/components/ShopProductPicture';
+import { runWhenIdle } from '@/utils/runWhenIdle';
 
-let inventoryProductsCache: ShopProduct[] = [];
+type InventorySnapshot = { products: ShopProduct[]; cachedAt: number };
+const INVENTORY_SNAPSHOT_TTL_MS = 30_000;
+const INVENTORY_SNAPSHOT_TOKEN_LIMIT = 2;
+const inventorySnapshots = new Map<string, InventorySnapshot>();
 const LEDGER_PAGE_SIZE = 5;
+
+function readInventorySnapshot(token: string) {
+  if (!token) return undefined;
+  const snapshot = inventorySnapshots.get(token);
+  if (!snapshot) return undefined;
+  inventorySnapshots.delete(token);
+  inventorySnapshots.set(token, snapshot);
+  return snapshot;
+}
+
+function rememberInventorySnapshot(token: string, products: ShopProduct[]) {
+  if (!token) return;
+  inventorySnapshots.delete(token);
+  while (inventorySnapshots.size >= INVENTORY_SNAPSHOT_TOKEN_LIMIT) {
+    const oldestToken = inventorySnapshots.keys().next().value;
+    if (!oldestToken) break;
+    inventorySnapshots.delete(oldestToken);
+  }
+  inventorySnapshots.set(token, { products, cachedAt: Date.now() });
+}
 
 function movementDelta(movement: ShopInventoryMovement) {
   return Number(movement.accounting_quantity_delta ?? movement.quantity_delta ?? 0);
@@ -30,7 +54,7 @@ function moneyRon(value?: string | number | null) {
 }
 
 function movementLabel(type: string) {
-  return ({ NIR_IN: 'Intrare din NIR', sale: 'Ieșire prin factură', SALE_OUT: 'Ieșire prin factură', MANUAL_ADJUSTMENT: 'Ajustare manuală', RETURN_IN: 'Retur în stoc', REVERSAL_OUT: 'Stornare intrare' } as Record<string, string>)[type] || type.replaceAll('_', ' ');
+  return ({ NIR_IN: 'Intrare din NIR', sale: 'Ieșire prin factură', SALE_OUT: 'Ieșire prin factură', MANUAL_ADJUSTMENT: 'Ajustare manuală', RETURN_IN: 'Intrare în stoc – Retur client', return: 'Intrare în stoc – Retur client', REVERSAL_OUT: 'Retur către furnizor' } as Record<string, string>)[type] || type.replaceAll('_', ' ');
 }
 
 function documentNumber(movement: ShopInventoryMovement) {
@@ -114,12 +138,13 @@ function Pager({ page, total, onChange }: { page: number; total: number; onChang
 
 export default function ShopInventoryManager({ onOpenNir }: { onOpenNir?: (nirId: string) => void }) {
   const { token } = useAuth();
-  const [products, setProducts] = useState<ShopProduct[]>(inventoryProductsCache);
+  const initialSnapshot = useMemo(() => readInventorySnapshot(token || ''), [token]);
+  const [products, setProducts] = useState<ShopProduct[]>(() => initialSnapshot?.products || []);
   const [movements, setMovements] = useState<ShopInventoryMovement[]>([]);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [loading, setLoading] = useState(inventoryProductsCache.length === 0);
+  const [loading, setLoading] = useState(() => !initialSnapshot);
   const [movementsLoading, setMovementsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -128,16 +153,48 @@ export default function ShopInventoryManager({ onOpenNir }: { onOpenNir?: (nirId
   const [note, setNote] = useState('');
   const [entryPage, setEntryPage] = useState(1);
   const [movementPage, setMovementPage] = useState(1);
+  const requestId = useRef(0);
+  const hasLoaded = useRef(Boolean(initialSnapshot));
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options: { showLoading?: boolean; silent?: boolean } = {}) => {
     if (!token) return;
-    if (!inventoryProductsCache.length) setLoading(true);
-    setError('');
-    try { const next = await shopApi.listInventory(token); inventoryProductsCache = next; setProducts(next); }
-    catch (loadError) { setError(loadError instanceof Error ? loadError.message : 'Stocurile nu au putut fi încărcate.'); }
-    finally { setLoading(false); }
+    const currentRequest = ++requestId.current;
+    if (options.showLoading ?? !hasLoaded.current) setLoading(true);
+    if (!options.silent) setError('');
+    try {
+      const next = await shopApi.listInventory(token);
+      if (currentRequest !== requestId.current) return;
+      rememberInventorySnapshot(token, next);
+      setProducts(next);
+      setError('');
+    }
+    catch (loadError) {
+      if (currentRequest === requestId.current && !options.silent) setError(loadError instanceof Error ? loadError.message : 'Stocurile nu au putut fi încărcate.');
+    }
+    finally {
+      if (currentRequest === requestId.current) {
+        hasLoaded.current = true;
+        setLoading(false);
+      }
+    }
   }, [token]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (!initialSnapshot) {
+      void load({ showLoading: true });
+      return;
+    }
+    if (Date.now() - initialSnapshot.cachedAt <= INVENTORY_SNAPSHOT_TTL_MS) return;
+    let interactionTask: ReturnType<typeof runWhenIdle> | null = null;
+    const frame = requestAnimationFrame(() => {
+      interactionTask = runWhenIdle(() => {
+        void load({ showLoading: false, silent: true });
+      });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      interactionTask?.cancel();
+    };
+  }, [initialSnapshot, load]);
 
   const filtered = useMemo(() => {
     const term = normalizeSemanticSearch(query);
@@ -167,7 +224,11 @@ export default function ShopInventoryManager({ onOpenNir }: { onOpenNir?: (nirId
     setSaving(true);
     try {
       const updated = await shopApi.adjustStock(token, selected.id, next, note.trim() || 'Ajustare manuală din aplicație');
-      setProducts((current) => current.map((product) => product.id === updated.id ? updated : product));
+      setProducts((current) => {
+        const nextProducts = current.map((product) => product.id === updated.id ? updated : product);
+        rememberInventorySnapshot(token, nextProducts);
+        return nextProducts;
+      });
       setSelected(updated); setMovementPage(1);
       setMovements(await shopApi.listInventoryMovements(token, updated.id));
       Alert.alert('Stoc actualizat', `Noul stoc este ${updated.stock_quantity} bucăți.`);

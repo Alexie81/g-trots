@@ -12,6 +12,7 @@ final class GtrotsInvoiceUbl
 {
     public const CUSTOMIZATION_ID = 'urn:cen.eu:en16931:2017#compliant#urn:efactura.mfinante.ro:CIUS-RO:1.0.1';
     private const NS_INVOICE = 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2';
+    private const NS_CREDIT_NOTE = 'urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2';
     private const NS_CBC = 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2';
     private const NS_CAC = 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2';
 
@@ -33,6 +34,7 @@ final class GtrotsInvoiceUbl
     public static function render(array $invoice): string
     {
         self::validateSource($invoice);
+        $isReturn = strtolower(trim((string)($invoice['status'] ?? ''))) === 'return';
         $currency = strtoupper(trim((string)($invoice['currency'] ?? 'RON'))) ?: 'RON';
         $items = array_values((array)$invoice['items']);
         $lines = [];
@@ -62,7 +64,7 @@ final class GtrotsInvoiceUbl
 
         $document = new DOMDocument('1.0', 'UTF-8');
         $document->formatOutput = true;
-        $root = $document->createElementNS(self::NS_INVOICE, 'Invoice');
+        $root = $document->createElementNS($isReturn ? self::NS_CREDIT_NOTE : self::NS_INVOICE, $isReturn ? 'CreditNote' : 'Invoice');
         $root->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:cac', self::NS_CAC);
         $root->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:cbc', self::NS_CBC);
         $document->appendChild($root);
@@ -70,8 +72,8 @@ final class GtrotsInvoiceUbl
         self::cbc($document, $root, 'CustomizationID', self::CUSTOMIZATION_ID);
         self::cbc($document, $root, 'ID', self::invoiceId($invoice));
         self::cbc($document, $root, 'IssueDate', self::date((string)$invoice['issue_date'], 'Data emiterii'));
-        if (trim((string)($invoice['due_date'] ?? '')) !== '') self::cbc($document, $root, 'DueDate', self::date((string)$invoice['due_date'], 'Data scadenței'));
-        self::cbc($document, $root, 'InvoiceTypeCode', '380');
+        if (!$isReturn && trim((string)($invoice['due_date'] ?? '')) !== '') self::cbc($document, $root, 'DueDate', self::date((string)$invoice['due_date'], 'Data scadenței'));
+        self::cbc($document, $root, $isReturn ? 'CreditNoteTypeCode' : 'InvoiceTypeCode', $isReturn ? '381' : '380');
         if (trim((string)($invoice['notes'] ?? '')) !== '') self::cbc($document, $root, 'Note', self::text((string)$invoice['notes'], 300));
         self::cbc($document, $root, 'DocumentCurrencyCode', $currency);
         if ($currency !== 'RON') self::cbc($document, $root, 'TaxCurrencyCode', 'RON');
@@ -80,6 +82,16 @@ final class GtrotsInvoiceUbl
         if ($orderReference !== '') {
             $orderNode = self::cac($document, $root, 'OrderReference');
             self::cbc($document, $orderNode, 'ID', self::text($orderReference, 30));
+        }
+        if ($isReturn) {
+            $related = is_array($invoice['related_invoice'] ?? null) ? $invoice['related_invoice'] : [];
+            $relatedId = trim((string)($related['series'] ?? '') . ' ' . (string)($related['number'] ?? ''));
+            if ($relatedId !== '') {
+                $billingReference = self::cac($document, $root, 'BillingReference');
+                $invoiceReference = self::cac($document, $billingReference, 'InvoiceDocumentReference');
+                self::cbc($document, $invoiceReference, 'ID', self::text($relatedId, 30));
+                if (trim((string)($related['date'] ?? '')) !== '') self::cbc($document, $invoiceReference, 'IssueDate', self::date((string)$related['date'], 'Data facturii corectate'));
+            }
         }
 
         self::party($document, self::cac($document, $root, 'AccountingSupplierParty'), (array)$invoice['seller'], true);
@@ -118,7 +130,7 @@ final class GtrotsInvoiceUbl
         if (abs($rounding) >= 0.005) self::amount($document, $totals, 'PayableRoundingAmount', $rounding, $currency);
         self::amount($document, $totals, 'PayableAmount', $payable, $currency);
 
-        foreach ($lines as $line) self::invoiceLine($document, $root, $line, $currency);
+        foreach ($lines as $line) self::invoiceLine($document, $root, $line, $currency, $isReturn);
         $xml = $document->saveXML();
         if (!is_string($xml) || $xml === '') throw new RuntimeException('Fișierul UBL nu a putut fi generat.');
         return $xml;
@@ -129,7 +141,12 @@ final class GtrotsInvoiceUbl
         if (array_key_exists('anaf_validation_enabled', $config) && !$config['anaf_validation_enabled']) {
             return ['stare' => 'skipped', 'messages' => []];
         }
-        $url = trim((string)($config['anaf_invoice_validation_url'] ?? 'https://webservicesp.anaf.ro/prod/FCTEL/rest/validare/FACT1'));
+        $probe = new DOMDocument();
+        $isCreditNote = @$probe->loadXML($xml, LIBXML_NONET) && $probe->documentElement?->localName === 'CreditNote';
+        $invoiceUrl = trim((string)($config['anaf_invoice_validation_url'] ?? 'https://webservicesp.anaf.ro/prod/FCTEL/rest/validare/FACT1'));
+        $creditNoteUrl = trim((string)($config['anaf_credit_note_validation_url'] ?? ''));
+        if ($creditNoteUrl === '') $creditNoteUrl = (string)preg_replace('~/FACT1/?$~', '/FCN', $invoiceUrl);
+        $url = $isCreditNote ? $creditNoteUrl : $invoiceUrl;
         if ($url === '') throw new RuntimeException('Serviciul oficial de validare ANAF nu este configurat.');
         $body = '';
         $httpStatus = 0;
@@ -230,12 +247,12 @@ final class GtrotsInvoiceUbl
         }
     }
 
-    private static function invoiceLine(DOMDocument $document, DOMElement $root, array $line, string $currency): void
+    private static function invoiceLine(DOMDocument $document, DOMElement $root, array $line, string $currency, bool $isReturn): void
     {
         $item = (array)$line['item'];
-        $node = self::cac($document, $root, 'InvoiceLine');
+        $node = self::cac($document, $root, $isReturn ? 'CreditNoteLine' : 'InvoiceLine');
         self::cbc($document, $node, 'ID', (string)$line['index']);
-        $quantity = self::cbc($document, $node, 'InvoicedQuantity', self::decimal($line['quantity'], 4));
+        $quantity = self::cbc($document, $node, $isReturn ? 'CreditedQuantity' : 'InvoicedQuantity', self::decimal($line['quantity'], 4));
         $quantity->setAttribute('unitCode', 'C62');
         self::amount($document, $node, 'LineExtensionAmount', $line['net'], $currency);
         if ((float)($line['discount_amount'] ?? 0) > 0) {

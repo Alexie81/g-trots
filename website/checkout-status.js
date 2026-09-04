@@ -296,12 +296,14 @@
     if (empty) empty.hidden = items.length > 0;
 
     document.querySelectorAll("[data-order-customer-data]").forEach(node => node.remove());
-    if (state.customerName || state.customer_name || state.companyName || state.company_name) {
+    if (state.customerDisplayName || state.customer_display_name || state.customerName || state.customer_name || state.companyName || state.company_name) {
       const isCompany = String(state.customerType || state.customer_type || "individual") === "company";
       const details = document.createElement("div");
       details.className = "order-receipt-customer";
       details.dataset.orderCustomerData = "";
-      details.innerHTML = `<header><span class="${isCompany ? "is-company" : ""}">${isCompany ? "PJ" : "PF"}</span><strong>${isCompany ? "Persoană juridică" : "Persoană fizică"}</strong></header><p><span>Nume</span><b>${escapeHtml(state.customerName || state.customer_name || "")}</b></p><p><span>Telefon</span><b>${escapeHtml(state.customerPhone || state.customer_phone || "")}</b></p>${isCompany ? `<p><span>Denumire firmă</span><b>${escapeHtml(state.companyName || state.company_name || "")}</b></p><p><span>CUI / CIF</span><b>${escapeHtml(state.companyCui || state.company_cui || "")}</b></p><p><span>Registrul Comerțului</span><b>${escapeHtml(state.companyRegistrationNumber || state.company_registration_number || "")}</b></p><p><span>Sediu social</span><b>${escapeHtml(state.companyAddress || state.company_address || "")}</b></p>` : ""}<p><span>Livrare</span><b>${escapeHtml(state.deliveryAddress || [state.address, state.city, state.county, state.postal_code].filter(Boolean).join(", ") || "")}</b></p>`;
+      const contactName = state.customerContactName || state.customer_contact_name || state.customerName || state.customer_name || "";
+      const displayName = state.customerDisplayName || state.customer_display_name || (isCompany ? state.companyName || state.company_name : contactName) || "";
+      details.innerHTML = `<header><span class="${isCompany ? "is-company" : ""}">${isCompany ? "PJ" : "PF"}</span><strong>${isCompany ? "Persoană juridică" : "Persoană fizică"}</strong></header><p><span>${isCompany ? "Denumire firmă" : "Nume"}</span><b>${escapeHtml(displayName)}</b></p>${isCompany ? `<p><span>Persoană de contact</span><b>${escapeHtml(contactName)}</b></p>` : ""}<p><span>Telefon</span><b>${escapeHtml(state.customerPhone || state.customer_phone || "")}</b></p>${isCompany ? `<p><span>CUI / CIF</span><b>${escapeHtml(state.companyCui || state.company_cui || "")}</b></p><p><span>Registrul Comerțului</span><b>${escapeHtml(state.companyRegistrationNumber || state.company_registration_number || "")}</b></p><p><span>Sediu social</span><b>${escapeHtml(state.companyAddress || state.company_address || "")}</b></p>` : ""}<p><span>Livrare</span><b>${escapeHtml(state.deliveryAddress || [state.address, state.city, state.county, state.postal_code].filter(Boolean).join(", ") || "")}</b></p>`;
       host.before(details);
     }
 

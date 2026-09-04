@@ -161,7 +161,9 @@ CREATE TABLE IF NOT EXISTS `clients` (
   `is_finalized`        TINYINT(1)    NOT NULL DEFAULT 0,
   `finalization_source` ENUM('manual','service') DEFAULT NULL,
   `created_at`          TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`          TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY `uq_qr_code` (`qr_code`),
+  KEY `idx_clients_updated` (`updated_at`),
   KEY `idx_clients_owner_user` (`owner_user_id`),
   FOREIGN KEY (`owner_user_id`) REFERENCES `app_users`(`id`)
     ON DELETE SET NULL ON UPDATE CASCADE,

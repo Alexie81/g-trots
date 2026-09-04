@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, LayoutAnimation, UIManager } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, LayoutAnimation } from 'react-native';
 import ReanimatedSwipeable, { SwipeDirection, type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Animated, {
   useAnimatedStyle,
@@ -9,19 +9,19 @@ import Animated, {
 import { Colors, StatusColors, StatusLabels, fmt } from '@/constants/colors';
 import type { Client } from '@/types';
 import { CalendarClock, Phone, Tag, ChevronRight, ChevronDown, CheckCircle, Percent, Trash2, MessageCircle } from 'lucide-react-native';
-import { calculateClientPayment, displayAmountDueForPayment, isTotalOnlyPayment } from '@/constants/financial';
+import { calculateClientPayment, displayAmountDueForPayment } from '@/constants/financial';
 
 interface Props {
   client: Client;
   onPress: (clientId: string) => void;
   onDelete?: (client: Client) => void;
   onWhatsApp?: (client: Client) => void;
+  onExpand?: (client: Client) => void;
   canDelete?: boolean;
 }
 
 function runClientCardLayoutAnimation() {
   try {
-    UIManager.setLayoutAnimationEnabledExperimental?.(true);
     LayoutAnimation.configureNext({
       duration: 165,
       create: {
@@ -41,70 +41,68 @@ function runClientCardLayoutAnimation() {
   }
 }
 
-function ClientCard({ client, onPress, onDelete, onWhatsApp, canDelete = false }: Props) {
-  const [expanded, setExpanded] = useState(false);
+function ClientCard({ client, onPress, onDelete, onWhatsApp, onExpand, canDelete = false }: Props) {
+  // Pagina de clienti reutilizeaza aceleasi sloturi native intre pagini. Legam
+  // extinderea de id-ul clientului ca un slot refolosit sa nu transporte starea
+  // randului anterior si sa evitam remontarea costisitoare a Swipeable.
+  const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
+  const expanded = expandedClientId === client.id;
   const swipeRef = useRef<SwipeableMethods | null>(null);
+  const clientRef = useRef(client);
+  const hasMountedRef = useRef(false);
   const expandProgress = useSharedValue(0);
   const statusColor = StatusColors[client.status] || Colors.textSecondary;
   const cardAccentColor = client.is_finalized ? Colors.success : Colors.error;
-  const payment = calculateClientPayment(
-    client.price,
-    client.predefined_price,
-    client.discount_percentage,
-    client.advance_amount
-  );
-  const totalDupaReducere = payment.total;
-  const baniIncasat = payment.amountDue;
-  const totalOnlyPayment = isTotalOnlyPayment(
-    client.price,
-    client.predefined_price,
-    client.advance_amount
-  );
-  const baniIncasatAfisat = client.payment_status === 'incasati'
-    ? 0
-    : displayAmountDueForPayment(client.price, client.predefined_price, baniIncasat, client.advance_amount);
-  const currency = client.currency_code || 'RON';
-  const amountDueLabel = 'Rest de plata';
-  const incasatEfectiv = totalDupaReducere;
-  const profilePct = client.profiles ? client.profiles.percentage / 100 : 0;
-  const baniProfil = incasatEfectiv * profilePct;
-  const expenses =
-    (client.manopera_colaboratori || 0)
-    + (client.valoare_piese || 0)
-    + (client.alte_cheltuieli || 0);
-  const baniGtrots = incasatEfectiv * (1 - profilePct) - expenses;
-  const collaboratorCosts = (client.collaborator_costs || []).filter((item) => item.cost > 0);
-  const fmtProfileBadge = (value: number) =>
-    `${(Math.round(value * 10) / 10).toFixed(1).padStart(4, '0')} ${currency.toLowerCase()}`;
-  const createdDate = formatCreatedDate(client.created_at);
+  useEffect(() => {
+    clientRef.current = client;
+  }, [client]);
   const toggleExpanded = useCallback(() => {
     runClientCardLayoutAnimation();
-    setExpanded((value) => !value);
-  }, []);
+    setExpandedClientId((value) => value === client.id ? null : client.id);
+  }, [client.id]);
   useEffect(() => {
-    expandProgress.value = withTiming(expanded ? 1 : 0, { duration: 220 });
-  }, [expanded, expandProgress]);
-  useEffect(() => {
-    setExpanded(false);
+    // `reset` nu animeaza inchiderea si este potrivit cand slotul primeste un
+    // client nou in urma paginarii.
+    swipeRef.current?.reset();
     expandProgress.value = 0;
   }, [client.id, expandProgress]);
+  useEffect(() => {
+    if (expanded) onExpand?.(clientRef.current);
+  }, [client.created_at, client.id, client.updated_at, expanded, onExpand]);
+  useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
+    expandProgress.value = withTiming(expanded ? 1 : 0, { duration: 220 });
+  }, [expanded, expandProgress]);
   const chevronAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${expandProgress.value * 180}deg` }],
   }));
 
-  const renderDeleteAction = () => (
+  const renderDeleteAction = useCallback(() => (
     <View style={[styles.swipeAction, styles.deleteAction]}>
       <Trash2 size={24} color={Colors.white} />
       <Text style={styles.swipeActionText}>Sterge</Text>
     </View>
-  );
+  ), []);
 
-  const renderWhatsAppAction = () => (
+  const renderWhatsAppAction = useCallback(() => (
     <View style={[styles.swipeAction, styles.whatsAppAction]}>
       <MessageCircle size={24} color={Colors.white} />
       <Text style={styles.swipeActionText}>WhatsApp</Text>
     </View>
-  );
+  ), []);
+
+  const handleSwipeableOpen = useCallback((direction: SwipeDirection) => {
+    swipeRef.current?.close();
+    if (direction === SwipeDirection.LEFT && onWhatsApp) onWhatsApp(client);
+    if (direction === SwipeDirection.RIGHT && canDelete) onDelete?.(client);
+  }, [canDelete, client, onDelete, onWhatsApp]);
+
+  const openClient = useCallback(() => {
+    onPress(client.id);
+  }, [client.id, onPress]);
 
   return (
     <ReanimatedSwipeable
@@ -116,11 +114,7 @@ function ClientCard({ client, onPress, onDelete, onWhatsApp, canDelete = false }
       overshootRight={false}
       renderLeftActions={canDelete ? renderDeleteAction : undefined}
       renderRightActions={onWhatsApp ? renderWhatsAppAction : undefined}
-      onSwipeableOpen={(direction) => {
-        swipeRef.current?.close();
-        if (direction === SwipeDirection.LEFT && onWhatsApp) onWhatsApp(client);
-        if (direction === SwipeDirection.RIGHT && canDelete) onDelete?.(client);
-      }}
+      onSwipeableOpen={handleSwipeableOpen}
       containerStyle={styles.swipeContainer}>
     <View
       style={[
@@ -161,7 +155,7 @@ function ClientCard({ client, onPress, onDelete, onWhatsApp, canDelete = false }
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.headerIconButton}
-          onPress={() => onPress(client.id)}
+          onPress={openClient}
           activeOpacity={0.75}
           accessibilityRole="button"
           accessibilityLabel={`Deschide clientul ${client.name}`}>
@@ -169,23 +163,54 @@ function ClientCard({ client, onPress, onDelete, onWhatsApp, canDelete = false }
         </TouchableOpacity>
       </View>
 
-      {expanded ? (
-        <View style={styles.expandedContent}>
-          {createdDate ? (
-            <View style={styles.metaRow}>
-              <CalendarClock size={12} color={Colors.orange} />
-              <Text style={styles.createdAt}>{createdDate}</Text>
-            </View>
-          ) : null}
+      {expanded ? <ExpandedClientDetails client={client} statusColor={statusColor} /> : null}
+    </View>
+    </ReanimatedSwipeable>
+  );
+}
 
-          {/* Status + profile badge */}
-          <View style={styles.footer}>
-            {client.qr_used && (
-              <View style={styles.qrUsedStatusBadge}>
-                <CheckCircle size={11} color={Colors.success} />
-                <Text style={styles.qrUsedStatusText}>QR folosit</Text>
-              </View>
-            )}
+const ExpandedClientDetails = React.memo(function ExpandedClientDetails({ client, statusColor }: {
+  client: Client;
+  statusColor: string;
+}) {
+  const payment = calculateClientPayment(
+    client.price,
+    client.predefined_price,
+    client.discount_percentage,
+    client.advance_amount
+  );
+  const totalDupaReducere = payment.total;
+  const baniIncasatAfisat = client.payment_status === 'incasati'
+    ? 0
+    : displayAmountDueForPayment(client.price, client.predefined_price, payment.amountDue, client.advance_amount);
+  const currency = client.currency_code || 'RON';
+  const profilePct = client.profiles ? client.profiles.percentage / 100 : 0;
+  const baniProfil = totalDupaReducere * profilePct;
+  const expenses =
+    (client.manopera_colaboratori || 0)
+    + (client.valoare_piese || 0)
+    + (client.alte_cheltuieli || 0);
+  const baniGtrots = totalDupaReducere * (1 - profilePct) - expenses;
+  const collaboratorCosts = (client.collaborator_costs || []).filter((item) => item.cost > 0);
+  const createdDate = formatCreatedDate(client.created_at);
+  const profileAmount = `${(Math.round(baniProfil * 10) / 10).toFixed(1).padStart(4, '0')} ${currency.toLowerCase()}`;
+
+  return (
+    <View style={styles.expandedContent}>
+      {createdDate ? (
+        <View style={styles.metaRow}>
+          <CalendarClock size={12} color={Colors.orange} />
+          <Text style={styles.createdAt}>{createdDate}</Text>
+        </View>
+      ) : null}
+
+      <View style={styles.footer}>
+        {client.qr_used && (
+          <View style={styles.qrUsedStatusBadge}>
+            <CheckCircle size={11} color={Colors.success} />
+            <Text style={styles.qrUsedStatusText}>QR folosit</Text>
+          </View>
+        )}
 
         {client.is_finalized && (
           <View style={styles.finalizedBadge}>
@@ -213,17 +238,16 @@ function ClientCard({ client, onPress, onDelete, onWhatsApp, canDelete = false }
         {client.profiles && (
           <View style={[styles.profileBadge, { backgroundColor: client.profiles.color + '22' }]}>
             <Text style={[styles.profileText, { color: client.profiles.color }]}>
-              {client.profiles.name} <Text style={styles.profileAmount}>{fmtProfileBadge(baniProfil)}</Text>
+              {client.profiles.name} <Text style={styles.profileAmount}>{profileAmount}</Text>
             </Text>
           </View>
         )}
       </View>
 
-      {/* Price breakdown */}
       <View style={styles.priceRow}>
         <PriceItem label="Pret total" value={`${fmt(totalDupaReducere)} ${currency}`} color={Colors.textSecondary} />
         <View style={styles.priceDivider} />
-        <PriceItem label={amountDueLabel} value={`${fmt(baniIncasatAfisat)} ${currency}`} color={Colors.orange} highlight />
+        <PriceItem label="Rest de plata" value={`${fmt(baniIncasatAfisat)} ${currency}`} color={Colors.orange} highlight />
         <View style={styles.priceDivider} />
         <PriceItem label="G-Trots" value={`${fmt(baniGtrots)} ${currency}`} color={Colors.success} />
       </View>
@@ -252,7 +276,6 @@ function ClientCard({ client, onPress, onDelete, onWhatsApp, canDelete = false }
         </View>
       )}
 
-      {/* QR code row */}
       {client.qr_code ? (
         <View style={[styles.qrRow, { borderTopColor: client.qr_used ? Colors.orange + '33' : Colors.success + '33' }]}>
           <Tag size={11} color={client.qr_used ? Colors.orange : Colors.success} />
@@ -268,26 +291,85 @@ function ClientCard({ client, onPress, onDelete, onWhatsApp, canDelete = false }
           )}
         </View>
       ) : null}
-        </View>
-      ) : null}
     </View>
-    </ReanimatedSwipeable>
   );
+});
+
+function sameProfile(left: Client['profiles'], right: Client['profiles']) {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return left.id === right.id
+    && left.name === right.name
+    && left.color === right.color
+    && left.percentage === right.percentage;
 }
 
-export default React.memo(ClientCard);
+function sameCollaboratorCosts(left: Client['collaborator_costs'], right: Client['collaborator_costs']) {
+  if (left === right) return true;
+  if ((left?.length || 0) !== (right?.length || 0)) return false;
+  for (let index = 0; index < (left?.length || 0); index += 1) {
+    const previous = left[index];
+    const next = right[index];
+    if (
+      previous.id !== next.id
+      || previous.cost !== next.cost
+      || previous.collaborator_name !== next.collaborator_name
+      || previous.collaborator_color !== next.collaborator_color
+      || previous.payment_status !== next.payment_status
+    ) return false;
+  }
+  return true;
+}
+
+function sameClientCardProps(previous: Props, next: Props) {
+  if (
+    previous.onPress !== next.onPress
+    || previous.onDelete !== next.onDelete
+    || previous.onWhatsApp !== next.onWhatsApp
+    || previous.onExpand !== next.onExpand
+    || previous.canDelete !== next.canDelete
+  ) return false;
+  if (previous.client === next.client) return true;
+
+  const left = previous.client;
+  const right = next.client;
+  return left.id === right.id
+    && left.name === right.name
+    && left.phone === right.phone
+    && left.status === right.status
+    && left.qr_code === right.qr_code
+    && left.qr_used === right.qr_used
+    && left.discount_percentage === right.discount_percentage
+    && left.price === right.price
+    && left.predefined_price === right.predefined_price
+    && left.advance_amount === right.advance_amount
+    && left.currency_code === right.currency_code
+    && left.payment_status === right.payment_status
+    && left.manopera_colaboratori === right.manopera_colaboratori
+    && left.valoare_piese === right.valoare_piese
+    && left.alte_cheltuieli === right.alte_cheltuieli
+    && left.is_finalized === right.is_finalized
+    && left.created_at === right.created_at
+    && left.updated_at === right.updated_at
+    && sameProfile(left.profiles, right.profiles)
+    && sameCollaboratorCosts(left.collaborator_costs, right.collaborator_costs);
+}
+
+export default React.memo(ClientCard, sameClientCardProps);
+
+const createdDateFormatter = new Intl.DateTimeFormat('ro-RO', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
 
 function formatCreatedDate(value?: string | null) {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleString('ro-RO', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return createdDateFormatter.format(date);
 }
 
 function PriceItem({ label, value, color, highlight }: { label: string; value: string; color: string; highlight?: boolean }) {

@@ -496,9 +496,10 @@ final class GtrotsInvoicePdf
     {
         $related = $d['related_invoice'];
         if ($related['series'] === '' && $related['number'] === '') return '';
-        $prefix = $d['status'] === 'return' ? 'Corectează factura' : 'Referință factură';
+        $prefix = $d['status'] === 'return' ? 'Retur pentru factura fiscală emisă' : 'Referință factură';
         $text = trim($related['series'] . ' ' . $related['number']);
         if ($related['date'] !== '') $text .= ' din ' . self::dateLabel($related['date']);
+        if ($d['status'] === 'return' && $d['order_reference'] !== '') $text .= ' · comanda ' . $d['order_reference'];
         return '<div class="related"><b>' . self::e($prefix) . '</b><span>' . self::e($text) . '</span></div>';
     }
 

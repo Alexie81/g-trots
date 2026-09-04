@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   AppState,
   Alert,
@@ -16,13 +16,16 @@ import {
   Modal,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { Colors } from '@/constants/colors';
 import Header from '@/components/Header';
 import ClientCard from '@/components/ClientCard';
 import MobileChatHeaderButton from '@/components/MobileChatHeaderButton';
-import { deleteClient, getClients, getProfiles } from '@/services/api';
+import TablePagination from '@/components/TablePagination';
+import { deleteClient, getClientById, getClientsPage, getProfiles, type ClientsTableQuery } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Client, Profile } from '@/types';
+import { runWhenIdle } from '@/utils/runWhenIdle';
 import {
   ArrowDownAZ,
   ArrowDownZA,
@@ -42,9 +45,89 @@ import {
 let savedClientsScrollOffset = 0;
 let savedClientsSnapshot: Client[] = [];
 
+function readSavedClientsScrollOffset() {
+  return savedClientsScrollOffset;
+}
+
+function rememberClientsScrollOffset(offset: number) {
+  savedClientsScrollOffset = offset;
+}
+
 type ClientSortMode = '' | 'new' | 'old' | 'name_az' | 'name_za';
 type ClientLifecycleFilter = '' | 'active' | 'finalized';
 type SortIcon = typeof CalendarArrowDown;
+const CLIENTS_PAGE_SIZE_KEY = 'gtrots.clientsPageSize.v1';
+const DEFAULT_CLIENTS_PAGE_SIZE = 10;
+const TABLE_PAGE_SIZES = new Set([10, 15, 25, 50, 100]);
+const CLIENTS_PAGE_CACHE_LIMIT = 12;
+type ClientsPageResult = Awaited<ReturnType<typeof getClientsPage>> & {
+  prefetch_end_page?: number;
+};
+let savedClientsTotal = 0;
+let savedClientsPage = 1;
+let savedClientsHasMore = false;
+let savedClientsPageSize = DEFAULT_CLIENTS_PAGE_SIZE;
+let savedClientsSnapshotToken = '';
+let savedClientsSearch = '';
+let savedClientsProfile = '';
+let savedClientsSort: ClientSortMode = '';
+let savedClientsLifecycle: ClientLifecycleFilter = '';
+const savedClientsPageCache = new Map<string, ClientsPageResult>();
+const CLIENT_DETAIL_CACHE_LIMIT = 12;
+const CLIENT_DETAIL_CACHE_TTL_MS = 60_000;
+const savedClientDetailCache = new Map<string, { value: Client; cachedAt: number }>();
+const savedClientDetailRequests = new Map<string, Promise<Client | null>>();
+
+function clientsPageCacheKey(query: ClientsTableQuery, authToken = '') {
+  return JSON.stringify([authToken, query.search || '', query.profileId || '', query.lifecycle || '', query.sortBy || '', query.sortDir || '', query.page || 1, query.pageSize || DEFAULT_CLIENTS_PAGE_SIZE]);
+}
+
+function clientsPageCacheLimit(pageSize: number) {
+  return Math.max(5, Math.min(CLIENTS_PAGE_CACHE_LIMIT, Math.floor(500 / Math.max(pageSize, 10))));
+}
+
+// O pagina noua schimba datele, nu structura vizibila. Cheile stabile pe slot
+// permit FlatList sa refoloseasca randurile native si instantele Swipeable in
+// loc sa distruga si sa reconstruiasca toate cardurile la fiecare apasare.
+function clientPageSlotKey(_item: Client, index: number) {
+  return `client-page-slot-${index}`;
+}
+
+function clientDetailCacheKey(authToken: string, clientId: string) {
+  return `${authToken.length}:${authToken}|${clientId}`;
+}
+
+function rememberClientDetail(key: string, value: Client) {
+  if (savedClientDetailCache.has(key)) savedClientDetailCache.delete(key);
+  while (savedClientDetailCache.size >= CLIENT_DETAIL_CACHE_LIMIT) {
+    const oldest = savedClientDetailCache.keys().next().value;
+    if (!oldest) break;
+    savedClientDetailCache.delete(oldest);
+  }
+  savedClientDetailCache.set(key, { value, cachedAt: Date.now() });
+}
+
+function mergeCachedClientRelations(authToken: string, items: Client[]) {
+  if (!authToken) return items;
+  return items.map((item) => {
+    const key = clientDetailCacheKey(authToken, item.id);
+    const cached = savedClientDetailCache.get(key);
+    if (!cached) return item;
+    const summaryVersion = item.updated_at || item.created_at || '';
+    const detailVersion = cached.value.updated_at || cached.value.created_at || '';
+    if (summaryVersion !== detailVersion) {
+      savedClientDetailCache.delete(key);
+      return item;
+    }
+    return {
+      ...item,
+      collaborator_costs: cached.value.collaborator_costs,
+      expense_costs: cached.value.expense_costs,
+      participants: cached.value.participants,
+      activity_logs: cached.value.activity_logs,
+    };
+  });
+}
 
 const clientSortOptions: { key: Exclude<ClientSortMode, ''>; label: string; Icon: SortIcon }[] = [
   { key: 'new', label: 'Noi', Icon: CalendarArrowDown },
@@ -59,64 +142,151 @@ const clientLifecycleOptions: { key: Exclude<ClientLifecycleFilter, ''>; label: 
 ];
 
 function clientsVersion(items: Client[]) {
-  return JSON.stringify(items);
-}
-
-function clientCreatedTime(client: Client) {
-  const timestamp = new Date(client.created_at || '').getTime();
-  return Number.isFinite(timestamp) ? timestamp : 0;
+  return items.map((item) => [
+    item.id,
+    item.updated_at || item.created_at,
+    item.name,
+    item.phone,
+    item.status,
+    item.qr_code,
+    item.qr_used ? 1 : 0,
+    item.discount_percentage,
+    item.price,
+    item.predefined_price,
+    item.advance_amount,
+    item.currency_code,
+    item.payment_status,
+    item.amount_due,
+    item.manopera_colaboratori,
+    item.valoare_piese,
+    item.alte_cheltuieli,
+    item.is_finalized ? 1 : 0,
+    item.profiles?.id || '',
+    item.profiles?.name || '',
+    item.profiles?.color || '',
+    item.profiles?.percentage || 0,
+    (item.collaborator_costs || []).map((cost) => `${cost.id}:${cost.cost}:${cost.payment_status}`).join(','),
+  ].join(':')).join('|');
 }
 
 export default function ClientsScreen() {
   const router = useRouter();
   const { token, user, refreshUser } = useAuth();
-  const [clients, setClients] = useState<Client[]>(savedClientsSnapshot);
+  const canRestoreSnapshot = Boolean(token && savedClientsSnapshotToken === token);
+  const [clients, setClients] = useState<Client[]>(canRestoreSnapshot ? savedClientsSnapshot : []);
+  const [totalClients, setTotalClients] = useState(canRestoreSnapshot ? (savedClientsTotal || savedClientsSnapshot.length) : 0);
+  const [loadedPage, setLoadedPage] = useState(canRestoreSnapshot ? savedClientsPage : 1);
+  const [pageSize, setPageSize] = useState(savedClientsPageSize);
+  const [pageSizeReady, setPageSizeReady] = useState(false);
+  const [hasMore, setHasMore] = useState(canRestoreSnapshot ? savedClientsHasMore : false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!canRestoreSnapshot || savedClientsSnapshot.length === 0);
   const [refreshing, setRefreshing] = useState(false);
-  const [search, setSearch] = useState('');
-  const [selectedProfile, setSelectedProfile] = useState<string>('');
-  const [sortMode, setSortMode] = useState<ClientSortMode>('');
-  const [lifecycleFilter, setLifecycleFilter] = useState<ClientLifecycleFilter>('');
+  const [search, setSearch] = useState(canRestoreSnapshot ? savedClientsSearch : '');
+  const [selectedProfile, setSelectedProfile] = useState<string>(canRestoreSnapshot ? savedClientsProfile : '');
+  const [sortMode, setSortMode] = useState<ClientSortMode>(canRestoreSnapshot ? savedClientsSort : '');
+  const [lifecycleFilter, setLifecycleFilter] = useState<ClientLifecycleFilter>(canRestoreSnapshot ? savedClientsLifecycle : '');
   const [error, setError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const clientsSyncInFlight = useRef(false);
-  const searchRef = useRef('');
-  const selectedProfileRef = useRef('');
+  const searchRef = useRef(canRestoreSnapshot ? savedClientsSearch : '');
+  const selectedProfileRef = useRef(canRestoreSnapshot ? savedClientsProfile : '');
+  const sortModeRef = useRef<ClientSortMode>(canRestoreSnapshot ? savedClientsSort : '');
+  const lifecycleFilterRef = useRef<ClientLifecycleFilter>(canRestoreSnapshot ? savedClientsLifecycle : '');
   const listRef = useRef<FlatList<Client> | null>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clientsRef = useRef<Client[]>([]);
   const loadRequestIdRef = useRef(0);
-  const hasLoadedRef = useRef(false);
-  const currentScrollOffsetRef = useRef(savedClientsScrollOffset);
+  const listRequestInFlightRef = useRef(false);
+  const currentPageRef = useRef(canRestoreSnapshot ? savedClientsPage : 1);
+  const pageSizeRef = useRef(savedClientsPageSize);
+  const pageCacheRef = useRef(savedClientsPageCache);
+  const pageRequestsRef = useRef(new Map<string, Promise<ClientsPageResult>>());
+  const pageCacheGenerationRef = useRef(0);
+  const detailScopeRef = useRef(token || '');
+  const hasLoadedRef = useRef(canRestoreSnapshot && savedClientsSnapshot.length > 0);
+  const currentScrollOffsetRef = useRef(readSavedClientsScrollOffset());
   const isRestrictedUser = user?.role === 'user';
   const canViewClientPanel = user?.role !== 'user' || Boolean(user?.client_panel_access);
-  const sortedClients = useMemo(() => {
-    const filtered = lifecycleFilter
-      ? clients.filter((client) => lifecycleFilter === 'active' ? !client.is_finalized : !!client.is_finalized)
-      : clients;
-    if (!sortMode) return filtered;
-    const copy = [...filtered];
-    copy.sort((a, b) => {
-      if (sortMode === 'new') return clientCreatedTime(b) - clientCreatedTime(a);
-      if (sortMode === 'old') return clientCreatedTime(a) - clientCreatedTime(b);
-      const aName = (a.name || '').localeCompare(b.name || '', 'ro', { sensitivity: 'base' });
-      return sortMode === 'name_az' ? aName : -aName;
-    });
-    return copy;
-  }, [clients, lifecycleFilter, sortMode]);
+  const sortedClients = clients;
 
   useEffect(() => {
     clientsRef.current = clients;
     savedClientsSnapshot = clients;
-  }, [clients]);
+    savedClientsTotal = totalClients;
+    savedClientsPage = loadedPage;
+    savedClientsHasMore = hasMore;
+    savedClientsPageSize = pageSize;
+    savedClientsSnapshotToken = token || '';
+    savedClientsSearch = search;
+    savedClientsProfile = selectedProfile;
+    savedClientsSort = sortMode;
+    savedClientsLifecycle = lifecycleFilter;
+  }, [clients, hasMore, lifecycleFilter, loadedPage, pageSize, search, selectedProfile, sortMode, token, totalClients]);
+
+  useEffect(() => {
+    detailScopeRef.current = token || '';
+  }, [token]);
+
+  const fetchClientsPage = useCallback((request: ClientsTableQuery, preferCache = false) => {
+    const key = clientsPageCacheKey(request, token || '');
+    const cached = preferCache ? pageCacheRef.current.get(key) : undefined;
+    if (cached) {
+      pageCacheRef.current.delete(key);
+      pageCacheRef.current.set(key, cached);
+      return Promise.resolve(cached);
+    }
+    const pending = preferCache ? pageRequestsRef.current.get(key) : undefined;
+    if (pending) return pending;
+    const generation = pageCacheGenerationRef.current;
+    const networkRequest = getClientsPage(token || '', request, preferCache);
+    pageRequestsRef.current.set(key, networkRequest);
+    void networkRequest.then((result) => {
+      if (generation !== pageCacheGenerationRef.current) return;
+      const cache = pageCacheRef.current;
+      const remember = (cacheKey: string, value: ClientsPageResult) => {
+        if (cache.has(cacheKey)) cache.delete(cacheKey);
+        const limit = clientsPageCacheLimit(request.pageSize || DEFAULT_CLIENTS_PAGE_SIZE);
+        while (cache.size >= limit) {
+          const oldest = cache.keys().next().value;
+          if (!oldest) break;
+          cache.delete(oldest);
+        }
+        cache.set(cacheKey, value);
+      };
+      const prefetchEndPage = result.prefetch_pages?.reduce(
+        (furthest, item) => Math.max(furthest, item.page),
+        result.page
+      ) ?? result.page;
+      remember(key, {
+        ...result,
+        prefetch_pages: undefined,
+        prefetch_end_page: prefetchEndPage,
+      });
+      result.prefetch_pages?.forEach((prefetched) => {
+        const prefetchedRequest = { ...request, page: prefetched.page };
+        remember(clientsPageCacheKey(prefetchedRequest, token || ''), {
+          ...result,
+          items: prefetched.items,
+          page: prefetched.page,
+          has_more: prefetched.has_more,
+          prefetch_pages: undefined,
+          prefetch_end_page: prefetchEndPage,
+        });
+      });
+    }, () => {}).finally(() => {
+      if (pageRequestsRef.current.get(key) === networkRequest) pageRequestsRef.current.delete(key);
+    });
+    return networkRequest;
+  }, [token]);
 
   const load = useCallback(async (
     q?: string,
     profileId?: string,
-    options: { restoreScroll?: boolean; silent?: boolean } = {}
+    options: { restoreScroll?: boolean; silent?: boolean; page?: number; append?: boolean; preferCache?: boolean; scrollToTop?: boolean } = {}
   ) => {
     if (!canViewClientPanel) {
       setClients([]);
@@ -124,15 +294,45 @@ export default function ClientsScreen() {
       return;
     }
     const requestId = ++loadRequestIdRef.current;
+    listRequestInFlightRef.current = true;
+    const page = Math.max(options.page || 1, 1);
+    if (options.append) setLoadingMore(true);
     try {
       if (!options.silent) setError('');
-      const data = await getClients(q, profileId, token);
+      const activeSort = sortModeRef.current;
+      const request: ClientsTableQuery = {
+        search: q?.trim() || undefined,
+        profileId: profileId || undefined,
+        lifecycle: lifecycleFilterRef.current || undefined,
+        sortBy: activeSort === 'name_az' || activeSort === 'name_za' ? 'name' : 'created_at',
+        sortDir: activeSort === 'old' || activeSort === 'name_az' ? 'asc' : 'desc',
+        page,
+        pageSize: pageSizeRef.current,
+      };
+      if (options.preferCache && !pageCacheRef.current.has(clientsPageCacheKey(request, token || ''))) setLoadingMore(true);
+      const data = await fetchClientsPage(request, options.preferCache);
       if (requestId !== loadRequestIdRef.current) return;
-      setClients((current) => clientsVersion(current) === clientsVersion(data) ? current : data);
-      if (options.restoreScroll !== false) {
+      const hydratedItems = mergeCachedClientRelations(token || '', data.items);
+      setClients((current) => {
+        const next = options.append
+          ? [...current, ...hydratedItems.filter((item) => !current.some((currentItem) => currentItem.id === item.id))]
+          : hydratedItems;
+        return clientsVersion(current) === clientsVersion(next) ? current : next;
+      });
+      setTotalClients(data.total);
+      setLoadedPage(data.page);
+      currentPageRef.current = data.page;
+      setHasMore(data.has_more);
+      const furthestPrefetchedPage = data.prefetch_pages?.reduce((max, item) => Math.max(max, item.page), data.page) ?? data.page;
+      if ((furthestPrefetchedPage * data.page_size) < data.total) {
+        void fetchClientsPage({ ...request, page: furthestPrefetchedPage + 1 }, true).catch(() => {});
+      }
+      if (options.scrollToTop) requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: false }));
+      if (!options.append && options.restoreScroll !== false) {
         requestAnimationFrame(() => {
-          if (savedClientsScrollOffset > 0) {
-            listRef.current?.scrollToOffset({ offset: savedClientsScrollOffset, animated: false });
+          const savedOffset = readSavedClientsScrollOffset();
+          if (savedOffset > 0) {
+            listRef.current?.scrollToOffset({ offset: savedOffset, animated: false });
           }
         });
       }
@@ -145,8 +345,30 @@ export default function ClientsScreen() {
             : (e?.message || 'Eroare la incarcarea clientilor.')
         );
       }
+    } finally {
+      if (requestId === loadRequestIdRef.current) {
+        setLoadingMore(false);
+        listRequestInFlightRef.current = false;
+      }
     }
-  }, [canViewClientPanel, token]);
+  }, [canViewClientPanel, fetchClientsPage, token]);
+
+  useEffect(() => {
+    let active = true;
+    void SecureStore.getItemAsync(CLIENTS_PAGE_SIZE_KEY).then((saved) => {
+      const nextSize = Number(saved || DEFAULT_CLIENTS_PAGE_SIZE);
+      if (!active || !TABLE_PAGE_SIZES.has(nextSize) || nextSize === pageSizeRef.current) return;
+      pageSizeRef.current = nextSize;
+      setPageSize(nextSize);
+      savedClientsPageSize = nextSize;
+      pageCacheGenerationRef.current += 1;
+      pageCacheRef.current.clear();
+      pageRequestsRef.current.clear();
+    }).catch(() => {}).finally(() => {
+      if (active) setPageSizeReady(true);
+    });
+    return () => { active = false; };
+  }, []);
 
   const loadProfiles = useCallback(async () => {
     try {
@@ -157,34 +379,59 @@ export default function ClientsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (!pageSizeReady) return undefined;
       let active = true;
-      if (!hasLoadedRef.current && clientsRef.current.length === 0) {
+      let frame: number | null = null;
+      let interactionTask: ReturnType<typeof runWhenIdle> | null = null;
+      const hasSnapshot = hasLoadedRef.current;
+
+      if (!hasSnapshot && clientsRef.current.length === 0) {
         setLoading(true);
       }
-      (async () => {
-        const freshUser = await refreshUser();
-        const freshCanViewClientPanel = freshUser?.role !== 'user' || Boolean(freshUser?.client_panel_access);
-        if (!freshCanViewClientPanel) {
-          setClients([]);
-          router.replace('/(tabs)/scanner');
-          return;
-        }
-        await Promise.all([load(searchRef.current, selectedProfileRef.current), loadProfiles()]);
-      })().finally(() => {
-        if (active) {
-          hasLoadedRef.current = true;
-          setLoading(false);
-        }
-      });
+
+      const revalidate = () => {
+        if (!active) return;
+        const listRequest = load(searchRef.current, selectedProfileRef.current, {
+          page: currentPageRef.current,
+          restoreScroll: false,
+          silent: hasSnapshot,
+          preferCache: !hasSnapshot,
+        });
+        void listRequest.finally(() => {
+          if (active) {
+            hasLoadedRef.current = true;
+            setLoading(false);
+          }
+        });
+        void loadProfiles();
+        void refreshUser().then((freshUser) => {
+          if (!active) return;
+          const freshCanViewClientPanel = freshUser?.role !== 'user' || Boolean(freshUser?.client_panel_access);
+          if (!freshCanViewClientPanel) {
+            setClients([]);
+            router.replace('/(tabs)/scanner');
+          }
+        });
+      };
+
+      if (hasSnapshot) {
+        frame = requestAnimationFrame(() => {
+          interactionTask = runWhenIdle(revalidate);
+        });
+      } else {
+        revalidate();
+      }
+
       return () => {
         active = false;
+        if (frame !== null) cancelAnimationFrame(frame);
+        interactionTask?.cancel();
       };
-    }, [load, loadProfiles, refreshUser, router])
+    }, [load, loadProfiles, pageSizeReady, refreshUser, router])
   );
 
   useEffect(() => {
     if (!canViewClientPanel) {
-      setClients([]);
       router.replace('/(tabs)/scanner');
     }
   }, [canViewClientPanel, router]);
@@ -207,7 +454,7 @@ export default function ClientsScreen() {
     if (!token || !canViewClientPanel || clientsSyncInFlight.current || AppState.currentState !== 'active') return;
     clientsSyncInFlight.current = true;
     try {
-      await load(searchRef.current, selectedProfileRef.current, { restoreScroll: false, silent: true });
+      await load(searchRef.current, selectedProfileRef.current, { page: currentPageRef.current, restoreScroll: false, silent: true, preferCache: false });
     } finally {
       clientsSyncInFlight.current = false;
     }
@@ -218,7 +465,7 @@ export default function ClientsScreen() {
   }, []);
 
   const onSearch = useCallback((text: string) => {
-    savedClientsScrollOffset = 0;
+    rememberClientsScrollOffset(0);
     currentScrollOffsetRef.current = 0;
     searchRef.current = text;
     setSearch(text);
@@ -232,7 +479,7 @@ export default function ClientsScreen() {
   }, [load]);
 
   const onSelectProfile = (id: string) => {
-    savedClientsScrollOffset = 0;
+    rememberClientsScrollOffset(0);
     currentScrollOffsetRef.current = 0;
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     const next = selectedProfile === id ? '' : id;
@@ -242,27 +489,66 @@ export default function ClientsScreen() {
   };
 
   const onSelectSort = useCallback((mode: Exclude<ClientSortMode, ''>) => {
-    savedClientsScrollOffset = 0;
+    rememberClientsScrollOffset(0);
     currentScrollOffsetRef.current = 0;
-    setSortMode((current) => current === mode ? '' : mode);
+    const next = sortModeRef.current === mode ? '' : mode;
+    sortModeRef.current = next;
+    setSortMode(next);
+    load(searchRef.current, selectedProfileRef.current, { restoreScroll: false });
     requestAnimationFrame(() => {
       listRef.current?.scrollToOffset({ offset: 0, animated: true });
     });
-  }, []);
+  }, [load]);
 
   const onSelectLifecycle = useCallback((mode: Exclude<ClientLifecycleFilter, ''>) => {
-    savedClientsScrollOffset = 0;
+    rememberClientsScrollOffset(0);
     currentScrollOffsetRef.current = 0;
-    setLifecycleFilter((current) => current === mode ? '' : mode);
+    const next = lifecycleFilterRef.current === mode ? '' : mode;
+    lifecycleFilterRef.current = next;
+    setLifecycleFilter(next);
+    load(searchRef.current, selectedProfileRef.current, { restoreScroll: false });
     requestAnimationFrame(() => {
       listRef.current?.scrollToOffset({ offset: 0, animated: true });
     });
-  }, []);
+  }, [load]);
 
   const openClient = useCallback((clientId: string) => {
-    savedClientsScrollOffset = currentScrollOffsetRef.current;
+    rememberClientsScrollOffset(currentScrollOffsetRef.current);
     router.push(`/client/${clientId}`);
   }, [router]);
+
+  const hydrateClientDetails = useCallback((client: Client) => {
+    if (!token) return;
+    const requestScope = token;
+    const key = clientDetailCacheKey(requestScope, client.id);
+    const cached = savedClientDetailCache.get(key);
+    const commit = (detail: Client) => {
+      if (detailScopeRef.current !== requestScope) return;
+      setClients((current) => current.map((item) => item.id === detail.id ? { ...item, ...detail } : item));
+    };
+    if (cached) {
+      savedClientDetailCache.delete(key);
+      savedClientDetailCache.set(key, cached);
+      commit(cached.value);
+      const sameVersion = !client.updated_at
+        || !cached.value.updated_at
+        || client.updated_at === cached.value.updated_at;
+      if (sameVersion && Date.now() - cached.cachedAt < CLIENT_DETAIL_CACHE_TTL_MS) return;
+    }
+    let pending = savedClientDetailRequests.get(key);
+    if (!pending) {
+      pending = getClientById(client.id, token);
+      savedClientDetailRequests.set(key, pending);
+      void pending.finally(() => {
+        if (savedClientDetailRequests.get(key) === pending) savedClientDetailRequests.delete(key);
+      }).catch(() => {});
+    }
+    void pending.then((detail) => {
+      if (!detail || detailScopeRef.current !== requestScope) return;
+      rememberClientDetail(key, detail);
+      commit(detail);
+    }).catch(() => {});
+  }, [token]);
 
   const canDeleteClient = useCallback((client: Client) => (
     user?.role === 'admin' || (user?.role === 'manager' && !client.is_finalized)
@@ -289,14 +575,43 @@ export default function ClientsScreen() {
     setDeleteError('');
     try {
       await deleteClient(deleteTarget.id, token);
-      setClients((current) => current.filter((item) => item.id !== deleteTarget.id));
+      pageCacheGenerationRef.current += 1;
+      pageCacheRef.current.clear();
+      pageRequestsRef.current.clear();
+      const detailKey = token ? clientDetailCacheKey(token, deleteTarget.id) : '';
+      if (detailKey) {
+        savedClientDetailCache.delete(detailKey);
+        savedClientDetailRequests.delete(detailKey);
+      }
+      const nextTotal = Math.max(0, totalClients - 1);
+      const targetPage = Math.min(
+        currentPageRef.current,
+        Math.max(1, Math.ceil(nextTotal / pageSizeRef.current))
+      );
+      const nextClients = targetPage === currentPageRef.current
+        ? clientsRef.current.filter((item) => item.id !== deleteTarget.id)
+        : [];
+      const nextHasMore = targetPage * pageSizeRef.current < nextTotal;
+      clientsRef.current = nextClients;
+      currentPageRef.current = targetPage;
+      setClients(nextClients);
+      setTotalClients(nextTotal);
+      setLoadedPage(targetPage);
+      setHasMore(nextHasMore);
       setDeleteTarget(null);
+      void load(searchRef.current, selectedProfileRef.current, {
+        page: targetPage,
+        restoreScroll: false,
+        silent: true,
+        preferCache: true,
+        scrollToTop: true,
+      });
     } catch (error: any) {
       setDeleteError(error?.message || 'Clientul nu a putut fi sters. Incearca din nou.');
     } finally {
       setDeleteLoading(false);
     }
-  }, [deleteTarget, token]);
+  }, [deleteTarget, load, token, totalClients]);
 
   const openClientWhatsApp = useCallback(async (client: Client) => {
     let phone = String(client.phone || '').replace(/\D/g, '');
@@ -335,11 +650,74 @@ export default function ClientsScreen() {
         onPress={openClient}
         onDelete={requestDeleteClient}
         onWhatsApp={openClientWhatsApp}
+        onExpand={hydrateClientDetails}
         canDelete={canDeleteClient(item)}
       />
     ),
-    [canDeleteClient, openClient, openClientWhatsApp, requestDeleteClient]
+    [canDeleteClient, hydrateClientDetails, openClient, openClientWhatsApp, requestDeleteClient]
   );
+
+  const changePage = useCallback((page: number) => {
+    if (page < 1 || (page > loadedPage && !hasMore)) return;
+    rememberClientsScrollOffset(0);
+    currentScrollOffsetRef.current = 0;
+    const activeSort = sortModeRef.current;
+    const request: ClientsTableQuery = {
+      search: searchRef.current.trim() || undefined,
+      profileId: selectedProfileRef.current || undefined,
+      lifecycle: lifecycleFilterRef.current || undefined,
+      sortBy: activeSort === 'name_az' || activeSort === 'name_za' ? 'name' : 'created_at',
+      sortDir: activeSort === 'old' || activeSort === 'name_az' ? 'asc' : 'desc',
+      page,
+      pageSize: pageSizeRef.current,
+    };
+    const cacheKey = clientsPageCacheKey(request, token || '');
+    const cached = pageCacheRef.current.get(cacheKey);
+    if (cached) {
+      loadRequestIdRef.current += 1;
+      listRequestInFlightRef.current = false;
+      setLoadingMore(false);
+      pageCacheRef.current.delete(cacheKey);
+      pageCacheRef.current.set(cacheKey, cached);
+      setClients(mergeCachedClientRelations(token || '', cached.items));
+      setTotalClients(cached.total);
+      setLoadedPage(cached.page);
+      currentPageRef.current = cached.page;
+      setHasMore(cached.has_more);
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      });
+      const furthest = cached.prefetch_end_page
+        ?? cached.prefetch_pages?.reduce((max, item) => Math.max(max, item.page), cached.page)
+        ?? cached.page;
+      if ((furthest * cached.page_size) < cached.total) void fetchClientsPage({ ...request, page: furthest + 1 }, true).catch(() => {});
+      return;
+    }
+    void load(searchRef.current, selectedProfileRef.current, {
+      restoreScroll: false,
+      silent: true,
+      page,
+      preferCache: true,
+      scrollToTop: true,
+    });
+  }, [fetchClientsPage, hasMore, load, loadedPage, token]);
+
+  const changePageSize = useCallback((nextSize: number) => {
+    if (!TABLE_PAGE_SIZES.has(nextSize) || nextSize === pageSizeRef.current) return;
+    loadRequestIdRef.current += 1;
+    listRequestInFlightRef.current = false;
+    setLoadingMore(false);
+    pageSizeRef.current = nextSize;
+    setPageSize(nextSize);
+    setLoadedPage(1);
+    currentPageRef.current = 1;
+    savedClientsPageSize = nextSize;
+    pageCacheGenerationRef.current += 1;
+    pageCacheRef.current.clear();
+    pageRequestsRef.current.clear();
+    void SecureStore.setItemAsync(CLIENTS_PAGE_SIZE_KEY, String(nextSize)).catch(() => {});
+    void load(searchRef.current, selectedProfileRef.current, { page: 1, restoreScroll: false, silent: true, scrollToTop: true });
+  }, [load]);
 
   const renderEmpty = () => (
     <View style={styles.empty}>
@@ -476,14 +854,15 @@ export default function ClientsScreen() {
         <FlatList
           ref={listRef}
           data={sortedClients}
-          keyExtractor={(item) => item.id}
+          keyExtractor={clientPageSlotKey}
           renderItem={renderClient}
           ListEmptyComponent={renderEmpty}
+          ListFooterComponent={sortedClients.length ? <TablePagination page={loadedPage} pageSize={pageSize} total={totalClients} loading={loadingMore} onPageChange={changePage} onPageSizeChange={changePageSize} /> : null}
           contentContainerStyle={styles.list}
-          initialNumToRender={8}
-          maxToRenderPerBatch={8}
-          updateCellsBatchingPeriod={50}
-          windowSize={7}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={16}
+          windowSize={5}
           removeClippedSubviews={Platform.OS === 'android'}
           refreshControl={
             <RefreshControl
@@ -496,15 +875,11 @@ export default function ClientsScreen() {
           onScroll={(event) => {
             const offset = event.nativeEvent.contentOffset.y;
             currentScrollOffsetRef.current = offset;
-            savedClientsScrollOffset = offset;
+            rememberClientsScrollOffset(offset);
           }}
           scrollEventThrottle={16}
         />
       )}
-
-      <View style={styles.countBar}>
-        <Text style={styles.countText}>{sortedClients.length} clienti</Text>
-      </View>
 
       <Modal visible={!!deleteTarget} transparent animationType="fade" onRequestClose={closeDeleteModal}>
         <View style={styles.deleteOverlay}>
@@ -683,12 +1058,30 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: 'rgba(20,20,20,0.84)',
+    minHeight: 58,
     paddingVertical: 6,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 14,
     alignItems: 'center',
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.08)',
   },
   countText: { color: Colors.textMuted, fontSize: 11, fontFamily: 'Inter-Regular' },
+  pageRange: { color: Colors.textMuted, fontSize: 9, fontFamily: 'Inter-Regular', marginTop: 2 },
+  pageLabel: { minWidth: 120, minHeight: 36, alignItems: 'center', justifyContent: 'center' },
+  pageButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+  },
+  pageButtonDisabled: { opacity: 0.38 },
   deleteOverlay: {
     flex: 1,
     alignItems: 'center',

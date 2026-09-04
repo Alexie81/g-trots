@@ -18,12 +18,6 @@ final class GtrotsInvoiceService
 
         $db->beginTransaction();
         try {
-            $existing = self::findByOrder($db, $orderId, true);
-            if ($existing) {
-                $db->commit();
-                return self::row($existing, true, self::canDelete($db, $existing));
-            }
-
             $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
             $lockSuffix = $driver === 'sqlite' ? '' : ' FOR UPDATE';
             $orderStmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ?' . $lockSuffix);
@@ -32,6 +26,12 @@ final class GtrotsInvoiceService
             if (!$order) throw new InvalidArgumentException('Comanda nu există.');
             if (in_array((string)($order['status'] ?? ''), ['cancelled', 'refunded'], true)) {
                 throw new InvalidArgumentException('Nu poți emite o factură normală pentru o comandă anulată sau rambursată.');
+            }
+
+            $existing = self::findByOrder($db, $orderId, true);
+            if ($existing) {
+                $db->commit();
+                return self::row($existing, true, self::canDelete($db, $existing));
             }
 
             $company = $db->query('SELECT * FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
@@ -75,6 +75,7 @@ final class GtrotsInvoiceService
                 $encoded,
                 $assignedBy,
             ]);
+            if (class_exists('GtrotsSpvService')) GtrotsSpvService::enqueue($db, $invoiceId, 'invoice');
             $db->commit();
 
             $saved = self::find($db, $invoiceId);
@@ -86,6 +87,113 @@ final class GtrotsInvoiceService
             if ($db->inTransaction()) $db->rollBack();
             throw $error;
         }
+    }
+
+    /**
+     * Issues one full return invoice for an order. Return documents share the
+     * active invoice series and consume the next number from the same sequence.
+     */
+    public static function issueReturn(PDO $db, string $orderId, string $reason, array $actor, array $config, bool $manageTransaction = true): array
+    {
+        $orderId = trim($orderId);
+        $reason = mb_substr(trim($reason), 0, 1000);
+        if ($orderId === '') throw new InvalidArgumentException('Comanda nu a fost selectată.');
+        if ($reason === '') throw new InvalidArgumentException('Motivul anulării este obligatoriu.');
+
+        if ($manageTransaction) $db->beginTransaction();
+        try {
+            $existingReturn = self::findByOrderType($db, $orderId, 'return', true);
+            if ($existingReturn) {
+                if ($manageTransaction) $db->commit();
+                return self::row($existingReturn, true, false);
+            }
+            $original = self::findByOrderType($db, $orderId, 'invoice', true);
+            if (!$original) throw new InvalidArgumentException('Comanda nu are o factură care poate fi returnată.');
+
+            $originalPayload = json_decode((string)($original['payload_json'] ?? ''), true, 512, JSON_THROW_ON_ERROR);
+            if (!is_array($originalPayload)) throw new RuntimeException('Datele facturii inițiale nu mai sunt disponibile.');
+            $documentSettings = GtrotsInvoiceThemeStore::settings($db);
+            $series = (string)($documentSettings['invoice_series'] ?? $original['series'] ?? 'GT');
+            $number = self::nextNumber($db, $series);
+            $invoiceId = self::uuid();
+            $issueDate = date('Y-m-d');
+            $assignedBy = mb_substr(trim((string)($actor['display_name'] ?? $actor['username'] ?? 'Sistem anulări')), 0, 180);
+
+            $payload = $originalPayload;
+            $payload['document_id'] = $invoiceId;
+            $payload['status'] = 'return';
+            $payload['series'] = $series;
+            $payload['number'] = $number;
+            $payload['issue_date'] = $issueDate;
+            $payload['due_date'] = $issueDate;
+            $payload['delivery_date'] = $issueDate;
+            $payload['amount_paid'] = 0;
+            $payload['return_reason'] = $reason;
+            $payload['order_reference'] = trim((string)($original['order_number'] ?? $originalPayload['order_reference'] ?? ''));
+            $payload['related_order'] = [
+                'order_number' => $payload['order_reference'],
+            ];
+            $payload['related_invoice'] = [
+                'series' => (string)$original['series'],
+                'number' => (string)$original['invoice_number'],
+                'date' => (string)$original['issue_date'],
+            ];
+            $payload['notes_label'] = 'Motivul returului';
+            $payload['notes'] = $reason;
+            if (!is_array($payload['payment'] ?? null)) $payload['payment'] = [];
+            $payload['payment']['reference'] = $series . ' ' . $number;
+
+            $assignment = GtrotsInvoiceThemeStore::pin($db, $payload, $assignedBy);
+            $payload['theme'] = $assignment['theme'];
+            $encoded = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+            $insert = $db->prepare(
+                'INSERT INTO shop_invoices
+                 (id, order_id, series, invoice_number, invoice_type, original_invoice_id, document_status, theme, issue_date, due_date, currency, total, buyer_name, buyer_cui, payload_json, issued_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            );
+            $insert->execute([
+                $invoiceId,
+                $orderId,
+                $series,
+                $number,
+                'return',
+                (string)$original['id'],
+                'return',
+                (string)$assignment['theme'],
+                $issueDate,
+                $issueDate,
+                (string)$original['currency'],
+                -abs((float)$original['total']),
+                (string)$original['buyer_name'],
+                (string)($original['buyer_cui'] ?? ''),
+                $encoded,
+                $assignedBy,
+            ]);
+            // Emiterea facturii de retur reprezintă și recepția fizică. Stocul
+            // este însă justificat de documentul separat „Retur client”, nu de
+            // factura fiscală în sine. Ambele sunt create în aceeași tranzacție.
+            self::postReturnStock($db, $original, $invoiceId, $series, $number, $reason, $actor);
+            if (class_exists('GtrotsSpvService')) GtrotsSpvService::enqueue($db, $invoiceId, 'credit_note');
+            if ($manageTransaction) $db->commit();
+
+            $saved = self::find($db, $invoiceId);
+            if (!$saved) throw new RuntimeException('Factura de retur a fost emisă, dar nu a putut fi recitită.');
+            if ($manageTransaction) self::warmStoredDocuments($db, $saved, $config);
+            return self::row($saved, false, false);
+        } catch (Throwable $error) {
+            if ($manageTransaction && $db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
+    }
+
+    public static function canDeleteOrderInvoice(PDO $db, array $invoice, bool $lock = false): bool
+    {
+        return self::canDelete($db, $invoice, $lock);
+    }
+
+    public static function removeStoredDocumentsForInvoice(array $invoice, array $config): void
+    {
+        self::removeStoredDocuments($invoice, $config);
     }
 
     public static function list(PDO $db): array
@@ -142,11 +250,12 @@ final class GtrotsInvoiceService
 
         $payload = self::detailPayload($db, $invoice, self::refreshPayloadState($invoice, $payload));
         $fileNumber = preg_replace('/[^A-Za-z0-9._-]+/', '-', (string)$invoice['invoice_number']) ?: 'factura';
+        $isReturn = (string)($invoice['invoice_type'] ?? '') === 'return' || (string)($invoice['document_status'] ?? '') === 'return';
         if ($format === 'xlsx') {
             require_once __DIR__ . '/invoice-xlsx.php';
             $xlsx = GtrotsInvoiceXlsx::render($payload);
             return [
-                'file_name' => 'Factura-' . (string)$invoice['series'] . '-' . $fileNumber . '.xlsx',
+                'file_name' => ($isReturn ? 'Factura-retur-' : 'Factura-') . (string)$invoice['series'] . '-' . $fileNumber . '.xlsx',
                 'mime_type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 'content_base64' => base64_encode($xlsx),
             ];
@@ -156,7 +265,7 @@ final class GtrotsInvoiceService
             $xml = GtrotsInvoiceUbl::render($payload);
             $validation = GtrotsInvoiceUbl::validateWithAnaf($xml, $config);
             return [
-                'file_name' => 'e-Factura-' . (string)$invoice['series'] . '-' . $fileNumber . '.xml',
+                'file_name' => ($isReturn ? 'e-Factura-retur-' : 'e-Factura-') . (string)$invoice['series'] . '-' . $fileNumber . '.xml',
                 'mime_type' => 'application/xml',
                 'content_base64' => base64_encode($xml),
                 'anaf_validation' => $validation,
@@ -165,7 +274,7 @@ final class GtrotsInvoiceService
         require_once __DIR__ . '/invoice-pdf.php';
         $pdf = GtrotsInvoicePdf::renderPinned($db, $payload, (string)($invoice['issued_by'] ?? ''));
         return [
-            'file_name' => 'Factura-' . (string)$invoice['series'] . '-' . $fileNumber . '.pdf',
+            'file_name' => ($isReturn ? 'Factura-retur-' : 'Factura-') . (string)$invoice['series'] . '-' . $fileNumber . '.pdf',
             'mime_type' => 'application/pdf',
             'content_base64' => base64_encode($pdf),
         ];
@@ -184,28 +293,50 @@ final class GtrotsInvoiceService
 
         try {
             $pdfFile = self::download($db, (string)$invoice['id'], 'pdf', $config);
-            $xlsxFile = self::download($db, (string)$invoice['id'], 'xlsx', $config);
             $number = trim((string)$invoice['series'] . ' ' . (string)$invoice['invoice_number']);
+            $isReturn = (string)($invoice['invoice_type'] ?? '') === 'return' || (string)($invoice['document_status'] ?? '') === 'return';
             $buyer = htmlspecialchars((string)($invoice['customer_name'] ?? $invoice['buyer_name'] ?? 'client'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $safeNumber = htmlspecialchars($number, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $safeCurrency = htmlspecialchars((string)$invoice['currency'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $safeOrderNumber = htmlspecialchars((string)($invoice['order_number'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $safeLogoUrl = htmlspecialchars((string)($config['order_email_logo_url'] ?? 'https://g-trots.ro/assets/logo.png'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $issueDate = htmlspecialchars(date('d.m.Y', strtotime((string)($invoice['issue_date'] ?? 'now'))), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $total = number_format((float)$invoice['total'], 2, ',', '.') . ' ' . $safeCurrency;
-            $statusText = self::effectiveStatus($invoice) === 'paid' ? 'Factura este achitată.' : 'Factura este emisă și este în așteptarea plății.';
-            $html = '<!doctype html><html lang="ro"><head><meta charset="utf-8"></head><body style="margin:0;background:#f5f5f5;font-family:Arial,sans-serif;color:#102346">'
-                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 14px">'
-                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#fff;border-radius:24px;overflow:hidden;border:1px solid #e4e7ec">'
-                . '<tr><td style="height:8px;background:#ff8a00"></td></tr><tr><td style="padding:32px">'
-                . '<div style="font-size:12px;font-weight:800;letter-spacing:.12em;color:#ff7a00">G-TROTS ROMÂNIA · FACTURĂ EMISĂ</div>'
-                . '<h1 style="margin:14px 0 8px;font-size:30px">Factura ' . $safeNumber . '</h1>'
-                . '<p style="color:#5f6673;line-height:1.6">Bună, ' . $buyer . '. Găsești factura atașată acestui e-mail în formatele PDF și XLSX.</p>'
-                . '<div style="margin:24px 0;padding:18px;border-radius:16px;background:#fff5e9"><strong style="font-size:22px">' . $total . '</strong><br><span style="color:#6e6257;font-size:13px">' . $statusText . '</span></div>'
-                . '<p style="margin:0;color:#7b8190;font-size:12px">Document generat automat din comanda ' . htmlspecialchars((string)($invoice['order_number'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '.</p>'
+            $statusText = $isReturn
+                ? 'Factura de retur corectează integral factura inițială aferentă comenzii anulate.'
+                : (self::effectiveStatus($invoice) === 'paid' ? 'Factura este achitată.' : 'Factura este emisă și este în așteptarea plății.');
+            $heading = $isReturn ? 'FACTURĂ DE RETUR EMISĂ' : 'FACTURĂ EMISĂ';
+            $title = $isReturn ? 'Factura de retur ' . $safeNumber : 'Factura ' . $safeNumber;
+            $accent = $isReturn ? '#fb7185' : '#ff8a00';
+            $accentBackground = $isReturn ? '#301a20' : '#2c2117';
+            $statusLabel = $isReturn ? 'RETUR' : (self::effectiveStatus($invoice) === 'paid' ? 'ACHITATĂ' : 'EMISĂ');
+            $intro = $isReturn
+                ? 'Găsești atașată factura de retur în format PDF.'
+                : 'Găsești factura atașată acestui e-mail în format PDF.';
+            $html = '<!doctype html><html lang="ro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"></head>'
+                . '<body style="margin:0;background:transparent;color:#fff8f3;font-family:Roboto,\'Segoe UI\',Arial,sans-serif;-webkit-font-smoothing:antialiased">'
+                . '<div style="display:none;max-height:0;overflow:hidden;opacity:0">' . $title . ' este atașată în format PDF.</div>'
+                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:transparent"><tr><td align="center" style="padding:30px 14px">'
+                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:650px;overflow:hidden;border:1px solid #3f3a42;border-radius:34px;background:#1d1b20">'
+                . '<tr><td style="height:8px;background:' . $accent . '"></td></tr><tr><td style="padding:28px 30px 32px">'
+                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="width:62px"><img src="' . $safeLogoUrl . '" width="54" height="54" alt="G-Trots România" style="display:block;width:54px;height:54px;border-radius:18px"></td>'
+                . '<td><strong style="display:block;color:#fff8f3;font-size:17px;line-height:1.2">G-Trots România</strong><span style="display:block;margin-top:4px;color:#9f979f;font-size:9px;font-weight:800;letter-spacing:.1em">SERVICE &amp; MAGAZIN</span></td>'
+                . '<td align="right"><span style="display:inline-block;padding:9px 12px;border:1px solid ' . $accent . '55;border-radius:999px;background:' . $accentBackground . ';color:' . $accent . ';font-size:9px;font-weight:900;letter-spacing:.08em">●&nbsp; ' . $statusLabel . '</span></td></tr></table>'
+                . '<div style="padding:31px 0 22px"><span style="display:block;color:' . $accent . ';font-size:9px;font-weight:900;letter-spacing:.14em">DOCUMENT FISCAL · ' . $heading . '</span>'
+                . '<h1 style="margin:10px 0 12px;color:#fff8f3;font-size:38px;line-height:1.04;letter-spacing:-.045em">' . $title . '</h1>'
+                . '<p style="margin:0;color:#b1a9b2;font-size:14px;line-height:1.65">Bună, ' . $buyer . '. ' . $intro . '</p></div>'
+                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #454048;border-radius:24px;background:#151318"><tr>'
+                . '<td style="padding:19px 20px"><span style="display:block;color:#8f8790;font-size:8px;font-weight:900;letter-spacing:.11em">TOTAL DOCUMENT</span><strong style="display:block;margin-top:7px;color:' . $accent . ';font-size:25px;line-height:1.1">' . $total . '</strong><span style="display:block;margin-top:7px;color:#aaa2ac;font-size:10px;line-height:1.5">' . $statusText . '</span></td>'
+                . '<td align="right" style="width:155px;padding:19px 20px;border-left:1px solid #37333a"><span style="display:block;color:#8f8790;font-size:8px;font-weight:900;letter-spacing:.1em">DATA EMITERII</span><strong style="display:block;margin-top:7px;color:#eee8ef;font-size:12px">' . $issueDate . '</strong><span style="display:block;margin-top:12px;color:#8f8790;font-size:8px;font-weight:900;letter-spacing:.1em">COMANDA</span><strong style="display:block;margin-top:5px;color:#ffb77a;font-size:10px;overflow-wrap:anywhere">' . $safeOrderNumber . '</strong></td>'
+                . '</tr></table>'
+                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:15px;border:1px solid #4a4035;border-radius:20px;background:#272018"><tr><td style="width:48px;padding:14px 0 14px 15px"><span style="display:block;width:38px;height:38px;line-height:38px;text-align:center;border-radius:13px;background:' . $accent . ';color:#1d1510;font-size:10px;font-weight:1000">PDF</span></td><td style="padding:14px"><strong style="display:block;color:#fff8f3;font-size:12px">Document atașat</strong><span style="display:block;margin-top:4px;color:#9f979f;font-size:10px;line-height:1.45">Factura este inclusă în acest e-mail doar în format PDF.</span></td></tr></table>'
+                . '<p style="margin:23px 0 0;text-align:center;color:#756e77;font-size:10px;line-height:1.65">Document generat automat pentru comanda <strong style="color:#aaa2ac">' . $safeOrderNumber . '</strong>.<br>Ai nevoie de ajutor? Răspunde direct la acest mesaj.</p>'
                 . '</td></tr></table></td></tr></table></body></html>';
-            gtSmtpSend($config, $recipient, 'Factura ' . $number . ' – G-Trots România', $html, array_map(static fn(array $file): array => [
+            gtSmtpSend($config, $recipient, ($isReturn ? 'Factura de retur ' : 'Factura ') . $number . ' – G-Trots România', $html, array_map(static fn(array $file): array => [
                 'file_name' => (string)$file['file_name'],
                 'mime_type' => (string)$file['mime_type'],
                 'content' => base64_decode((string)$file['content_base64'], true) ?: '',
-            ], [$pdfFile, $xlsxFile]));
+            ], [$pdfFile]));
             $result = ['sent' => true, 'recipient' => $recipient];
             self::recordEmailResult($db, (string)$invoice['id'], $result);
             return $result;
@@ -214,6 +345,50 @@ final class GtrotsInvoiceService
             $result = ['sent' => false, 'recipient' => $recipient, 'error' => mb_substr($error->getMessage(), 0, 500)];
             self::recordEmailResult($db, (string)$invoice['id'], $result);
             return $result;
+        }
+    }
+
+    /**
+     * Automatic flows use this method so two overlapping requests cannot send
+     * the same invoice twice. A deliberate resend from the invoice screen still
+     * calls sendEmail() directly.
+     */
+    public static function sendEmailOnce(PDO $db, string $id, array $config): array
+    {
+        $id = trim($id);
+        if ($id === '') throw new InvalidArgumentException('Factura nu a fost selectată.');
+        $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
+        $lockName = 'g-trots-invoice-email-' . preg_replace('/[^a-zA-Z0-9-]/', '', $id);
+        $locked = false;
+
+        if ($driver !== 'sqlite') {
+            $lock = $db->prepare('SELECT GET_LOCK(?, 15)');
+            $lock->execute([$lockName]);
+            $locked = (int)$lock->fetchColumn() === 1;
+            if (!$locked) return ['sent' => false, 'error' => 'Trimiterea facturii este deja în curs.'];
+        }
+
+        try {
+            $invoice = self::find($db, $id);
+            if (!$invoice) throw new InvalidArgumentException('Factura nu există.');
+            if (!empty($invoice['email_sent_at'])) {
+                return [
+                    'sent' => true,
+                    'recipient' => mb_strtolower(trim((string)($invoice['customer_email'] ?? ''))),
+                    'skipped' => true,
+                    'already_sent' => true,
+                ];
+            }
+            return self::sendEmail($db, $id, $config);
+        } finally {
+            if ($locked) {
+                try {
+                    $release = $db->prepare('SELECT RELEASE_LOCK(?)');
+                    $release->execute([$lockName]);
+                } catch (Throwable $error) {
+                    error_log('[G-Trots invoice email lock] ' . $error->getMessage());
+                }
+            }
         }
     }
 
@@ -264,12 +439,12 @@ final class GtrotsInvoiceService
      * inventory/FIFO effect produced by issuing it. The released sequence is
      * intentionally reused by the next invoice in the same series.
      */
-    public static function delete(PDO $db, string $id, array $config): array
+    public static function delete(PDO $db, string $id, array $config, bool $manageTransaction = true): array
     {
         $id = trim($id);
         if ($id === '') throw new InvalidArgumentException('Factura nu a fost selectată.');
         $deletedInvoice = null;
-        $db->beginTransaction();
+        if ($manageTransaction) $db->beginTransaction();
         try {
             $invoice = self::findForUpdate($db, $id);
             if (!$invoice) throw new InvalidArgumentException('Factura nu există.');
@@ -285,14 +460,17 @@ final class GtrotsInvoiceService
                 ->execute([(string)$invoice['id'], (string)$invoice['series'], (string)$invoice['invoice_number']]);
             $db->prepare('DELETE FROM shop_invoices WHERE id = ?')->execute([$id]);
             self::resetSequence($db, (string)$invoice['series']);
-            $db->commit();
+            if ($manageTransaction) $db->commit();
             $deletedInvoice = $invoice;
         } catch (Throwable $error) {
-            if ($db->inTransaction()) $db->rollBack();
+            if ($manageTransaction && $db->inTransaction()) $db->rollBack();
             throw $error;
         }
 
-        if (is_array($deletedInvoice)) self::removeStoredDocuments($deletedInvoice, $config);
+        // When this method participates in the caller's transaction, the caller
+        // removes files only after its own commit. Otherwise a later rollback
+        // could restore the DB row while its immutable documents were gone.
+        if ($manageTransaction && is_array($deletedInvoice)) self::removeStoredDocuments($deletedInvoice, $config);
         return [
             'deleted' => true,
             'id' => $id,
@@ -323,9 +501,36 @@ final class GtrotsInvoiceService
         ];
     }
 
+    public static function orderReturnSummary(array $row): ?array
+    {
+        $id = trim((string)($row['return_invoice_join_id'] ?? ''));
+        if ($id === '') return null;
+        return [
+            'id' => $id,
+            'order_id' => (string)($row['id'] ?? $row['order_id'] ?? ''),
+            'series' => (string)($row['return_invoice_join_series'] ?? ''),
+            'number' => (string)($row['return_invoice_join_number'] ?? ''),
+            'display_number' => trim((string)($row['return_invoice_join_series'] ?? '') . ' ' . (string)($row['return_invoice_join_number'] ?? '')),
+            'invoice_type' => 'return',
+            'original_invoice_id' => ($row['return_invoice_join_original_id'] ?? null) !== null ? (string)$row['return_invoice_join_original_id'] : null,
+            'status' => 'return',
+            'theme' => (string)($row['return_invoice_join_theme'] ?? 'orange'),
+            'spv_status' => (string)($row['return_invoice_join_spv_status'] ?? 'not_sent'),
+            'spv_sent_at' => ($row['return_invoice_join_spv_sent_at'] ?? null) !== null ? (string)$row['return_invoice_join_spv_sent_at'] : null,
+            'customer_email' => (string)($row['customer_email'] ?? ''),
+            'issue_date' => (string)($row['return_invoice_join_date'] ?? ''),
+            'total' => round((float)($row['return_invoice_join_total'] ?? 0), 2),
+            'currency' => strtoupper(trim((string)($row['return_invoice_join_currency'] ?? $row['currency'] ?? 'RON'))) ?: 'RON',
+            'issued_at' => (string)($row['return_invoice_join_at'] ?? ''),
+            'email_sent_at' => ($row['return_invoice_join_email_sent_at'] ?? null) !== null ? (string)$row['return_invoice_join_email_sent_at'] : null,
+            'can_delete' => false,
+        ];
+    }
+
     public static function orderJoinSql(string $orderAlias = 'o'): string
     {
-        return " LEFT JOIN shop_invoices issued_invoice ON issued_invoice.order_id = {$orderAlias}.id ";
+        return " LEFT JOIN shop_invoices issued_invoice ON issued_invoice.order_id = {$orderAlias}.id AND issued_invoice.invoice_type = 'invoice'"
+            . " LEFT JOIN shop_invoices return_invoice_join ON return_invoice_join.order_id = {$orderAlias}.id AND return_invoice_join.invoice_type = 'return' ";
     }
 
     public static function orderJoinColumns(): string
@@ -337,7 +542,19 @@ final class GtrotsInvoiceService
                   issued_invoice.spv_status AS issued_invoice_spv_status,
                   issued_invoice.spv_sent_at AS issued_invoice_spv_sent_at,
                   issued_invoice.issue_date AS issued_invoice_date,
-                  issued_invoice.issued_at AS issued_invoice_at';
+                  issued_invoice.issued_at AS issued_invoice_at,
+                  return_invoice_join.id AS return_invoice_join_id,
+                  return_invoice_join.series AS return_invoice_join_series,
+                  return_invoice_join.invoice_number AS return_invoice_join_number,
+                  return_invoice_join.original_invoice_id AS return_invoice_join_original_id,
+                  return_invoice_join.theme AS return_invoice_join_theme,
+                  return_invoice_join.spv_status AS return_invoice_join_spv_status,
+                  return_invoice_join.spv_sent_at AS return_invoice_join_spv_sent_at,
+                  return_invoice_join.issue_date AS return_invoice_join_date,
+                  return_invoice_join.total AS return_invoice_join_total,
+                  return_invoice_join.currency AS return_invoice_join_currency,
+                  return_invoice_join.email_sent_at AS return_invoice_join_email_sent_at,
+                  return_invoice_join.issued_at AS return_invoice_join_at';
     }
 
     private static function find(PDO $db, string $id): ?array
@@ -365,15 +582,20 @@ final class GtrotsInvoiceService
 
     private static function findByOrder(PDO $db, string $orderId, bool $lock): ?array
     {
+        return self::findByOrderType($db, $orderId, 'invoice', $lock);
+    }
+
+    private static function findByOrderType(PDO $db, string $orderId, string $invoiceType, bool $lock): ?array
+    {
         $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
         $suffix = $lock && $driver !== 'sqlite' ? ' FOR UPDATE' : '';
         $stmt = $db->prepare(
             'SELECT i.*, o.order_number, o.payment_status, o.payment_method, o.stripe_paid_at, o.customer_name, o.customer_email, o.customer_phone
              FROM shop_invoices i
              INNER JOIN shop_orders o ON o.id = i.order_id
-             WHERE i.order_id = ? LIMIT 1' . $suffix
+             WHERE i.order_id = ? AND i.invoice_type = ? LIMIT 1' . $suffix
         );
-        $stmt->execute([$orderId]);
+        $stmt->execute([$orderId, $invoiceType]);
         $row = $stmt->fetch();
         return $row ?: null;
     }
@@ -388,6 +610,8 @@ final class GtrotsInvoiceService
             'series' => (string)$row['series'],
             'number' => (string)$row['invoice_number'],
             'display_number' => trim((string)$row['series'] . ' ' . (string)$row['invoice_number']),
+            'invoice_type' => (string)($row['invoice_type'] ?? 'invoice'),
+            'original_invoice_id' => ($row['original_invoice_id'] ?? null) !== null ? (string)$row['original_invoice_id'] : null,
             'status' => $status,
             'theme' => (string)$row['theme'],
             'issue_date' => (string)$row['issue_date'],
@@ -404,7 +628,9 @@ final class GtrotsInvoiceService
             'customer_email' => (string)($row['customer_email'] ?? ''),
             'email_sent_at' => ($row['email_sent_at'] ?? null) !== null ? (string)$row['email_sent_at'] : null,
             'email_last_error' => ($row['email_last_error'] ?? null) !== null ? (string)$row['email_last_error'] : null,
-            'spv_status' => (string)($row['spv_status'] ?? 'not_sent') === 'sent' ? 'sent' : 'not_sent',
+            'spv_status' => in_array((string)($row['spv_status'] ?? 'not_sent'), ['sent', 'processing', 'error', 'rejected'], true)
+                ? (string)$row['spv_status']
+                : 'not_sent',
             'spv_sent_at' => ($row['spv_sent_at'] ?? null) !== null ? (string)$row['spv_sent_at'] : null,
             'spv_submission_id' => ($row['spv_submission_id'] ?? null) !== null ? (string)$row['spv_submission_id'] : null,
             'can_delete' => $canDelete,
@@ -414,6 +640,7 @@ final class GtrotsInvoiceService
 
     private static function effectiveStatus(array $row): string
     {
+        if ((string)($row['invoice_type'] ?? '') === 'return' || (string)($row['document_status'] ?? '') === 'return') return 'return';
         if (array_key_exists('payment_status', $row)) return self::statusForOrder($row);
         return in_array((string)($row['document_status'] ?? ''), ['paid', 'unpaid'], true)
             ? (string)$row['document_status']
@@ -541,10 +768,11 @@ final class GtrotsInvoiceService
 
         $safeSeries = preg_replace('/[^A-Za-z0-9._-]+/', '-', (string)$invoice['series']) ?: 'GT';
         $safeNumber = preg_replace('/[^A-Za-z0-9._-]+/', '-', (string)$invoice['invoice_number']) ?: 'factura';
+        $isReturn = (string)($invoice['invoice_type'] ?? '') === 'return' || (string)($invoice['document_status'] ?? '') === 'return';
         $secret = (string)($config['api_key'] ?? '');
         $token = substr(hash('sha256', (string)$invoice['id'] . '|' . $secret . '|gtrots-invoice-public-v1'), 0, 32);
-        $storedName = strtolower('factura-' . $safeSeries . '-' . $safeNumber . '-' . $token . '.' . $format);
-        $friendlyName = ($format === 'xml' ? 'e-Factura-' : 'Factura-') . $safeSeries . '-' . $safeNumber . '.' . $format;
+        $storedName = strtolower(($isReturn ? 'factura-retur-' : 'factura-') . $safeSeries . '-' . $safeNumber . '-' . $token . '.' . $format);
+        $friendlyName = ($format === 'xml' ? ($isReturn ? 'e-Factura-retur-' : 'e-Factura-') : ($isReturn ? 'Factura-retur-' : 'Factura-')) . $safeSeries . '-' . $safeNumber . '.' . $format;
         return [
             'directory' => $directory,
             'stored_name' => $storedName,
@@ -618,24 +846,31 @@ final class GtrotsInvoiceService
     private static function deletableInvoiceId(PDO $db): string
     {
         $cast = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite' ? 'INTEGER' : 'UNSIGNED';
-        $row = $db->query("SELECT * FROM shop_invoices ORDER BY issued_at DESC, CAST(invoice_number AS {$cast}) DESC, series DESC LIMIT 1")->fetch();
+        $row = $db->query("SELECT * FROM shop_invoices WHERE invoice_type = 'invoice' ORDER BY issued_at DESC, CAST(invoice_number AS {$cast}) DESC, series DESC LIMIT 1")->fetch();
         return $row && self::canDelete($db, $row) ? (string)$row['id'] : '';
     }
 
     private static function canDelete(PDO $db, array $invoice, bool $lock = false): bool
     {
+        if ((string)($invoice['invoice_type'] ?? 'invoice') !== 'invoice') return false;
+        // Fail closed for return/credit documents, including migrated rows whose
+        // type may be inconsistent but still retain the original invoice link.
+        if ((string)($invoice['document_status'] ?? '') === 'return') return false;
+        if (trim((string)($invoice['original_invoice_id'] ?? '')) !== '') return false;
         if ((string)($invoice['spv_status'] ?? 'not_sent') === 'sent') return false;
         $series = (string)($invoice['series'] ?? '');
         $number = (int)($invoice['invoice_number'] ?? 0);
         if ($series === '' || $number <= 0) return false;
 
-        $later = $db->prepare('SELECT id FROM shop_invoices WHERE issued_at > ? LIMIT 1');
-        $later->execute([(string)($invoice['issued_at'] ?? '')]);
-        if ($later->fetchColumn()) return false;
-
         $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
         $cast = $driver === 'sqlite' ? 'INTEGER' : 'UNSIGNED';
         $suffix = $lock && $driver !== 'sqlite' ? ' FOR UPDATE' : '';
+        // There is exactly one deletable fiscal document: the last document
+        // issued globally. This also handles invoices created in the same second,
+        // where a simple `issued_at > current` comparison is ambiguous.
+        $latest = $db->query("SELECT id FROM shop_invoices ORDER BY issued_at DESC, CAST(invoice_number AS {$cast}) DESC, series DESC, id DESC LIMIT 1{$suffix}");
+        if ((string)$latest->fetchColumn() !== (string)($invoice['id'] ?? '')) return false;
+
         $invoices = $db->prepare("SELECT invoice_number FROM shop_invoices WHERE series = ? ORDER BY CAST(invoice_number AS {$cast}) DESC LIMIT 1{$suffix}");
         $invoices->execute([$series]);
         if ((int)$invoices->fetchColumn() !== $number) return false;
@@ -815,6 +1050,157 @@ final class GtrotsInvoiceService
             $after = $current - $quantity;
             $updateStock->execute([$after, $accountingAfter, $productId]);
             $movement->execute([self::uuid(), $productId, $warehouseId ?: null, (string)$order['id'], $invoiceId, (string)$item['id'], 'sale', -$quantity, $after, -$quantity, $accountingAfter, $fifoUnitCost, $fifoAllocated > 0 ? $fifoTotalCost : null, $saleUnitPrice, $saleTotal, $fifoStatus, $fifoAllocated, $fifoPending, $note, $actorName]);
+        }
+    }
+
+    /**
+     * Creates the customer-return receipt and reverses the original FIFO sale.
+     * This method is called only after the return invoice was inserted, so an
+     * order without a return invoice can never add stock accidentally.
+     */
+    private static function postReturnStock(PDO $db, array $original, string $returnInvoiceId, string $series, string $number, string $reason, array $actor): void
+    {
+        $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
+        $lock = $driver === 'sqlite' ? '' : ' FOR UPDATE';
+        $alreadyDocumented = $db->prepare("SELECT id FROM shop_nir_documents WHERE return_invoice_id = ? LIMIT 1" . $lock);
+        $alreadyDocumented->execute([$returnInvoiceId]);
+        if ($alreadyDocumented->fetchColumn()) return;
+
+        $movements = $db->prepare(
+            "SELECT m.*, COALESCE(oi.product_name, p.name, 'Produs') AS product_name,
+                    COALESCE(oi.product_sku, p.sku, '') AS product_sku
+             FROM shop_inventory_movements m
+             LEFT JOIN shop_order_items oi ON oi.id = m.sales_invoice_line_id
+             LEFT JOIN shop_products p ON p.id = m.product_id
+             WHERE m.sales_invoice_id = ? AND m.movement_type = 'sale'" . $lock
+        );
+        $movements->execute([(string)$original['id']]);
+        $saleMovements = $movements->fetchAll();
+        if (!$saleMovements) return;
+
+        $settings = $db->query('SELECT * FROM shop_nir_settings WHERE id = 1' . $lock)->fetch() ?: [];
+        $warehouseId = trim((string)($saleMovements[0]['warehouse_id'] ?? $settings['default_warehouse_id'] ?? ''));
+        if ($warehouseId === '') throw new RuntimeException('Gestiunea implicită nu este configurată pentru recepția returului.');
+        $receiptLocation = $db->query('SELECT * FROM shop_company_receipt_locations ORDER BY is_default DESC, sort_order ASC, name ASC, id ASC LIMIT 1')->fetch() ?: [];
+        $receiptLocationId = trim((string)($receiptLocation['id'] ?? '')) ?: null;
+        $receiptLocationAddress = implode(', ', array_values(array_filter([
+            trim((string)($receiptLocation['address'] ?? '')),
+            trim((string)($receiptLocation['city'] ?? '')),
+            trim((string)($receiptLocation['county'] ?? '')),
+            trim((string)($receiptLocation['postal_code'] ?? '')),
+        ])));
+        $receiptLocationName = trim((string)($receiptLocation['name'] ?? '')) ?: 'Gestiune principală';
+        $receiptLocationLabel = mb_substr($receiptLocationName . ($receiptLocationAddress !== '' ? ' — ' . $receiptLocationAddress : ''), 0, 500);
+        $sequence = max(1, (int)($settings['next_sequence'] ?? 1));
+        $prefix = trim((string)($settings['number_prefix'] ?? 'NIR')) ?: 'NIR';
+        $receiptDate = date('Y-m-d');
+        $receiptTime = date('H:i:s');
+        $nirNumber = $prefix . '-' . substr($receiptDate, 0, 4) . '-' . str_pad((string)$sequence, 6, '0', STR_PAD_LEFT);
+        if (array_key_exists('next_sequence', $settings)) {
+            $db->prepare('UPDATE shop_nir_settings SET next_sequence = ? WHERE id = 1')->execute([$sequence + 1]);
+        }
+
+        $receiptId = self::uuid();
+        $actorName = mb_substr(trim((string)($actor['display_name'] ?? $actor['username'] ?? 'Sistem retururi')), 0, 180);
+        $returnLabel = trim($series . ' ' . $number);
+        $originalLabel = trim((string)$original['series'] . ' ' . (string)$original['invoice_number']);
+        $orderNumber = trim((string)($original['order_number'] ?? ''));
+        $inventoryTotal = round(array_reduce($saleMovements, static fn(float $sum, array $movement): float => $sum + abs((float)($movement['inventory_cost_total_ron'] ?? 0)), 0.0), 2);
+        $notes = 'Intrare în stoc – Retur client. Factura de retur ' . $returnLabel . ' corectează factura fiscală ' . $originalLabel . ($orderNumber !== '' ? ' pentru comanda ' . $orderNumber : '') . '.';
+        if (trim($reason) !== '') $notes .= ' Motiv: ' . trim($reason);
+
+        $insertDocument = $db->prepare(
+            'INSERT INTO shop_nir_documents
+             (id, temporary_number, nir_number, status, supplier_id, warehouse_id, reception_location_id, reception_location, supplier_invoice_series, supplier_invoice_number,
+              supplier_invoice_date, nir_date, nir_time, reception_date, reception_time, currency, exchange_rate, exchange_rate_date,
+              notes, source_type, operation_type, order_id, sales_invoice_id, return_invoice_id, customer_name, customer_email,
+              return_reason, external_identifier, subtotal, vat_total, grand_total, subtotal_ron, vat_total_ron, grand_total_ron,
+              inventory_cost_total_ron, total_difference_ron, row_version, confirmed_at, confirmed_by, created_by, updated_by)
+             VALUES (?, ?, ?, "confirmed", NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "RON", 1, ?, ?, "customer_return", "customer_return", ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, 0, 1, CURRENT_TIMESTAMP, ?, ?, ?)'
+        );
+        $insertDocument->execute([
+            $receiptId, 'SYSTEM-RT-' . substr(str_replace('-', '', $receiptId), 0, 12), $nirNumber, $warehouseId, $receiptLocationId, $receiptLocationLabel,
+            $series, $number, $receiptDate, $receiptDate, $receiptTime, $receiptDate, $receiptTime, $receiptDate,
+            $notes, (string)($original['order_id'] ?? ''), (string)$original['id'], $returnInvoiceId,
+            mb_substr(trim((string)($original['customer_name'] ?? '')), 0, 255) ?: null,
+            mb_substr(trim((string)($original['customer_email'] ?? '')), 0, 255) ?: null,
+            mb_substr(trim($reason), 0, 1000) ?: null, $orderNumber ?: null,
+            $inventoryTotal, $inventoryTotal, $inventoryTotal, $inventoryTotal, $inventoryTotal,
+            $actorName, $actorName, $actorName,
+        ]);
+
+        $insertLine = $db->prepare(
+            'INSERT INTO shop_nir_lines
+             (id, nir_document_id, line_number, product_id, supplier_product_code, supplier_product_name, product_snapshot_name,
+              sku_snapshot, purchase_unit, stock_unit, invoiced_quantity, received_quantity, accepted_quantity, rejected_quantity,
+              conversion_factor, stock_quantity, unit_price, discount_percent, discount_value, vat_rate, line_net, line_vat,
+              line_total, line_net_ron, line_vat_ron, line_total_ron, allocated_cost_ron, inventory_unit_cost_ron,
+              inventory_cost_total_ron, resolution_status, match_method, match_confidence, is_stock_item, row_version)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, "buc", "buc", ?, ?, ?, 0, 1, ?, ?, 0, 0, 0, ?, 0, ?, ?, 0, ?, 0, ?, ?, "matched", "return_invoice", 1, 1, 1)'
+        );
+        $product = $db->prepare('SELECT stock_quantity, accounting_stock_quantity FROM shop_products WHERE id = ?' . $lock);
+        $updateProduct = $db->prepare('UPDATE shop_products SET stock_quantity = ?, accounting_stock_quantity = ? WHERE id = ?');
+        $existingReturn = $db->prepare("SELECT id FROM shop_inventory_movements WHERE sales_invoice_id = ? AND movement_type IN ('return', 'RETURN_IN') AND reversal_of_movement_id = ? LIMIT 1");
+        $insertReturn = $db->prepare(
+            'INSERT INTO shop_inventory_movements
+             (id, product_id, warehouse_id, order_id, nir_document_id, nir_line_id, sales_invoice_id, sales_invoice_line_id, movement_type, quantity_delta, quantity_after,
+              accounting_quantity_delta, accounting_quantity_after, inventory_unit_cost_ron, inventory_cost_total_ron, sale_unit_price_ron,
+              sale_total_ron, fifo_status, fifo_quantity_allocated, fifo_quantity_pending, reversal_of_movement_id, note, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, "RETURN_IN", ?, ?, ?, ?, ?, ?, ?, ?, "restored", ?, 0, ?, ?, ?)'
+        );
+
+        foreach ($saleMovements as $index => $movement) {
+            $movementId = (string)($movement['id'] ?? '');
+            $productId = trim((string)($movement['product_id'] ?? ''));
+            if ($movementId === '' || $productId === '') continue;
+            $existingReturn->execute([$returnInvoiceId, $movementId]);
+            if ($existingReturn->fetchColumn()) continue;
+            $product->execute([$productId]);
+            $current = $product->fetch();
+            if (!$current) continue;
+            $quantity = abs((float)($movement['quantity_delta'] ?? 0));
+            $accountingQuantity = abs((float)($movement['accounting_quantity_delta'] ?? $quantity));
+            $costTotal = abs((float)($movement['inventory_cost_total_ron'] ?? 0));
+            $unitCost = $accountingQuantity > 0 ? round($costTotal / $accountingQuantity, 6) : abs((float)($movement['inventory_unit_cost_ron'] ?? 0));
+            $lineId = self::uuid();
+            $insertLine->execute([
+                $lineId, $receiptId, $index + 1, $productId, (string)($movement['product_sku'] ?? ''),
+                (string)($movement['product_name'] ?? 'Produs'), (string)($movement['product_name'] ?? 'Produs'),
+                (string)($movement['product_sku'] ?? ''), $quantity, $quantity, $quantity, $quantity,
+                $unitCost, $costTotal, $costTotal, $costTotal, $costTotal, $unitCost, $costTotal,
+            ]);
+            $stockAfter = round((float)($current['stock_quantity'] ?? 0) + $quantity, 4);
+            $accountingAfter = round((float)($current['accounting_stock_quantity'] ?? 0) + $accountingQuantity, 4);
+            $updateProduct->execute([$stockAfter, $accountingAfter, $productId]);
+            $insertReturn->execute([
+                self::uuid(), $productId, trim((string)($movement['warehouse_id'] ?? '')) ?: $warehouseId, $original['order_id'] ?? null,
+                $receiptId, $lineId, $returnInvoiceId, $movement['sales_invoice_line_id'] ?? null, $quantity, $stockAfter,
+                $accountingQuantity, $accountingAfter, $unitCost,
+                $costTotal,
+                $movement['sale_unit_price_ron'] ?? null,
+                isset($movement['sale_total_ron']) ? -abs((float)$movement['sale_total_ron']) : null,
+                (float)($movement['fifo_quantity_allocated'] ?? 0), $movementId,
+                'Intrare în stoc prin ' . $nirNumber . ' · retur client · factura de retur ' . $returnLabel . ' · corectează ' . $originalLabel,
+                $actorName,
+            ]);
+        }
+
+        $consumptions = $db->prepare(
+            "SELECT c.* FROM shop_inventory_layer_consumptions c
+             WHERE c.source_document_type = 'SALES_INVOICE' AND c.source_document_id = ? AND c.reversed_at IS NULL" . $lock
+        );
+        $consumptions->execute([(string)$original['id']]);
+        $layer = $db->prepare('SELECT original_quantity, remaining_quantity, is_reversed FROM shop_inventory_cost_layers WHERE id = ?' . $lock);
+        $updateLayer = $db->prepare('UPDATE shop_inventory_cost_layers SET remaining_quantity = ?, status = ?, row_version = row_version + 1 WHERE id = ?');
+        $reverseConsumption = $db->prepare('UPDATE shop_inventory_layer_consumptions SET reversed_at = CURRENT_TIMESTAMP, reversal_consumption_id = ?, row_version = row_version + 1 WHERE id = ? AND reversed_at IS NULL');
+        foreach ($consumptions->fetchAll() as $consumption) {
+            $layer->execute([(string)$consumption['inventory_cost_layer_id']]);
+            $current = $layer->fetch();
+            if (!$current || !empty($current['is_reversed'])) continue;
+            $remaining = min((float)$current['original_quantity'], (float)$current['remaining_quantity'] + (float)$consumption['quantity']);
+            $status = abs($remaining - (float)$current['original_quantity']) <= 0.00005 ? 'open' : 'partially_consumed';
+            $updateLayer->execute([round($remaining, 4), $status, (string)$consumption['inventory_cost_layer_id']]);
+            $reverseConsumption->execute([$receiptId, (string)$consumption['id']]);
         }
     }
 

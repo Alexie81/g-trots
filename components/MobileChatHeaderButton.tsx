@@ -77,14 +77,16 @@ export default function MobileChatHeaderButton({ compact }: Props) {
         )}
       </TouchableOpacity>
 
-      <ChatModal
-        visible={showChat}
-        onClose={() => {
-          setShowChat(false);
-          pollChatUnread();
-        }}
-        onUnreadChange={setChatUnread}
-      />
+      {showChat ? (
+        <ChatModal
+          visible
+          onClose={() => {
+            setShowChat(false);
+            pollChatUnread();
+          }}
+          onUnreadChange={setChatUnread}
+        />
+      ) : null}
     </>
   );
 }

@@ -204,6 +204,8 @@ export type ShopNirDocument = {
   supplier_cui?: string | null;
   warehouse_id: string;
   warehouse_name?: string;
+  reception_location_id?: string | null;
+  reception_location?: string | null;
   supplier_invoice_series: string | null;
   supplier_invoice_number: string | null;
   supplier_invoice_date: string | null;
@@ -216,7 +218,15 @@ export type ShopNirDocument = {
   exchange_rate_date: string | null;
   notes: string | null;
   source_type: string;
-  document_kind?: 'nir' | 'storno';
+  operation_type?: 'supplier_receipt' | 'customer_return' | 'supplier_return';
+  operation_label?: string;
+  document_kind?: 'nir' | 'storno' | 'customer_return';
+  order_id?: string | null;
+  sales_invoice_id?: string | null;
+  return_invoice_id?: string | null;
+  customer_name?: string | null;
+  customer_email?: string | null;
+  return_reason?: string | null;
   public_status?: string;
   can_storno?: boolean;
   storno_state?: 'none' | 'partial' | 'full';
@@ -485,6 +495,7 @@ export type ShopProductSale = {
   status: ShopOrder['status'];
   payment_status: ShopOrder['payment_status'];
   customer_name: string;
+  customer_display_name?: string;
   created_at: string;
   quantity: number;
   unit_price: number;
@@ -504,11 +515,32 @@ export type ShopProductStats = {
 
 export type ShopDashboardStats = {
   revenue: number;
+  gross_revenue: number;
+  returns_count: number;
+  returns_total: number;
   orders_count: number;
   new_orders_count: number;
   acquisitions: number;
+  cost_of_goods_sold: number;
   profit: number;
   products_count: number;
+  daily_stats: Array<{
+    date: string;
+    orders_count: number;
+    gross_revenue: number;
+    returns_count: number;
+    returns_total: number;
+    revenue: number;
+    acquisitions: number;
+    cost_of_goods_sold: number;
+    profit: number;
+  }>;
+  range: {
+    period: string;
+    start: string;
+    end: string;
+    granularity: 'hour' | 'day' | 'week' | 'month';
+  };
   recent_orders: ShopOrder[];
 };
 
@@ -593,7 +625,7 @@ export type ShopInvoiceItem = {
 
 export type ShopInvoicePayload = {
   document_id: string;
-  status: 'paid' | 'unpaid';
+  status: 'paid' | 'unpaid' | 'return';
   series: string;
   number: string;
   issue_date: string;
@@ -608,6 +640,9 @@ export type ShopInvoicePayload = {
   payment?: { method?: string; reference?: string; iban?: string; bank_name?: string; paid_at?: string; transaction_id?: string };
   notes?: string;
   order_reference?: string;
+  related_invoice?: { series?: string; number?: string; date?: string };
+  related_order?: { order_number?: string };
+  return_reason?: string;
   tax_note?: string;
   amount_paid?: number;
 };
@@ -619,7 +654,9 @@ export type ShopIssuedInvoice = {
   series: string;
   number: string;
   display_number: string;
-  status: 'paid' | 'unpaid';
+  status: 'paid' | 'unpaid' | 'return';
+  invoice_type?: 'invoice' | 'return';
+  original_invoice_id?: string | null;
   theme: ShopInvoiceTheme;
   issue_date: string;
   due_date: string | null;
@@ -635,7 +672,7 @@ export type ShopIssuedInvoice = {
   updated_at: string;
   email_sent_at: string | null;
   email_last_error: string | null;
-  spv_status: 'not_sent' | 'sent';
+  spv_status: 'not_sent' | 'processing' | 'error' | 'rejected' | 'sent';
   spv_sent_at: string | null;
   spv_submission_id: string | null;
   can_delete: boolean;
@@ -643,15 +680,20 @@ export type ShopIssuedInvoice = {
   pdf_url?: string;
   existing?: boolean;
   email_notification?: ShopOrderEmailNotification;
+  paired_documents?: boolean;
+  return_invoice?: ShopIssuedInvoice | null;
+  return_invoice_email?: ShopOrderEmailNotification;
 };
 
 export type ShopOrder = {
   id: string;
   order_number: string;
-  status: 'new' | 'confirmed' | 'processing' | 'shipped' | 'completed' | 'refunded' | 'cancelled';
+  status: 'new' | 'confirmed' | 'processing' | 'shipped' | 'completed' | 'return_requested' | 'return_refused' | 'return_confirmed' | 'refunded' | 'cancelled';
   payment_status: 'pending' | 'paid' | 'failed' | 'refunded';
   payment_method: 'card' | 'cash_on_delivery';
   customer_name: string;
+  customer_contact_name?: string;
+  customer_display_name?: string;
   customer_email: string | null;
   customer_phone: string;
   customer_type?: 'individual' | 'company';
@@ -665,6 +707,27 @@ export type ShopOrder = {
   postal_code: string | null;
   customer_notes: string | null;
   admin_notes: string | null;
+  customer_cancellation_reason?: string | null;
+  customer_cancelled_at?: string | null;
+  cancellation_source?: 'customer' | 'staff' | null;
+  cancellation_invoice_action?: 'none' | 'deleted_latest_unsent' | 'return_invoice_created' | null;
+  return_invoice_id?: string | null;
+  refund_status?: 'none' | 'pending' | 'completed' | 'failed';
+  refund_due_at?: string | null;
+  return_reason?: string | null;
+  return_bank_iban?: string | null;
+  return_bank_iban_masked?: string | null;
+  return_bank_account_holder?: string | null;
+  return_shipping_cost?: number | null;
+  configured_return_shipping_cost?: number;
+  return_refund_amount?: number | null;
+  return_requested_at?: string | null;
+  return_request_source?: 'customer' | 'staff' | null;
+  return_request_email_sent_at?: string | null;
+  return_request_email_error?: string | null;
+  return_confirmed_at?: string | null;
+  return_confirmation_email_sent_at?: string | null;
+  return_confirmation_email_error?: string | null;
   shipping_method_name: string;
   subtotal: number;
   discount_total?: number;
@@ -681,9 +744,80 @@ export type ShopOrder = {
   status_history?: ShopOrderStatusHistory[];
   email_notification?: ShopOrderEmailNotification;
   invoice_automation?: ShopInvoiceAutomationResult;
+  return_invoice?: ShopIssuedInvoice | null;
+  return_confirmation?: {
+    invoice_action: 'none_no_positive_invoice' | 'return_invoice_created' | 'return_invoice_existing';
+    return_invoice?: ShopIssuedInvoice | null;
+    return_invoice_email?: ShopOrderEmailNotification | null;
+  };
   invoice?: ShopIssuedInvoice | null;
   created_at: string;
   updated_at: string;
+};
+
+export type ShopSpvMode = 'manual' | 'on_issue' | 'delayed';
+export type ShopSpvSettings = {
+  environment: 'test' | 'production';
+  invoice_mode: ShopSpvMode;
+  invoice_delay_days: number;
+  return_mode: ShopSpvMode;
+  return_delay_days: number;
+  reminders_enabled: boolean;
+  updated_by?: string;
+  updated_at?: string | null;
+};
+export type ShopSpvConnection = {
+  configured: boolean;
+  connected: boolean;
+  status: 'connected' | 'disconnected' | 'error';
+  environment: 'test' | 'production';
+  certificate_hint: string;
+  connected_at: string | null;
+  access_expires_at: string | null;
+  refresh_expires_at: string | null;
+  last_tested_at: string | null;
+  last_error: string;
+  settings: ShopSpvSettings | null;
+  legal_deadline_working_days: number;
+  token_policy: { access_days: number; refresh_days: number; automatic_refresh: boolean };
+};
+export type ShopNotification = {
+  id: string;
+  notification_type: 'new_order' | 'return_requested' | 'order_cancelled' | 'spv_deadline' | 'spv_error' | 'spv_rejected' | string;
+  title: string;
+  body: string;
+  entity_type: 'order' | 'invoice' | string;
+  entity_id: string;
+  severity: 'info' | 'success' | 'warning' | 'error';
+  read_at: string | null;
+  created_at: string;
+  read: boolean;
+};
+export type ShopNotificationFeed = { unread_count: number; items: ShopNotification[] };
+
+export function shopOrderCustomerDisplayName(order: Pick<ShopOrder, 'customer_type' | 'company_name' | 'customer_name' | 'customer_display_name'>) {
+  const serverName = String(order.customer_display_name || '').trim();
+  if (serverName) return serverName;
+  const companyName = String(order.company_name || '').trim();
+  return order.customer_type === 'company' && companyName ? companyName : String(order.customer_name || '').trim();
+}
+
+export type ShopOrderPage = {
+  orders: ShopOrder[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  summary: {
+    orders_count: number;
+    new_count: number;
+    processing_count: number;
+    returns_count: number;
+    returns_total: number;
+    collected: number;
+    pending_cash: number;
+    financial_total: number;
+  };
 };
 
 export type ShopCustomerSummary = {
@@ -751,6 +885,7 @@ export type ShopPromotionStats = {
     order_number: string;
     status: string;
     customer_name: string;
+    customer_display_name?: string;
     customer_email: string | null;
     subtotal: number;
     discount_total: number;
@@ -835,6 +970,20 @@ export type ShopCompanySettings = {
   updated_at?: string | null;
 };
 
+export type ShopReceiptLocation = {
+  id: string;
+  company_id: number;
+  name: string;
+  address: string;
+  city: string;
+  county: string;
+  postal_code: string;
+  is_default: boolean;
+  sort_order: number;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type ShopStripeSyncSummary = {
   synced: number;
   archived: number;
@@ -862,6 +1011,7 @@ export type ShopShippingMethod = {
   name: string;
   description: string;
   cost: number;
+  return_cost: number;
   free_above: number | null;
   eta_label: string;
   is_active: boolean;
@@ -935,6 +1085,75 @@ const SHOP_API_KEY = process.env.EXPO_PUBLIC_SHOP_API_KEY || process.env.EXPO_PU
 
 export function isUnknownShopAction(error: unknown): boolean {
   return error instanceof Error && /actiune\s+shop\s+necunoscuta/i.test(error.message.normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+}
+
+function legacyOrderPage(orders: ShopOrder[], filters: { page?: number; page_size?: number; q?: string; status?: string; payment_method?: string; payment_status?: string }): ShopOrderPage {
+  const normalize = (value: unknown) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const query = normalize(filters.q).trim();
+  const filtered = orders.filter((order) => {
+    if (filters.status === 'returned' && !['return_confirmed', 'refunded'].includes(order.status)) return false;
+    if (filters.status && filters.status !== 'returned' && order.status !== filters.status) return false;
+    if (filters.payment_method === 'card' && order.payment_method !== 'card') return false;
+    if (filters.payment_method === 'cash' && order.payment_method === 'card') return false;
+    if (filters.payment_status && order.payment_status !== filters.payment_status) return false;
+    if (!query) return true;
+    const parsedCreatedAt = new Date(String(order.created_at || '').replace(' ', 'T'));
+    const localizedCreatedAt = Number.isNaN(parsedCreatedAt.getTime()) ? '' : [
+      parsedCreatedAt.toLocaleDateString('ro-RO'),
+      parsedCreatedAt.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' }),
+    ].join(' ');
+    const localizedStatus = {
+      new: 'in procesare noua comenzi noi',
+      confirmed: 'confirmata',
+      processing: 'in pregatire',
+      shipped: 'predata curierului',
+      completed: 'livrata',
+      return_requested: 'retur solicitat cerere retur',
+      return_refused: 'retur refuzat respins',
+      return_confirmed: 'retur confirmat aprobat',
+      refunded: 'rambursata',
+      cancelled: 'comanda anulata',
+    }[order.status];
+    const localizedPaymentStatus = {
+      pending: 'in asteptare',
+      paid: 'platita',
+      failed: 'esuata',
+      refunded: 'rambursata',
+    }[order.payment_status];
+    const searchText = normalize([
+      order.order_number, order.customer_display_name, order.customer_name, order.customer_phone, order.customer_email, order.customer_type,
+      order.company_name, order.company_cui, order.company_registration_number, order.company_address,
+      order.created_at, localizedCreatedAt, order.status, localizedStatus, order.payment_method, order.payment_status, localizedPaymentStatus,
+      order.payment_method === 'card' ? 'card online plata cu cardul' : 'ramburs la curier plata ramburs numerar cash',
+      order.customer_type === 'company' || order.company_name || order.company_cui || order.company_registration_number ? 'pj persoana juridica firma' : 'pf persoana fizica',
+    ].join(' '));
+    return searchText.includes(query);
+  });
+  const pageSize = Math.max(5, Math.min(50, Number(filters.page_size || 10)));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const page = Math.min(Math.max(1, Number(filters.page || 1)), totalPages);
+  const active = orders.filter((order) => !['cancelled', 'refunded'].includes(order.status));
+  const grossCollected = active.filter((order) => order.payment_status === 'paid').reduce((sum, order) => sum + Number(order.total || 0), 0);
+  const collectedReturnDeduction = active.filter((order) => order.payment_status === 'paid').reduce((sum, order) => sum + Math.abs(Number(order.return_invoice?.total || 0)), 0);
+  const collected = grossCollected - collectedReturnDeduction;
+  const pendingCash = active.filter((order) => order.payment_method !== 'card' && order.payment_status === 'pending').reduce((sum, order) => sum + Number(order.total || 0), 0);
+  return {
+    orders: filtered.slice((page - 1) * pageSize, page * pageSize),
+    total: filtered.length,
+    page,
+    page_size: pageSize,
+    total_pages: totalPages,
+    summary: {
+      orders_count: orders.length,
+      new_count: orders.filter((order) => order.status === 'new').length,
+      processing_count: orders.filter((order) => order.status === 'processing').length,
+      returns_count: orders.filter((order) => Boolean(order.return_invoice)).length,
+      returns_total: orders.reduce((sum, order) => sum + Math.abs(Number(order.return_invoice?.total || 0)), 0),
+      collected,
+      pending_cash: pendingCash,
+      financial_total: collected + pendingCash,
+    },
+  };
 }
 
 export function legacyNirAttachmentUrl(attachment: ShopNirAttachment): string | null {
@@ -1050,8 +1269,55 @@ async function syncStripeCatalogInBatches(token: string, onProgress?: (progress:
   return summary;
 }
 
+type ShopDashboardFilters = {
+  period?: string;
+  start_date?: string;
+  end_date?: string;
+  granularity?: 'hour' | 'day' | 'week' | 'month';
+};
+
+const shopDashboardCache = new Map<string, { value?: ShopDashboardStats; request?: Promise<ShopDashboardStats> }>();
+
+function shopDashboardCacheKey(token: string, filters: ShopDashboardFilters) {
+  return JSON.stringify([token, filters.period || '', filters.start_date || '', filters.end_date || '', filters.granularity || '']);
+}
+
+function rememberShopDashboard(key: string, value: ShopDashboardStats) {
+  if (shopDashboardCache.has(key)) shopDashboardCache.delete(key);
+  while (shopDashboardCache.size >= 2) {
+    const oldest = shopDashboardCache.keys().next().value;
+    if (!oldest) break;
+    shopDashboardCache.delete(oldest);
+  }
+  shopDashboardCache.set(key, { value });
+  return value;
+}
+
+function loadShopDashboard(token: string, filters: ShopDashboardFilters = {}) {
+  const key = shopDashboardCacheKey(token, filters);
+  const pending = shopDashboardCache.get(key)?.request;
+  if (pending) return pending;
+  const request = shopCall<ShopDashboardStats>('getDashboardStats', token, undefined, undefined, 0, filters)
+    .then((value) => rememberShopDashboard(key, value))
+    .catch((error) => {
+      const cached = shopDashboardCache.get(key);
+      if (cached?.request === request) {
+        if (cached.value) shopDashboardCache.set(key, { value: cached.value });
+        else shopDashboardCache.delete(key);
+      }
+      throw error;
+    });
+  shopDashboardCache.set(key, { value: shopDashboardCache.get(key)?.value, request });
+  return request;
+}
+
+function peekShopDashboard(token: string, filters: ShopDashboardFilters = {}) {
+  return shopDashboardCache.get(shopDashboardCacheKey(token, filters))?.value || null;
+}
+
 export const shopApi = {
-  getDashboardStats: (token: string) => shopCall<ShopDashboardStats>('getDashboardStats', token),
+  getDashboardStats: loadShopDashboard,
+  peekDashboardStats: peekShopDashboard,
   loadProductManager: (
     token: string,
     options: { page?: number; page_size?: number; q?: string; include_metadata?: boolean } = {},
@@ -1138,16 +1404,33 @@ export const shopApi = {
   listInventory: (token: string) => shopCall<ShopProduct[]>('listInventory', token),
   listInventoryMovements: (token: string, productId?: string) => shopCall<ShopInventoryMovement[]>('listInventoryMovements', token, undefined, productId),
   adjustStock: (token: string, id: string, quantity: number, note: string) => shopCall<ShopProduct>('adjustStock', token, { method: 'POST', body: JSON.stringify({ quantity, note }) }, id),
-  listOrders: (token: string) => shopCall<ShopOrder[]>('listOrders', token),
+  listOrders: async (token: string, filters: { page?: number; page_size?: number; q?: string; status?: string; payment_method?: string; payment_status?: string } = {}) => {
+    try {
+      return await shopCall<ShopOrderPage>('listOrdersPage', token, undefined, undefined, 0, filters);
+    } catch (error) {
+      if (!isUnknownShopAction(error)) throw error;
+      return legacyOrderPage(await shopCall<ShopOrder[]>('listOrders', token), filters);
+    }
+  },
   getOrder: (token: string, id: string) => shopCall<ShopOrder>('getOrder', token, undefined, id),
-  updateOrder: (token: string, id: string, payload: Pick<ShopOrder, 'status' | 'payment_status'> & { admin_notes: string; notify_customer: boolean; address?: string; city?: string; county?: string; postal_code?: string }) => shopCall<ShopOrder>('updateOrder', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
-  issueInvoice: (token: string, orderId: string, sendEmail = false) => shopCall<ShopIssuedInvoice>('issueInvoice', token, { method: 'POST', body: JSON.stringify({ order_id: orderId, send_email: sendEmail }) }, orderId),
+  updateOrder: (token: string, id: string, payload: Pick<ShopOrder, 'status' | 'payment_status'> & { admin_notes: string; notify_customer: boolean; cancellation_reason?: string; return_reason?: string; return_bank_iban?: string; return_bank_account_holder?: string; address?: string; city?: string; county?: string; postal_code?: string }) => shopCall<ShopOrder>('updateOrder', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
+  issueInvoice: (token: string, orderId: string, sendEmail = false, sendReturnEmail = false) => shopCall<ShopIssuedInvoice>('issueInvoice', token, { method: 'POST', body: JSON.stringify({ order_id: orderId, send_email: sendEmail, send_return_email: sendReturnEmail }) }, orderId),
   listInvoices: (token: string) => shopCall<ShopIssuedInvoice[]>('listInvoices', token),
   getInvoice: (token: string, id: string) => shopCall<ShopIssuedInvoice>('getInvoice', token, undefined, id),
   downloadInvoice: (token: string, id: string, format: 'pdf' | 'xlsx' | 'xml' = 'pdf') => shopCall<{ file_name: string; mime_type: string; content_base64: string; public_url?: string; stored?: boolean; anaf_validation?: { stare: string; trace_id?: string } }>('downloadInvoice', token, undefined, id, 0, { format }),
   getInvoicePublicLink: (token: string, id: string, format: 'pdf' | 'xlsx' | 'xml' = 'pdf') => shopCall<{ url: string; file_name: string; mime_type: string; format: 'pdf' | 'xlsx' | 'xml' }>('getInvoicePublicLink', token, undefined, id, 0, { format }),
   sendInvoiceEmail: (token: string, id: string) => shopCall<ShopOrderEmailNotification>('sendInvoiceEmail', token, { method: 'POST', body: JSON.stringify({ invoice_id: id }) }, id),
   deleteInvoice: (token: string, id: string) => shopCall<{ deleted: boolean; id: string; order_id: string; released_number: string }>('deleteInvoice', token, { method: 'DELETE' }, id),
+  getSpvConnection: (token: string) => shopCall<ShopSpvConnection>('getSpvConnection', token),
+  beginSpvOAuth: (token: string) => shopCall<{ authorization_url: string; expires_at: string; environment: 'test' | 'production' }>('beginSpvOAuth', token, { method: 'POST', body: '{}' }),
+  testSpvConnection: (token: string) => shopCall<ShopSpvConnection>('testSpvConnection', token, { method: 'POST', body: '{}' }),
+  updateSpvSettings: (token: string, payload: ShopSpvSettings) => shopCall<ShopSpvConnection>('updateSpvSettings', token, { method: 'PUT', body: JSON.stringify(payload) }),
+  disconnectSpv: (token: string) => shopCall<ShopSpvConnection>('disconnectSpv', token, { method: 'POST', body: '{}' }),
+  sendInvoiceToSpv: (token: string, id: string) => shopCall<{ invoice: ShopIssuedInvoice; job?: { status?: string; last_error?: string } }>('sendInvoiceToSpv', token, { method: 'POST', body: JSON.stringify({ invoice_id: id }) }, id),
+  runSpvWorker: (token: string) => shopCall<{ processed: number; errors?: string[] }>('runSpvWorker', token, { method: 'POST', body: JSON.stringify({ limit: 5 }) }),
+  getShopNotificationSummary: (token: string) => shopCall<{ unread_count: number }>('getShopNotificationSummary', token),
+  listShopNotifications: (token: string) => shopCall<ShopNotificationFeed>('listShopNotifications', token, undefined, '', 0, { unread_only: 1 }),
+  markShopNotificationRead: (token: string, id: string, all = false) => shopCall<ShopNotificationFeed>('markShopNotificationRead', token, { method: 'POST', body: JSON.stringify({ id, all }) }, id),
   listCustomers: (token: string) => shopCall<ShopCustomerSummary[]>('listCustomers', token),
   getCustomer: (token: string, id: string) => shopCall<ShopCustomerDetail>('getCustomer', token, undefined, id),
   updateCustomerStatus: (token: string, id: string, isActive: boolean) => shopCall<{ success: true; is_active: boolean }>('updateCustomerStatus', token, { method: 'PATCH', body: JSON.stringify({ is_active: isActive }) }, id),
@@ -1167,6 +1450,10 @@ export const shopApi = {
   createCompanySettings: (token: string, payload: ShopCompanySettings) => shopCall<ShopCompanySettings>('createCompanySettings', token, { method: 'POST', body: JSON.stringify(payload) }),
   updateCompanySettings: (token: string, id: number, payload: ShopCompanySettings) => shopCall<ShopCompanySettings>('updateCompanySettings', token, { method: 'PUT', body: JSON.stringify(payload) }, String(id)),
   deleteCompanySettings: (token: string, id: number) => shopCall<{ success: true }>('deleteCompanySettings', token, { method: 'DELETE' }, String(id)),
+  listReceiptLocations: (token: string, companyId?: number) => shopCall<ShopReceiptLocation[]>('listReceiptLocations', token, undefined, undefined, 0, companyId ? { company_id: companyId } : {}),
+  createReceiptLocation: (token: string, payload: Omit<ShopReceiptLocation, 'id'>) => shopCall<ShopReceiptLocation>('createReceiptLocation', token, { method: 'POST', body: JSON.stringify(payload) }),
+  updateReceiptLocation: (token: string, id: string, payload: Omit<ShopReceiptLocation, 'id'>) => shopCall<ShopReceiptLocation>('updateReceiptLocation', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
+  deleteReceiptLocation: (token: string, id: string) => shopCall<{ success: true }>('deleteReceiptLocation', token, { method: 'DELETE' }, id),
   syncStripeCatalog: (token: string, onProgress?: (progress: ShopStripeSyncProgress) => void) => syncStripeCatalogInBatches(token, onProgress),
   listShippingMethods: (token: string) => shopCall<ShopShippingMethod[]>('listShippingMethods', token),
   createShippingMethod: (token: string, payload: Omit<ShopShippingMethod, 'id'>) => shopCall<ShopShippingMethod>('createShippingMethod', token, { method: 'POST', body: JSON.stringify(payload) }),

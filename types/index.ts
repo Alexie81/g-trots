@@ -148,6 +148,8 @@ export interface Client {
   profile_id: string | null;
   owner_user_id?: string | null;
   created_at: string;
+  updated_at?: string;
+  participant_count?: number;
   profiles?: Profile | null;
   financials_hidden?: boolean;
   participants?: ClientParticipant[];

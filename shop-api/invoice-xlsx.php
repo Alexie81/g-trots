@@ -30,8 +30,15 @@ final class GtrotsInvoiceXlsx
 
         $seller = is_array($invoice['seller'] ?? null) ? $invoice['seller'] : [];
         $buyer = is_array($invoice['buyer'] ?? null) ? $invoice['buyer'] : [];
+        $related = is_array($invoice['related_invoice'] ?? null) ? $invoice['related_invoice'] : [];
+        $returnReference = $status === 'return'
+            ? 'RETUR PENTRU FACTURA FISCALĂ EMISĂ ' . trim((string)($related['series'] ?? '') . ' ' . (string)($related['number'] ?? ''))
+                . (trim((string)($related['date'] ?? '')) !== '' ? ' DIN ' . self::dateLabel((string)$related['date']) : '')
+                . (trim((string)($invoice['order_reference'] ?? '')) !== '' ? ' · COMANDA ' . trim((string)$invoice['order_reference']) : '')
+            : '';
         $rows = '';
         $merges = ['A1:B3', 'C1:F1', 'C2:F2', 'C3:F3', 'G1:J1', 'G2:J2', 'G3:H3', 'I3:J3', 'A5:E5', 'F5:J5', 'A6:E6', 'F6:J6', 'A7:E9', 'F7:J9', 'A11:J11'];
+        if ($returnReference !== '') $merges[] = 'A4:J4';
         $rows .= shopNirPremiumXlsxRow(1, [1 => shopNirPremiumXlsxCellSpec('', 'string', 1), 3 => shopNirPremiumXlsxCellSpec('FACTURĂ FISCALĂ', 'string', 1), 7 => shopNirPremiumXlsxCellSpec($statusLabel, 'string', 17)], 32);
         $rows .= shopNirPremiumXlsxRow(2, [3 => shopNirPremiumXlsxCellSpec(trim((string)($seller['name'] ?? 'G-Trots România')), 'string', 2), 7 => shopNirPremiumXlsxCellSpec($series . ' ' . $number, 'string', 3)], 25);
         $sellerIdentity = implode(' · ', array_values(array_filter([
@@ -39,7 +46,7 @@ final class GtrotsInvoiceXlsx
             trim((string)($seller['registration_number'] ?? '')) !== '' ? 'RC ' . trim((string)$seller['registration_number']) : '',
         ])));
         $rows .= shopNirPremiumXlsxRow(3, [3 => shopNirPremiumXlsxCellSpec($sellerIdentity, 'string', 4), 7 => shopNirPremiumXlsxCellSpec('Emisă: ' . self::dateLabel((string)($invoice['issue_date'] ?? '')), 'string', 4), 9 => shopNirPremiumXlsxCellSpec('Scadență: ' . self::dateLabel((string)($invoice['due_date'] ?? '')), 'string', 4)], 24);
-        $rows .= shopNirPremiumXlsxRow(4, [], 9);
+        $rows .= shopNirPremiumXlsxRow(4, $returnReference !== '' ? [1 => shopNirPremiumXlsxCellSpec($returnReference, 'string', 18)] : [], $returnReference !== '' ? 25 : 9);
         $rows .= shopNirPremiumXlsxRow(5, [1 => shopNirPremiumXlsxCellSpec('FURNIZOR / EMITENT', 'string', 18), 6 => shopNirPremiumXlsxCellSpec('CLIENT / DESTINATAR', 'string', 18)], 24);
         $rows .= shopNirPremiumXlsxRow(6, [1 => shopNirPremiumXlsxCellSpec(trim((string)($seller['name'] ?? '')), 'string', 7), 6 => shopNirPremiumXlsxCellSpec(trim((string)($buyer['name'] ?? '')), 'string', 7)], 26);
         $rows .= shopNirPremiumXlsxRow(7, [1 => shopNirPremiumXlsxCellSpec(self::partyDetails($seller, true), 'string', 5), 6 => shopNirPremiumXlsxCellSpec(self::partyDetails($buyer, false), 'string', 5)], 55);
@@ -127,9 +134,9 @@ final class GtrotsInvoiceXlsx
         $files['xl/workbook.xml'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView windowWidth="24000" windowHeight="14000"/></bookViews><sheets><sheet name="Factură" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">Factură!$A$1:$J$' . $lastRow . '</definedName><definedName name="_xlnm.Print_Titles" localSheetId="0">Factură!$12:$12</definedName></definedNames><calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/></workbook>';
         $files['xl/_rels/workbook.xml.rels'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
         $files['xl/styles.xml'] = self::styles($accent, $soft, $accentDark, $statusColor, $currency);
-        $files['xl/worksheets/sheet1.xml'] = shopNirPremiumXlsxSheet($rows, [6, 15, 32, 9, 12, 16, 11, 11, 17, 17], $lastRow, 10, ['merges' => $merges, 'auto_filter' => 'A12:J' . $lastDataRow, 'freeze_rows' => 12, 'drawing' => $logo !== null, 'orientation' => 'landscape', 'paper_size' => 9, 'fit_to_height' => count($items) <= 10 ? 1 : 0, 'header' => '&LG-Trots · Factură ' . $series . ' ' . $number, 'footer' => '&LDocument fiscal generat electronic&RPagina &P / &N']);
+        $files['xl/worksheets/sheet1.xml'] = shopNirPremiumXlsxSheet($rows, [6, 15, 32, 9, 12, 16, 11, 11, 17, 17], $lastRow, 10, ['merges' => $merges, 'auto_filter' => 'A12:J' . $lastDataRow, 'freeze_rows' => 12, 'drawing' => $logo !== null, 'orientation' => 'landscape', 'paper_size' => 9, 'fit_to_height' => count($items) <= 10 ? 1 : 0, 'header' => '&LG-Trots · ' . ($status === 'return' ? 'Factură de retur ' : 'Factură ') . $series . ' ' . $number, 'footer' => '&LDocument fiscal generat electronic&RPagina &P / &N']);
         $created = gmdate('Y-m-d\TH:i:s\Z');
-        $title = 'Factura ' . $series . ' ' . $number;
+        $title = ($status === 'return' ? 'Factura de retur ' : 'Factura ') . $series . ' ' . $number;
         $files['docProps/core.xml'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>' . shopNirPremiumXlsxXml($title) . '</dc:title><dc:creator>G-Trots Management</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">' . $created . '</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">' . $created . '</dcterms:modified></cp:coreProperties>';
         $files['docProps/app.xml'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>G-Trots Management</Application><TitlesOfParts><vt:vector size="1" baseType="lpstr"><vt:lpstr>Factură</vt:lpstr></vt:vector></TitlesOfParts><Company>' . shopNirPremiumXlsxXml(trim((string)($seller['name'] ?? 'G-Trots'))) . '</Company></Properties>';
         return shopNirBuildZip($files);

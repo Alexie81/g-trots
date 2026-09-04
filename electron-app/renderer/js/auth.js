@@ -235,6 +235,7 @@
     canManagePartners,
     canUseSupportChat,
     canViewClientPanel,
+    canViewServiceSheets,
     canViewClientFinancials,
     canViewStats,
     login,

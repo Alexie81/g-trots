@@ -77,6 +77,22 @@ foreach ([$stornoXlsx, $stornoHtml] as $output) {
     $expect(str_contains($output, 'INV 191') && str_contains($output, 'INV 190'), 'Exportul STORNO nu separă factura curentă de factura inițială.');
 }
 
+$customerReturn = $document;
+$customerReturn['nir_number'] = 'NIR-2026-000003';
+$customerReturn['source_type'] = 'customer_return';
+$customerReturn['operation_type'] = 'customer_return';
+$customerReturn['supplier_name'] = 'Client Test';
+$customerReturn['supplier_cui'] = 'client@example.test';
+$customerReturn['supplier_invoice_series'] = 'GT';
+$customerReturn['supplier_invoice_number'] = 'RET-2';
+$customerReturn['pdf_context']['relationship'] = ['original_invoice' => ['series' => 'GT', 'number' => '1', 'date' => '2026-08-30'], 'reason' => 'Retur client'];
+$customerReturnXlsx = shopNirBuildXlsx($customerReturn);
+$customerReturnHtml = shopNirStrictPdfHtml($customerReturn);
+foreach ([$customerReturnXlsx, $customerReturnHtml] as $output) {
+    $expect(str_contains(str_replace('<br>', ' ', $output), 'NOTĂ DE RECEPȚIE ȘI CONSTATARE DE DIFERENȚE'), 'NIR-ul de retur client trebuie să păstreze titlul oficial al documentului.');
+    $expect(str_contains($output, '(Intrare în stoc – retur client)'), 'NIR-ul de retur client trebuie să afișeze discret tipul intrării în stoc.');
+}
+
 $multiPage = $document;
 $multiPage['lines'] = [];
 for ($index = 1; $index <= 28; $index++) {

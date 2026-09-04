@@ -20,6 +20,11 @@
   const chatSummary = document.getElementById('topbar-chat-summary');
   const openChatButton = document.getElementById('topbar-open-chat');
   const openUpdateButton = document.getElementById('topbar-open-update');
+  const openShopNotificationsButton = document.getElementById('topbar-open-shop-notifications');
+  const shopNotificationsSummary = document.getElementById('topbar-shop-notifications-summary');
+  const shopNotificationsPanel = document.getElementById('topbar-shop-notifications-panel');
+  const shopNotificationsList = document.getElementById('topbar-shop-notifications-list');
+  const shopNotificationsReadAll = document.getElementById('topbar-shop-notifications-read-all');
   const profileModal = document.getElementById('profile-modal');
   const profileForm = document.getElementById('profile-form');
   const profileClose = document.getElementById('profile-modal-close');
@@ -39,6 +44,8 @@
   const logoutActions = document.getElementById('logout-modal-actions');
   const toastStack = document.getElementById('business-toast-stack');
   let chatUnreadCount = 0;
+  let shopUnreadCount = 0;
+  let shopNotificationsTimer = null;
   let refreshTimer = null;
   let logoutInProgress = false;
 
@@ -62,6 +69,7 @@
   function closeMenus() {
     accountMenu.hidden = true;
     notificationsMenu.hidden = true;
+    if (shopNotificationsPanel) shopNotificationsPanel.hidden = true;
     topbarButton?.classList.remove('active');
     notificationsButton?.classList.remove('active');
   }
@@ -122,12 +130,13 @@
   }
 
   function renderNotifications() {
-    const notificationCount = chatUnreadCount;
+    const notificationCount = chatUnreadCount + shopUnreadCount;
     const visible = notificationCount > 0;
     notificationsBadge.hidden = !visible;
     notificationsBadge.textContent = notificationCount > 9 ? '9+' : String(notificationCount);
     notificationsSummary.textContent = visible ? `${notificationCount} notificari noi` : 'Totul este la zi';
     chatSummary.textContent = chatUnreadCount > 0 ? `${chatUnreadCount} mesaje necitite` : 'Niciun mesaj necitit';
+    if (shopNotificationsSummary) shopNotificationsSummary.textContent = shopUnreadCount > 0 ? `${shopUnreadCount} alerte necitite` : 'Activitatea magazinului este la zi';
     if (openUpdateButton) openUpdateButton.hidden = true;
   }
 
@@ -218,6 +227,121 @@
     refreshTimer = setInterval(() => refreshAccount(true), 120000);
   }
 
+  function shopNotificationType(item) {
+    return String(item?.notification_type || item?.type || '').trim();
+  }
+
+  function shopNotificationSeverity(item) {
+    const explicit = String(item?.severity || item?.tone || '').trim().toLowerCase();
+    if (['success', 'warning', 'error', 'info'].includes(explicit)) return explicit;
+    const type = shopNotificationType(item);
+    if (type === 'new_order') return 'success';
+    if (type === 'return_requested' || type === 'spv_deadline') return 'warning';
+    if (type === 'order_cancelled' || type === 'spv_error' || type === 'spv_rejected') return 'error';
+    return 'info';
+  }
+
+  function shopNotificationIcon(type) {
+    const icons = {
+      new_order: '<svg viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6L5 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/><path d="M12 12v5m-2.5-2.5h5"/></svg>',
+      return_requested: '<svg viewBox="0 0 24 24"><path d="M9 7H5v-4"/><path d="M5 7a8 8 0 1 1-1 8"/><path d="m5 7 4-4"/></svg>',
+      order_cancelled: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m9 9 6 6m0-6-6 6"/></svg>',
+      spv_deadline: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>',
+      spv_error: '<svg viewBox="0 0 24 24"><path d="m12 3 9 17H3L12 3Z"/><path d="M12 9v5m0 3h.01"/></svg>',
+      spv_rejected: '<svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="m9 9 6 6m0-6-6 6"/></svg>',
+    };
+    return icons[type] || '<svg viewBox="0 0 24 24"><path d="M12 4a7 7 0 0 0-7 7v4l-2 3h18l-2-3v-4a7 7 0 0 0-7-7Z"/><path d="M10 21h4"/></svg>';
+  }
+
+  function shopNotificationTime(value) {
+    if (!value) return '';
+    const date = new Date(String(value).replace(' ', 'T'));
+    if (Number.isNaN(date.getTime())) return '';
+    const elapsed = Math.max(0, Date.now() - date.getTime());
+    const minutes = Math.floor(elapsed / 60000);
+    if (minutes < 1) return 'acum';
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} h`;
+    return new Intl.DateTimeFormat('ro-RO', { day: 'numeric', month: 'short' }).format(date).replace('.', '');
+  }
+
+  function renderShopNotificationFeed(feed) {
+    shopUnreadCount = Math.max(0, Number(feed?.unread_count || 0));
+    renderNotifications();
+    if (!shopNotificationsList) return;
+    if (shopNotificationsReadAll) shopNotificationsReadAll.hidden = shopUnreadCount === 0;
+    const items = Array.isArray(feed?.items) ? feed.items.filter(item => !item.read) : [];
+    shopNotificationsList.replaceChildren();
+    if (!items.length) {
+      const empty = document.createElement('small');
+      empty.className = 'topbar-shop-notifications-empty';
+      empty.textContent = 'Nu există alerte SHOP.';
+      shopNotificationsList.appendChild(empty);
+      return;
+    }
+    items.slice(0, 30).forEach(item => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      const type = shopNotificationType(item);
+      const severity = shopNotificationSeverity(item);
+      button.className = `topbar-shop-notification ${item.read ? 'read' : 'unread'} ${severity}`;
+      const icon = document.createElement('i');
+      icon.innerHTML = shopNotificationIcon(type);
+      const copy = document.createElement('span');
+      const heading = document.createElement('span');
+      const title = document.createElement('strong');
+      title.textContent = item.title || 'Notificare SHOP';
+      const time = document.createElement('time');
+      time.textContent = shopNotificationTime(item.created_at);
+      const body = document.createElement('small');
+      body.textContent = item.body || '';
+      heading.append(title, time);
+      copy.append(heading, body);
+      const arrow = document.createElement('b');
+      arrow.className = 'topbar-shop-notification-arrow';
+      arrow.innerHTML = '<svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>';
+      button.append(icon, copy, arrow);
+      button.addEventListener('click', async event => {
+        event.stopPropagation();
+        if (button.classList.contains('dismissing')) return;
+        button.classList.add('dismissing');
+        shopUnreadCount = Math.max(0, shopUnreadCount - 1);
+        renderNotifications();
+        void window.SHOP_API?.markShopNotificationRead?.(item.id, false).catch(() => void refreshShopNotifications(true));
+        window.setTimeout(() => {
+          button.remove();
+          closeMenus();
+          const entityType = item.entity_type === 'invoice' ? 'invoice' : 'order';
+          window.switchTab?.(entityType === 'invoice' ? 'shop-invoices' : 'shop-orders');
+          window.setTimeout(() => window.dispatchEvent(new CustomEvent('shop-open-entity', { detail: { type: entityType, id: item.entity_id } })), 120);
+        }, 230);
+      });
+      shopNotificationsList.appendChild(button);
+    });
+  }
+
+  async function refreshShopNotifications(full = false) {
+    if (!window.AUTH?.isLoggedIn?.() || !window.SHOP_API) return;
+    try {
+      if (full) renderShopNotificationFeed(await window.SHOP_API.listShopNotifications(50, true));
+      else {
+        const summary = await window.SHOP_API.getShopNotificationSummary();
+        shopUnreadCount = Math.max(0, Number(summary?.unread_count || 0));
+        renderNotifications();
+      }
+    } catch {
+      if (shopNotificationsSummary) shopNotificationsSummary.textContent = 'Alertele SHOP nu au putut fi verificate';
+    }
+  }
+
+  function startShopNotifications() {
+    clearInterval(shopNotificationsTimer);
+    if (!window.AUTH?.isLoggedIn?.()) { shopUnreadCount = 0; renderNotifications(); return; }
+    void refreshShopNotifications(false);
+    shopNotificationsTimer = setInterval(() => void refreshShopNotifications(false), 60000);
+  }
+
   sidebarButton?.addEventListener('click', openProfile);
   topbarButton?.addEventListener('click', event => {
     event.stopPropagation();
@@ -234,6 +358,27 @@
   openUpdateButton?.addEventListener('click', () => {
     closeMenus();
     window.APP_UPDATER_UI?.open?.();
+  });
+  openShopNotificationsButton?.addEventListener('click', event => {
+    event.stopPropagation();
+    if (!shopNotificationsPanel) return;
+    shopNotificationsPanel.hidden = !shopNotificationsPanel.hidden;
+    if (!shopNotificationsPanel.hidden) void refreshShopNotifications(true);
+  });
+  shopNotificationsReadAll?.addEventListener('click', async event => {
+    event.stopPropagation();
+    const rows = Array.from(shopNotificationsList?.querySelectorAll('.topbar-shop-notification') || []);
+    rows.forEach((row, index) => window.setTimeout(() => row.classList.add('dismissing'), index * 28));
+    shopUnreadCount = 0;
+    renderNotifications();
+    shopNotificationsReadAll.hidden = true;
+    try {
+      await window.SHOP_API.markShopNotificationRead('', true);
+      window.setTimeout(() => renderShopNotificationFeed({ unread_count: 0, items: [] }), Math.min(420, 230 + rows.length * 28));
+    } catch (error) {
+      showToast(error.message || 'Notificările nu au putut fi marcate.', 'error');
+      void refreshShopNotifications(true);
+    }
   });
   document.addEventListener('click', event => {
     if (!event.target.closest('.business-dropdown-wrap')) closeMenus();
@@ -290,6 +435,7 @@
   window.addEventListener('auth-change', () => {
     renderAccount();
     startRefresh();
+    startShopNotifications();
   });
   window.addEventListener('focus', () => refreshAccount(true));
 
@@ -297,4 +443,5 @@
   renderAccount();
   renderNotifications();
   startRefresh();
+  startShopNotifications();
 })();

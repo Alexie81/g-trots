@@ -153,7 +153,7 @@ final class GtrotsInvoiceAutomation
                 } else {
                     $notification = $emailCallback
                         ? $emailCallback($db, $invoiceId, $config)
-                        : GtrotsInvoiceService::sendEmail($db, $invoiceId, $config);
+                        : GtrotsInvoiceService::sendEmailOnce($db, $invoiceId, $config);
                     $emailSent = !empty($notification['sent']);
                     if (!$emailSent) throw new RuntimeException((string)($notification['error'] ?? 'E-mailul facturii nu a putut fi trimis.'));
                 }

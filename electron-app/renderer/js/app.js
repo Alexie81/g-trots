@@ -1,8 +1,26 @@
 // ─── App controller ───────────────────────────────────────────────────────────
 (function() {
   const MODULE_STORAGE_KEY = 'gtrots_active_module_v1';
-  const moduleStartTabs = { service: 'scanner', shop: 'shop-dashboard' };
+  const MODULE_TAB_STORAGE_KEYS = {
+    service: 'gtrots_last_service_tab_v1',
+    shop: 'gtrots_last_shop_tab_v1',
+  };
+  const moduleDefaultTabs = { service: 'scanner', shop: 'shop-dashboard' };
+  const moduleStartTabs = {
+    service: localStorage.getItem(MODULE_TAB_STORAGE_KEYS.service) || 'scanner',
+    shop: localStorage.getItem(MODULE_TAB_STORAGE_KEYS.shop) || 'shop-dashboard',
+  };
   let activeModule = localStorage.getItem(MODULE_STORAGE_KEY) === 'shop' ? 'shop' : 'service';
+  let tabChangeRevision = 0;
+  let warmedTablesToken = '';
+
+  function rememberedModuleTab(moduleId) {
+    const candidate = moduleStartTabs[moduleId];
+    const button = document.querySelector(`.nav-btn[data-tab="${candidate}"]`);
+    return button?.closest('[data-module-nav]')?.dataset.moduleNav === moduleId
+      ? candidate
+      : moduleDefaultTabs[moduleId];
+  }
 
   window.SCANNER_CLIENT = null;
   document.documentElement.classList.add('performance-rendering');
@@ -30,7 +48,7 @@
     document.getElementById('active-module-chip')?.classList.toggle('shop', nextModule === 'shop');
 
     window.dispatchEvent(new CustomEvent('module-change', { detail: nextModule }));
-    if (navigate) switchTab(moduleStartTabs[nextModule]);
+    if (navigate) switchTab(rememberedModuleTab(nextModule));
   }
 
   function switchTab(tabId) {
@@ -58,8 +76,21 @@
     document.querySelectorAll('.tab-panel').forEach(panel => {
       panel.classList.toggle('active', panel.id === 'tab-' + tabId);
     });
-    // Dispatch event for modules
-    window.dispatchEvent(new CustomEvent('tab-change', { detail: tabId }));
+    const selectedButton = document.querySelector(`.nav-btn[data-tab="${tabId}"]`);
+    const selectedModule = selectedButton?.closest('[data-module-nav]')?.dataset.moduleNav;
+    if (selectedModule === 'service' || selectedModule === 'shop') {
+      moduleStartTabs[selectedModule] = tabId;
+      localStorage.setItem(MODULE_TAB_STORAGE_KEYS[selectedModule], tabId);
+    }
+
+    // Lasam intai browserul sa afiseze modulul. Incarcarea/revalidarea datelor
+    // porneste in cadrul urmator si nu mai poate bloca vizual click-ul.
+    const revision = ++tabChangeRevision;
+    requestAnimationFrame(() => {
+      if (revision !== tabChangeRevision) return;
+      if (!document.getElementById(`tab-${tabId}`)?.classList.contains('active')) return;
+      window.dispatchEvent(new CustomEvent('tab-change', { detail: tabId }));
+    });
   }
 
   // Wire nav buttons
@@ -96,10 +127,36 @@
     }
   });
 
+  window.addEventListener('auth-change', (event) => {
+    const authToken = String(event.detail?.token || '');
+    if (!authToken) {
+      warmedTablesToken = '';
+      return;
+    }
+    if (warmedTablesToken === authToken) return;
+    warmedTablesToken = authToken;
+    const warmTables = () => {
+      const allowedSizes = new Set([10, 15, 25, 50, 100]);
+      const savedClientsSize = Number(localStorage.getItem('gtrots.clientsPageSize.v1') || 10);
+      const savedServiceSize = Number(localStorage.getItem('gtrots.serviceSheetsPageSize.v1') || 10);
+      const clientsSize = allowedSizes.has(savedClientsSize) ? savedClientsSize : 10;
+      const serviceSize = allowedSizes.has(savedServiceSize) ? savedServiceSize : 10;
+      void Promise.allSettled([
+        window.API?.getClientsPage?.({ page: 1, pageSize: clientsSize, sortBy: 'created_at', sortDir: 'desc' }),
+        // Service pornește fără sortare explicită cât timp selectorul legacy este
+        // ascuns. Folosim aceeași formă a cererii pentru ca prima deschidere să
+        // nimerească pagina deja încălzită din cache.
+        window.API?.getServiceSheetsPage?.({ page: 1, pageSize: serviceSize }),
+      ]);
+    };
+    if ('requestIdleCallback' in window) window.requestIdleCallback(warmTables, { timeout: 1200 });
+    else window.setTimeout(warmTables, 250);
+  });
+
   window.switchTab = switchTab;
   window.selectAppModule = selectModule;
 
   // Restore the last workspace used on this computer.
   selectModule(activeModule, false);
-  switchTab(moduleStartTabs[activeModule]);
+  switchTab(rememberedModuleTab(activeModule));
 })();

@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { runWhenIdle } from '@/utils/runWhenIdle';
 import * as ImagePicker from 'expo-image-picker';
 import {
   Check,
@@ -214,21 +215,54 @@ function money(value: number) {
 }
 
 const DETAIL_SALES_PAGE_SIZE = 5;
-let productManagerCache: ShopProductManagerBootstrap | null = null;
+type ProductManagerSnapshot = { data: ShopProductManagerBootstrap; cachedAt: number };
+const PRODUCT_MANAGER_SNAPSHOT_TTL_MS = 30_000;
+const PRODUCT_MANAGER_SNAPSHOT_TOKEN_LIMIT = 2;
+const productManagerSnapshots = new Map<string, ProductManagerSnapshot>();
+
+function readProductManagerSnapshot(token: string) {
+  if (!token) return undefined;
+  const snapshot = productManagerSnapshots.get(token);
+  if (!snapshot) return undefined;
+  productManagerSnapshots.delete(token);
+  productManagerSnapshots.set(token, snapshot);
+  return snapshot;
+}
+
+function rememberProductManagerSnapshot(token: string, bootstrap: ShopProductManagerBootstrap) {
+  if (!token) return;
+  const previous = productManagerSnapshots.get(token)?.data;
+  const data: ShopProductManagerBootstrap = {
+    ...bootstrap,
+    categories: bootstrap.categories.length ? bootstrap.categories : (previous?.categories || []),
+    brands: bootstrap.brands.length ? bootstrap.brands : (previous?.brands || []),
+    manufacturers: bootstrap.manufacturers.length ? bootstrap.manufacturers : (previous?.manufacturers || []),
+    sources: bootstrap.sources.length ? bootstrap.sources : (previous?.sources || []),
+  };
+  productManagerSnapshots.delete(token);
+  while (productManagerSnapshots.size >= PRODUCT_MANAGER_SNAPSHOT_TOKEN_LIMIT) {
+    const oldestToken = productManagerSnapshots.keys().next().value;
+    if (!oldestToken) break;
+    productManagerSnapshots.delete(oldestToken);
+  }
+  productManagerSnapshots.set(token, { data, cachedAt: Date.now() });
+}
 
 export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (orderId: string) => void }) {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
-  const [products, setProducts] = useState<ShopProduct[]>(() => productManagerCache?.products || []);
-  const [categories, setCategories] = useState<ShopCategory[]>(() => productManagerCache?.categories || []);
-  const [brands, setBrands] = useState<ShopBrand[]>(() => productManagerCache?.brands || []);
-  const [manufacturers, setManufacturers] = useState<ShopManufacturer[]>(() => productManagerCache?.manufacturers || []);
-  const [sources, setSources] = useState<ShopProductSource[]>(() => productManagerCache?.sources || []);
+  const initialSnapshot = useMemo(() => readProductManagerSnapshot(token || ''), [token]);
+  const initialBootstrap = initialSnapshot?.data;
+  const [products, setProducts] = useState<ShopProduct[]>(() => initialBootstrap?.products || []);
+  const [categories, setCategories] = useState<ShopCategory[]>(() => initialBootstrap?.categories || []);
+  const [brands, setBrands] = useState<ShopBrand[]>(() => initialBootstrap?.brands || []);
+  const [manufacturers, setManufacturers] = useState<ShopManufacturer[]>(() => initialBootstrap?.manufacturers || []);
+  const [sources, setSources] = useState<ShopProductSource[]>(() => initialBootstrap?.sources || []);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [productTotal, setProductTotal] = useState(productManagerCache?.total || productManagerCache?.products.length || 0);
-  const [loading, setLoading] = useState(!productManagerCache);
+  const [productTotal, setProductTotal] = useState(initialBootstrap?.total || initialBootstrap?.products.length || 0);
+  const [loading, setLoading] = useState(!initialBootstrap);
   const [listRefreshing, setListRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -248,26 +282,31 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
   const [slugTouched, setSlugTouched] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const requestSequence = useRef(0);
-  const metadataLoaded = useRef(Boolean(productManagerCache?.categories?.length));
+  const metadataLoaded = useRef(Boolean(initialBootstrap?.categories?.length));
+  const hasLoaded = useRef(Boolean(initialBootstrap));
+  const initialLoadEffect = useRef(true);
 
   const load = useCallback(async (
     quiet = false,
-    request: { page?: number; pageSize?: number; query?: string; includeMetadata?: boolean } = {},
+    request: { page?: number; pageSize?: number; query?: string; includeMetadata?: boolean; silent?: boolean } = {},
   ) => {
     if (!token) return;
     const sequence = ++requestSequence.current;
     if (!quiet) setLoading(true);
     else setListRefreshing(true);
-    setError('');
+    if (!request.silent) setError('');
     try {
+      const requestedPage = request.page ?? 1;
+      const requestedPageSize = request.pageSize ?? 10;
+      const requestedQuery = request.query ?? '';
       const bootstrap = await shopApi.loadProductManager(token, {
-        page: request.page ?? 1,
-        page_size: request.pageSize ?? 10,
-        q: request.query ?? '',
+        page: requestedPage,
+        page_size: requestedPageSize,
+        q: requestedQuery,
         include_metadata: request.includeMetadata ?? !metadataLoaded.current,
       });
       if (sequence !== requestSequence.current) return undefined;
-      if ((request.query ?? '') === '') productManagerCache = bootstrap;
+      if (!requestedQuery && requestedPage === 1 && requestedPageSize === 10) rememberProductManagerSnapshot(token, bootstrap);
       setProducts(bootstrap.products);
       setProductTotal(bootstrap.total ?? bootstrap.products.length);
       if (bootstrap.categories.length || !metadataLoaded.current) setCategories(bootstrap.categories);
@@ -275,12 +314,14 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
       if (bootstrap.manufacturers.length || !metadataLoaded.current) setManufacturers(bootstrap.manufacturers);
       if (bootstrap.sources.length || !metadataLoaded.current) setSources(bootstrap.sources);
       if (bootstrap.categories.length || bootstrap.brands.length || bootstrap.manufacturers.length || bootstrap.sources.length) metadataLoaded.current = true;
+      setError('');
       return bootstrap;
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Produsele nu au putut fi incarcate.');
+      if (!request.silent) setError(loadError instanceof Error ? loadError.message : 'Produsele nu au putut fi incarcate.');
       return undefined;
     } finally {
       if (sequence === requestSequence.current) {
+        hasLoaded.current = true;
         setLoading(false);
         setListRefreshing(false);
       }
@@ -288,8 +329,29 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
   }, [token]);
 
   useEffect(() => {
+    const firstRun = initialLoadEffect.current;
+    initialLoadEffect.current = false;
+    if (firstRun && initialSnapshot) {
+      if (Date.now() - initialSnapshot.cachedAt <= PRODUCT_MANAGER_SNAPSHOT_TTL_MS) return;
+      let interactionTask: ReturnType<typeof runWhenIdle> | null = null;
+      const frame = requestAnimationFrame(() => {
+        interactionTask = runWhenIdle(() => {
+          void load(true, {
+            page,
+            pageSize,
+            query,
+            includeMetadata: !metadataLoaded.current,
+            silent: true,
+          });
+        });
+      });
+      return () => {
+        cancelAnimationFrame(frame);
+        interactionTask?.cancel();
+      };
+    }
     const timeout = setTimeout(() => {
-      void load(Boolean(productManagerCache || products.length), {
+      void load(hasLoaded.current, {
         page,
         pageSize,
         query,
@@ -297,7 +359,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
       });
     }, query.trim() ? 220 : 0);
     return () => clearTimeout(timeout);
-  }, [load, page, pageSize, query]);
+  }, [initialSnapshot, load, page, pageSize, query]);
 
   const filtered = products;
   const safePage = Math.min(page, Math.max(1, Math.ceil(productTotal / pageSize)));
@@ -373,6 +435,14 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
     setForm((current) => ({ ...current, [key]: value }));
   };
 
+  const resetEditor = () => {
+    setEditorVisible(false);
+    setEditorLoading(false);
+    setGalleryDragging(false);
+    setSlugTouched(false);
+    setForm(emptyForm());
+  };
+
   const openNew = () => {
     const next = emptyForm();
     setForm(next);
@@ -386,7 +456,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
     // Open first, then hydrate the large editor payload in the background. A
     // product can contain long HTML, many images, specs and FAQ entries, so
     // waiting before showing the modal made the button look frozen.
-    setForm((current) => ({ ...current, id: product.id, name: product.name }));
+    setForm({ ...emptyForm(), id: product.id, name: product.name });
     setEditorLoading(true);
     setEditorVisible(true);
     try {
@@ -427,7 +497,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
       setSlugTouched(false);
     } catch (editError) {
       Alert.alert('Produs indisponibil', editError instanceof Error ? editError.message : 'Nu s-a putut deschide produsul.');
-      setEditorVisible(false);
+      resetEditor();
     } finally {
       setEditorLoading(false);
     }
@@ -470,10 +540,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
 
   const closeEditor = () => {
     if (saving || editorLoading) return;
-    setEditorVisible(false);
-    // Continutul bogat (WebView, imagini si zeci de campuri) este curatat dupa
-    // ce panoul a disparut, astfel incat atingerea pe X raspunde imediat.
-    setTimeout(() => setForm(emptyForm()), 40);
+    resetEditor();
   };
 
   const refreshDetail = async () => {
@@ -619,7 +686,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
       const saved = form.id
         ? await shopApi.updateProduct(token, form.id, payload)
         : await shopApi.createProduct(token, payload);
-      setEditorVisible(false);
+      resetEditor();
       await load(true, { page, pageSize, query, includeMetadata: false });
       if (saved.stripe_sync_status === 'error') {
         Alert.alert('Produs salvat in catalog', `Produsul este salvat, dar oglinda Stripe nu s-a actualizat: ${saved.stripe_sync_error || 'sincronizarea va trebui reincercata.'}`);
@@ -721,7 +788,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
               const orderProfit = Number(order.line_total || 0) - (acquisitionPrice * Number(order.quantity || 0));
               return <TouchableOpacity key={order.id} activeOpacity={0.76} style={styles.saleCard} onPress={() => { closeDetail(); onOpenOrder?.(order.id); }}>
                 <View style={styles.saleHead}><View><Text style={styles.saleLabel}>NUMAR COMANDA</Text><Text style={styles.saleNumber}>{order.order_number}</Text></View><View style={styles.saleStatus}><Text style={styles.saleStatusText}>{order.status}</Text></View></View>
-                <Text style={styles.saleMeta}>{order.customer_name} · {order.created_at} · {order.quantity} buc.</Text>
+                <Text style={styles.saleMeta}>{order.customer_display_name || order.customer_name} · {order.created_at} · {order.quantity} buc.</Text>
                 <View style={styles.saleStats}>
                   <View style={styles.saleStat}><Text style={styles.saleLabel}>PRET ACHIZITIE</Text><Text style={styles.saleValue}>{money(acquisitionPrice)}</Text></View>
                   <View style={styles.saleStat}><Text style={styles.saleLabel}>PRET VANZARE</Text><Text style={styles.saleValue}>{money(salePrice)}</Text></View>

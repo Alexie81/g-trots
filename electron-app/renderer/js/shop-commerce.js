@@ -1,17 +1,49 @@
 (function () {
   const { shell, clipboard } = require('electron');
+  const DASHBOARD_PREFERENCES_STORAGE_KEY = 'gtrots.shopDashboardPreferences.v1';
+  const DASHBOARD_PERIOD_VALUES = new Set(['24h', '7d', '28d', '3m', '6m', '12m', '16m', 'all', 'custom']);
+  const DASHBOARD_GRANULARITY_VALUES = new Set(['hour', 'day', 'week', 'month']);
+  const dashboardPreferences = readDashboardPreferences();
   const state = {
-    products: [], orders: [], invoices: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], promotions: [], companies: [], nirs: [], nirPermissions: [], nirWarehouses: [], invoiceThemeSettings: null, invoiceAutomationSettings: null, invoiceAutomationSaving: false, selectedInvoiceTheme: 'orange', invoiceSettingsDraft: { invoice_series: 'GT', next_number: 1, due_days: 7, default_notes: '' }, invoiceThemeSaving: false, invoiceQuery: '', invoiceStatusFilter: 'all', invoiceBusy: '',
-    editingProduct: null, editingOrder: null, invoiceIssueOrder: null, invoiceDetail: null, editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
+    products: [], orders: [], invoices: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], promotions: [], companies: [], receiptLocations: [], nirs: [], nirPermissions: [], nirWarehouses: [], nirReceiptLocations: [], invoiceThemeSettings: null, invoiceAutomationSettings: null, invoiceAutomationSaving: false, selectedInvoiceTheme: 'orange', invoiceSettingsDraft: { invoice_series: 'GT', next_number: 1, due_days: 7, default_notes: '' }, invoiceThemeSaving: false, invoiceQuery: '', invoiceStatusFilter: 'all', invoiceBusy: '', spvConnection: null, spvDraft: null, spvBusy: '', spvWaitingForOAuth: false,
+    editingProduct: null, editingOrder: null, invoiceIssueOrder: null, invoiceDetail: null, editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, editingReceiptLocation: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
     productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, productTotal: 0, productSearchTimer: null, productLoadRequestId: 0, slugTouched: false, productQuery: '', orderQuery: '', orderSearchTimer: null, orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
     customerQuery: '', inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false, nirBundleDownloading: '', nirRegistryDownloadPeriod: 'current_month', nirRegistryDownloadContent: 'complete', nirRegistryDownloading: false, nirExportProgressTimer: null,
     pages: { products: 1, orders: 1, invoices: 1, inventory: 1, stockFlow: 1, stockMovements: 1, productSales: 1, productReviews: 1, productPurchases: 1, customers: 1, customerOrders: 1, nirs: 1 },
     pageSizes: { products: 10, orders: 10, invoices: 10, inventory: 10, stockFlow: 5, stockMovements: 5, productSales: 5, productReviews: 5, productPurchases: 5, customers: 10, customerOrders: 5, nirs: 15 },
+    dashboardPeriod: dashboardPreferences.period, dashboardStartDate: dashboardPreferences.startDate, dashboardEndDate: dashboardPreferences.endDate, dashboardGranularity: dashboardPreferences.granularity, dashboardRequestId: 0, dashboardSeries: new Set(['revenue', 'returns', 'orders', 'acquisitions', 'profit']),
   };
   const PAGE_SIZE_OPTIONS = [10, 25, 50];
   const PRODUCT_SALES_PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25, 50, 75, 100];
   let invoiceAutomationSaveQueue = Promise.resolve();
   let invoiceAutomationSaveRevision = 0;
+  let dashboardGranularityPickerCleanup = null;
+  let dashboardWarmupScheduled = false;
+  let shopViewLoadGeneration = 0;
+  let shopViewAuthToken = window.AUTH?.getToken?.() || '';
+  let cancelShopViewIdleRefresh = null;
+  let spvOAuthPollTimer = null;
+  const SHOP_VIEW_REVISIT_TTL_MS = 30000;
+  const shopViewFreshAt = new Map();
+  const shopViewLoads = new Map();
+  const quietShopContent = new Map();
+  const SHOP_VIEW_CONTENT_IDS = {
+    'shop-products': 'shop-products-content',
+    'shop-orders': 'shop-orders-content',
+    'shop-invoices': 'shop-invoices-content',
+    'shop-inventory': 'shop-inventory-content',
+    'shop-sources': 'shop-sources-content',
+    'shop-suppliers': 'shop-suppliers-content',
+    'shop-nirs': 'shop-nirs-content',
+    'shop-payments': 'shop-payments-content',
+    'shop-automations': 'shop-automations-content',
+    'shop-shipping': 'shop-shipping-content',
+    'shop-customers': 'shop-customers-content',
+    'shop-discounts': 'shop-discounts-content',
+    'shop-company': 'shop-company-content',
+    'shop-invoice-configurator': 'shop-invoice-configurator-content',
+    'shop-spv': 'shop-spv-content',
+  };
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
   const supplierDisplayName = (source, fallback = 'Furnizor') => {
@@ -22,7 +54,39 @@
     return fallback;
   };
   const money = value => `${new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0))} lei`;
+  const compactMoney = value => `${new Intl.NumberFormat('ro-RO', { maximumFractionDigits: 0 }).format(Number(value || 0))} lei`;
   const quantity = value => new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 0, maximumFractionDigits: 4 }).format(Number(value || 0));
+  function isDashboardDate(value) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) && !Number.isNaN(new Date(`${value}T12:00:00`).getTime());
+  }
+  function readDashboardPreferences() {
+    const fallback = { period: '7d', startDate: '', endDate: '', granularity: 'day' };
+    try {
+      const saved = JSON.parse(localStorage.getItem(DASHBOARD_PREFERENCES_STORAGE_KEY) || 'null');
+      if (!saved || !DASHBOARD_PERIOD_VALUES.has(saved.period)) return fallback;
+      const startDate = isDashboardDate(saved.startDate) ? saved.startDate : '';
+      const endDate = isDashboardDate(saved.endDate) ? saved.endDate : '';
+      if (saved.period === 'custom' && (!startDate || !endDate || startDate > endDate)) return fallback;
+      return {
+        period: saved.period,
+        startDate: saved.period === 'custom' ? startDate : '',
+        endDate: saved.period === 'custom' ? endDate : '',
+        granularity: DASHBOARD_GRANULARITY_VALUES.has(saved.granularity) ? saved.granularity : 'day',
+      };
+    } catch {
+      return fallback;
+    }
+  }
+  function saveDashboardPreferences() {
+    try {
+      localStorage.setItem(DASHBOARD_PREFERENCES_STORAGE_KEY, JSON.stringify({
+        period: state.dashboardPeriod,
+        startDate: state.dashboardPeriod === 'custom' ? state.dashboardStartDate : '',
+        endDate: state.dashboardPeriod === 'custom' ? state.dashboardEndDate : '',
+        granularity: state.dashboardGranularity,
+      }));
+    } catch {}
+  }
   const slugify = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 200);
   const normalizeSemanticSearch = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
   function searchEditDistance(left, right) {
@@ -78,34 +142,32 @@
     return score;
   }
   const toast = (message, type = 'success') => window.BUSINESS_UI?.showToast?.(message, type);
-  const statusLabels = { new: 'În procesare (Nouă)', confirmed: 'Confirmată', processing: 'În pregătire', shipped: 'Predată curierului', completed: 'Livrată', refunded: 'Rambursată', cancelled: 'Comandă anulată' };
-  const statusShortLabels = { new: 'Nouă', confirmed: 'Confirmată', processing: 'În pregătire', shipped: 'Predată curierului', completed: 'Livrată', refunded: 'Rambursată', cancelled: 'Anulată' };
-  const statusColors = { new: '#38bdf8', confirmed: '#34d399', processing: '#fb923c', shipped: '#a78bfa', completed: '#22c55e', refunded: '#f59e0b', cancelled: '#fb7185' };
+  const statusLabels = { new: 'În procesare (Nouă)', confirmed: 'Confirmată', processing: 'În pregătire', shipped: 'Predată curierului', completed: 'Livrată', return_requested: 'Retur solicitat', return_refused: 'Retur refuzat', return_confirmed: 'Retur confirmat', refunded: 'Rambursată', cancelled: 'Comandă anulată' };
+  const statusShortLabels = { new: 'Nouă', confirmed: 'Confirmată', processing: 'În pregătire', shipped: 'Predată curierului', completed: 'Livrată', return_requested: 'Retur solicitat', return_refused: 'Retur refuzat', return_confirmed: 'Retur confirmat', refunded: 'Rambursată', cancelled: 'Anulată' };
+  const statusColors = { new: '#38bdf8', confirmed: '#34d399', processing: '#fb923c', shipped: '#a78bfa', completed: '#22c55e', return_requested: '#f472b6', return_refused: '#fb7185', return_confirmed: '#2dd4bf', refunded: '#f59e0b', cancelled: '#fb7185' };
   const statusDefinitions = [
     { value: 'new', description: 'Comanda a fost primită și a intrat în procesare.' },
     { value: 'confirmed', description: 'Comanda și plata au fost confirmate.' },
     { value: 'processing', description: 'Produsele sunt pregătite pentru expediere.' },
     { value: 'shipped', description: 'Pachetul a fost predat curierului.' },
     { value: 'completed', description: 'Comanda a ajuns la destinație.' },
+    { value: 'return_requested', description: 'Cererea de retur a fost înregistrată intern și așteaptă verificarea.' },
+    { value: 'return_refused', description: 'Solicitarea a fost verificată și refuzată. Acest pas poate fi sărit.' },
+    { value: 'return_confirmed', description: 'Returul a fost aprobat intern și poate continua către rambursare.' },
     { value: 'refunded', description: 'Comanda a fost returnată și rambursată.' },
     { value: 'cancelled', description: 'Comanda nu mai este procesată.' },
   ];
-  const mainStatusFlow = ['new', 'confirmed', 'processing', 'shipped', 'completed'];
+  const mainStatusFlow = ['new', 'confirmed', 'processing', 'shipped', 'completed', 'return_requested', 'return_refused', 'return_confirmed'];
   const terminalStatuses = ['refunded', 'cancelled'];
-  const statusTransitionLocked = (current, candidate) => {
-    if (candidate === current) return false;
-    if (terminalStatuses.includes(current)) return true;
-    if (terminalStatuses.includes(candidate)) return false;
-    const currentIndex = mainStatusFlow.indexOf(current);
-    const candidateIndex = mainStatusFlow.indexOf(candidate);
-    return currentIndex >= 0 && candidateIndex >= 0 && candidateIndex < currentIndex;
-  };
   const statusIcon = status => ({
     new: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg>',
     confirmed: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>',
     processing: '<svg viewBox="0 0 24 24"><path d="m4 8 8-4 8 4-8 4Z"/><path d="M4 8v8l8 4 8-4V8M12 12v8"/></svg>',
     shipped: '<svg viewBox="0 0 24 24"><path d="M3 6h11v11H3zM14 10h4l3 3v4h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
     completed: '<svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/><circle cx="12" cy="12" r="10"/></svg>',
+    return_requested: '<svg viewBox="0 0 24 24"><path d="M4 7v5h5"/><path d="M5.6 16a8 8 0 1 0 .2-8.2L4 12"/></svg>',
+    return_refused: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></svg>',
+    return_confirmed: '<svg viewBox="0 0 24 24"><path d="M4 7v5h5"/><path d="M5.6 16a8 8 0 1 0 .2-8.2L4 12"/><path d="m9 12 2 2 4-4"/></svg>',
     refunded: '<svg viewBox="0 0 24 24"><path d="M4 7v5h5"/><path d="M5.6 16a8 8 0 1 0 .2-8.2L4 12"/></svg>',
     cancelled: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></svg>',
   }[status] || '');
@@ -139,11 +201,11 @@
       ${dashboardCard('shop-company', 'purple', 'IDENTITATE', 'Datele firmei', 'Societati, conturi bancare si stampila.')}
       ${dashboardCard('shop-invoice-configurator', 'amber', 'DOCUMENTE', 'Configurator factură', 'Patru teme și alegerea aspectului pentru facturile viitoare.')}
       ${dashboardCard('shop-automations', 'amber', 'FLUXURI', 'Automatizări', 'Emitere și trimitere automată a facturilor.')}
-      ${dashboardCard('shop-spv', 'blue', 'ANAF', 'SPV / e-Factura', 'Conectarea și transmiterea facturilor vor fi configurate aici.')}
+      ${dashboardCard('shop-spv', 'blue', 'ANAF', 'SPV - RO e-Factura', 'Conectarea și transmiterea facturilor vor fi configurate aici.')}
     `);
     document.body.insertAdjacentHTML('beforeend', productModal() + productDetailModal() + orderModal() + invoiceIssueModal() + invoiceDetailModal() + stockModal() + sourceModal() + supplierModal() + nirModal() + nirRegistryDownloadModal() + shippingModal() + customerModal() + promotionModal() + promotionStatsModal() + companyModal());
     wire();
-    if ($('tab-shop-dashboard')?.classList.contains('active')) void loadDashboard();
+    if ($('tab-shop-dashboard')?.classList.contains('active')) void loadShopView('shop-dashboard', { force: true });
   }
 
   function commercePage(title, description, contentId, hasAdd = false) {
@@ -191,7 +253,22 @@
     return `<div class="shop-commerce-overlay" id="shop-order-modal" hidden><form class="shop-commerce-modal compact" id="shop-order-form"><header><div><small>COMANDA SHOP</small><h2 id="shop-order-title">Comanda</h2></div><button type="button" data-commerce-close="shop-order-modal">×</button></header><div class="shop-commerce-modal-scroll" id="shop-order-details"></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-order-modal">Inchide</button><button type="submit" class="btn-primary" id="shop-order-save">Salveaza comanda</button></footer></form></div>`;
   }
   function invoiceIssueModal() {
-    return `<div class="shop-commerce-overlay shop-invoice-issue-overlay" id="shop-invoice-issue-modal" hidden><form class="shop-commerce-modal compact shop-invoice-issue-modal" id="shop-invoice-issue-form"><span class="shop-invoice-issue-glow" aria-hidden="true"></span><header><div><small>DOCUMENT FISCAL · TEMĂ FIXATĂ</small><h2>Emite factura</h2></div><button type="button" data-commerce-close="shop-invoice-issue-modal">×</button></header><div class="shop-invoice-issue-body"><div class="shop-invoice-issue-lead"><span><svg viewBox="0 0 24 24"><path d="M6 2h9l4 4v16l-3-2-3 2-3-2-4 2V2Z"/><path d="M14 2v5h5M9 11h6m-6 4h4"/></svg></span><div><small>EMITERE DIN COMANDĂ</small><strong id="shop-invoice-issue-order">—</strong><p>Factura scade stocul imediat. FIFO alege loturile, iar valorile păstrate sunt costurile reale de achiziție din NIR.</p></div></div><div class="shop-invoice-issue-summary"><span><small>CLIENT</small><strong id="shop-invoice-issue-client">—</strong></span><span><small>TOTAL FACTURĂ</small><strong id="shop-invoice-issue-total">—</strong></span></div><label class="shop-invoice-email-switch"><span class="shop-invoice-email-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/></svg></span><span><strong>Trimite și pe e-mail</strong><small id="shop-invoice-issue-email">—</small></span><input id="shop-invoice-issue-send-email" type="checkbox"><i><b></b></i></label><div class="shop-invoice-issue-note"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg><span>Numărul, tema și valorile rămân neschimbate la orice regenerare.</span></div></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-invoice-issue-modal">Renunță</button><button type="submit" class="btn-primary shop-invoice-issue-confirm" id="shop-invoice-issue-confirm"><svg viewBox="0 0 24 24"><path d="M6 2h9l4 4v16l-3-2-3 2-3-2-4 2V2Z"/><path d="M14 2v5h5M9 11h6m-6 4h4"/></svg><span>Emite factura</span></button></footer></form></div>`;
+    return `<div class="shop-commerce-overlay shop-invoice-issue-overlay" id="shop-invoice-issue-modal" hidden>
+      <form class="shop-commerce-modal compact shop-invoice-issue-modal" id="shop-invoice-issue-form">
+        <span class="shop-invoice-issue-glow" aria-hidden="true"></span>
+        <header><div><small>DOCUMENT FISCAL · TEMĂ FIXATĂ</small><h2>Emite factura</h2></div><button type="button" data-commerce-close="shop-invoice-issue-modal">×</button></header>
+        <div class="shop-invoice-issue-body">
+          <div class="shop-invoice-issue-lead"><span><svg viewBox="0 0 24 24"><path d="M6 2h9l4 4v16l-3-2-3 2-3-2-4 2V2Z"/><path d="M14 2v5h5M9 11h6m-6 4h4"/></svg></span><div><small>EMITERE DIN COMANDĂ</small><strong id="shop-invoice-issue-order">—</strong><p>Factura scade stocul imediat. FIFO alege loturile, iar valorile păstrate sunt costurile reale de achiziție din NIR.</p></div></div>
+          <div class="shop-invoice-issue-summary"><span><small>CLIENT</small><strong id="shop-invoice-issue-client">—</strong></span><span><small>TOTAL FACTURĂ</small><strong id="shop-invoice-issue-total">—</strong></span></div>
+          <div class="shop-invoice-email-options">
+            <label class="shop-invoice-email-switch"><span class="shop-invoice-email-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/></svg></span><span><strong id="shop-invoice-issue-email-title">Trimite și pe e-mail</strong><small id="shop-invoice-issue-email">—</small></span><input id="shop-invoice-issue-send-email" type="checkbox"><i><b></b></i></label>
+            <label class="shop-invoice-email-switch return" id="shop-invoice-return-email-option" hidden><span class="shop-invoice-email-icon"><svg viewBox="0 0 24 24"><path d="M4 7v5h5"/><path d="M5.6 16a8 8 0 1 0 .2-8.2L4 12"/><path d="m9 12 2 2 4-4"/></svg></span><span><strong>Trimite factura de retur</strong><small id="shop-invoice-issue-return-email">PDF separat la adresa clientului</small></span><input id="shop-invoice-issue-send-return-email" type="checkbox"><i><b></b></i></label>
+          </div>
+          <div class="shop-invoice-issue-note"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg><span>Numărul, tema și valorile rămân neschimbate la orice regenerare.</span></div>
+        </div>
+        <footer><button type="button" class="btn-ghost" data-commerce-close="shop-invoice-issue-modal">Renunță</button><button type="submit" class="btn-primary shop-invoice-issue-confirm" id="shop-invoice-issue-confirm"><svg viewBox="0 0 24 24"><path d="M6 2h9l4 4v16l-3-2-3 2-3-2-4 2V2Z"/><path d="M14 2v5h5M9 11h6m-6 4h4"/></svg><span>Emite factura</span></button></footer>
+      </form>
+    </div>`;
   }
   function invoiceDetailModal() {
     return `<div class="shop-commerce-overlay shop-invoice-detail-overlay" id="shop-invoice-detail-modal" hidden><section class="shop-commerce-modal shop-invoice-detail-modal"><header><div><small>FACTURI EMISE / FIȘĂ COMPLETĂ</small><h2 id="shop-invoice-detail-title">Factură</h2></div><button type="button" data-commerce-close="shop-invoice-detail-modal">×</button></header><div class="shop-commerce-modal-scroll" id="shop-invoice-detail-content"><div class="shop-commerce-loading">Se pregătește factura...</div></div><footer><button type="button" class="shop-invoice-detail-action link" id="shop-invoice-detail-link"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2"/></svg><span>Obține link</span></button><button type="button" class="shop-invoice-detail-action email" id="shop-invoice-detail-email"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg><span>E-mail</span></button><button type="button" class="shop-invoice-detail-action pdf" id="shop-invoice-detail-pdf"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14"/></svg><span>PDF</span></button><button type="button" class="shop-invoice-detail-action xlsx" id="shop-invoice-detail-xlsx"><svg viewBox="0 0 24 24"><path d="M6 2h9l4 4v16H6Z"/><path d="M15 2v5h5M9 11l5 6m0-6-5 6"/></svg><span>XLSX</span></button><button type="button" class="shop-invoice-detail-action xml" id="shop-invoice-detail-xml"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3M10 8l-4 4 4 4m4-8 4 4-4 4"/></svg><span>e-Factura XML</span></button><button type="button" class="shop-invoice-detail-action delete" id="shop-invoice-detail-delete" hidden><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg><span>Șterge</span></button></footer></section></div>`;
@@ -243,7 +320,7 @@
     <div class="shop-commerce-overlay shop-nir-export-progress-overlay" id="shop-nir-export-progress-dialog" hidden><section class="shop-nir-export-progress" role="dialog" aria-modal="true" aria-labelledby="shop-nir-export-progress-title"><div class="shop-nir-export-progress-orb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7zM14 3v5h5M12 10v7m0 0 3-3m-3 3-3-3"/></svg><i></i></div><small>EXPORT ÎN CURS</small><h2 id="shop-nir-export-progress-title">Pregătim exportul</h2><p id="shop-nir-export-progress-detail">Calculăm volumul de date…</p><div class="shop-nir-export-progress-stats"><span><b id="shop-nir-export-progress-docs">—</b><small>NIR-URI</small></span><span><b id="shop-nir-export-progress-lines">—</b><small>POZIȚII</small></span><span><b id="shop-nir-export-progress-files">—</b><small>FIȘIERE</small></span></div><div class="shop-nir-export-progress-meta"><strong id="shop-nir-export-progress-percent">2%</strong><span id="shop-nir-export-progress-eta">Calculăm timpul rămas…</span></div><div class="shop-nir-export-progress-track"><i id="shop-nir-export-progress-fill"></i></div><footer>Poți lăsa această fereastră deschisă. Descărcarea pornește automat când arhiva este gata.</footer></section></div>`;
   }
   function shippingModal() {
-    return `<div class="shop-commerce-overlay" id="shop-shipping-modal" hidden><form class="shop-commerce-modal mini" id="shop-shipping-form"><header><div><small>LIVRARE SHOP</small><h2 id="shop-shipping-title">Livrare noua</h2></div><button type="button" data-commerce-close="shop-shipping-modal">×</button></header><div class="shop-commerce-modal-scroll"><label>Nume *<input id="shop-shipping-name" required maxlength="120" /></label><label>Descriere<textarea id="shop-shipping-description" rows="3" maxlength="500"></textarea></label><div class="shop-commerce-columns"><label>Cost lei<input id="shop-shipping-cost" type="number" min="0" step="0.01" required /></label><label>Gratuit peste<input id="shop-shipping-free" type="number" min="0" step="0.01" placeholder="Optional" /></label></div><label>Termen estimat<input id="shop-shipping-eta" maxlength="120" placeholder="1-3 zile lucratoare" /></label><div class="shop-editor-toggles"><label><span><b>Livrare activa</b><small>Este disponibila pe site.</small></span><input id="shop-shipping-active" type="checkbox" checked /></label></div></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-shipping-modal">Renunta</button><button type="submit" class="btn-primary" id="shop-shipping-save">Salveaza livrarea</button></footer></form></div>`;
+    return `<div class="shop-commerce-overlay" id="shop-shipping-modal" hidden><form class="shop-commerce-modal mini" id="shop-shipping-form"><header><div><small>LIVRARE SHOP</small><h2 id="shop-shipping-title">Livrare noua</h2></div><button type="button" data-commerce-close="shop-shipping-modal">×</button></header><div class="shop-commerce-modal-scroll"><label>Nume *<input id="shop-shipping-name" required maxlength="120" /></label><label>Descriere<textarea id="shop-shipping-description" rows="3" maxlength="500"></textarea></label><div class="shop-commerce-columns"><label>Cost livrare lei<input id="shop-shipping-cost" type="number" min="0" step="0.01" required /></label><label>Cost retur curier<input id="shop-shipping-return-cost" type="number" min="0" step="0.01" required /></label></div><label>Gratuit peste<input id="shop-shipping-free" type="number" min="0" step="0.01" placeholder="Optional" /></label><label>Termen estimat<input id="shop-shipping-eta" maxlength="120" placeholder="1-3 zile lucratoare" /></label><div class="shop-editor-toggles"><label><span><b>Livrare activa</b><small>Este disponibila pe site.</small></span><input id="shop-shipping-active" type="checkbox" checked /></label></div></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-shipping-modal">Renunta</button><button type="submit" class="btn-primary" id="shop-shipping-save">Salveaza livrarea</button></footer></form></div>`;
   }
   function customerModal() {
     return `<div class="shop-commerce-overlay" id="shop-customer-modal" hidden><section class="shop-commerce-modal shop-customer-modal"><header><div><small>FISA CLIENT</small><h2 id="shop-customer-title">Client</h2></div><button type="button" data-commerce-close="shop-customer-modal">×</button></header><div class="shop-commerce-modal-scroll" id="shop-customer-details"></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-customer-modal">Inchide</button><button type="button" class="btn-primary" id="shop-customer-status">Dezactiveaza contul</button></footer></section></div>`;
@@ -290,7 +367,14 @@
       <div class="shop-commerce-columns"><label>Banca<input id="shop-company-bank" /></label><label>IBAN<input id="shop-company-iban" /></label></div><label>Capital social<input id="shop-company-capital" /></label>
       ${section('04', 'Stampila firmei', 'Imaginea poate fi folosita pe documentele generate.')}
       <div class="shop-company-stamp"><div id="shop-company-stamp-preview"><span>Fara stampila</span></div><div><input id="shop-company-stamp-input" type="file" accept="image/png,image/jpeg,image/webp" hidden /><button type="button" class="btn-ghost" id="shop-company-stamp-pick">Alege stampila</button><button type="button" class="btn-ghost danger" id="shop-company-stamp-remove">Sterge stampila</button></div></div>
-    </div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-company-modal">Renunta</button><button type="submit" class="btn-primary" id="shop-company-save">Salveaza firma</button></footer></form></div>`;
+    </div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-company-modal">Renunta</button><button type="submit" class="btn-primary" id="shop-company-save">Salveaza firma</button></footer></form></div>
+    <div class="shop-commerce-overlay" id="shop-receipt-location-modal" hidden><form class="shop-commerce-modal mini shop-receipt-location-modal" id="shop-receipt-location-form"><header><div><small>PUNCT DE RECEPȚIE</small><h2 id="shop-receipt-location-title">Punct nou</h2></div><button type="button" data-commerce-close="shop-receipt-location-modal">×</button></header><div class="shop-commerce-modal-scroll">
+      ${section('01', 'Identificare', 'Denumirea și adresa care vor apărea în selectorul NIR.')}
+      <label>Denumire *<input id="shop-receipt-location-name" required placeholder="Gestiune principală" /></label>
+      <label>Adresă<input id="shop-receipt-location-address" /></label>
+      <div class="shop-commerce-columns three"><label>Localitate<input id="shop-receipt-location-city" /></label><label>Județ<input id="shop-receipt-location-county" /></label><label>Cod poștal<input id="shop-receipt-location-postal" /></label></div>
+      <div class="shop-editor-toggles"><label><span><b>Punct implicit</b><small>Va fi selectat automat pe orice NIR nou.</small></span><input id="shop-receipt-location-default" type="checkbox" /></label></div>
+    </div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-receipt-location-modal">Renunță</button><button type="submit" class="btn-primary" id="shop-receipt-location-save">Salvează punctul</button></footer></form></div>`;
   }
   function section(number, title, text) { return `<div class="shop-editor-section"><b>${number}</b><span><strong>${title}</strong><small>${text}</small></span></div>`; }
 
@@ -300,21 +384,134 @@
     documentCard.insertAdjacentHTML('afterend', `<section class="shop-nir-storno-original" aria-label="Factura originală"><small>FACTURĂ ORIGINALĂ</small><strong id="shop-nir-storno-original-invoice">—</strong><span><b id="shop-nir-storno-original-date">Data —</b><b id="shop-nir-storno-original-value">Valoare —</b></span></section><section class="shop-nir-storno-invoice" aria-labelledby="shop-nir-storno-invoice-title"><header><span><small>FACTURĂ NOUĂ DE STORNO</small><strong id="shop-nir-storno-invoice-title">Completează documentul primit de la furnizor</strong></span><em>DATE OBLIGATORII</em></header><div><label><span id="shop-nir-storno-invoice-series-label">Serie factură storno</span><input id="shop-nir-storno-invoice-series" maxlength="80" autocomplete="off" placeholder="Ex: FT" /></label><label><span>Număr factură storno *</span><input id="shop-nir-storno-invoice-number" maxlength="120" autocomplete="off" placeholder="Ex: 191" /></label><label><span>Data facturii storno *</span><input id="shop-nir-storno-invoice-date" type="date" /></label></div><small id="shop-nir-storno-invoice-error" hidden>Completează datele obligatorii ale facturii de storno.</small></section><section class="shop-nir-storno-documents"><header><span><small>DOCUMENTELE FACTURII</small><strong>Atașează factura de storno și fișierele primite</strong></span><button type="button" id="shop-nir-storno-files-pick">Alege documente</button></header><div id="shop-nir-storno-file-list" class="shop-nir-storno-file-list"><p>PDF · JPG · PNG · WEBP · XLSX · XML</p></div></section>`);
   }
 
+  function shopViewLoader(tabId, options = {}) {
+    const loaders = {
+      'shop-dashboard': () => loadDashboard({ quiet: options.quiet || Boolean(document.querySelector('#tab-shop-dashboard .shop-dashboard-header')) }),
+      'shop-products': () => loadProducts({ quiet: options.quiet }),
+      'shop-orders': loadOrders,
+      'shop-invoices': loadInvoices,
+      'shop-inventory': loadInventory,
+      'shop-sources': loadSourcesPage,
+      'shop-suppliers': loadSuppliers,
+      'shop-nirs': () => loadNirs(undefined, { quiet: options.quiet }),
+      'shop-payments': loadPayments,
+      'shop-automations': loadInvoiceAutomations,
+      'shop-shipping': loadShippingPage,
+      'shop-customers': loadCustomers,
+      'shop-discounts': loadPromotions,
+      'shop-company': loadCompanies,
+      'shop-invoice-configurator': () => loadInvoiceConfigurator({ quiet: options.quiet }),
+      'shop-spv': () => loadSpv({ quiet: options.quiet }),
+    };
+    return loaders[tabId] || null;
+  }
+
+  function setShopContentQuiet(contentId, quiet) {
+    if (!contentId) return;
+    const count = quietShopContent.get(contentId) || 0;
+    if (quiet) quietShopContent.set(contentId, count + 1);
+    else if (count > 1) quietShopContent.set(contentId, count - 1);
+    else quietShopContent.delete(contentId);
+  }
+
+  function cancelScheduledShopViewRefresh() {
+    cancelShopViewIdleRefresh?.();
+    cancelShopViewIdleRefresh = null;
+  }
+
+  function isShopViewActive(tabId) {
+    return document.getElementById(`tab-${tabId}`)?.classList.contains('active');
+  }
+
+  function loadShopView(tabId, options = {}) {
+    const loader = shopViewLoader(tabId, options);
+    if (!loader) return Promise.resolve();
+    const existing = shopViewLoads.get(tabId);
+    if (existing) return existing;
+    const freshAt = shopViewFreshAt.get(tabId) || 0;
+    if (!options.force && freshAt && Date.now() - freshAt < SHOP_VIEW_REVISIT_TTL_MS) return Promise.resolve();
+
+    const generation = shopViewLoadGeneration;
+    const contentId = SHOP_VIEW_CONTENT_IDS[tabId];
+    if (options.quiet) setShopContentQuiet(contentId, true);
+    const pending = Promise.resolve()
+      .then(loader)
+      .then(() => {
+        if (generation === shopViewLoadGeneration) shopViewFreshAt.set(tabId, Date.now());
+      })
+      .finally(() => {
+        if (options.quiet) setShopContentQuiet(contentId, false);
+        if (shopViewLoads.get(tabId) === pending) shopViewLoads.delete(tabId);
+      });
+    shopViewLoads.set(tabId, pending);
+    return pending;
+  }
+
+  function scheduleShopViewRefresh(tabId) {
+    cancelScheduledShopViewRefresh();
+    const freshAt = shopViewFreshAt.get(tabId) || 0;
+    if (Date.now() - freshAt < SHOP_VIEW_REVISIT_TTL_MS) return;
+    const refresh = () => {
+      cancelShopViewIdleRefresh = null;
+      if (!isShopViewActive(tabId)) return;
+      void loadShopView(tabId, { force: true, quiet: true });
+    };
+    if ('requestIdleCallback' in window) {
+      const handle = window.requestIdleCallback(refresh, { timeout: 900 });
+      cancelShopViewIdleRefresh = () => window.cancelIdleCallback?.(handle);
+    } else {
+      const handle = window.setTimeout(refresh, 140);
+      cancelShopViewIdleRefresh = () => window.clearTimeout(handle);
+    }
+  }
+
   function wire() {
     mountNirStornoInvoiceFields();
-    const loaders = { 'shop-dashboard': loadDashboard, 'shop-products': loadProducts, 'shop-orders': loadOrders, 'shop-invoices': loadInvoices, 'shop-inventory': loadInventory, 'shop-sources': loadSourcesPage, 'shop-suppliers': loadSuppliers, 'shop-nirs': loadNirs, 'shop-payments': loadPayments, 'shop-automations': loadInvoiceAutomations, 'shop-shipping': loadShippingPage, 'shop-customers': loadCustomers, 'shop-discounts': loadPromotions, 'shop-company': loadCompanies, 'shop-invoice-configurator': loadInvoiceConfigurator };
+    const loaders = { 'shop-dashboard': () => loadDashboard({ quiet: Boolean(document.querySelector('#tab-shop-dashboard .shop-dashboard-header')) }), 'shop-products': loadProducts, 'shop-orders': loadOrders, 'shop-invoices': loadInvoices, 'shop-inventory': loadInventory, 'shop-sources': loadSourcesPage, 'shop-suppliers': loadSuppliers, 'shop-nirs': loadNirs, 'shop-payments': loadPayments, 'shop-automations': loadInvoiceAutomations, 'shop-shipping': loadShippingPage, 'shop-customers': loadCustomers, 'shop-discounts': loadPromotions, 'shop-company': loadCompanies, 'shop-invoice-configurator': loadInvoiceConfigurator, 'shop-spv': loadSpv };
     window.addEventListener('tab-change', event => {
-      loaders[event.detail]?.();
+      cancelScheduledShopViewRefresh();
+      const tabId = event.detail;
+      if (!loaders[tabId]) return;
+      if (!shopViewFreshAt.has(tabId)) void loadShopView(tabId, { force: true });
+      else scheduleShopViewRefresh(tabId);
     });
     window.addEventListener('auth-change', event => {
-      if (!event.detail?.token) return;
+      const nextToken = String(event.detail?.token || '');
+      if (nextToken !== shopViewAuthToken) {
+        shopViewAuthToken = nextToken;
+        shopViewLoadGeneration += 1;
+        shopViewFreshAt.clear();
+        shopViewLoads.clear();
+        cancelScheduledShopViewRefresh();
+      }
+      if (!nextToken) return;
       const activePanel = document.querySelector('.shop-tab-panel.active');
       const activeTab = activePanel?.id?.replace(/^tab-/, '');
-      if (activeTab && loaders[activeTab]) void loaders[activeTab]();
+      if (activeTab && loaders[activeTab]) void loadShopView(activeTab, { force: true });
+      if (!dashboardWarmupScheduled && activeTab !== 'shop-dashboard') {
+        dashboardWarmupScheduled = true;
+        const warmDashboard = () => {
+          dashboardWarmupScheduled = false;
+          if (!document.querySelector('#tab-shop-dashboard .shop-dashboard-header')) {
+            void loadShopView('shop-dashboard', { force: true, quiet: true });
+          }
+        };
+        if ('requestIdleCallback' in window) window.requestIdleCallback(warmDashboard, { timeout: 1200 });
+        else window.setTimeout(warmDashboard, 250);
+      }
+    });
+    window.addEventListener('shop-open-entity', event => {
+      const id = String(event.detail?.id || '');
+      if (!id) return;
+      if (event.detail?.type === 'invoice') void openInvoiceDetail(id);
+      else void openOrder(id);
     });
     document.querySelectorAll('[data-commerce-close]').forEach(button => button.addEventListener('click', () => closeModal(button.dataset.commerceClose)));
     document.querySelectorAll('.shop-commerce-overlay').forEach(overlay => overlay.addEventListener('mousedown', event => { if (event.target === overlay) closeModal(overlay.id); }));
-    document.querySelectorAll('[data-commerce-refresh]').forEach(button => button.addEventListener('click', () => ({ 'shop-products-content': loadProducts, 'shop-orders-content': loadOrders, 'shop-invoices-content': loadInvoices, 'shop-inventory-content': loadInventory, 'shop-sources-content': loadSourcesPage, 'shop-suppliers-content': loadSuppliers, 'shop-nirs-content': loadNirs, 'shop-automations-content': loadInvoiceAutomations, 'shop-shipping-content': loadShippingPage, 'shop-customers-content': loadCustomers, 'shop-discounts-content': loadPromotions, 'shop-company-content': loadCompanies })[button.dataset.commerceRefresh]?.()));
+    document.querySelectorAll('[data-commerce-refresh]').forEach(button => button.addEventListener('click', () => {
+      const tabId = Object.keys(SHOP_VIEW_CONTENT_IDS).find(key => SHOP_VIEW_CONTENT_IDS[key] === button.dataset.commerceRefresh);
+      if (tabId && loaders[tabId]) void loadShopView(tabId, { force: true });
+    }));
     document.querySelectorAll('[data-commerce-add]').forEach(button => button.addEventListener('click', () => ({ 'shop-products-content': openProduct, 'shop-sources-content': openSource, 'shop-suppliers-content': openSupplier, 'shop-nirs-content': createNir, 'shop-shipping-content': openShipping, 'shop-discounts-content': openPromotion, 'shop-company-content': openCompany })[button.dataset.commerceAdd]?.()));
     $('shop-nir-registry-download-confirm')?.addEventListener('click', () => void downloadNirRegistry());
     document.querySelectorAll('[data-nir-registry-content]').forEach(button => button.addEventListener('click', () => {
@@ -336,6 +533,7 @@
     $('shop-order-form').addEventListener('submit', saveOrder);
     $('shop-invoice-issue-form').addEventListener('submit', submitInvoiceIssue);
     $('shop-invoice-issue-send-email').addEventListener('change', syncInvoiceIssuePanel);
+    $('shop-invoice-issue-send-return-email').addEventListener('change', syncInvoiceIssuePanel);
     $('shop-invoice-detail-link').addEventListener('click', () => void copyInvoicePublicLink(state.invoiceDetail?.id));
     $('shop-invoice-detail-email').addEventListener('click', () => void emailIssuedInvoice(state.invoiceDetail?.id));
     $('shop-invoice-detail-pdf').addEventListener('click', () => void downloadIssuedInvoice(state.invoiceDetail?.id, 'pdf'));
@@ -391,6 +589,7 @@
     $('shop-shipping-form').addEventListener('submit', saveShipping);
     $('shop-promotion-form').addEventListener('submit', savePromotion);
     $('shop-company-form').addEventListener('submit', saveCompany);
+    $('shop-receipt-location-form').addEventListener('submit', saveReceiptLocation);
     $('shop-company-stamp-pick').addEventListener('click', () => $('shop-company-stamp-input').click());
     $('shop-company-stamp-input').addEventListener('change', readCompanyStamp);
     $('shop-company-stamp-remove').addEventListener('click', removeCompanyStamp);
@@ -827,8 +1026,16 @@
   async function metadata() {
     [state.categories, state.brands, state.manufacturers, state.sources] = await Promise.all([window.SHOP_API.listCategories(), window.SHOP_API.listBrands(), window.SHOP_API.listManufacturers(), window.SHOP_API.listProductSources()]);
   }
-  function loading(id, text) { $(id).innerHTML = `<div class="shop-commerce-loading">${esc(text)}</div>`; }
-  function failure(id, error) { $(id).innerHTML = `<div class="shop-commerce-error">${esc(error.message || 'Datele nu au putut fi incarcate.')}</div>`; }
+  function loading(id, text) {
+    const host = $(id);
+    if (!host || (quietShopContent.has(id) && host.childElementCount)) return;
+    host.innerHTML = `<div class="shop-commerce-loading">${esc(text)}</div>`;
+  }
+  function failure(id, error) {
+    const host = $(id);
+    if (!host || (quietShopContent.has(id) && host.childElementCount)) return;
+    host.innerHTML = `<div class="shop-commerce-error">${esc(error.message || 'Datele nu au putut fi incarcate.')}</div>`;
+  }
   function pageData(items, key, pageSizeOptions = PAGE_SIZE_OPTIONS) {
     const pageSize = pageSizeOptions.includes(state.pageSizes[key]) ? state.pageSizes[key] : pageSizeOptions[0];
     const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
@@ -867,27 +1074,262 @@
     return image?.url || image?.preview ? `<span class="${className}" style="${imageBackground(image)}" role="img"></span>` : `<span class="${className} empty">□</span>`;
   }
 
-  async function loadDashboard() {
+  function dashboardSeries(dashboard) {
+    const rows = Array.isArray(dashboard.daily_stats) ? dashboard.daily_stats : [];
+    return rows.map(row => ({
+      date: String(row.date || ''),
+      revenue: Number(row.revenue || 0),
+      returns: Number(row.returns_total || 0),
+      returnsCount: Number(row.returns_count || 0),
+      orders: Number(row.orders_count || 0),
+      profit: Number(row.profit || 0),
+      acquisitions: Number(row.acquisitions || 0),
+    }));
+  }
+  const dashboardGranularityLabels = { hour: 'Orar', day: 'Zilnic', week: 'Săptămânal', month: 'Lunar' };
+  function dashboardDateCount(startDate = '', endDate = '') {
+    const start = new Date(`${String(startDate).slice(0, 10)}T12:00:00`);
+    const end = new Date(`${String(endDate).slice(0, 10)}T12:00:00`);
+    return Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) ? 30 : Math.max(1, Math.round((end - start) / 86400000) + 1);
+  }
+  function dashboardGranularityOptions(period = state.dashboardPeriod, startDate = state.dashboardStartDate, endDate = state.dashboardEndDate) {
+    if (['24h', 'today', 'yesterday'].includes(period)) return ['hour'];
+    if (['7d', '14d', 'current_week_sun', 'current_week_mon', 'previous_week_sun', 'previous_week_mon'].includes(period)) return ['day'];
+    if (['28d', '30d', 'current_month', 'previous_month'].includes(period)) return ['day', 'week', 'month'];
+    if (['3m', '6m', '12m', '16m', 'current_year', 'all'].includes(period)) return ['day', 'week', 'month'];
+    const days = dashboardDateCount(startDate, endDate);
+    if (days <= 14) return ['day'];
+    if (days < 28) return ['day', 'week'];
+    if (days <= 730) return ['day', 'week', 'month'];
+    return ['month'];
+  }
+  function dashboardPreferredGranularity(period = state.dashboardPeriod, startDate = state.dashboardStartDate, endDate = state.dashboardEndDate) {
+    const allowed = dashboardGranularityOptions(period, startDate, endDate);
+    if (['6m', '12m', '16m', 'current_year', 'all'].includes(period) || (period === 'custom' && dashboardDateCount(startDate, endDate) > 120)) return 'month';
+    return allowed.includes('hour') ? 'hour' : allowed.includes('day') ? 'day' : allowed.includes('month') ? 'month' : 'week';
+  }
+  function dashboardBucketDate(value) {
+    const source = String(value || '');
+    const normalized = /^\d{4}-\d{2}$/.test(source) ? `${source}-01` : source;
+    const date = new Date(normalized.includes(' ') ? normalized.replace(' ', 'T') : `${normalized.slice(0, 10)}T12:00:00`);
+    return Number.isNaN(date.getTime()) ? new Date(2000, 0, 1, 12) : date;
+  }
+  function dashboardBucketLabel(value, granularity, rowCount) {
+    const options = granularity === 'hour'
+      ? { hour: '2-digit' }
+      : granularity === 'month'
+        ? (rowCount > 12 ? { month: 'short', year: '2-digit' } : { month: 'short' })
+        : granularity === 'week'
+          ? { day: '2-digit', month: 'short' }
+          : rowCount <= 8 ? { weekday: 'short' } : { day: '2-digit', month: 'short' };
+    return new Intl.DateTimeFormat('ro-RO', options).format(dashboardBucketDate(value)).replace('.', '');
+  }
+  function dashboardBucketTooltip(value, granularity) {
+    const options = granularity === 'hour'
+      ? { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
+      : granularity === 'month'
+        ? { month: 'long', year: 'numeric' }
+        : { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
+    return new Intl.DateTimeFormat('ro-RO', options).format(dashboardBucketDate(value)).replace('.', '');
+  }
+  function dashboardPath(values, width, height, inset = 8, forcedMaximum = 0, visualOffset = 0) {
+    const maximum = Math.max(forcedMaximum, ...values, 1);
+    const step = values.length > 1 ? (width - inset * 2) / (values.length - 1) : 0;
+    return values.map((value, index) => {
+      const x = inset + index * step;
+      const numericValue = Math.max(0, Number(value || 0));
+      const rawY = height - inset - (numericValue / maximum) * (height - inset * 2);
+      const y = numericValue > 0 ? Math.max(inset - 6, Math.min(height - inset, rawY + visualOffset)) : rawY;
+      return [Number(x.toFixed(1)), Number(y.toFixed(1))];
+    });
+  }
+  function dashboardSparkline(values, color) {
+    const points = dashboardPath(values.length ? values : [0, 0, 0, 0, 0, 0, 0], 112, 38, 3);
+    const line = points.map(point => point.join(',')).join(' ');
+    const area = `M ${points[0][0]} 38 L ${points.map(point => point.join(' ')).join(' L ')} L ${points[points.length - 1][0]} 38 Z`;
+    return `<svg class="shop-metric-sparkline" viewBox="0 0 112 38" preserveAspectRatio="none" aria-hidden="true"><path d="${area}" fill="${color}" opacity=".10"/><polyline points="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  }
+  function dashboardTrendChart(series, range = {}) {
+    const safeSeries = series.length ? series : Array.from({ length: 7 }, (_, index) => ({ date: new Date(Date.now() - (6 - index) * 86400000).toISOString().slice(0, 10), revenue: 0, returns: 0, returnsCount: 0, orders: 0, acquisitions: 0, profit: 0 }));
+    const granularity = ['hour', 'day', 'week', 'month'].includes(range.granularity) ? range.granularity : state.dashboardGranularity;
+    const moneyMaximum = Math.max(...safeSeries.flatMap(row => [row.revenue, row.returns, row.acquisitions, row.profit]), 1);
+    const orderMaximum = Math.max(...safeSeries.map(row => row.orders), 1);
+    const chartSeries = [
+      { key: 'revenue', label: 'Vânzări nete', color: '#4285f4', values: safeSeries.map(row => row.revenue), maximum: moneyMaximum, visualOffset: 0 },
+      { key: 'returns', label: 'Retururi', color: '#f472b6', values: safeSeries.map(row => row.returns), maximum: moneyMaximum, visualOffset: 0 },
+      { key: 'acquisitions', label: 'Achiziții', color: '#f9ab00', values: safeSeries.map(row => row.acquisitions), maximum: moneyMaximum, visualOffset: 0 },
+      { key: 'profit', label: 'Profit', color: '#34a853', values: safeSeries.map(row => row.profit), maximum: moneyMaximum, visualOffset: 4 },
+      { key: 'orders', label: 'Comenzi', color: '#a78bfa', values: safeSeries.map(row => row.orders), maximum: orderMaximum, visualOffset: -5 },
+    ];
+    const allPoints = Object.fromEntries(chartSeries.map(item => [item.key, dashboardPath(item.values, 700, 198, 18, item.maximum, item.visualOffset)]));
+    const revenuePoints = allPoints.revenue;
+    const area = `M ${revenuePoints[0][0]} 198 L ${revenuePoints.map(point => point.join(' ')).join(' L ')} L ${revenuePoints[revenuePoints.length - 1][0]} 198 Z`;
+    const lines = chartSeries.map(item => `<polyline class="shop-chart-line series-${item.key}${state.dashboardSeries.has(item.key) ? '' : ' is-hidden'}" data-chart-line="${item.key}" points="${allPoints[item.key].map(point => point.join(',')).join(' ')}" style="--series-color:${item.color}"/>`).join('');
+    const labelStep = Math.max(1, Math.ceil(safeSeries.length / 7));
+    const labels = safeSeries.map((row, index) => {
+      const show = index === 0 || index === safeSeries.length - 1 || index % labelStep === 0;
+      return `<span class="${show ? '' : 'is-muted'}">${show ? esc(dashboardBucketLabel(row.date, granularity, safeSeries.length)) : ''}</span>`;
+    }).join('');
+    const allowedGranularities = dashboardGranularityOptions();
+    const granularityShortLabels = { hour: 'OR', day: 'ZI', week: 'SĂP', month: 'LUN' };
+    const granularityDescriptions = { hour: 'Detaliu pe fiecare oră', day: 'Detaliu pentru fiecare zi', week: 'Rezumat pe săptămâni', month: 'Rezumat pe luni' };
+    const granularityOptions = Object.entries(dashboardGranularityLabels).map(([value, label]) => {
+      const enabled = allowedGranularities.includes(value);
+      const active = granularity === value;
+      return `<button type="button" class="shop-chart-granularity-option${active ? ' is-active' : ''}" data-dashboard-granularity-option="${value}" role="option" aria-selected="${active}" ${enabled ? '' : 'disabled'}><i>${granularityShortLabels[value]}</i><span><strong>${label}</strong><small>${enabled ? granularityDescriptions[value] : 'Indisponibil pentru interval'}</small></span><b aria-hidden="true">${active ? '<svg viewBox="0 0 20 20"><path d="m5 10 3 3 7-7"/></svg>' : ''}</b></button>`;
+    }).join('');
+    return `<article class="shop-dashboard-chart"><header><div><span>EVOLUȚIE</span><h2>Performanța în timp</h2></div><div class="shop-chart-granularity" data-dashboard-granularity-picker><button type="button" class="shop-chart-granularity-trigger" data-dashboard-granularity-trigger aria-haspopup="listbox" aria-expanded="false"><span><small>GRUPARE</small><strong>${dashboardGranularityLabels[granularity]}</strong></span><svg class="shop-chart-granularity-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4"/></svg></button><div class="shop-chart-granularity-menu" data-dashboard-granularity-menu role="listbox" aria-label="Gruparea graficului" hidden><header><small>AFIȘARE GRAFIC</small><strong>Alege nivelul de detaliu</strong></header>${granularityOptions}</div></div></header><div class="shop-chart-stage"><div class="shop-chart-scale"><span>${money(moneyMaximum)}</span><span>${money(moneyMaximum / 2)}</span><span>0 lei</span></div><svg viewBox="0 0 700 210" preserveAspectRatio="none" role="img" aria-label="Graficul performanței magazinului"><defs><linearGradient id="shopSalesArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4285f4" stop-opacity=".22"/><stop offset="1" stop-color="#4285f4" stop-opacity="0"/></linearGradient></defs><g class="shop-chart-grid"><line x1="18" y1="18" x2="682" y2="18"/><line x1="18" y1="102" x2="682" y2="102"/><line x1="18" y1="198" x2="682" y2="198"/></g><path class="shop-chart-area${state.dashboardSeries.has('revenue') ? '' : ' is-hidden'}" data-chart-area="revenue" d="${area}"/>${lines}<line class="shop-chart-cursor" x1="18" y1="18" x2="18" y2="198"/></svg><div class="shop-chart-tooltip" aria-hidden="true"></div><div class="shop-chart-labels" style="grid-template-columns:repeat(${safeSeries.length},1fr)">${labels}</div></div></article>`;
+  }
+
+  function dashboardPeriodControls() {
+    const buttons = [['24h', '24 ore'], ['7d', '7 zile'], ['28d', '28 zile'], ['3m', '3 luni']].map(([value, label]) => `<button type="button" class="${state.dashboardPeriod === value ? 'active' : ''}" data-dashboard-period="${value}">${state.dashboardPeriod === value ? '<i>✓</i>' : ''}${label}</button>`).join('');
+    const moreActive = !['24h', '7d', '28d', '3m'].includes(state.dashboardPeriod);
+    const today = new Date().toISOString().slice(0, 10);
+    const defaultStart = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
+    return `<section class="shop-dashboard-period"><div>${buttons}<button type="button" class="${moreActive ? 'active' : ''}" data-dashboard-more>${moreActive ? '<i>✓</i>' : ''}<span class="shop-period-more-label">Mai mult</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4"/></svg></button></div><small>Perioada selectată actualizează toate valorile și graficele.</small></section><div class="shop-dashboard-range-overlay" data-dashboard-range-overlay hidden><form class="shop-dashboard-range-dialog"><header><div><span>INTERVAL RAPORT</span><h2>Alege perioada</h2></div><button type="button" data-dashboard-range-close aria-label="Închide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg></button></header><div class="shop-dashboard-range-options">${[['6m','Ultimele 6 luni'],['12m','Ultimele 12 luni'],['16m','Ultimele 16 luni'],['all','Toată perioada'],['custom','Interval personalizat']].map(([value,label]) => `<label><input type="radio" name="dashboard-range" value="${value}" ${state.dashboardPeriod === value || (!moreActive && value === '6m') ? 'checked' : ''}/><span></span>${label}</label>`).join('')}</div><div class="shop-dashboard-custom-dates"><label>Data de început<input type="date" name="start_date" value="${esc(state.dashboardStartDate || defaultStart)}" max="${today}"/></label><em>—</em><label>Data de sfârșit<input type="date" name="end_date" value="${esc(state.dashboardEndDate || today)}" max="${today}"/></label></div><footer><button type="button" data-dashboard-range-close>Anulează</button><button type="submit">Aplică</button></footer></form></div>`;
+  }
+
+  async function loadDashboard(options = {}) {
     const host = document.querySelector('#tab-shop-dashboard .shop-page-scroll');
     if (!host || !window.SHOP_API?.getDashboardStats) return;
-    host.innerHTML = '<div class="shop-commerce-loading">Se actualizeaza dashboardul...</div>';
+    dashboardGranularityPickerCleanup?.();
+    dashboardGranularityPickerCleanup = null;
+    const requestId = ++state.dashboardRequestId;
+    if (options.quiet) host.classList.add('is-dashboard-refreshing');
+    else host.innerHTML = '<div class="shop-commerce-loading">Se actualizeaza dashboardul...</div>';
     try {
-      const dashboard = await window.SHOP_API.getDashboardStats();
+      const dashboard = await window.SHOP_API.getDashboardStats({ period: state.dashboardPeriod, start_date: state.dashboardStartDate, end_date: state.dashboardEndDate, granularity: state.dashboardGranularity });
+      if (requestId !== state.dashboardRequestId) return;
+      if (['hour', 'day', 'week', 'month'].includes(dashboard.range?.granularity)) {
+        state.dashboardGranularity = dashboard.range.granularity;
+        saveDashboardPreferences();
+      }
       const recentNewOrders = (Array.isArray(dashboard.recent_orders) ? dashboard.recent_orders : []).filter(order => order.status === 'new');
       const dashboardPaymentLabels = { pending: 'În așteptare', paid: 'Plătită', failed: 'Eșuată', refunded: 'Rambursată' };
       const recent = recentNewOrders.map(order => {
         const paymentState = ['pending', 'paid', 'failed', 'refunded'].includes(order.payment_status) ? order.payment_status : 'pending';
         const paymentMethod = order.payment_method === 'card' ? 'Card online' : 'Ramburs';
         const paymentMethodClass = order.payment_method === 'card' ? 'card' : 'cash';
-        return `<button type="button" class="shop-dashboard-order" data-dashboard-order-open="${esc(order.id)}"><span class="shop-dashboard-order-copy"><strong>${esc(order.order_number)}</strong><small>${esc(order.customer_name)} · ${esc(order.created_at)}</small><span class="shop-dashboard-order-payment"><i class="method ${paymentMethodClass}">${paymentMethod}</i><i class="state ${paymentState}"><b></b>${esc(dashboardPaymentLabels[paymentState])}</i></span></span><span class="shop-dashboard-order-total"><b>${money(order.total)}</b><em class="new">${esc(statusLabels[order.status] || order.status)}</em></span></button>`;
+        return `<button type="button" class="shop-dashboard-order" data-dashboard-order-open="${esc(order.id)}"><span class="shop-dashboard-order-marker" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 5h2l1.7 9.1a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 1.9-1.4L20 8H6"/><circle cx="9" cy="19" r="1.3"/><circle cx="17" cy="19" r="1.3"/></svg><i></i></span><span class="shop-dashboard-order-copy"><span class="shop-dashboard-order-head"><strong>${esc(order.order_number)}</strong><em class="new"><i></i>Comandă nouă</em></span><small>${esc(orderCustomerDisplayName(order))} · ${esc(dateTime(order.created_at))}</small><span class="shop-dashboard-order-payment"><i class="method ${paymentMethodClass}">${paymentMethod}</i><i class="state ${paymentState}"><b></b>${esc(dashboardPaymentLabels[paymentState])}</i></span></span><span class="shop-dashboard-order-total"><small>Total comandă</small><b>${money(order.total)}</b><em class="shop-dashboard-order-open-label">Deschide <svg viewBox="0 0 20 20"><path d="M4 10h11m-4-4 4 4-4 4"/></svg></em></span></button>`;
       }).join('') || '<p class="shop-dashboard-empty">Nu există comenzi noi.</p>';
       const quickActions = [
-        { target: 'shop-products', tone: 'orange', title: 'Produse', description: 'Adaugă sau editează catalogul.', icon: '<svg viewBox="0 0 24 24"><path d="m12 3 8 4.5-8 4.5-8-4.5L12 3Z"/><path d="m4 12 8 4.5 8-4.5M4 16.5l8 4.5 8-4.5"/></svg>' },
-        { target: 'shop-orders', tone: 'blue', title: 'Comenzi', description: 'Verifică și procesează comenzile.', icon: '<svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 8h6m-6 4h6"/></svg>', filter: 'all' },
-        { target: 'shop-invoices', tone: 'amber', title: 'Facturi emise', description: 'Vezi documentele fiscale și starea lor.', icon: '<svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>' },
-        { target: 'shop-payments', tone: 'purple', title: 'Metode de plată', description: 'Configurează cardul online și rambursul.', icon: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h3"/></svg>' },
-      ].map(action => `<button type="button" class="${action.tone}" data-shop-open="${action.target}" ${action.filter ? `data-shop-order-filter="${action.filter}"` : ''}><span>${action.icon}</span><strong>${action.title}</strong><small>${action.description}</small><b>Deschide <i>→</i></b></button>`).join('');
-      host.innerHTML = `<section class="shop-dashboard-hero"><div><span>DASHBOARD COMERCIAL</span><h1>Magazinul tau, pe scurt.</h1><p>Vanzari, comenzi, achizitii si profit sincronizate direct cu magazinul online.</p><b><i></i>Date sincronizate cu baza de date</b></div><div class="shop-dashboard-orbit" aria-hidden="true"><strong>↗</strong><span>${Number(dashboard.new_orders_count || 0)}</span><small>COMENZI NOI</small></div></section><section class="shop-dashboard-metrics">${dashboardMetric('Vanzari', money(dashboard.revenue), '#38bdf8')}${dashboardMetric('Comenzi', dashboard.orders_count, '#a78bfa')}${dashboardMetric('Achizitii', money(dashboard.acquisitions), '#f59e0b')}${dashboardMetric('Profit', money(dashboard.profit), '#22c55e')}</section><section class="shop-dashboard-columns"><div><div class="shop-section-head"><div><span>ACTIUNI RAPIDE</span><h2>Administreaza magazinul</h2></div></div><div class="shop-dashboard-actions">${quickActions}</div></div><div><div class="shop-section-head"><div><span>ACTIVITATE RECENTA</span><h2>Ultimele comenzi</h2></div><button type="button" class="shop-dashboard-see-all" data-shop-open="shop-orders" data-shop-order-filter="new">Vezi toate <b>→</b></button></div><div class="shop-dashboard-orders">${recent}</div></div></section>`;
+        { target: 'shop-products', tone: 'orange', code: 'CATALOG', title: 'Produse', description: 'Adaugă sau editează catalogul.', icon: '<svg viewBox="0 0 24 24"><path d="m12 3 8 4.5-8 4.5-8-4.5L12 3Z"/><path d="m4 12 8 4.5 8-4.5M4 16.5l8 4.5 8-4.5"/></svg>' },
+        { target: 'shop-orders', tone: 'blue', code: 'FLUX', title: 'Comenzi', description: 'Verifică și procesează comenzile.', icon: '<svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 8h6m-6 4h6"/></svg>', filter: 'all' },
+        { target: 'shop-invoices', tone: 'amber', code: 'DOCUMENTE', title: 'Facturi emise', description: 'Vezi documentele fiscale și starea lor.', icon: '<svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>' },
+        { target: 'shop-payments', tone: 'purple', code: 'CONFIGURARE', title: 'Metode de plată', description: 'Configurează cardul online și rambursul.', icon: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h3"/></svg>' },
+      ].map((action, index) => `<button type="button" class="shop-dashboard-action ${action.tone}" style="--action-delay:${index * 70}ms" data-shop-open="${action.target}" ${action.filter ? `data-shop-order-filter="${action.filter}"` : ''} aria-label="Deschide ${action.title}"><i class="shop-dashboard-action-orbit" aria-hidden="true"></i><span class="shop-dashboard-action-top"><span class="shop-dashboard-action-icon">${action.icon}</span><em>0${index + 1} · ${action.code}</em></span><span class="shop-dashboard-action-copy"><strong>${action.title}</strong><small>${action.description}</small></span><b><span>Deschide secțiunea</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11m-4-4 4 4-4 4"/></svg></b></button>`).join('');
+      const series = dashboardSeries(dashboard);
+      const margin = Number(dashboard.revenue || 0) > 0 ? Math.max(0, Math.min(100, Number(dashboard.profit || 0) / Number(dashboard.revenue || 0) * 100)) : 0;
+      const newOrdersCount = Number(dashboard.new_orders_count || 0);
+      const newOrdersLabel = newOrdersCount === 1 ? 'comandă nouă' : 'comenzi noi';
+      host.innerHTML = `<section class="shop-dashboard-header"><div><span>DASHBOARD COMERCIAL</span><h1>Magazinul tău, pe scurt</h1><p>Performanța magazinului, actualizată direct din baza de date.</p></div><div class="shop-dashboard-header-actions"><b><i></i>Sincronizat acum</b><button type="button" class="shop-dashboard-new-orders" data-shop-open="shop-orders" data-shop-order-filter="new" aria-label="Deschide ${newOrdersCount} ${newOrdersLabel}"><i class="shop-dashboard-new-orders-icon"><svg viewBox="0 0 24 24"><path d="M3 5h2l1.7 9.1a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 1.9-1.4L20 8H6"/><circle cx="9" cy="19" r="1.3"/><circle cx="17" cy="19" r="1.3"/></svg><b></b></i><span><strong>${newOrdersCount}</strong><small>${newOrdersLabel}</small></span><em><svg viewBox="0 0 20 20"><path d="M4 10h11m-4-4 4 4-4 4"/></svg></em></button></div></section>${dashboardPeriodControls()}<section class="shop-dashboard-metrics">${dashboardMetric('Vânzări nete', money(dashboard.revenue), '#4285f4', series.map(row => row.revenue), 'revenue')}${dashboardMetric(`Retururi · ${Number(dashboard.returns_count || 0)}`, money(dashboard.returns_total), '#f472b6', series.map(row => row.returns), 'returns')}${dashboardMetric('Comenzi', dashboard.orders_count, '#a78bfa', series.map(row => row.orders), 'orders')}${dashboardMetric('Achiziții', money(dashboard.acquisitions), '#f9ab00', series.map(row => row.acquisitions), 'acquisitions')}${dashboardMetric('Profit', money(dashboard.profit), '#34a853', series.map(row => row.profit), 'profit')}</section><section class="shop-dashboard-insights">${dashboardTrendChart(series, dashboard.range || {})}<article class="shop-dashboard-margin"><header><span>REZULTAT · PERIOADA ALEASĂ</span><h2>Marjă de profit</h2></header><button type="button" class="shop-margin-ring" style="--margin:${margin.toFixed(1)}" data-dashboard-margin aria-label="Afișează profitul perioadei"><div><strong data-margin-main>${margin.toFixed(0)}%</strong><small data-margin-caption>din vânzări nete</small></div></button><div class="shop-margin-values"><span><i></i><small>Profit</small><strong>${money(dashboard.profit)}</strong></span><span><i></i><small>Cost marfă FIFO</small><strong>${money(dashboard.cost_of_goods_sold)}</strong></span></div></article></section><section class="shop-dashboard-columns"><div><div class="shop-section-head"><div><span>ACȚIUNI RAPIDE</span><h2>Administrează magazinul</h2></div></div><div class="shop-dashboard-actions">${quickActions}</div></div><div><div class="shop-section-head"><div><span>ACTIVITATE RECENTĂ</span><h2>Ultimele comenzi</h2></div><button type="button" class="shop-dashboard-see-all" data-shop-open="shop-orders" data-shop-order-filter="new">Vezi toate <b>→</b></button></div><div class="shop-dashboard-orders">${recent}</div></div></section>`;
+      host.classList.remove('is-dashboard-refreshing');
+      host.querySelectorAll('[data-dashboard-period]').forEach(button => button.addEventListener('click', () => {
+        state.dashboardPeriod = button.dataset.dashboardPeriod;
+        state.dashboardStartDate = '';
+        state.dashboardEndDate = '';
+        state.dashboardGranularity = dashboardPreferredGranularity(state.dashboardPeriod);
+        saveDashboardPreferences();
+        void loadDashboard({ quiet: true });
+      }));
+      const rangeOverlay = host.querySelector('[data-dashboard-range-overlay]');
+      host.querySelector('[data-dashboard-more]')?.addEventListener('click', () => { rangeOverlay.hidden = false; });
+      host.querySelectorAll('[data-dashboard-range-close]').forEach(button => button.addEventListener('click', () => { rangeOverlay.hidden = true; }));
+      rangeOverlay?.addEventListener('click', event => { if (event.target === rangeOverlay) rangeOverlay.hidden = true; });
+      const rangeForm = host.querySelector('.shop-dashboard-range-dialog');
+      rangeForm?.addEventListener('submit', event => {
+        event.preventDefault();
+        const data = new FormData(rangeForm);
+        const period = String(data.get('dashboard-range') || '');
+        if (!period) return;
+        const startDate = String(data.get('start_date') || '');
+        const endDate = String(data.get('end_date') || '');
+        if (period === 'custom' && (!startDate || !endDate || startDate > endDate)) return toast('Alege un interval de date valid.', 'error');
+        state.dashboardPeriod = period;
+        state.dashboardStartDate = period === 'custom' ? startDate : '';
+        state.dashboardEndDate = period === 'custom' ? endDate : '';
+        state.dashboardGranularity = dashboardPreferredGranularity(period, state.dashboardStartDate, state.dashboardEndDate);
+        saveDashboardPreferences();
+        rangeOverlay.hidden = true;
+        void loadDashboard({ quiet: true });
+      });
+      const granularityPicker = host.querySelector('[data-dashboard-granularity-picker]');
+      const granularityTrigger = granularityPicker?.querySelector('[data-dashboard-granularity-trigger]');
+      const granularityMenu = granularityPicker?.querySelector('[data-dashboard-granularity-menu]');
+      let granularityCloseTimer = 0;
+      const closeGranularityPicker = (immediate = false) => {
+        if (!granularityPicker || !granularityMenu || !granularityTrigger) return;
+        window.clearTimeout(granularityCloseTimer);
+        granularityPicker.classList.remove('is-open');
+        granularityTrigger.setAttribute('aria-expanded', 'false');
+        document.removeEventListener('pointerdown', handleGranularityOutside, true);
+        if (immediate) granularityMenu.hidden = true;
+        else granularityCloseTimer = window.setTimeout(() => { granularityMenu.hidden = true; }, 150);
+      };
+      const handleGranularityOutside = event => { if (!granularityPicker?.contains(event.target)) closeGranularityPicker(); };
+      const openGranularityPicker = () => {
+        if (!granularityPicker || !granularityMenu || !granularityTrigger) return;
+        window.clearTimeout(granularityCloseTimer);
+        granularityMenu.hidden = false;
+        requestAnimationFrame(() => granularityPicker.classList.add('is-open'));
+        granularityTrigger.setAttribute('aria-expanded', 'true');
+        document.addEventListener('pointerdown', handleGranularityOutside, true);
+      };
+      granularityTrigger?.addEventListener('click', () => granularityPicker.classList.contains('is-open') ? closeGranularityPicker() : openGranularityPicker());
+      granularityPicker?.addEventListener('keydown', event => { if (event.key === 'Escape') { closeGranularityPicker(); granularityTrigger?.focus(); } });
+      granularityPicker?.querySelectorAll('[data-dashboard-granularity-option]').forEach(button => button.addEventListener('click', () => {
+        state.dashboardGranularity = button.dataset.dashboardGranularityOption;
+        saveDashboardPreferences();
+        closeGranularityPicker(true);
+        void loadDashboard({ quiet: true });
+      }));
+      dashboardGranularityPickerCleanup = () => { window.clearTimeout(granularityCloseTimer); document.removeEventListener('pointerdown', handleGranularityOutside, true); };
+      host.querySelectorAll('[data-dashboard-series]').forEach(card => card.addEventListener('click', () => {
+        const key = card.dataset.dashboardSeries;
+        if (state.dashboardSeries.has(key) && state.dashboardSeries.size === 1) return;
+        if (state.dashboardSeries.has(key)) state.dashboardSeries.delete(key); else state.dashboardSeries.add(key);
+        const active = state.dashboardSeries.has(key);
+        card.classList.toggle('is-selected', active);
+        card.setAttribute('aria-pressed', String(active));
+        const check = card.querySelector('.shop-metric-check');
+        if (check) check.textContent = active ? '✓' : '';
+        host.querySelector(`[data-chart-line="${key}"]`)?.classList.toggle('is-hidden', !active);
+        if (key === 'revenue') host.querySelector('[data-chart-area="revenue"]')?.classList.toggle('is-hidden', !active);
+      }));
+      host.querySelectorAll('[data-dashboard-series]').forEach(card => card.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); card.click(); } }));
+      host.querySelector('[data-dashboard-margin]')?.addEventListener('click', event => {
+        const button = event.currentTarget;
+        const showValue = button.classList.toggle('show-value');
+        button.querySelector('[data-margin-main]').textContent = showValue ? compactMoney(dashboard.profit) : `${margin.toFixed(0)}%`;
+        button.querySelector('[data-margin-caption]').textContent = showValue ? 'profit în perioadă' : 'din vânzări nete';
+        button.setAttribute('aria-label', showValue ? 'Afișează procentul marjei' : 'Afișează profitul perioadei');
+      });
+      const chartStage = host.querySelector('.shop-chart-stage');
+      const chartSvg = host.querySelector('.shop-chart-stage>svg');
+      const tooltip = host.querySelector('.shop-chart-tooltip');
+      const cursor = host.querySelector('.shop-chart-cursor');
+      chartSvg?.addEventListener('mousemove', event => {
+        if (!series.length) return;
+        const bounds = chartSvg.getBoundingClientRect();
+        const chartX = Math.max(18, Math.min(682, (event.clientX - bounds.left) / bounds.width * 700));
+        const index = Math.max(0, Math.min(series.length - 1, Math.round((chartX - 18) / 664 * (series.length - 1))));
+        const x = 18 + (series.length > 1 ? index * 664 / (series.length - 1) : 0);
+        cursor.setAttribute('x1', x); cursor.setAttribute('x2', x); cursor.classList.add('visible');
+        const row = series[index];
+        tooltip.innerHTML = `<strong>${esc(dashboardBucketTooltip(row.date, state.dashboardGranularity))}</strong><span><i style="--tip:#4285f4"></i>Vânzări nete <b>${money(row.revenue)}</b></span><span><i style="--tip:#f472b6"></i>Retururi (${row.returnsCount}) <b>${money(row.returns)}</b></span><span><i style="--tip:#a78bfa"></i>Comenzi <b>${row.orders}</b></span><span><i style="--tip:#f9ab00"></i>Achiziții <b>${money(row.acquisitions)}</b></span><span><i style="--tip:#34a853"></i>Profit <b>${money(row.profit)}</b></span>`;
+        const stageBounds = chartStage.getBoundingClientRect();
+        const pointerX = event.clientX - stageBounds.left;
+        const pointerY = event.clientY - stageBounds.top;
+        const tooltipWidth = tooltip.offsetWidth || 205;
+        const tooltipHeight = tooltip.offsetHeight || 142;
+        const gap = 14;
+        let tooltipLeft = pointerX + gap;
+        if (tooltipLeft + tooltipWidth > stageBounds.width - 8) tooltipLeft = pointerX - tooltipWidth - gap;
+        tooltip.style.left = `${Math.max(8, Math.min(stageBounds.width - tooltipWidth - 8, tooltipLeft))}px`;
+        tooltip.style.top = `${Math.max(8, Math.min(stageBounds.height - tooltipHeight - 24, pointerY - tooltipHeight / 2))}px`;
+        tooltip.classList.add('visible');
+      });
+      chartSvg?.addEventListener('mouseleave', () => { tooltip?.classList.remove('visible'); cursor?.classList.remove('visible'); });
       host.querySelectorAll('[data-dashboard-order-open]').forEach(button => button.addEventListener('click', async () => {
         state.orderStatusFilter = 'new';
         state.pages.orders = 1;
@@ -896,10 +1338,12 @@
         await openOrder(button.dataset.dashboardOrderOpen);
       }));
     } catch (error) {
-      host.innerHTML = `<div class="shop-commerce-error">${esc(error.message || 'Dashboardul nu a putut fi incarcat.')}</div>`;
+      if (requestId !== state.dashboardRequestId) return;
+      if (options.quiet) { host.classList.remove('is-dashboard-refreshing'); toast(error.message || 'Dashboardul nu a putut fi încărcat.', 'error'); }
+      else host.innerHTML = `<div class="shop-commerce-error">${esc(error.message || 'Dashboardul nu a putut fi incarcat.')}</div>`;
     }
   }
-  function dashboardMetric(label, value, color) { return `<article style="--metric:${color}"><i></i><small>${esc(label)}</small><strong>${esc(value)}</strong></article>`; }
+  function dashboardMetric(label, value, color, values = [], key = '') { const selected = state.dashboardSeries.has(key); return `<article class="${selected ? 'is-selected' : ''}" style="--metric:${color}" data-dashboard-series="${key}" role="button" tabindex="0" aria-pressed="${selected}"><span class="shop-metric-check">${selected ? '✓' : ''}</span><div class="shop-metric-copy"><i></i><small>${esc(label)}</small><strong>${esc(value)}</strong></div>${dashboardSparkline(values, color)}</article>`; }
 
   async function loadProducts(options = {}) {
     const requestId = ++state.productLoadRequestId;
@@ -998,7 +1442,7 @@
       const acquisitionPrice = Number(product.cost_price || 0);
       const salePrice = Number(order.unit_price || 0);
       const orderProfit = Number(order.line_total || 0) - (acquisitionPrice * Number(order.quantity || 0));
-      return `<tr data-product-sale-order="${esc(order.id)}" style="--product-sale-index:${index}"><td><strong>${esc(order.order_number)}</strong><small>${esc(order.created_at)}</small><em>${esc(order.customer_name)}</em></td><td>${order.quantity} buc.</td><td><b>${money(acquisitionPrice)}</b><small>pe bucata</small></td><td><b>${money(salePrice)}</b><small>pe bucata</small></td><td><b class="shop-profit-value">${money(orderProfit)}</b><small>total comanda</small></td><td><span class="commerce-pill" style="--pill:${statusColors[order.status] || '#aaa'}">${esc(statusLabels[order.status] || order.status)}</span></td></tr>`;
+      return `<tr data-product-sale-order="${esc(order.id)}" style="--product-sale-index:${index}"><td><strong>${esc(order.order_number)}</strong><small>${esc(order.created_at)}</small><em>${esc(order.customer_display_name || orderCustomerDisplayName(order))}</em></td><td>${order.quantity} buc.</td><td><b>${money(acquisitionPrice)}</b><small>pe bucata</small></td><td><b>${money(salePrice)}</b><small>pe bucata</small></td><td><b class="shop-profit-value">${money(orderProfit)}</b><small>total comanda</small></td><td><span class="commerce-pill" style="--pill:${statusColors[order.status] || '#aaa'}">${esc(statusLabels[order.status] || order.status)}</span></td></tr>`;
     }).join('');
     const reviews = reviewsPage.items.map((review, index) => `<article class="shop-detail-review" style="--product-review-index:${index}"><header><div><strong>${esc(review.customer_name)}</strong><small>${'★'.repeat(review.rating)}${'☆'.repeat(5 - review.rating)} · ${esc(review.created_at)}</small></div><button type="button" class="danger" data-detail-review-delete="${review.id}">×</button></header><p>${esc(review.message)}</p><label>Raspunsul magazinului<textarea rows="3" data-detail-review-reply="${review.id}">${esc(review.admin_reply || '')}</textarea></label><button type="button" class="btn-primary" data-detail-review-save="${review.id}">Salveaza raspunsul</button></article>`).join('') || '<p class="shop-detail-empty">Produsul nu are inca recenzii.</p>';
     const soldUnits = Number(detail.units_sold || 0);
@@ -1171,7 +1615,104 @@
   }
   async function deleteProduct(id) { const product = state.products.find(item => item.id === id); if (!product || !confirm(`Stergi definitiv produsul „${product.name}”? Toate pozele lui vor fi sterse de pe server.`)) return; try { const result = await window.SHOP_API.deleteProduct(id); if (!result?.success || result.deleted_id !== id) throw new Error('Serverul nu a confirmat stergerea produsului.'); state.products = state.products.filter(item => item.id !== id); renderProducts(); await loadProducts(); if (state.products.some(item => item.id === id)) throw new Error('Produsul apare inca in catalog dupa stergere. Reincarca si incearca din nou.'); toast(`Produsul a fost sters definitiv${result.deleted_files ? ` impreuna cu ${result.deleted_files} fisiere` : ''}.`); } catch (error) { toast(error.message, 'error'); } }
 
+  function shopDateTime(value) {
+    if (!value) return '—';
+    const normalized = String(value).replace(' ', 'T');
+    const date = new Date(normalized);
+    return Number.isNaN(date.getTime()) ? esc(value) : esc(new Intl.DateTimeFormat('ro-RO', { dateStyle: 'medium', timeStyle: 'short' }).format(date));
+  }
+  const spvModeLabels = {
+    manual: ['Manual', 'Trimiți din factura aleasă'],
+    on_issue: ['La emitere', 'Intră imediat în coada ANAF'],
+    delayed: ['Programat', 'După 1–5 zile lucrătoare'],
+  };
+  function spvAutomationCard(kind, title, subtitle, accent) {
+    const draft = state.spvDraft || {};
+    const modeKey = kind === 'invoice' ? 'invoice_mode' : 'return_mode';
+    const delayKey = kind === 'invoice' ? 'invoice_delay_days' : 'return_delay_days';
+    const mode = draft[modeKey] || 'manual';
+    const delay = Number(draft[delayKey] || 1);
+    const choices = Object.entries(spvModeLabels).map(([value, [label, hint]]) => `<button type="button" class="shop-spv-mode ${mode === value ? 'active' : ''}" style="--spv-accent:${accent}" data-spv-kind="${kind}" data-spv-mode="${value}"><i>${mode === value ? '✓' : ''}</i><span><strong>${label}</strong><small>${hint}</small></span></button>`).join('');
+    const delays = [1, 2, 3, 4, 5].map(day => `<button type="button" class="${delay === day ? 'active' : ''}" style="--spv-accent:${accent}" data-spv-delay-kind="${kind}" data-spv-delay="${day}">${day}</button>`).join('');
+    return `<article class="shop-spv-automation" style="--spv-accent:${accent}"><header><span class="shop-spv-automation-icon"><svg viewBox="0 0 24 24"><path d="M12 16V5m0 0L8 9m4-4 4 4"/><path d="M5 15v4h14v-4"/></svg></span><div><strong>${title}</strong><small>${subtitle}</small></div></header><div class="shop-spv-mode-list">${choices}</div>${mode === 'delayed' ? `<div class="shop-spv-delay"><small>TRIMITE DUPĂ</small><div>${delays}</div><p>zile lucrătoare de la emitere</p></div>` : ''}</article>`;
+  }
+  function renderSpv() {
+    const root = $('shop-spv-content');
+    const connection = state.spvConnection;
+    if (!root || !connection) return;
+    const connected = Boolean(connection.connected);
+    const configured = Boolean(connection.configured);
+    const waiting = Boolean(state.spvWaitingForOAuth);
+    root.innerHTML = `<section class="shop-spv-hero ${connected ? 'connected' : ''}"><span class="shop-spv-glow" aria-hidden="true"></span><span class="shop-spv-icon" aria-hidden="true"><img src="./assets/anaf-ro.png" alt="ANAF" /></span><span class="shop-spv-state ${connected ? 'connected' : ''}"><i></i>${connected ? 'CONECTAT SECURIZAT' : 'NECONECTAT'}</span><small>CONFIGURARE ANAF</small><h1>SPV - RO e-Factura</h1><p>${connected ? 'Tokenurile sunt păstrate criptat pe server. Aceeași conexiune funcționează pe desktop, telefon și orice dispozitiv autentificat.' : 'Conectează o singură dată certificatul digital calificat. Certificatul și datele OAuth nu sunt salvate în aplicație.'}</p></section>
+      ${!connected ? `<section class="shop-spv-connect"><span><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9m-4 4 3 3m-6 0 3 3"/></svg></span><h2>Conectează firma la SPV</h2><p>${configured ? 'Vei fi redirecționat pe pagina oficială ANAF pentru alegerea certificatului. După confirmare, revino în aplicație.' : 'Datele OAuth ANAF trebuie configurate în zona securizată a serverului.'}</p><button type="button" id="shop-spv-connect" ${!configured || state.spvBusy ? 'disabled' : ''}>${state.spvBusy === 'connect' ? '<i class="shop-spv-spinner"></i>' : '<svg viewBox="0 0 24 24"><path d="M12 3 20 6v6c0 5-3.4 8-8 9-4.6-1-8-4-8-9V6l8-3Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>'}<strong>${waiting ? 'Așteptăm confirmarea ANAF' : 'Conectează SPV'}</strong></button>${waiting ? '<button type="button" class="shop-spv-refresh-link" id="shop-spv-refresh">Am confirmat certificatul · verifică acum</button>' : ''}</section>` : `<div class="shop-spv-connected-content"><section class="shop-spv-connection"><header><span><svg viewBox="0 0 24 24"><path d="M12 3 20 6v6c0 5-3.4 8-8 9-4.6-1-8-4-8-9V6l8-3Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg></span><div><strong>Conexiune server activă</strong><small>Certificat ${esc(connection.certificate_hint || 'verificat de ANAF')} · testat ${shopDateTime(connection.last_tested_at)}</small></div></header><div class="shop-spv-token"><span><small>ACCESS TOKEN</small><strong>Reînnoire automată · expiră ${shopDateTime(connection.access_expires_at)}</strong></span><span><small>REFRESH TOKEN</small><strong>Valabil până la ${shopDateTime(connection.refresh_expires_at)}</strong></span></div><footer><button type="button" id="shop-spv-test" ${state.spvBusy ? 'disabled' : ''}>Testează conexiunea</button><button type="button" class="danger" id="shop-spv-disconnect" ${state.spvBusy ? 'disabled' : ''}>Deconectează</button></footer></section>
+      <section class="shop-spv-settings-head"><div><small>MEDIU DE TRANSMITERE</small><h2>Unde trimitem documentele</h2></div><span>Termen legal: 5 zile lucrătoare</span></section><div class="shop-spv-environment"><button type="button" data-spv-environment="test" class="${state.spvDraft?.environment === 'test' ? 'active test' : ''}">Test ANAF</button><button type="button" data-spv-environment="production" class="${state.spvDraft?.environment === 'production' ? 'active production' : ''}">Producție</button></div><p class="shop-spv-environment-note ${state.spvDraft?.environment === 'production' ? 'production' : ''}">${state.spvDraft?.environment === 'production' ? 'Mod Producție: documentele acceptate sunt transmise oficial în RO e-Factura.' : 'Mediul de test nu produce efecte fiscale reale. Treci în Producție numai după verificarea fluxului complet.'}</p><section class="shop-spv-settings-head"><div><small>REGULI AUTOMATE</small><h2>Momentul transmiterii</h2></div></section><div class="shop-spv-automation-grid">${spvAutomationCard('invoice', 'Facturi emise', 'Facturile pozitive din vânzări', '#60a5fa')}${spvAutomationCard('return', 'Facturi de retur', 'Facturi de corecție · cod 381', '#f472b6')}</div><label class="shop-spv-reminder"><span><strong>Alerte termen legal</strong><small>Notifică atunci când mai sunt cel mult 2 zile lucrătoare din termenul legal.</small></span><input type="checkbox" id="shop-spv-reminders" ${state.spvDraft?.reminders_enabled ? 'checked' : ''}><i></i></label><button type="button" class="shop-spv-save" id="shop-spv-save" ${state.spvBusy ? 'disabled' : ''}><svg viewBox="0 0 24 24"><path d="M5 3h12l2 2v16H5V3Z"/><path d="M8 3v6h8V3M8 21v-8h8v8"/></svg><strong>Salvează și recalculează coada</strong></button></div>`}`;
+    $('shop-spv-connect')?.addEventListener('click', connectSpv);
+    $('shop-spv-refresh')?.addEventListener('click', () => void loadSpv({ quiet: true }));
+    $('shop-spv-test')?.addEventListener('click', testSpv);
+    $('shop-spv-disconnect')?.addEventListener('click', disconnectSpv);
+    $('shop-spv-save')?.addEventListener('click', saveSpvSettings);
+    root.querySelectorAll('[data-spv-environment]').forEach(button => button.addEventListener('click', () => { state.spvDraft = { ...state.spvDraft, environment: button.dataset.spvEnvironment }; renderSpv(); }));
+    root.querySelectorAll('[data-spv-mode]').forEach(button => button.addEventListener('click', () => { const key = button.dataset.spvKind === 'invoice' ? 'invoice_mode' : 'return_mode'; state.spvDraft = { ...state.spvDraft, [key]: button.dataset.spvMode }; renderSpv(); }));
+    root.querySelectorAll('[data-spv-delay]').forEach(button => button.addEventListener('click', () => { const key = button.dataset.spvDelayKind === 'invoice' ? 'invoice_delay_days' : 'return_delay_days'; state.spvDraft = { ...state.spvDraft, [key]: Number(button.dataset.spvDelay) }; renderSpv(); }));
+    $('shop-spv-reminders')?.addEventListener('change', event => { state.spvDraft = { ...state.spvDraft, reminders_enabled: event.target.checked }; });
+  }
+  async function loadSpv({ quiet = false } = {}) {
+    if (!quiet) loading('shop-spv-content', 'Se verifică legătura securizată cu ANAF…');
+    try {
+      const result = await window.SHOP_API.getSpvConnection();
+      state.spvConnection = result;
+      if (result.settings) state.spvDraft = { ...result.settings };
+      if (result.connected) {
+        state.spvWaitingForOAuth = false;
+        clearInterval(spvOAuthPollTimer);
+        spvOAuthPollTimer = null;
+      }
+      renderSpv();
+    } catch (error) { failure('shop-spv-content', error); }
+  }
+  async function connectSpv() {
+    if (state.spvBusy) return;
+    state.spvBusy = 'connect'; renderSpv();
+    try {
+      const result = await window.SHOP_API.beginSpvOAuth('test');
+      state.spvWaitingForOAuth = true;
+      await shell.openExternal(result.authorization_url);
+      clearInterval(spvOAuthPollTimer);
+      spvOAuthPollTimer = setInterval(() => void loadSpv({ quiet: true }), 3000);
+    } catch (error) { toast(error.message || 'Conectarea SPV nu a putut fi pornită.', 'error'); }
+    finally { state.spvBusy = ''; renderSpv(); }
+  }
+  async function testSpv() {
+    if (state.spvBusy) return;
+    state.spvBusy = 'test'; renderSpv();
+    try { state.spvConnection = await window.SHOP_API.testSpvConnection(); toast('ANAF a confirmat conexiunea OAuth.'); }
+    catch (error) { toast(error.message || 'ANAF nu a confirmat conexiunea.', 'error'); }
+    finally { state.spvBusy = ''; renderSpv(); }
+  }
+  async function disconnectSpv() {
+    if (state.spvBusy || !confirm('Deconectezi SPV?\n\nTokenurile criptate vor fi revocate și șterse de pe server.')) return;
+    state.spvBusy = 'disconnect'; renderSpv();
+    try { state.spvConnection = await window.SHOP_API.disconnectSpv(); state.spvDraft = null; state.spvWaitingForOAuth = false; clearInterval(spvOAuthPollTimer); spvOAuthPollTimer = null; toast('Conexiunea SPV a fost închisă.'); }
+    catch (error) { toast(error.message || 'Deconectarea nu a reușit.', 'error'); }
+    finally { state.spvBusy = ''; renderSpv(); }
+  }
+  async function saveSpvSettings() {
+    if (state.spvBusy || !state.spvDraft) return;
+    state.spvBusy = 'save'; renderSpv();
+    try { state.spvConnection = await window.SHOP_API.updateSpvSettings(state.spvDraft); state.spvDraft = { ...state.spvConnection.settings }; toast('Automatizările SPV au fost salvate, iar coada a fost recalculată.'); }
+    catch (error) { toast(error.message || 'Automatizările SPV nu au fost salvate.', 'error'); }
+    finally { state.spvBusy = ''; renderSpv(); }
+  }
+
   const invoiceThemeColors = { orange: '#ff8a00', green: '#19a86b', red: '#ef4056', purple: '#8b72e8' };
+  function invoiceSpvPresentation(status) {
+    return ({
+      sent: ['TRIMISĂ', 'sent', 'Document acceptat de ANAF'],
+      processing: ['ÎN PROCESARE', 'processing', 'ANAF verifică documentul'],
+      error: ['EROARE', 'error', 'Retrimite documentul'],
+      rejected: ['RESPINSĂ', 'error', 'Corectează și retrimite'],
+    })[status] || ['NETRIMISĂ', 'pending', 'Transmitere manuală disponibilă'];
+  }
   const invoiceMoney = (value, currency = 'RON') => `${new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0))} ${esc(currency || 'RON')}`;
   const invoiceAssetUrl = value => { const path = String(value || '').trim(); return !path || /^(?:https?:|data:)/i.test(path) ? path : `${String(window.SHOP_API_URL || 'https://g-trots.ro/shop-api').replace(/\/$/, '')}/${path.replace(/^\/+/, '')}`; };
   function invoiceItemAmounts(item) {
@@ -1224,25 +1765,42 @@
     }).join('');
     const discountCallout = discountTotal > 0 ? `<div class="shop-invoice-discount-callout"><span class="shop-invoice-discount-orbit"><b>%</b><i></i></span><span><small>REDUCERE APLICATĂ</small><strong>${esc(discountCode ? `Cod ${discountCode}` : 'Promoție comercială')}</strong><em>Este deja inclusă în prețurile pozițiilor.</em></span><b>−${invoiceMoney(discountTotal, payload.currency)}</b></div>` : '';
     const discountTotalRow = discountTotal > 0 ? `<span class="discount"><small>Reducere${discountCode ? ` · ${esc(discountCode)}` : ''}<em>inclusă în subtotal</em></small><strong>−${invoiceMoney(discountTotal, payload.currency)}</strong></span>` : '';
-    const spvAction = invoice.spv_status !== 'sent' ? `<button type="button" class="shop-invoice-spv-send" data-invoice-spv-setup="${esc(invoice.id)}"><svg viewBox="0 0 24 24"><path d="M12 16V5m0 0L8 9m4-4 4 4"/><path d="M5 15v4h14v-4"/></svg><span><strong>Trimite în SPV</strong><small>Necesită conectarea ANAF</small></span><i>›</i></button>` : '';
-    root.innerHTML = `<section class="shop-invoice-detail-hero" style="--invoice-accent:${accent}"><span class="shop-invoice-detail-document"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span><div><small>DOCUMENT FISCAL · TEMA ${esc(String(invoice.theme || '').toUpperCase())}</small><h3>${esc(invoice.display_number)}</h3><p>Comanda ${esc(invoice.order_number)} · emisă ${esc(invoice.issue_date)}</p></div><span class="shop-invoice-state-stack"><b class="${invoice.status}">${invoice.status === 'paid' ? 'PLĂTITĂ' : 'NEPLĂTITĂ'}</b><b class="spv ${invoice.spv_status === 'sent' ? 'sent' : 'pending'}">SPV ${invoice.spv_status === 'sent' ? 'TRIMISĂ' : 'NETRIMISĂ'}</b>${spvAction}</span></section><section class="shop-invoice-parties">${invoicePartyCard('seller', payload.seller)}${invoicePartyCard('buyer', payload.buyer)}</section><section class="shop-invoice-products"><header><div><small>POZIȚII FACTURATE</small><strong>${items.length} ${items.length === 1 ? 'poziție' : 'poziții'}</strong></div><span>${productIcon}</span></header>${rows || '<p class="shop-detail-empty">Factura nu conține poziții.</p>'}</section><section class="shop-invoice-detail-bottom"><article class="shop-invoice-payment"><small>PLATĂ ȘI EMITERE</small><strong>${esc(payload.payment?.method || 'Metodă neprecizată')}</strong><p>Scadență ${esc(payload.due_date || payload.issue_date)} · emisă de ${esc(invoice.issued_by || 'Administrator')}</p>${discountCallout}${payload.notes ? `<em class="shop-invoice-payment-note">${esc(payload.notes)}</em>` : ''}</article><article class="shop-invoice-totals">${discountTotalRow}<span><small>Subtotal fără TVA</small><strong>${invoiceMoney(totals.net, payload.currency)}</strong></span><span><small>TVA</small><strong>${invoiceMoney(totals.vat, payload.currency)}</strong></span><span class="grand" style="--invoice-accent:${accent}"><small>TOTAL FACTURĂ</small><strong>${invoiceMoney(invoice.total, payload.currency)}</strong></span></article></section>`;
+    const [spvLabel, spvClass, spvHint] = invoiceSpvPresentation(invoice.spv_status);
+    const spvDisabled = ['sent', 'processing'].includes(invoice.spv_status);
+    const spvAction = `<button type="button" class="shop-invoice-spv-send ${spvClass}" data-invoice-spv-send="${esc(invoice.id)}" ${spvDisabled ? 'disabled' : ''}><svg viewBox="0 0 24 24">${invoice.spv_status === 'sent' ? '<path d="m5 12 4 4L19 6"/>' : '<path d="M12 16V5m0 0L8 9m4-4 4 4"/><path d="M5 15v4h14v-4"/>'}</svg><span><strong>${invoice.spv_status === 'sent' ? 'Trimisă în SPV' : invoice.spv_status === 'processing' ? 'În procesare ANAF' : ['error', 'rejected'].includes(invoice.spv_status) ? 'Retrimite în SPV' : 'Trimite în SPV'}</strong><small>${spvHint}</small></span><i>${spvDisabled ? '✓' : '›'}</i></button>`;
+    const returnReference = invoice.status === 'return' ? `<p><strong>Retur pentru factura fiscală emisă ${esc(`${payload.related_invoice?.series || ''} ${payload.related_invoice?.number || ''}`.trim())}</strong> · comanda ${esc(payload.order_reference || invoice.order_number)}</p>` : '';
+    root.innerHTML = `<section class="shop-invoice-detail-hero" style="--invoice-accent:${accent}"><span class="shop-invoice-detail-document"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span><div><small>${invoice.status === 'return' ? 'FACTURĂ DE RETUR' : 'DOCUMENT FISCAL'} · TEMA ${esc(String(invoice.theme || '').toUpperCase())}</small><h3>${esc(invoice.display_number)}</h3><p>Comanda ${esc(invoice.order_number)} · emisă ${esc(invoice.issue_date)}</p>${returnReference}</div><span class="shop-invoice-state-stack"><b class="${invoice.status}">${invoice.status === 'return' ? 'RETUR' : invoice.status === 'paid' ? 'PLĂTITĂ' : 'NEPLĂTITĂ'}</b><b class="spv ${spvClass}">SPV ${spvLabel}</b>${spvAction}</span></section><section class="shop-invoice-parties">${invoicePartyCard('seller', payload.seller)}${invoicePartyCard('buyer', payload.buyer)}</section><section class="shop-invoice-products"><header><div><small>POZIȚII FACTURATE</small><strong>${items.length} ${items.length === 1 ? 'poziție' : 'poziții'}</strong></div><span>${productIcon}</span></header>${rows || '<p class="shop-detail-empty">Factura nu conține poziții.</p>'}</section><section class="shop-invoice-detail-bottom"><article class="shop-invoice-payment"><small>PLATĂ ȘI EMITERE</small><strong>${esc(payload.payment?.method || 'Metodă neprecizată')}</strong><p>Scadență ${esc(payload.due_date || payload.issue_date)} · emisă de ${esc(invoice.issued_by || 'Administrator')}</p>${discountCallout}${payload.notes ? `<em class="shop-invoice-payment-note">${esc(payload.notes)}</em>` : ''}</article><article class="shop-invoice-totals">${discountTotalRow}<span><small>Subtotal fără TVA</small><strong>${invoiceMoney(totals.net, payload.currency)}</strong></span><span><small>TVA</small><strong>${invoiceMoney(totals.vat, payload.currency)}</strong></span><span class="grand" style="--invoice-accent:${accent}"><small>TOTAL FACTURĂ</small><strong>${invoiceMoney(invoice.total, payload.currency)}</strong></span></article></section>`;
     root.querySelectorAll('[data-invoice-product]').forEach(button => button.addEventListener('click', () => void openProductDetail(button.dataset.invoiceProduct, { overOrder: true })));
-    root.querySelector('[data-invoice-spv-setup]')?.addEventListener('click', () => openSpvSetupFromInvoice(invoice));
+    root.querySelector('[data-invoice-spv-send]')?.addEventListener('click', () => void sendInvoiceToSpv(invoice));
     $('shop-invoice-detail-email').disabled = !invoice.customer_email;
     $('shop-invoice-detail-delete').hidden = !invoice.can_delete;
   }
-  function openSpvSetupFromInvoice(invoice) {
-    if (!invoice || invoice.spv_status === 'sent') return;
-    closeModal('shop-invoice-detail-modal');
-    window.switchTab?.('shop-spv');
-    toast(`${invoice.display_number} este pregătită. Conectează firma la ANAF pentru transmiterea în SPV.`);
+  async function sendInvoiceToSpv(invoice) {
+    if (!invoice || ['sent', 'processing'].includes(invoice.spv_status) || state.invoiceBusy) return;
+    if (!confirm(`Trimiți ${invoice.display_number} către ANAF în SPV?\n\nDocumentul va fi validat și starea se va actualiza numai după răspunsul ANAF.`)) return;
+    state.invoiceBusy = invoice.id;
+    try {
+      const result = await window.SHOP_API.sendInvoiceToSpv(invoice.id);
+      const updated = result.invoice || invoice;
+      state.invoiceDetail = updated;
+      state.invoices = state.invoices.map(item => item.id === updated.id ? { ...item, ...updated } : item);
+      renderInvoiceDetail(updated);
+      toast(updated.spv_status === 'sent' ? `${updated.display_number} a fost acceptată în SPV.` : `${updated.display_number} este în procesare la ANAF.`);
+    } catch (error) {
+      if (/conect/i.test(String(error.message || ''))) {
+        closeModal('shop-invoice-detail-modal');
+        window.switchTab?.('shop-spv');
+      }
+      toast(error.message || 'Factura nu a putut fi trimisă în SPV.', 'error');
+    } finally { state.invoiceBusy = ''; }
   }
   async function openInvoiceDetail(id) {
     if (!id) return;
     const summary = state.invoices.find(item => item.id === id) || null;
-    state.invoiceDetail = summary;
+    state.invoiceDetail = summary ? { ...summary, can_delete: false } : null;
     $('shop-invoice-detail-title').textContent = summary?.display_number || 'Se încarcă...';
     $('shop-invoice-detail-content').innerHTML = '<div class="shop-invoice-detail-loading"><span class="shop-invoice-loading-icon"><i></i></span><strong>Încărcăm fișa facturii</strong><small>Produsele, clientul și documentele vor apărea imediat.</small></div>';
+    $('shop-invoice-detail-delete').hidden = true;
     openModal('shop-invoice-detail-modal');
     try {
       const invoice = await window.SHOP_API.getInvoice(id);
@@ -1293,7 +1851,8 @@
     const cards = page.items.map(invoice => {
       const accent = invoiceThemeColors[invoice.theme] || invoiceThemeColors.orange;
       const sent = Boolean(invoice.email_sent_at);
-      return `<article class="shop-issued-invoice" data-invoice-open="${esc(invoice.id)}" tabindex="0" role="button" aria-label="Deschide fișa facturii ${esc(invoice.display_number)}" style="--invoice-accent:${accent}"><span class="shop-issued-invoice-icon"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span><div class="shop-issued-invoice-copy"><header><strong>${esc(invoice.display_number)}</strong><b class="${invoice.status}">${invoice.status === 'paid' ? 'PLĂTITĂ' : 'NEPLĂTITĂ'}</b><b class="shop-invoice-spv ${invoice.spv_status === 'sent' ? 'sent' : 'pending'}">SPV ${invoice.spv_status === 'sent' ? 'TRIMISĂ' : 'NETRIMISĂ'}</b></header><h3>${esc(invoice.buyer_name)}</h3><p>Comanda ${esc(invoice.order_number)} · ${esc(invoice.issue_date)} · tema ${esc(invoice.theme)}</p><span class="${sent ? 'sent' : ''}"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/></svg>${sent ? `Trimisă la ${esc(invoice.customer_email)}` : esc(invoice.customer_email || 'Fără e-mail')}</span></div><aside><small>TOTAL FACTURĂ</small><strong>${invoiceMoney(invoice.total, invoice.currency)}</strong><button type="button" class="shop-issued-invoice-open" data-invoice-detail="${esc(invoice.id)}"><span>Deschide fișa</span><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button></aside></article>`;
+      const [spvLabel, spvClass] = invoiceSpvPresentation(invoice.spv_status);
+      return `<article class="shop-issued-invoice" data-invoice-open="${esc(invoice.id)}" tabindex="0" role="button" aria-label="Deschide fișa facturii ${esc(invoice.display_number)}" style="--invoice-accent:${accent}"><span class="shop-issued-invoice-icon"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span><div class="shop-issued-invoice-copy"><header><strong>${esc(invoice.display_number)}</strong><b class="${invoice.status}">${invoice.status === 'return' ? 'RETUR' : invoice.status === 'paid' ? 'PLĂTITĂ' : 'NEPLĂTITĂ'}</b><b class="shop-invoice-spv ${spvClass}">SPV ${spvLabel}</b></header><h3>${esc(invoice.buyer_name)}</h3><p>${invoice.status === 'return' ? 'Factură de retur pentru ' : 'Comanda '}${esc(invoice.order_number)} · ${esc(invoice.issue_date)} · tema ${esc(invoice.theme)}</p><span class="${sent ? 'sent' : ''}"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/></svg>${sent ? `Trimisă la ${esc(invoice.customer_email)}` : esc(invoice.customer_email || 'Fără e-mail')}</span></div><aside><small>${invoice.status === 'return' ? 'TOTAL RETUR' : 'TOTAL FACTURĂ'}</small><strong>${invoiceMoney(invoice.total, invoice.currency)}</strong><button type="button" class="shop-issued-invoice-open" data-invoice-detail="${esc(invoice.id)}"><span>Deschide fișa</span><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button></aside></article>`;
     }).join('');
     root.innerHTML = `${metrics}${toolbar}${cards ? `<section class="shop-issued-invoice-list">${cards}</section>${pagination('invoices', filtered.length, page.page, page.pageCount, page.pageSize)}` : empty('Nu există facturi emise', state.invoices.length ? 'Schimbă filtrul sau căutarea.' : 'Emite prima factură din pagina unei comenzi.')}`;
     $('shop-invoices-search')?.addEventListener('input', event => { state.invoiceQuery = event.target.value; state.pages.invoices = 1; renderInvoices(); $('shop-invoices-search')?.focus({ preventScroll: true }); });
@@ -1314,8 +1873,19 @@
   }
   async function deleteIssuedInvoice(id) {
     if (!id || state.invoiceBusy) return;
-    const invoice = state.invoices.find(item => item.id === id) || state.invoiceDetail;
-    if (!invoice?.can_delete) return toast(invoice?.spv_status === 'sent' ? 'Factura este deja trimisă în SPV și nu poate fi ștearsă.' : 'Poți șterge numai ultima factură emisă din serie.', 'error');
+    state.invoiceBusy = id;
+    let invoice;
+    try {
+      invoice = await window.SHOP_API.getInvoice(id);
+      state.invoiceDetail = invoice;
+      state.invoices = state.invoices.map(item => item.id === id ? { ...item, can_delete: Boolean(invoice?.can_delete), spv_status: invoice?.spv_status || item.spv_status } : item);
+      $('shop-invoice-detail-delete').hidden = !invoice?.can_delete;
+    } catch (error) {
+      $('shop-invoice-detail-delete').hidden = true;
+      toast(error.message || 'Permisiunea de ștergere nu a putut fi verificată.', 'error');
+      return;
+    } finally { state.invoiceBusy = ''; }
+    if (!invoice?.can_delete) return;
     if (!confirm(`Ștergi ${invoice.display_number}?\n\nFactura este netrimisă în SPV. Stocul și mișcările vor fi refăcute, iar acest număr va fi reutilizat la următoarea emitere.`)) return;
     state.invoiceBusy = id;
     try {
@@ -1346,38 +1916,56 @@
     const order = state.orders.find(item => item.id === orderId) || (state.editingOrder?.id === orderId ? state.editingOrder : null);
     if (!order) return;
     if (order.invoice) { navigateToIssuedInvoice(order.invoice.id); return; }
+    if (['cancelled', 'refunded'].includes(order.status)) return toast('Nu poți emite o factură normală pentru o comandă anulată sau rambursată.', 'error');
     state.invoiceIssueOrder = order;
+    const paired = order.status === 'return_confirmed';
+    const modal = $('shop-invoice-issue-modal');
+    const title = modal?.querySelector('header h2');
+    const lead = modal?.querySelector('.shop-invoice-issue-lead p');
+    const note = modal?.querySelector('.shop-invoice-issue-note span');
+    if (title) title.textContent = paired ? 'Emite factura și returul' : 'Emite factura';
+    if (lead) lead.textContent = paired ? 'Se emit factura pozitivă și factura de retur, cu numere consecutive. Returul va indica explicit factura pozitivă și comanda.' : 'Factura scade stocul imediat. FIFO alege loturile, iar valorile păstrate sunt costurile reale de achiziție din NIR.';
+    if (note) note.textContent = paired ? 'Alegi independent dacă trimiți factura pozitivă, factura de retur, ambele sau niciuna.' : 'Numărul, tema și valorile rămân neschimbate la orice regenerare.';
     $('shop-invoice-issue-order').textContent = order.order_number;
-    $('shop-invoice-issue-client').textContent = order.customer_name || 'Client';
+    $('shop-invoice-issue-client').textContent = orderCustomerDisplayName(order) || 'Client';
     $('shop-invoice-issue-total').textContent = `${new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2 }).format(Number(order.total || 0))} ${order.currency || 'RON'}`;
-    $('shop-invoice-issue-email').textContent = order.customer_email ? `PDF-ul și XLSX-ul vor fi trimise la ${order.customer_email}` : 'Comanda nu are o adresă de e-mail validă.';
+    $('shop-invoice-issue-email').textContent = order.customer_email ? `Doar PDF-ul va fi trimis la ${order.customer_email}` : 'Comanda nu are o adresă de e-mail validă.';
+    $('shop-invoice-issue-email-title').textContent = paired ? 'Trimite factura pozitivă' : 'Trimite și pe e-mail';
     $('shop-invoice-issue-send-email').checked = false;
     $('shop-invoice-issue-send-email').disabled = !order.customer_email;
+    $('shop-invoice-return-email-option').hidden = !paired;
+    $('shop-invoice-issue-return-email').textContent = order.customer_email ? `PDF separat la ${order.customer_email}` : 'Comanda nu are o adresă de e-mail validă.';
+    $('shop-invoice-issue-send-return-email').checked = false;
+    $('shop-invoice-issue-send-return-email').disabled = !order.customer_email;
     syncInvoiceIssuePanel();
     openModal('shop-invoice-issue-modal');
   }
   function syncInvoiceIssuePanel() {
-    const toggle = $('shop-invoice-issue-send-email');
-    const label = toggle?.closest('.shop-invoice-email-switch');
-    label?.classList.toggle('active', Boolean(toggle?.checked));
-    label?.classList.toggle('disabled', Boolean(toggle?.disabled));
+    ['shop-invoice-issue-send-email', 'shop-invoice-issue-send-return-email'].forEach(id => {
+      const toggle = $(id);
+      const label = toggle?.closest('.shop-invoice-email-switch');
+      label?.classList.toggle('active', Boolean(toggle?.checked));
+      label?.classList.toggle('disabled', Boolean(toggle?.disabled));
+    });
     const text = $('shop-invoice-issue-confirm')?.querySelector('span');
-    if (text) text.textContent = toggle?.checked ? 'Emite și trimite' : 'Emite factura';
+    if (text) text.textContent = state.invoiceIssueOrder?.status === 'return_confirmed' ? 'Emite ambele' : toggle?.checked ? 'Emite și trimite' : 'Emite factura';
   }
   async function submitInvoiceIssue(event) {
     event.preventDefault();
     const order = state.invoiceIssueOrder;
     if (!order || state.invoiceBusy) return;
     const sendEmail = Boolean($('shop-invoice-issue-send-email')?.checked);
+    const sendReturnEmail = order.status === 'return_confirmed' && Boolean($('shop-invoice-issue-send-return-email')?.checked);
     const button = $('shop-invoice-issue-confirm');
     button.disabled = true;
     state.invoiceBusy = order.id;
     try {
-      const invoice = await window.SHOP_API.issueInvoice(order.id, sendEmail);
+      const invoice = await window.SHOP_API.issueInvoice(order.id, sendEmail, sendReturnEmail);
       closeModal('shop-invoice-issue-modal');
       state.invoiceIssueOrder = null;
       const notification = invoice.email_notification;
-      toast(sendEmail ? (notification?.sent ? `${invoice.display_number} a fost emisă și trimisă la ${notification.recipient}.` : `${invoice.display_number} a fost emisă, dar e-mailul nu a plecat: ${notification?.error || 'verifică SMTP.'}`) : `${invoice.display_number} a fost emisă.`, sendEmail && !notification?.sent ? 'error' : 'success');
+      const pairedMessage = invoice.return_invoice ? (invoice.return_invoice_email?.sent ? ` ${invoice.return_invoice.display_number} a fost emisă ca retur, cu referință la factura pozitivă și comanda ${order.order_number}, apoi trimisă clientului.` : invoice.return_invoice_email?.requested === false ? ` ${invoice.return_invoice.display_number} a fost emisă și nu a fost trimisă pe e-mail, conform selecției tale.` : ` ${invoice.return_invoice.display_number} a fost emisă cu referințele complete, dar PDF-ul de retur nu a putut fi trimis: ${invoice.return_invoice_email?.error || 'verifică SMTP.'}`) : '';
+      toast((sendEmail ? (notification?.sent ? `${invoice.display_number} a fost emisă și trimisă la ${notification.recipient}.` : `${invoice.display_number} a fost emisă, dar e-mailul nu a plecat: ${notification?.error || 'verifică SMTP.'}`) : `${invoice.display_number} a fost emisă.`) + pairedMessage, sendEmail && !notification?.sent ? 'error' : 'success');
       const refreshed = await window.SHOP_API.getOrder(order.id);
       state.orders = state.orders.map(item => item.id === refreshed.id ? refreshed : item);
       if (state.editingOrder?.id === refreshed.id) renderOrderDetails(refreshed);
@@ -1401,6 +1989,14 @@
     const kind = orderCustomerKind(order);
     return `<span class="shop-order-customer-type ${kind.key}" title="${kind.label}" aria-label="${kind.label}">${kind.short}</span>`;
   }
+  function orderCustomerDisplayName(order) {
+    const serverName = String(order?.customer_display_name || '').trim();
+    if (serverName) return serverName;
+    const companyName = String(order?.company_name || '').trim();
+    return String(order?.customer_type || '').toLowerCase() === 'company' && companyName
+      ? companyName
+      : String(order?.customer_name || '').trim();
+  }
   function orderPaymentChips(order, labels) {
     const isCard = order.payment_method === 'card';
     const method = isCard ? 'card' : 'cash';
@@ -1420,30 +2016,35 @@
       const created = new Date(String(order.created_at || '').replace(' ', 'T'));
       const createdLabels = Number.isNaN(created.getTime()) ? [] : [created.toLocaleDateString('ro-RO'), created.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' }), created.toLocaleString('ro-RO')];
       const customerKind = orderCustomerKind(order);
-      const searchText = normalizeSearch([order.order_number, order.customer_name, order.customer_phone, order.customer_email, customerKind.short, customerKind.label, order.company_name, order.company_cui, order.company_registration_number, order.company_address, order.address, order.city, order.county, order.postal_code, order.created_at, ...createdLabels, order.status, statusLabels[order.status], statusShortLabels[order.status], order.payment_method, order.payment_method === 'card' ? 'card online plata cu cardul' : 'ramburs la curier plata ramburs numerar cash', order.payment_status, paymentStatusLabels[order.payment_status], ...(Array.isArray(order.items) ? order.items.flatMap(item => [item.product_name, item.product_sku]) : [])].join(' '));
+      const searchText = normalizeSearch([order.order_number, orderCustomerDisplayName(order), order.customer_name, order.customer_phone, order.customer_email, customerKind.short, customerKind.label, order.company_name, order.company_cui, order.company_registration_number, order.company_address, order.address, order.city, order.county, order.postal_code, order.created_at, ...createdLabels, order.status, statusLabels[order.status], statusShortLabels[order.status], order.payment_method, order.payment_method === 'card' ? 'card online plata cu cardul' : 'ramburs la curier plata ramburs numerar cash', order.payment_status, paymentStatusLabels[order.payment_status], ...(Array.isArray(order.items) ? order.items.flatMap(item => [item.product_name, item.product_sku]) : [])].join(' '));
       const compactSearchText = searchText.replace(/\s+/g, '');
       if (searchTerms.length && !searchTerms.every(searchTerm => searchText.includes(searchTerm) || compactSearchText.includes(searchTerm.replace(/\s+/g, '')))) return false;
-      if (state.orderStatusFilter !== 'all' && order.status !== state.orderStatusFilter) return false;
+      if (state.orderStatusFilter === 'returned' && !['return_confirmed', 'refunded'].includes(order.status)) return false;
+      if (!['all', 'returned'].includes(state.orderStatusFilter) && order.status !== state.orderStatusFilter) return false;
       if (state.orderPaymentMethodFilter === 'card' && order.payment_method !== 'card') return false;
       if (state.orderPaymentMethodFilter === 'cash' && order.payment_method === 'card') return false;
       if (state.orderPaymentStatusFilter !== 'all' && order.payment_status !== state.orderPaymentStatusFilter) return false;
       return true;
     });
     const page = pageData(filtered, 'orders');
-    const rows = page.items.map(order => `<tr data-order-open="${order.id}"><td><strong>${esc(order.order_number)}</strong><small>${esc(new Date(order.created_at.replace(' ', 'T')).toLocaleString('ro-RO'))}</small></td><td><div class="shop-order-client-heading"><strong>${esc(order.customer_name)}</strong>${orderCustomerBadge(order)}</div><small>${esc(order.customer_phone)}</small></td><td><span class="commerce-pill" style="--pill:${statusColors[order.status]}">${esc(statusShortLabels[order.status] || order.status)}</span></td><td>${orderPaymentChips(order, paymentStatusLabels)}</td><td><b>${money(order.total)}</b></td><td><button type="button" class="shop-order-invoice-button ${order.invoice ? 'issued' : ''}" data-order-invoice="${esc(order.id)}" title="${order.invoice ? `Deschide ${esc(order.invoice.display_number)} în Facturi emise` : 'Emite factura'}"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg><span>${order.invoice ? esc(order.invoice.display_number) : 'Emite'}</span></button></td><td><span class="shop-order-open-indicator" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span></td></tr>`).join('');
+    const rows = page.items.map(order => `<tr data-order-open="${order.id}"><td><strong>${esc(order.order_number)}</strong><small>${esc(new Date(order.created_at.replace(' ', 'T')).toLocaleString('ro-RO'))}</small></td><td><div class="shop-order-client-heading"><strong>${esc(orderCustomerDisplayName(order))}</strong>${orderCustomerBadge(order)}</div><small>${esc(order.customer_phone)}</small></td><td><span class="commerce-pill" style="--pill:${statusColors[order.status]}">${esc(statusShortLabels[order.status] || order.status)}</span></td><td>${orderPaymentChips(order, paymentStatusLabels)}</td><td><b>${money(order.total)}</b></td><td><button type="button" class="shop-order-invoice-button ${order.invoice ? 'issued' : ''}" data-order-invoice="${esc(order.id)}" title="${order.invoice ? `Deschide ${esc(order.invoice.display_number)} în Facturi emise` : 'Emite factura'}"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg><span>${order.invoice ? esc(order.invoice.display_number) : 'Emite'}</span></button></td><td><span class="shop-order-open-indicator" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span></td></tr>`).join('');
     const activeOrders = state.orders.filter(item => !terminalStatuses.includes(item.status));
-    const collected = activeOrders.filter(item => item.payment_status === 'paid').reduce((sum, item) => sum + Number(item.total || 0), 0);
+    const grossCollected = activeOrders.filter(item => item.payment_status === 'paid').reduce((sum, item) => sum + Number(item.total || 0), 0);
+    const returnsTotal = state.orders.reduce((sum, item) => sum + Math.abs(Number(item.return_invoice?.total || 0)), 0);
+    const collectedReturnDeduction = activeOrders.filter(item => item.payment_status === 'paid').reduce((sum, item) => sum + Math.abs(Number(item.return_invoice?.total || 0)), 0);
+    const collected = grossCollected - collectedReturnDeduction;
     const pendingCash = activeOrders.filter(item => item.payment_method !== 'card' && item.payment_status === 'pending').reduce((sum, item) => sum + Number(item.total || 0), 0);
     const orderMetrics = [
       { tone: 'blue', icon: statusIcon('new'), label: 'În procesare', value: String(state.orders.filter(item => item.status === 'new').length), help: 'Comenzi noi' },
       { tone: 'orange', icon: statusIcon('processing'), label: 'În pregătire', value: String(state.orders.filter(item => item.status === 'processing').length), help: 'Se pregătesc pentru livrare' },
+      { tone: 'pink', icon: statusIcon('return_confirmed'), label: `Retururi · ${state.orders.filter(item => item.return_invoice).length}`, value: money(returnsTotal), help: 'Facturi de retur emise' },
       { tone: 'purple', icon: '<svg viewBox="0 0 24 24"><path d="M4 7h16v11H4z"/><path d="M7 7V5h10v2M8 13h4"/></svg>', label: 'Total', value: money(collected + pendingCash), help: 'Încasări + ramburs în așteptare' },
       { tone: 'green', icon: statusIcon('completed'), label: 'Încasat', value: money(collected), help: 'Toate plățile încasate' },
       { tone: 'amber', icon: statusIcon('new'), label: 'De încasat', value: money(pendingCash), help: 'Ramburs în așteptare' },
     ];
     const metricsHtml = `<div class="shop-order-kpi-strip">${orderMetrics.map(item => `<article class="shop-order-kpi ${item.tone}"><span class="shop-order-kpi-icon">${item.icon}</span><div><small>${esc(item.label)}</small><strong>${esc(item.value)}</strong><em>${esc(item.help)}</em></div></article>`).join('')}</div>`;
     const option = (value, label, selected) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${esc(label)}</option>`;
-    const filtersHtml = `<section class="shop-order-filters"><header><div><strong>Căutare și filtre</strong><span>${filtered.length} ${filtered.length === 1 ? 'rezultat' : 'rezultate'}</span></div><button type="button" id="shop-orders-filter-reset" ${(term || state.orderStatusFilter !== 'all' || state.orderPaymentMethodFilter !== 'all' || state.orderPaymentStatusFilter !== 'all') ? '' : 'disabled'}>Resetează filtrele</button></header><div class="shop-order-filter-grid"><label class="search"><small>Caută în toate datele comenzii</small><input id="shop-orders-search" type="search" autocomplete="off" spellcheck="false" value="${esc(state.orderQuery)}" placeholder="Client, dată, oră, telefon, produs, status, plată sau număr comandă" /></label><label><small>Status comandă</small><select id="shop-orders-status-filter">${option('all', 'Toate statusurile', state.orderStatusFilter)}${Object.entries(statusLabels).map(([value, label]) => option(value, label, state.orderStatusFilter)).join('')}</select></label><label><small>Metodă de plată</small><select id="shop-orders-payment-method-filter">${option('all', 'Toate metodele', state.orderPaymentMethodFilter)}${option('card', 'Card online', state.orderPaymentMethodFilter)}${option('cash', 'Ramburs la curier', state.orderPaymentMethodFilter)}</select></label><label><small>Status plată</small><select id="shop-orders-payment-status-filter">${option('all', 'Toate plățile', state.orderPaymentStatusFilter)}${option('pending', 'În așteptare', state.orderPaymentStatusFilter)}${option('paid', 'Plătită', state.orderPaymentStatusFilter)}${option('failed', 'Eșuată', state.orderPaymentStatusFilter)}${option('refunded', 'Rambursată', state.orderPaymentStatusFilter)}</select></label></div></section>`;
+    const filtersHtml = `<section class="shop-order-filters"><header><div><strong>Căutare și filtre</strong><span>${filtered.length} ${filtered.length === 1 ? 'rezultat' : 'rezultate'}</span></div><button type="button" id="shop-orders-filter-reset" ${(term || state.orderStatusFilter !== 'all' || state.orderPaymentMethodFilter !== 'all' || state.orderPaymentStatusFilter !== 'all') ? '' : 'disabled'}>Resetează filtrele</button></header><div class="shop-order-filter-grid"><label class="search"><small>Caută în toate datele comenzii</small><input id="shop-orders-search" type="search" autocomplete="off" spellcheck="false" value="${esc(state.orderQuery)}" placeholder="Client, dată, oră, telefon, produs, status, plată sau număr comandă" /></label><label><small>Status comandă</small><select id="shop-orders-status-filter">${option('all', 'Toate statusurile', state.orderStatusFilter)}${option('returned', 'Returnate', state.orderStatusFilter)}${Object.entries(statusLabels).map(([value, label]) => option(value, label, state.orderStatusFilter)).join('')}</select></label><label><small>Metodă de plată</small><select id="shop-orders-payment-method-filter">${option('all', 'Toate metodele', state.orderPaymentMethodFilter)}${option('card', 'Card online', state.orderPaymentMethodFilter)}${option('cash', 'Ramburs la curier', state.orderPaymentMethodFilter)}</select></label><label><small>Status plată</small><select id="shop-orders-payment-status-filter">${option('all', 'Toate plățile', state.orderPaymentStatusFilter)}${option('pending', 'În așteptare', state.orderPaymentStatusFilter)}${option('paid', 'Plătită', state.orderPaymentStatusFilter)}${option('failed', 'Eșuată', state.orderPaymentStatusFilter)}${option('refunded', 'Rambursată', state.orderPaymentStatusFilter)}</select></label></div></section>`;
     const tableHtml = rows ? `<div class="shop-commerce-table-wrap"><table class="shop-commerce-table orders"><thead><tr><th>Comanda</th><th>Client</th><th>Status</th><th>Plata</th><th>Total</th><th>Factură</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${pagination('orders', filtered.length, page.page, page.pageCount, page.pageSize)}` : empty('Nicio comandă găsită', 'Schimbă sau resetează filtrele pentru a vedea alte comenzi.');
     $('shop-orders-content').innerHTML = state.orders.length ? `${metricsHtml}${filtersHtml}${tableHtml}` : empty('Nicio comanda', 'Comenzile trimise de pe site vor aparea automat aici.');
     $('shop-orders-content').querySelectorAll('[data-order-open]').forEach(row => row.addEventListener('click', () => openOrder(row.dataset.orderOpen)));
@@ -1488,8 +2089,7 @@
   }
   function orderStatusPicker(order) {
     return `<section class="shop-order-status-section"><div class="shop-order-section-title"><span>ACTUALIZEAZĂ</span><strong>Alege următorul status</strong></div><div class="shop-order-status-picker">${statusDefinitions.map((item, index) => {
-      const locked = statusTransitionLocked(order.status, item.value);
-      return `<label class="shop-order-status-option ${order.status === item.value ? 'selected' : ''} ${locked ? 'locked' : ''}" style="--status-color:${statusColors[item.value]}"><input type="radio" name="shop-order-status" value="${item.value}" ${order.status === item.value ? 'checked' : ''} ${locked ? 'disabled' : ''}><span class="shop-order-status-icon">${statusIcon(item.value)}<b>${String(index + 1).padStart(2, '0')}</b></span><span><strong>${esc(statusLabels[item.value])}</strong><small>${esc(locked ? 'Etapă finalizată · nu se poate reveni' : item.description)}</small></span><i>✓</i></label>`;
+      return `<label class="shop-order-status-option ${order.status === item.value ? 'selected' : ''}" style="--status-color:${statusColors[item.value]}"><input type="radio" name="shop-order-status" value="${item.value}" ${order.status === item.value ? 'checked' : ''}><span class="shop-order-status-icon">${statusIcon(item.value)}<b>${String(index + 1).padStart(2, '0')}</b></span><span><strong>${esc(statusLabels[item.value])}</strong><small>${esc(item.description)}</small></span><i>✓</i></label>`;
     }).join('')}</div></section>`;
   }
   function normalizeWhatsAppPhone(value) {
@@ -1522,17 +2122,29 @@
   function syncOrderNotify() {
     const notify = $('shop-order-notify');
     const helper = $('shop-order-notify-helper');
+    const title = document.querySelector('.shop-order-notify-copy > strong');
     const card = notify?.closest('.shop-order-notify');
     const stateBadge = $('shop-order-notify-state');
     const status = document.querySelector('input[name="shop-order-status"]:checked')?.value || state.editingOrder?.status;
     if (!notify || !state.editingOrder) return;
     const hasEmail = Boolean(state.editingOrder.customer_email);
     const changed = status !== state.editingOrder.status;
-    notify.disabled = !hasEmail || !changed;
-    if (notify.disabled) notify.checked = false;
-    if (helper) helper.textContent = !hasEmail ? 'Comanda nu are o adresă de e-mail.' : !changed ? 'Alege un status diferit, apoi poți trimite automat rezumatul comenzii.' : `Rezumatul și linkul de urmărire vor fi trimise la ${state.editingOrder.customer_email}.`;
-    if (card) card.dataset.notifyState = !hasEmail ? 'missing' : !changed ? 'waiting' : notify.checked ? 'active' : 'ready';
-    if (stateBadge) stateBadge.textContent = !hasEmail ? 'FĂRĂ E-MAIL' : !changed ? 'ALEGE STATUS' : notify.checked ? 'ACTIVATĂ' : 'PREGĂTITĂ';
+    const isCancellation = status === 'cancelled' && changed;
+    const isReturnRequest = status === 'return_requested' && changed;
+    const isReturnConfirmation = status === 'return_confirmed' && changed;
+    const cancellationField = $('shop-order-cancellation-field');
+    const cancellationReason = $('shop-order-cancellation-reason');
+    const returnField = $('shop-order-return-field');
+    if (cancellationField) cancellationField.hidden = status !== 'cancelled';
+    if (cancellationReason) cancellationReason.disabled = state.editingOrder.status === 'cancelled';
+    if (returnField) returnField.hidden = !['return_requested', 'return_refused', 'return_confirmed', 'refunded'].includes(status);
+    notify.disabled = isCancellation || !hasEmail || !changed;
+    if (isCancellation) notify.checked = true;
+    else if (notify.disabled) notify.checked = false;
+    if (helper) helper.textContent = !hasEmail ? 'Comanda nu are o adresă de e-mail.' : isReturnRequest ? `Clientul va primi e-mailul „Am primit solicitarea ta de retur” la ${state.editingOrder.customer_email}.` : isReturnConfirmation ? `Clientul poate primi confirmarea aprobării. Factura de retur, dacă există factura pozitivă, se trimite automat separat.` : isCancellation ? `Confirmarea anulării va fi trimisă automat la ${state.editingOrder.customer_email}.` : !changed ? 'Alege un status diferit, apoi poți trimite automat rezumatul comenzii.' : `Rezumatul și linkul de urmărire vor fi trimise la ${state.editingOrder.customer_email}.`;
+    if (title) title.textContent = isReturnRequest ? 'Trimite confirmarea solicitării' : isReturnConfirmation ? 'Trimite confirmarea returului' : isCancellation ? 'Confirmare automată pe e-mail' : 'Trimite actualizarea pe e-mail';
+    if (card) card.dataset.notifyState = !hasEmail ? 'missing' : isCancellation || notify.checked ? 'active' : !changed ? 'waiting' : 'ready';
+    if (stateBadge) stateBadge.textContent = !hasEmail ? 'FĂRĂ E-MAIL' : isCancellation ? 'AUTOMAT' : isReturnRequest || isReturnConfirmation ? 'OPȚIONAL' : !changed ? 'ALEGE STATUS' : notify.checked ? 'ACTIVATĂ' : 'PREGĂTITĂ';
     document.querySelectorAll('.shop-order-status-option').forEach(label => label.classList.toggle('selected', label.querySelector('input')?.checked));
   }
   function renderOrderDetails(order) {
@@ -1561,19 +2173,40 @@
     const editIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>';
     const customerKind = orderCustomerKind(order);
     const companyRows = customerKind.key === 'company'
-      ? `<div class="shop-order-company-block"><small>DATE FISCALE</small>${orderDetailRow('Denumire firmă', order.company_name, true)}${orderDetailRow('CUI / CIF', order.company_cui)}${orderDetailRow('Registrul Comerțului', order.company_registration_number)}${orderDetailRow('Sediu social', order.company_address)}</div>`
+      ? `<div class="shop-order-company-block"><small>DATE FISCALE</small>${orderDetailRow('CUI / CIF', order.company_cui)}${orderDetailRow('Registrul Comerțului', order.company_registration_number)}${orderDetailRow('Sediu social', order.company_address)}</div>`
       : '';
-    const clientCard = `<section class="shop-order-summary-card"><div class="shop-order-card-head"><small>CLIENT</small><div class="shop-order-client-kind">${orderCustomerBadge(order)}<em>${customerKind.label.toUpperCase()}</em></div></div>${orderDetailRow('Nume', order.customer_name, true)}${orderDetailRow('Telefon', order.customer_phone)}${orderDetailRow('E-mail', order.customer_email || 'Fără e-mail')}${companyRows}<div class="shop-order-contact-actions"><button type="button" data-order-call>${contactIcon}<span>Apelează</span></button><button type="button" class="whatsapp" data-order-whatsapp>${whatsappIcon}<span>WhatsApp</span></button></div></section>`;
-    const deliveryCard = `<section class="shop-order-summary-card"><div class="shop-order-card-head"><small>LIVRARE</small><div class="shop-order-card-actions"><em>DATE COMPLETE</em><button type="button" data-order-delivery-edit>${editIcon}<span>Editează</span></button></div></div>${orderDeliveryInput('Adresă completă', 'shop-order-address', order.address, true)}${orderDeliveryInput('Localitate', 'shop-order-city', order.city)}${orderDeliveryInput('Județ', 'shop-order-county', order.county)}${orderDeliveryInput('Cod poștal', 'shop-order-postal-code', order.postal_code)}${orderDetailRow('Metodă', order.shipping_method_name)}${orderDetailRow('Cost livrare', money(order.shipping_cost))}<p class="shop-order-delivery-helper" hidden>Modificările se salvează folosind butonul „Salvează comanda”.</p></section>`;
+    const clientCard = `<section class="shop-order-summary-card"><div class="shop-order-card-head"><small>CLIENT</small><div class="shop-order-client-kind">${orderCustomerBadge(order)}<em>${customerKind.label.toUpperCase()}</em></div></div>${orderDetailRow(customerKind.key === 'company' ? 'Denumire firmă' : 'Nume', orderCustomerDisplayName(order), true)}${customerKind.key === 'company' ? orderDetailRow('Persoană de contact', order.customer_contact_name || order.customer_name) : ''}${orderDetailRow('Telefon', order.customer_phone)}${orderDetailRow('E-mail', order.customer_email || 'Fără e-mail')}${companyRows}<div class="shop-order-contact-actions"><button type="button" data-order-call>${contactIcon}<span>Apelează</span></button><button type="button" class="whatsapp" data-order-whatsapp>${whatsappIcon}<span>WhatsApp</span></button></div></section>`;
+    const paymentMethodCard = order.payment_method === 'card'
+      ? '<div class="shop-order-payment-method card"><span><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h3"/></svg></span><div><small>METODĂ DE PLATĂ</small><strong>Card online</strong></div></div>'
+      : '<div class="shop-order-payment-method cash"><span><svg viewBox="0 0 24 24"><path d="M4 7h16v11H4z"/><path d="M8 11h.01M16 14h.01"/><circle cx="12" cy="12.5" r="2.2"/></svg></span><div><small>METODĂ DE PLATĂ</small><strong>Ramburs la curier</strong></div></div>';
+    const deliveryCard = `<section class="shop-order-summary-card"><div class="shop-order-card-head"><small>LIVRARE</small><div class="shop-order-card-actions"><em>DATE COMPLETE</em><button type="button" data-order-delivery-edit>${editIcon}<span>Editează</span></button></div></div>${orderDeliveryInput('Adresă completă', 'shop-order-address', order.address, true)}${orderDeliveryInput('Localitate', 'shop-order-city', order.city)}${orderDeliveryInput('Județ', 'shop-order-county', order.county)}${orderDeliveryInput('Cod poștal', 'shop-order-postal-code', order.postal_code)}${orderDetailRow('Metodă livrare', order.shipping_method_name)}${orderDetailRow('Cost livrare', money(order.shipping_cost))}${paymentMethodCard}<p class="shop-order-delivery-helper" hidden>Modificările se salvează folosind butonul „Salvează comanda”.</p></section>`;
     const hasVat = Boolean(order.vat_payer);
     const invoiceCard = order.invoice
       ? `<section class="shop-order-invoice-card issued"><span class="shop-order-invoice-icon">✓</span><div><small>FACTURĂ EMISĂ · TEMA ${esc(String(order.invoice.theme || '').toUpperCase())}</small><strong>${esc(order.invoice.display_number)}</strong><p>${order.invoice.status === 'paid' ? 'Plătită' : 'Neplătită'} · SPV ${order.invoice.spv_status === 'sent' ? 'trimisă' : 'netrimisă'} · ${invoiceMoney(order.invoice.total, order.invoice.currency)} · ieșire de stoc înregistrată</p></div><aside><button type="button" class="primary issue" data-order-invoice-open="${esc(order.invoice.id)}"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>Vezi factura</button></aside></section>`
       : `<section class="shop-order-invoice-card"><span class="shop-order-invoice-icon"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span><div><small>FACTURĂ FISCALĂ</small><strong>Factura nu este emisă</strong><p>La emitere se fixează tema și prețurile, se scade stocul și se stabilește proveniența FIFO disponibilă.</p></div><aside><button type="button" class="primary issue" data-order-invoice-issue="${esc(order.id)}">Emite factura</button></aside></section>`;
-    $('shop-order-details').innerHTML = `<div class="shop-order-grid">${clientCard}${deliveryCard}</div><div class="shop-order-items">${orderItemsHtml}</div><div class="shop-order-total"><span>${isProductPromotion && orderDiscount > 0 ? 'Subtotal după reduceri' : 'Subtotal'}${hasVat ? ' (TVA inclus)' : ''} ${money(productsTotal)} · Livrare ${money(order.shipping_cost)}${globalDiscount}</span><strong>Total de plată${hasVat ? ' (TVA inclus)' : ''} ${money(order.total)}</strong></div>${invoiceCard}${orderTimeline(order)}${orderStatusPicker(order)}<label class="shop-order-notify" data-notify-state="waiting"><input id="shop-order-notify" type="checkbox"><span class="shop-order-notify-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/></svg><i></i></span><span class="shop-order-notify-copy"><span class="shop-order-notify-eyebrow">NOTIFICARE CLIENT <b id="shop-order-notify-state">ALEGE STATUS</b></span><strong>Trimite actualizarea pe e-mail</strong><small id="shop-order-notify-helper"></small></span><span class="shop-order-notify-switch" aria-hidden="true"><i></i></span></label><div class="shop-commerce-columns"><label>Status plată<select id="shop-order-payment-status">${['pending', 'paid', 'failed', 'refunded'].map(value => `<option value="${value}" ${order.payment_status === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label><label>Metodă de plată<input value="${order.payment_method === 'card' ? 'Card online' : 'Ramburs la curier'}" disabled></label></div><label>Notițe interne<textarea id="shop-order-admin-notes" rows="4">${esc(order.admin_notes || '')}</textarea></label>${order.customer_notes ? `<div class="shop-order-note"><small>OBSERVAȚII CLIENT</small>${esc(order.customer_notes)}</div>` : ''}`;
+    const returnInvoiceCard = ['return_requested', 'return_refused', 'return_confirmed', 'refunded'].includes(order.status) && order.return_invoice
+      ? `<section class="shop-order-invoice-card issued return"><span class="shop-order-invoice-icon">↩</span><div><small>FACTURĂ DE RETUR</small><strong>${esc(order.return_invoice.display_number)}</strong><p>Referință la ${esc(order.invoice?.display_number || 'factura pozitivă')} și comanda ${esc(order.order_number)} · SPV ${order.return_invoice.spv_status === 'sent' ? 'trimisă' : 'în așteptare'}</p></div><aside><button type="button" class="primary issue" data-order-invoice-open="${esc(order.return_invoice.id)}">Vezi returul</button></aside></section>`
+      : '';
+    const returnCost = Number(order.return_shipping_cost ?? order.configured_return_shipping_cost ?? 0);
+    const returnRefund = Number(order.return_refund_amount ?? Math.max(0, Number(order.total || 0) - returnCost));
+    const returnLocked = order.status === 'return_requested';
+    const returnSummary = order.return_reason
+      ? `<section class="shop-order-return-summary"><small>DETALII RETUR</small><strong>${esc(order.return_reason)}</strong><p>Titular: ${esc(order.return_bank_account_holder || '—')} · IBAN: ${esc(order.return_bank_iban || order.return_bank_iban_masked || '—')}</p><p>Cost retur ${money(Number(order.return_shipping_cost || 0))} · estimare restituire <b>${money(Number(order.return_refund_amount || 0))}</b></p></section>`
+      : '';
+    const returnRequestCard = `<section id="shop-order-return-field" class="shop-order-return-field" ${order.status === 'return_requested' ? '' : 'hidden'}><header><span>RETUR SOLICITAT</span><strong>${returnLocked ? 'Datele returului' : 'Înregistrează solicitarea'}</strong><small>Costul curierului este preluat din metoda de livrare și rămâne salvat pe solicitare.</small></header><label>Motivul returului<textarea id="shop-order-return-reason" rows="4" maxlength="1000" ${returnLocked ? 'disabled' : ''} placeholder="Scrie motivul returului...">${esc(order.return_reason || '')}</textarea></label><div class="shop-commerce-columns"><label>Titular cont<input id="shop-order-return-holder" maxlength="180" ${returnLocked ? 'disabled' : ''} value="${esc(order.return_bank_account_holder || '')}" placeholder="Numele titularului"></label><label>IBAN rambursare<input id="shop-order-return-iban" maxlength="40" ${returnLocked ? 'disabled' : ''} value="${esc(order.return_bank_iban || '')}" placeholder="RO..." autocomplete="off"></label></div><footer><span>Cost retur <b>−${money(returnCost)}</b></span><span>Estimare restituire <strong>${money(returnRefund)}</strong></span></footer></section>`;
+    $('shop-order-details').innerHTML = `
+      <div class="shop-order-grid">${clientCard}${deliveryCard}</div>
+      <div class="shop-order-items">${orderItemsHtml}</div>
+      <div class="shop-order-total"><span>${isProductPromotion && orderDiscount > 0 ? 'Subtotal după reduceri' : 'Subtotal'}${hasVat ? ' (TVA inclus)' : ''} ${money(productsTotal)} · Livrare ${money(order.shipping_cost)}${globalDiscount}</span><strong>Total de plată${hasVat ? ' (TVA inclus)' : ''} ${money(order.total)}</strong></div>
+      ${invoiceCard}${returnInvoiceCard}${returnSummary}${orderTimeline(order)}${orderStatusPicker(order)}${returnRequestCard}
+      <label id="shop-order-cancellation-field" class="shop-order-cancellation-field" ${order.status === 'cancelled' ? '' : 'hidden'}><span><b>ANULARE COMANDĂ · MOTIV OBLIGATORIU</b><strong>${order.status === 'cancelled' ? 'Motivul înregistrat' : 'De ce anulăm comanda?'}</strong><small>Clientul va fi notificat automat, iar factura și stocul vor fi corectate după regulile fiscale.</small></span><textarea id="shop-order-cancellation-reason" rows="4" maxlength="1000" placeholder="Scrie motivul transmis clientului...">${esc(order.customer_cancellation_reason || '')}</textarea></label>
+      <label class="shop-order-notify" data-notify-state="waiting"><input id="shop-order-notify" type="checkbox"><span class="shop-order-notify-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/></svg><i></i></span><span class="shop-order-notify-copy"><span class="shop-order-notify-eyebrow">NOTIFICARE CLIENT <b id="shop-order-notify-state">ALEGE STATUS</b></span><strong>Trimite actualizarea pe e-mail</strong><small id="shop-order-notify-helper"></small></span><span class="shop-order-notify-switch" aria-hidden="true"><i></i></span></label>
+      <div class="shop-commerce-columns"><label>Status plată<select id="shop-order-payment-status">${['pending', 'paid', 'failed', 'refunded'].map(value => `<option value="${value}" ${order.payment_status === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label><label>Metodă de plată<input value="${order.payment_method === 'card' ? 'Card online' : 'Ramburs la curier'}" disabled></label></div>
+      <label>Notițe interne<textarea id="shop-order-admin-notes" rows="4">${esc(order.admin_notes || '')}</textarea></label>${order.customer_notes ? `<div class="shop-order-note"><small>OBSERVAȚII CLIENT</small>${esc(order.customer_notes)}</div>` : ''}`;
     $('shop-order-details').querySelector('[data-order-call]')?.addEventListener('click', () => void openOrderContact('call', order.customer_phone));
     $('shop-order-details').querySelector('[data-order-whatsapp]')?.addEventListener('click', () => void openOrderContact('whatsapp', order.customer_phone));
     $('shop-order-details').querySelector('[data-order-invoice-issue]')?.addEventListener('click', () => openInvoiceIssue(order.id));
-    $('shop-order-details').querySelector('[data-order-invoice-open]')?.addEventListener('click', event => { event.preventDefault(); navigateToIssuedInvoice(event.currentTarget.dataset.orderInvoiceOpen); });
+    $('shop-order-details').querySelectorAll('[data-order-invoice-open]').forEach(button => button.addEventListener('click', event => { event.preventDefault(); navigateToIssuedInvoice(event.currentTarget.dataset.orderInvoiceOpen); }));
     $('shop-order-details').querySelectorAll('[data-order-product-open]').forEach(button => button.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
@@ -1613,14 +2246,43 @@
     button.disabled = true;
     try {
       const status = document.querySelector('input[name="shop-order-status"]:checked')?.value || state.editingOrder.status;
-      if (status === 'cancelled' && state.editingOrder.status !== 'cancelled' && !confirm('Anulezi comanda? Stocul va fi returnat automat.')) return;
-      const updated = await window.SHOP_API.updateOrder(state.editingOrder.id, { status, payment_status: $('shop-order-payment-status').value, admin_notes: $('shop-order-admin-notes').value.trim(), notify_customer: Boolean($('shop-order-notify')?.checked), address: $('shop-order-address')?.value.trim(), city: $('shop-order-city')?.value.trim(), county: $('shop-order-county')?.value.trim(), postal_code: $('shop-order-postal-code')?.value.trim() });
+      const cancellationReason = $('shop-order-cancellation-reason')?.value.trim() || '';
+      const returnReason = $('shop-order-return-reason')?.value.trim() || '';
+      const returnHolder = $('shop-order-return-holder')?.value.trim() || '';
+      const returnIban = ($('shop-order-return-iban')?.value || '').trim().toUpperCase().replace(/\s+/g, '');
+      const paymentStatus = $('shop-order-payment-status').value;
+      const adminNotes = $('shop-order-admin-notes').value.trim();
+      const address = $('shop-order-address')?.value.trim() || '';
+      const city = $('shop-order-city')?.value.trim() || '';
+      const county = $('shop-order-county')?.value.trim() || '';
+      const postalCode = $('shop-order-postal-code')?.value.trim() || '';
+      const savedReturnIban = String(state.editingOrder.return_bank_iban || '').trim().toUpperCase().replace(/\s+/g, '');
+      const hasChanges = status !== state.editingOrder.status
+        || paymentStatus !== state.editingOrder.payment_status
+        || adminNotes !== String(state.editingOrder.admin_notes || '').trim()
+        || address !== String(state.editingOrder.address || '').trim()
+        || city !== String(state.editingOrder.city || '').trim()
+        || county !== String(state.editingOrder.county || '').trim()
+        || postalCode !== String(state.editingOrder.postal_code || '').trim()
+        || returnReason !== String(state.editingOrder.return_reason || '').trim()
+        || returnHolder !== String(state.editingOrder.return_bank_account_holder || '').trim()
+        || returnIban !== savedReturnIban;
+      if (!hasChanges) {
+        toast('Comanda este deja salvată. Nu a fost trimis niciun e-mail.', 'info');
+        return;
+      }
+      if (status === 'cancelled' && state.editingOrder.status !== 'cancelled' && cancellationReason.length < 3) throw new Error('Scrie motivul anulării, de cel puțin 3 caractere.');
+      if (status === 'cancelled' && state.editingOrder.status !== 'cancelled' && !confirm('Anulezi comanda? Anularea se salvează imediat, clientul este notificat automat, iar factura și stocul sunt corectate după regulile fiscale.')) return;
+      const returnTarget = ['return_requested', 'return_refused', 'return_confirmed', 'refunded'].includes(status);
+      if (returnTarget && !state.editingOrder.return_reason && (returnReason.length < 3 || returnHolder.length < 3 || !returnIban)) throw new Error('Completează motivul, titularul contului și IBAN-ul pentru retur.');
+      const updated = await window.SHOP_API.updateOrder(state.editingOrder.id, { status, payment_status: paymentStatus, admin_notes: adminNotes, notify_customer: status !== state.editingOrder.status && (status === 'cancelled' ? true : Boolean($('shop-order-notify')?.checked)), cancellation_reason: status === 'cancelled' ? cancellationReason : undefined, return_reason: returnTarget ? returnReason : undefined, return_bank_iban: returnTarget ? returnIban : undefined, return_bank_account_holder: returnTarget ? returnHolder : undefined, address, city, county, postal_code: postalCode });
       closeModal('shop-order-modal');
       const email = updated.email_notification;
       const automation = updated.invoice_automation;
       const orderMessage = email?.requested ? (email.sent ? `Clientul a primit e-mailul comenzii la ${email.recipient}.` : `E-mailul comenzii nu a plecat: ${email.error || 'verifică SMTP.'}`) : 'Comanda a fost actualizată.';
       const automationMessage = automation?.processed ? (automation.status === 'completed' ? (automation.email_sent ? ` ${updated.invoice?.display_number || 'Factura'} a fost emisă și trimisă separat.` : ` ${updated.invoice?.display_number || 'Factura'} a fost emisă automat.`) : ` Factura automată nu s-a finalizat: ${automation.error || 'poate fi reluată.'}`) : '';
-      toast(`${orderMessage}${automationMessage}`, (email?.requested && !email.sent) || automation?.status === 'failed' ? 'error' : 'success');
+      const returnMessage = updated.return_confirmation ? (updated.return_confirmation.return_invoice ? (updated.return_confirmation.return_invoice_email?.sent ? ` ${updated.return_confirmation.return_invoice.display_number} a fost emisă ca retur și trimisă automat clientului.` : ` ${updated.return_confirmation.return_invoice.display_number} a fost emisă, dar PDF-ul nu a putut fi trimis: ${updated.return_confirmation.return_invoice_email?.error || 'verifică SMTP.'}`) : ' Nu s-a emis factură de retur deoarece comanda nu avea o factură pozitivă.') : '';
+      toast(`${orderMessage}${automationMessage}${returnMessage}`, (email?.requested && !email.sent) || automation?.status === 'failed' ? 'error' : 'success');
       await loadOrders();
     } catch (error) { toast(error.message, 'error'); }
     finally { button.disabled = false; }
@@ -1664,7 +2326,7 @@
   function stockMovementDelta(movement) { return Number(movement.accounting_quantity_delta ?? movement.quantity_delta ?? 0); }
   function stockMovementAfter(movement) { return Number(movement.accounting_quantity_after ?? movement.quantity_after ?? 0); }
   function stockMovementType(movement) {
-    const labels = { NIR_IN: 'Intrare prin NIR', NIR_REVERSAL: 'Stornare NIR', sale: 'Ieșire prin factură', adjustment: 'Ajustare manuala', return: 'Retur in stoc', cancellation: 'Anulare comanda', reservation: 'Rezervare', release: 'Eliberare rezervare' };
+    const labels = { NIR_IN: 'Intrare prin NIR', NIR_REVERSAL: 'Retur către furnizor', RETURN_IN: 'Intrare în stoc – Retur client', sale: 'Ieșire prin factură', adjustment: 'Ajustare manuala', return: 'Intrare în stoc – Retur client', cancellation: 'Anulare comanda', reservation: 'Rezervare', release: 'Eliberare rezervare' };
     return labels[movement.movement_type] || String(movement.movement_type || 'Miscare de stoc').replaceAll('_', ' ');
   }
   function stockMovementDate(value) {
@@ -2131,12 +2793,12 @@
       <g class="shop-courier-vehicle"><path class="shop-courier-box" d="M10 5h20v17H10Z"></path><path class="shop-courier-cab" d="M30 11h7l6 6v5H30Z"></path><path class="shop-courier-window" d="M33 13h3l3.6 4H33Z"></path><path class="shop-courier-mark" d="m17 11 3 3 5-6"></path><circle class="shop-courier-wheel wheel-one" cx="17" cy="24" r="3"></circle><circle class="shop-courier-wheel wheel-two" cx="36" cy="24" r="3"></circle><circle class="shop-courier-hub" cx="17" cy="24" r=".8"></circle><circle class="shop-courier-hub" cx="36" cy="24" r=".8"></circle></g>
       <path class="shop-courier-road" d="M6 29h38"></path>
     </svg>`;
-    $('shop-shipping-content').innerHTML = state.shipping.map((item, index) => `<article class="shop-settings-row shop-shipping-row" style="--shipping-index:${index}"><span class="shop-settings-icon shop-courier-icon">${courierIcon}</span><div><strong>${esc(item.name)}</strong><small>${item.cost ? money(item.cost) : 'Gratuit'}${item.free_above !== null ? ` · gratuit peste ${money(item.free_above)}` : ''}</small><em>${esc(item.eta_label || item.description || '')}</em></div>${!item.is_active ? '<b class="commerce-pill inactive">INACTIVA</b>' : ''}<button data-shipping-edit="${item.id}" aria-label="Editeaza livrarea" title="Editeaza livrarea">✎</button><button class="danger" data-shipping-delete="${item.id}" aria-label="Sterge livrarea" title="Sterge livrarea">×</button></article>`).join('') || empty('Nicio metoda de livrare', 'Adauga prima livrare.');
+    $('shop-shipping-content').innerHTML = state.shipping.map((item, index) => `<article class="shop-settings-row shop-shipping-row" style="--shipping-index:${index}"><span class="shop-settings-icon shop-courier-icon">${courierIcon}</span><div><strong>${esc(item.name)}</strong><small>${item.cost ? `Livrare ${money(item.cost)}` : 'Livrare gratuită'}${item.free_above !== null ? ` · gratuit peste ${money(item.free_above)}` : ''}</small><em>Retur curier ${money(Number(item.return_cost || 0))} · ${esc(item.eta_label || item.description || '')}</em></div>${!item.is_active ? '<b class="commerce-pill inactive">INACTIVA</b>' : ''}<button data-shipping-edit="${item.id}" aria-label="Editeaza livrarea" title="Editeaza livrarea">✎</button><button class="danger" data-shipping-delete="${item.id}" aria-label="Sterge livrarea" title="Sterge livrarea">×</button></article>`).join('') || empty('Nicio metoda de livrare', 'Adauga prima livrare.');
     $('shop-shipping-content').querySelectorAll('[data-shipping-edit]').forEach(button => button.addEventListener('click', () => openShipping(button.dataset.shippingEdit)));
     $('shop-shipping-content').querySelectorAll('[data-shipping-delete]').forEach(button => button.addEventListener('click', () => deleteShipping(button.dataset.shippingDelete)));
   }
-  function openShipping(id = '') { const item = state.shipping.find(entry => entry.id === id) || null; state.editingShipping = item; $('shop-shipping-title').textContent = item ? 'Editeaza livrarea' : 'Livrare noua'; $('shop-shipping-name').value = item?.name || ''; $('shop-shipping-description').value = item?.description || ''; $('shop-shipping-cost').value = item?.cost ?? 0; $('shop-shipping-free').value = item?.free_above ?? ''; $('shop-shipping-eta').value = item?.eta_label || ''; $('shop-shipping-active').checked = item?.is_active ?? true; openModal('shop-shipping-modal'); }
-  async function saveShipping(event) { event.preventDefault(); const button = $('shop-shipping-save'); button.disabled = true; try { const payload = { name: $('shop-shipping-name').value.trim(), description: $('shop-shipping-description').value.trim(), cost: Number($('shop-shipping-cost').value || 0), free_above: $('shop-shipping-free').value === '' ? null : Number($('shop-shipping-free').value), eta_label: $('shop-shipping-eta').value.trim(), is_active: $('shop-shipping-active').checked, sort_order: state.editingShipping?.sort_order || state.shipping.length }; if (state.editingShipping) await window.SHOP_API.updateShippingMethod(state.editingShipping.id, payload); else await window.SHOP_API.createShippingMethod(payload); closeModal('shop-shipping-modal'); toast('Livrarea a fost salvata.'); await loadShippingPage(); } catch (error) { toast(error.message, 'error'); } finally { button.disabled = false; } }
+  function openShipping(id = '') { const item = state.shipping.find(entry => entry.id === id) || null; state.editingShipping = item; $('shop-shipping-title').textContent = item ? 'Editeaza livrarea' : 'Livrare noua'; $('shop-shipping-name').value = item?.name || ''; $('shop-shipping-description').value = item?.description || ''; $('shop-shipping-cost').value = item?.cost ?? 0; $('shop-shipping-return-cost').value = item?.return_cost ?? 0; $('shop-shipping-free').value = item?.free_above ?? ''; $('shop-shipping-eta').value = item?.eta_label || ''; $('shop-shipping-active').checked = item?.is_active ?? true; openModal('shop-shipping-modal'); }
+  async function saveShipping(event) { event.preventDefault(); const button = $('shop-shipping-save'); button.disabled = true; try { const payload = { name: $('shop-shipping-name').value.trim(), description: $('shop-shipping-description').value.trim(), cost: Number($('shop-shipping-cost').value || 0), return_cost: Number($('shop-shipping-return-cost').value || 0), free_above: $('shop-shipping-free').value === '' ? null : Number($('shop-shipping-free').value), eta_label: $('shop-shipping-eta').value.trim(), is_active: $('shop-shipping-active').checked, sort_order: state.editingShipping?.sort_order || state.shipping.length }; if (state.editingShipping) await window.SHOP_API.updateShippingMethod(state.editingShipping.id, payload); else await window.SHOP_API.createShippingMethod(payload); closeModal('shop-shipping-modal'); toast('Livrarea a fost salvata.'); await loadShippingPage(); } catch (error) { toast(error.message, 'error'); } finally { button.disabled = false; } }
   async function deleteShipping(id) { const item = state.shipping.find(entry => entry.id === id); if (!item || !confirm(`Stergi metoda ${item.name}?`)) return; try { await window.SHOP_API.deleteShippingMethod(id); toast('Livrarea a fost stearsa.'); await loadShippingPage(); } catch (error) { toast(error.message, 'error'); } }
 
   function dateTime(value) {
@@ -2333,7 +2995,7 @@
       const item = detail.promotion;
       const status = promotionStatus(item);
       $('shop-promotion-stats-title').textContent = item.title;
-      const applications = (Array.isArray(detail.applications) ? detail.applications : []).map(order => `<button type="button" class="shop-promotion-application ${order.is_counted ? '' : 'excluded'}" data-promotion-order="${esc(order.id)}"><span><strong>${esc(order.order_number)}</strong><small>${esc(order.customer_name || order.customer_email || 'Client')} · ${esc(dateTime(order.created_at))}</small></span><span><b>-${money(order.discount_total)}</b><small>${order.is_counted ? 'Inclusa' : 'Anulata / rambursata'} · total ${money(order.total)}</small></span><i>›</i></button>`).join('');
+      const applications = (Array.isArray(detail.applications) ? detail.applications : []).map(order => `<button type="button" class="shop-promotion-application ${order.is_counted ? '' : 'excluded'}" data-promotion-order="${esc(order.id)}"><span><strong>${esc(order.order_number)}</strong><small>${esc(order.customer_display_name || orderCustomerDisplayName(order) || order.customer_email || 'Client')} · ${esc(dateTime(order.created_at))}</small></span><span><b>-${money(order.discount_total)}</b><small>${order.is_counted ? 'Inclusa' : 'Anulata / rambursata'} · total ${money(order.total)}</small></span><i>›</i></button>`).join('');
       $('shop-promotion-stats-content').innerHTML = `<section class="shop-promotion-stats-hero"><span class="shop-promotion-icon large">%</span><div><small>COD ${esc(item.code)} · <b class="shop-promotion-status-${status.key}">${status.label}</b></small><strong>${esc(promotionValue(item))}</strong><p>${esc(item.description || 'Campanie fara descriere.')}</p></div></section><section class="shop-customer-metrics modal-metrics">${detailMetric('Aplicari valide', detail.summary.application_count, true)}${detailMetric('Total redus', money(detail.summary.total_discount_given))}${detailMetric('Medie redusa', money(detail.summary.average_discount))}${detailMetric('Valoare comenzi', money(detail.summary.orders_total))}</section><section class="shop-promotion-stats-facts"><span><b>Public</b>${esc(promotionAudience(item))}</span><span><b>Aplicare</b>${item.scope === 'global' ? 'Toata comanda' : `${Number(item.product_ids?.length || 0)} produse`}</span><span><b>Perioada</b>${esc(dateTime(item.valid_from))} — ${esc(dateTime(item.valid_until))}</span></section>${section('01', 'Aplicari recente', 'Comenzile anulate sau rambursate nu intra in totalurile campaniei.')}<div class="shop-promotion-applications">${applications || empty('Nicio aplicare', 'Primele comenzi cu aceasta reducere vor aparea aici.')}</div>`;
       $('shop-promotion-stats-content').querySelectorAll('[data-promotion-order]').forEach(button => button.addEventListener('click', () => { closeModal('shop-promotion-stats-modal'); setTimeout(() => openOrder(button.dataset.promotionOrder), 190); }));
     } catch (error) { $('shop-promotion-stats-content').innerHTML = `<div class="shop-commerce-error">${esc(error.message)}</div>`; }
@@ -2607,10 +3269,10 @@
     }));
     $('shop-invoice-theme-save')?.addEventListener('click', () => void saveInvoiceTheme());
   }
-  async function loadInvoiceConfigurator() {
+  async function loadInvoiceConfigurator(options = {}) {
     const content = $('shop-invoice-configurator-content');
     if (!content) return;
-    content.innerHTML = '<div class="shop-commerce-loading">Se încarcă temele facturii...</div>';
+    if (!options.quiet || !content.childElementCount) content.innerHTML = '<div class="shop-commerce-loading">Se încarcă temele facturii...</div>';
     try {
       state.invoiceThemeSettings = await window.SHOP_API.getInvoiceThemeSettings();
       state.selectedInvoiceTheme = state.invoiceThemeSettings.active_theme || 'orange';
@@ -2645,8 +3307,9 @@
   async function loadCompanies() {
     loading('shop-company-content', 'Se incarca firmele...');
     try {
-      const companies = await window.SHOP_API.listCompanySettings();
+      const [companies, receiptLocations] = await Promise.all([window.SHOP_API.listCompanySettings(), window.SHOP_API.listReceiptLocations()]);
       state.companies = Array.isArray(companies) ? companies : [];
+      state.receiptLocations = Array.isArray(receiptLocations) ? receiptLocations : [];
       renderCompanies();
     } catch (error) { failure('shop-company-content', error); }
   }
@@ -2683,9 +3346,18 @@
         </aside>
       </article>`;
     }).join('');
-    $('shop-company-content').innerHTML = `<section class="shop-customer-metrics shop-company-metrics">${detailMetric('Firma configurata', state.companies.length ? 'Da' : 'Nu')}${detailMetric('Societatea folosita', state.companies.find(item => item.is_default)?.trade_name || state.companies.find(item => item.is_default)?.legal_name || '—', true)}${detailMetric('Profil complet', completeCompanies ? 'Da' : 'Nu')}${detailMetric('Regim TVA', state.companies.some(item => item.vat_payer) ? 'Platitoare' : 'Neplatitoare')}</section><section class="shop-company-intro"><span>▤</span><div><small>IDENTITATEA COMPANIEI</small><strong>Date pregatite pentru documente si comenzi</strong><p>Completeaza datele juridice, contactul, banca si stampila societatii folosite in fluxurile SHOP.</p></div></section><div class="shop-company-list">${cards || empty('Nicio firma configurata', 'Configureaza societatea folosita pentru documentele G-Trots.')}</div>`;
+    const pinIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>';
+    const receiptCards = state.receiptLocations.map(location => {
+      const address = [location.address, location.city, location.county, location.postal_code].filter(Boolean).join(', ');
+      return `<article class="shop-receipt-location-card ${location.is_default ? 'is-default' : ''}"><span class="shop-receipt-location-pin">${pinIcon}</span><div><span><strong>${esc(location.name)}</strong>${location.is_default ? '<em>IMPLICIT</em>' : ''}</span><small>${esc(address || 'Fără adresă detaliată')}</small></div><aside><button type="button" data-receipt-location-open="${esc(location.id)}" aria-label="Editează ${esc(location.name)}" title="Editează">✎</button><button type="button" class="danger" data-receipt-location-delete="${esc(location.id)}" aria-label="Șterge ${esc(location.name)}" title="Șterge">×</button></aside></article>`;
+    }).join('');
+    const receiptSection = `<section class="shop-receipt-locations"><header><div><small>LOCURI PENTRU NIR</small><strong>Puncte de recepție</strong><p>Gestionează locurile fizice disponibile în selectorul NIR. Punctul implicit este ales automat.</p></div><button type="button" data-receipt-location-add><span>+</span> Adaugă punct</button></header><div>${receiptCards || '<p class="shop-receipt-location-empty">Nu există niciun punct de recepție configurat.</p>'}</div></section>`;
+    $('shop-company-content').innerHTML = `<section class="shop-customer-metrics shop-company-metrics">${detailMetric('Firma configurata', state.companies.length ? 'Da' : 'Nu')}${detailMetric('Societatea folosita', state.companies.find(item => item.is_default)?.trade_name || state.companies.find(item => item.is_default)?.legal_name || '—', true)}${detailMetric('Profil complet', completeCompanies ? 'Da' : 'Nu')}${detailMetric('Regim TVA', state.companies.some(item => item.vat_payer) ? 'Platitoare' : 'Neplatitoare')}</section><section class="shop-company-intro"><span>▤</span><div><small>IDENTITATEA COMPANIEI</small><strong>Date pregatite pentru documente si comenzi</strong><p>Completeaza datele juridice, contactul, banca si stampila societatii folosite in fluxurile SHOP.</p></div></section><div class="shop-company-list">${cards || empty('Nicio firma configurata', 'Configureaza societatea folosita pentru documentele G-Trots.')}</div>${receiptSection}`;
     $('shop-company-content').querySelectorAll('[data-company-open]').forEach(button => button.addEventListener('click', () => openCompany(button.dataset.companyOpen)));
     $('shop-company-content').querySelectorAll('[data-company-delete]').forEach(button => button.addEventListener('click', () => deleteCompany(button.dataset.companyDelete)));
+    $('shop-company-content').querySelector('[data-receipt-location-add]')?.addEventListener('click', () => openReceiptLocation());
+    $('shop-company-content').querySelectorAll('[data-receipt-location-open]').forEach(button => button.addEventListener('click', () => openReceiptLocation(button.dataset.receiptLocationOpen)));
+    $('shop-company-content').querySelectorAll('[data-receipt-location-delete]').forEach(button => button.addEventListener('click', () => deleteReceiptLocation(button.dataset.receiptLocationDelete)));
   }
 
   function companyValue(id, value = undefined) { const input = $(id); if (value === undefined) return input.value; input.value = value ?? ''; }
@@ -2732,6 +3404,43 @@
     if (!company || !confirm(`Stergi firma „${company.trade_name || company.legal_name}”?`)) return;
     try { await window.SHOP_API.deleteCompanySettings(company.id); toast('Firma a fost stearsa.'); await loadCompanies(); }
     catch (error) { toast(error.message || 'Firma nu a putut fi stearsa.', 'error'); }
+  }
+
+  function openReceiptLocation(id = '') {
+    const location = state.receiptLocations.find(item => String(item.id) === String(id)) || null;
+    const company = state.companies.find(item => item.is_default) || state.companies[0];
+    if (!company) return toast('Salvează mai întâi datele firmei.', 'error');
+    state.editingReceiptLocation = location;
+    $('shop-receipt-location-title').textContent = location ? 'Editează punctul' : 'Punct nou';
+    companyValue('shop-receipt-location-name', location?.name || '');
+    companyValue('shop-receipt-location-address', location?.address || '');
+    companyValue('shop-receipt-location-city', location?.city || '');
+    companyValue('shop-receipt-location-county', location?.county || '');
+    companyValue('shop-receipt-location-postal', location?.postal_code || '');
+    $('shop-receipt-location-default').checked = location?.is_default ?? state.receiptLocations.length === 0;
+    openModal('shop-receipt-location-modal');
+  }
+
+  async function saveReceiptLocation(event) {
+    event.preventDefault();
+    const company = state.companies.find(item => item.is_default) || state.companies[0];
+    if (!company) return toast('Salvează mai întâi datele firmei.', 'error');
+    const button = $('shop-receipt-location-save'); button.disabled = true;
+    try {
+      const payload = { company_id: company.id, name: companyValue('shop-receipt-location-name').trim(), address: companyValue('shop-receipt-location-address').trim(), city: companyValue('shop-receipt-location-city').trim(), county: companyValue('shop-receipt-location-county').trim(), postal_code: companyValue('shop-receipt-location-postal').trim(), is_default: $('shop-receipt-location-default').checked, sort_order: state.editingReceiptLocation?.sort_order ?? state.receiptLocations.length };
+      if (!payload.name) throw new Error('Completează denumirea punctului de recepție.');
+      if (state.editingReceiptLocation) await window.SHOP_API.updateReceiptLocation(state.editingReceiptLocation.id, payload); else await window.SHOP_API.createReceiptLocation(payload);
+      closeModal('shop-receipt-location-modal'); toast('Punctul de recepție a fost salvat.'); await loadCompanies();
+      state.nirBootstrapped = false;
+    } catch (error) { toast(error.message || 'Punctul de recepție nu a putut fi salvat.', 'error'); }
+    finally { button.disabled = false; }
+  }
+
+  async function deleteReceiptLocation(id) {
+    const location = state.receiptLocations.find(item => String(item.id) === String(id));
+    if (!location || !confirm(`Ștergi punctul de recepție „${location.name}”? Documentele NIR existente își păstrează locul salvat.`)) return;
+    try { await window.SHOP_API.deleteReceiptLocation(location.id); toast('Punctul de recepție a fost șters.'); await loadCompanies(); state.nirBootstrapped = false; }
+    catch (error) { toast(error.message || 'Punctul de recepție nu a putut fi șters.', 'error'); }
   }
 
   const nirToday = () => new Date().toISOString().slice(0, 10);
@@ -2822,14 +3531,16 @@
   }
   const nirCan = permission => state.nirPermissions.includes(permission);
   const isNirReversalDocument = document => document?.document_kind === 'storno' || document?.source_type === 'reversal' || Boolean(document?.reversal_of_id);
+  const isCustomerReturnDocument = document => document?.document_kind === 'customer_return' || document?.source_type === 'customer_return' || document?.operation_type === 'customer_return';
   const nirHasStornoHistory = document => ['partial', 'full'].includes(String(document?.storno_state || '').toLowerCase()) || Number(document?.storned_quantity || 0) > 0;
-  const isNirCorrectionLocked = document => isNirReversalDocument(document) || document?.status === 'reversed' || document?.fully_storned === true || document?.storno_complete === true || nirHasStornoHistory(document);
+  const isNirCorrectionLocked = document => isNirReversalDocument(document) || isCustomerReturnDocument(document) || document?.status === 'reversed' || document?.fully_storned === true || document?.storno_complete === true || nirHasStornoHistory(document);
   const nirStornableLines = document => (document?.lines || []).filter(line => line.id && Number(line.stornable_quantity || 0) > 0);
-  const canNirStorno = document => !isNirReversalDocument(document) && document?.status === 'confirmed' && [true, 1, '1'].includes(document?.can_storno) && nirStornableLines(document).length > 0;
+  const canNirStorno = document => !isNirReversalDocument(document) && !isCustomerReturnDocument(document) && document?.status === 'confirmed' && [true, 1, '1'].includes(document?.can_storno) && nirStornableLines(document).length > 0;
   const nirStatus = document => {
-    if (isNirReversalDocument(document)) return ['STORNAT', 'red'];
+    if (isCustomerReturnDocument(document)) return ['RETUR CLIENT', 'green'];
+    if (isNirReversalDocument(document)) return ['RETUR FURNIZOR', 'red'];
     if (document?.status === 'draft') return ['CIORNA', 'amber'];
-    if (document?.status === 'confirmed' || document?.status === 'reversed') return ['CONFIRMAT', 'green'];
+    if (document?.status === 'confirmed' || document?.status === 'reversed') return ['RECEPȚIE', 'green'];
     return [String(document?.status || '').toUpperCase(), 'gray'];
   };
   const nirUiIcon = kind => ({
@@ -2847,19 +3558,19 @@
   }[kind] || '');
   const nirStepBadge = (number, kind) => `<b class="shop-nir-step-badge">${nirUiIcon(kind)}<i>${number}</i></b>`;
 
-  async function loadNirs(page = state.pages.nirs || 1) {
+  async function loadNirs(page = state.pages.nirs || 1, options = {}) {
     const requestId = ++state.nirRegistryRequestId;
     const registryHost = $('shop-nir-registry');
-    if (registryHost) {
+    if (registryHost && !options.quiet) {
       registryHost.classList.add('is-loading');
       registryHost.setAttribute('aria-busy', 'true');
-    } else {
+    } else if (!registryHost) {
       loading('shop-nirs-content', 'Se incarca registrul NIR...');
     }
     try {
       const bootstrap = state.nirBootstrapped
         ? Promise.resolve(null)
-        : Promise.all([window.SHOP_API.getNirPermissions(), window.SHOP_API.listWarehouses(), window.SHOP_API.searchSuppliers('')]);
+        : Promise.all([window.SHOP_API.getNirPermissions(), window.SHOP_API.listWarehouses(), window.SHOP_API.searchSuppliers(''), window.SHOP_API.listReceiptLocations()]);
       const [registry, lookups] = await Promise.all([
         window.SHOP_API.listNirs({ page, page_size: state.pageSizes.nirs, search: state.nirSearch, status: state.nirStatus }),
         bootstrap,
@@ -2868,17 +3579,18 @@
       state.nirs = Array.isArray(registry.items) ? registry.items : [];
       state.nirRegistry = registry;
       if (lookups) {
-        const [permissions, warehouses, suppliers] = lookups;
+        const [permissions, warehouses, suppliers, receiptLocations] = lookups;
         state.nirPermissions = Array.isArray(permissions.permissions) ? permissions.permissions : [];
         state.nirWarehouses = Array.isArray(warehouses) ? warehouses : [];
         state.suppliers = Array.isArray(suppliers) ? suppliers : [];
+        state.nirReceiptLocations = Array.isArray(receiptLocations) ? receiptLocations : [];
         state.nirBootstrapped = true;
       }
       state.pages.nirs = Number(registry.page || 1);
       renderNirs();
     } catch (error) {
       if (requestId !== state.nirRegistryRequestId) return;
-      if ($('shop-nir-registry')) $('shop-nir-registry').innerHTML = empty('Registrul NIR nu s-a putut încărca', error.message || 'Încearcă din nou.');
+      if ($('shop-nir-registry') && !options.quiet) $('shop-nir-registry').innerHTML = empty('Registrul NIR nu s-a putut încărca', error.message || 'Încearcă din nou.');
       else failure('shop-nirs-content', error);
     } finally {
       if (requestId === state.nirRegistryRequestId) {
@@ -2893,7 +3605,9 @@
     const cards = state.nirs.map((document, index) => {
       const [label, tone] = nirStatus(document);
       const number = document.nir_number || document.temporary_number;
-      return `<article role="button" tabindex="0" aria-label="Deschide ${esc(number)}" class="shop-nir-registry-card ${tone}" data-nir-open="${esc(document.id)}" style="--nir-index:${index}"><span class="shop-nir-card-mark"></span><span class="shop-nir-card-icon"><i></i>${nirUiIcon('document')}</span><span class="shop-nir-card-copy"><small>${esc(number)}</small><strong>${esc(supplierDisplayName(document, 'Furnizor neselectat'))}</strong><span class="shop-nir-card-meta"><em>${nirUiIcon('calendar')} ${esc(document.nir_date || document.reception_date)} · ${esc(String(document.nir_time || document.reception_time || '').slice(0, 5) || '—')}</em><em>${nirUiIcon('product')} ${Number(document.line_count || 0)} produse</em><em>${nirUiIcon('document')} Factura ${esc(document.supplier_invoice_series || '')} ${esc(document.supplier_invoice_number || '—')}</em></span></span><span class="shop-nir-card-right"><b class="shop-nir-state ${tone}">${label}</b>${nirCan('NIR_VIEW_COSTS') ? `<strong>${money(document.grand_total_ron || 0)}</strong>` : ''}<small>${esc(document.currency || 'RON')}</small><span class="shop-nir-card-actions"><button type="button" class="shop-nir-bundle-download" data-nir-bundle-download="${esc(document.id)}" aria-label="Descarcă toate fișierele pentru ${esc(number)}" title="Descarcă PDF, Excel și documente"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="shop-nir-download-arrow" d="M12 3v11m0 0 4-4m-4 4-4-4"/><path d="M5 17v3h14v-3"/></svg></button><i aria-hidden="true">›</i></span></span></article>`;
+      const counterparty = isCustomerReturnDocument(document) ? (document.customer_name || 'Client') : supplierDisplayName(document, 'Furnizor neselectat');
+      const invoiceKind = isCustomerReturnDocument(document) ? 'Factura retur' : 'Factura';
+      return `<article role="button" tabindex="0" aria-label="Deschide ${esc(number)}" class="shop-nir-registry-card ${tone}" data-nir-open="${esc(document.id)}" style="--nir-index:${index}"><span class="shop-nir-card-mark"></span><span class="shop-nir-card-icon"><i></i>${nirUiIcon('document')}</span><span class="shop-nir-card-copy"><small>${esc(number)}</small><strong>${esc(counterparty)}</strong><span class="shop-nir-card-meta"><em>${nirUiIcon('calendar')} ${esc(document.nir_date || document.reception_date)} · ${esc(String(document.nir_time || document.reception_time || '').slice(0, 5) || '—')}</em><em>${nirUiIcon('product')} ${Number(document.line_count || 0)} produse</em><em>${nirUiIcon('document')} ${invoiceKind} ${esc(document.supplier_invoice_series || '')} ${esc(document.supplier_invoice_number || '—')}</em></span></span><span class="shop-nir-card-right"><b class="shop-nir-state ${tone}">${esc(document.operation_label || label)}</b>${nirCan('NIR_VIEW_COSTS') ? `<strong>${money(document.grand_total_ron || 0)}</strong>` : ''}<small>${esc(document.currency || 'RON')}</small><span class="shop-nir-card-actions"><button type="button" class="shop-nir-bundle-download" data-nir-bundle-download="${esc(document.id)}" aria-label="Descarcă toate fișierele pentru ${esc(number)}" title="Descarcă PDF, Excel și documente"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="shop-nir-download-arrow" d="M12 3v11m0 0 4-4m-4 4-4-4"/><path d="M5 17v3h14v-3"/></svg></button><i aria-hidden="true">›</i></span></span></article>`;
     }).join('');
     const emptyRegistry = `<div class="shop-nir-empty-modern"><span class="shop-nir-empty-orb"><i></i>${nirUiIcon('document')}</span><div><small>REGISTRU NIR</small><strong>Niciun NIR pentru filtrul ales</strong><p>${state.nirSearch ? 'Nu am gasit un document care sa corespunda cautarii.' : 'Adauga prima receptie sau alege un alt filtru.'}</p></div>${nirCan('NIR_CREATE') ? '<button type="button" data-nir-empty-create><b>+</b> NIR nou</button>' : ''}</div>`;
     const summary = `<div><span class="shop-nir-summary-icon">${nirUiIcon('document')}</span><small>TOTAL DOCUMENTE</small><strong>${Number(registry.total || 0)}</strong><span>in registrul central</span></div><div class="draft"><span class="shop-nir-summary-icon">${nirUiIcon('calendar')}</span><small>CIORNE IN PAGINA</small><strong>${state.nirs.filter(item => item.status === 'draft').length}</strong><span>fara impact in stoc</span></div><div class="confirmed"><span class="shop-nir-summary-icon">${nirUiIcon('check')}</span><small>CONFIRMATE IN PAGINA</small><strong>${state.nirs.filter(item => !isNirReversalDocument(item) && (item.status === 'confirmed' || item.status === 'reversed')).length}</strong><span>cu evaluare contabila</span></div>`;
@@ -2938,12 +3652,14 @@
     state.nirCreateInFlight = true;
     try {
       if (!state.nirWarehouses.length) state.nirWarehouses = await window.SHOP_API.listWarehouses();
+      if (!state.nirReceiptLocations.length) state.nirReceiptLocations = await window.SHOP_API.listReceiptLocations();
       const warehouse = state.nirWarehouses.find(item => item.is_default) || state.nirWarehouses[0];
+      const receiptLocation = state.nirReceiptLocations.find(item => item.is_default) || state.nirReceiptLocations[0];
       const date = nirToday();
       const time = nirNowTime();
       state.nirEditor = {
         id: `local-nir-${Date.now()}`, temporary_number: 'NIR nesalvat', nir_number: null, status: 'draft',
-        supplier_id: null, supplier_name: null, warehouse_id: warehouse?.id || '', supplier_invoice_series: null,
+        supplier_id: null, supplier_name: null, warehouse_id: warehouse?.id || '', reception_location_id: receiptLocation?.id || null, reception_location: receiptLocation?.name || 'Gestiune principală', supplier_invoice_series: null,
         supplier_invoice_number: null, supplier_invoice_date: date, nir_date: date, nir_time: time, reception_date: date, reception_time: time,
         currency: 'RON', exchange_rate: '1', exchange_rate_date: date, notes: null, source_type: 'manual',
         row_version: 0, confirmed_at: null, confirmed_by: null, reversed_at: null, reversed_by: null,
@@ -3027,6 +3743,9 @@
     $('shop-nir-status').textContent = statusLabel; $('shop-nir-status').className = `shop-nir-status ${statusTone}`;
     const supplierOptions = `<option value="">Selecteaza furnizorul</option>${state.suppliers.map(supplier => `<option value="${esc(supplier.id)}" ${supplier.id === document.supplier_id ? 'selected' : ''}>${esc(supplierDisplayName(supplier))}${supplier.name !== supplierDisplayName(supplier) ? ` · ${esc(supplier.name)}` : ''}${supplier.cui ? ` · ${esc(supplier.cui)}` : ''}</option>`).join('')}`;
     const warehouseOptions = state.nirWarehouses.map(warehouse => `<option value="${esc(warehouse.id)}" ${warehouse.id === document.warehouse_id ? 'selected' : ''}>${esc(warehouse.name)}</option>`).join('');
+    const hasCurrentReceiptLocation = state.nirReceiptLocations.some(location => location.id === document.reception_location_id);
+    const historicalReceiptLocation = !hasCurrentReceiptLocation && document.reception_location ? `<option value="${esc(document.reception_location_id || '')}" selected>${esc(document.reception_location)} · salvat în document</option>` : '';
+    const receiptLocationOptions = historicalReceiptLocation + state.nirReceiptLocations.map(location => `<option value="${esc(location.id)}" ${location.id === document.reception_location_id ? 'selected' : ''}>${esc(location.name)}${location.is_default ? ' · implicit' : ''}${[location.address, location.city].filter(Boolean).length ? ` — ${esc([location.address, location.city].filter(Boolean).join(', '))}` : ''}</option>`).join('');
     const lines = (document.lines || []).map((line, index) => renderNirLine(line, index, editable)).join('');
     const attachmentKind = (name, mime = '') => { const extension = String(name || '').split('.').pop().toUpperCase(); if (String(mime).startsWith('image/') || ['JPG', 'JPEG', 'PNG', 'WEBP'].includes(extension)) return `Imagine ${extension || ''}`.trim(); if (extension === 'PDF') return 'Factura PDF'; if (extension === 'XLSX') return 'Fisier Excel'; if (extension === 'XML') return 'Fisier XML'; return `Document ${extension || ''}`.trim(); };
     const attachments = (document.attachments || []).map(file => `<article class="shop-nir-attachment saved"><span>${nirUiIcon('document')}</span><div><strong>${esc(attachmentKind(file.original_name, file.mime_type))}</strong><small title="${esc(file.original_name)}">${esc(file.original_name)}</small><em>Salvat · ${esc(file.extraction_status)} · ${(Number(file.file_size || 0) / 1024).toFixed(0)} KB</em></div><button type="button" class="shop-nir-attachment-download" data-nir-attachment-download="${esc(file.id)}" aria-label="Descarca ${esc(file.original_name)}" title="Descarca documentul">${nirUiIcon('download')}</button></article>`).join('');
@@ -3038,7 +3757,7 @@
     $('shop-nir-editor').innerHTML = `<section class="shop-nir-editor-flow"><div><small>GHID RAPID</small><strong>Completeaza NIR-ul in 5 pasi</strong><span>Urmeaza sageata: fiecare pas este desenat pe rand, apoi fluxul porneste din nou.</span></div><ol><i class="shop-nir-flow-trail" aria-hidden="true"><b></b></i><li style="--flow-index:0"><i>${nirUiIcon('supplier')}</i><b>1</b><span>Furnizor</span></li><li style="--flow-index:1"><i>${nirUiIcon('calendar')}</i><b>2</b><span>Receptie</span></li><li style="--flow-index:2"><i>${nirUiIcon('currency')}</i><b>3</b><span>Moneda</span></li><li style="--flow-index:3"><i>${nirUiIcon('product')}</i><b>4</b><span>Produse</span></li><li style="--flow-index:4"><i>${nirUiIcon('check')}</i><b>5</b><span>Verificare</span></li></ol></section>
       <div class="shop-nir-editor-grid">
         <section class="shop-nir-editor-section supplier"><header>${nirStepBadge('01', 'supplier')}<span><strong>Alege furnizorul</strong><small>Identifica firma si factura primita</small></span></header><p class="shop-nir-step-help"><b>1</b>Selecteaza furnizorul, apoi completeaza datele facturii.</p><div class="shop-nir-supplier-line"><label>Denumire furnizor *<select data-nir-field="supplier_id" ${editable ? '' : 'disabled'}>${supplierOptions}</select></label>${editable && nirCan('SUPPLIER_CREATE') ? '<button type="button" id="shop-nir-new-supplier">+ Furnizor nou</button>' : ''}</div><div class="shop-commerce-columns three">${nirInput('Serie factura', 'supplier_invoice_series', document.supplier_invoice_series, editable ? '' : 'disabled')}${nirInput('Numar factura *', 'supplier_invoice_number', document.supplier_invoice_number, editable ? 'required' : 'disabled')}${nirInput('Data facturii *', 'supplier_invoice_date', document.supplier_invoice_date, `type="date" ${editable ? '' : 'disabled'}`)}</div></section>
-        <section class="shop-nir-editor-section reception"><header>${nirStepBadge('02', 'calendar')}<span><strong>Stabileste receptia</strong><small>Alege data si ora din acelasi selector</small></span></header><p class="shop-nir-step-help"><b>2</b>Fiecare control deschide impreuna calendarul si ora.</p><div class="shop-nir-reception-fields">${nirDateTimeInput('Data si ora NIR *', 'nir', document.nir_date, document.nir_time, editable)}${nirDateTimeInput('Data si ora receptiei *', 'reception', document.reception_date, document.reception_time, editable)}<label>Gestiune *<select data-nir-field="warehouse_id" ${editable ? '' : 'disabled'}>${warehouseOptions}</select></label></div></section>
+        <section class="shop-nir-editor-section reception"><header>${nirStepBadge('02', 'calendar')}<span><strong>Stabileste receptia</strong><small>Alege data, ora, gestiunea și locul fizic</small></span></header><p class="shop-nir-step-help"><b>2</b>Locul recepției rămâne memorat în document, separat de gestiunea contabilă.</p><div class="shop-nir-reception-fields">${nirDateTimeInput('Data si ora NIR *', 'nir', document.nir_date, document.nir_time, editable)}${nirDateTimeInput('Data si ora receptiei *', 'reception', document.reception_date, document.reception_time, editable)}<label>Gestiune *<select data-nir-field="warehouse_id" ${editable ? '' : 'disabled'}>${warehouseOptions}</select></label><label>Loc recepție *<select data-nir-field="reception_location_id" ${editable ? '' : 'disabled'}>${receiptLocationOptions || `<option value="">${esc(document.reception_location || 'Gestiune principală')}</option>`}</select></label></div></section>
         <section class="shop-nir-editor-section currency"><header>${nirStepBadge('03', 'currency')}<span><strong>Seteaza moneda</strong><small>Cursul si etichetele de pret se adapteaza automat</small></span></header><p class="shop-nir-step-help"><b>3</b>Alege moneda din lista. Pentru valuta preluam automat cursul oficial BNR, dar il poti modifica.</p><div class="shop-commerce-columns three">${nirCurrencyPicker(document.currency, editable)}${nirInput(`Curs ${esc(document.currency || 'RON')}/RON *`, 'exchange_rate', document.exchange_rate, `type="number" min="0.00000001" step="0.00000001" placeholder="${state.nirRateLoading === document.currency ? 'Se preia de la BNR...' : 'Curs in lei'}" ${editable && document.currency !== 'RON' ? '' : 'disabled'}`)}${nirInput('Data cursului BNR', 'exchange_rate_date', document.exchange_rate_date, `type="date" ${editable && document.currency !== 'RON' ? '' : 'disabled'}`)}</div><p class="shop-nir-bnr-note">${document.currency === 'RON' ? `${nirUiIcon('check')} RON: curs fix 1, data cursului este data facturii.` : state.nirRateLoading === document.currency ? `${nirUiIcon('currency')} Se preia cursul oficial BNR...` : `${nirUiIcon('check')} Curs BNR din ${esc(document.exchange_rate_date || 'data facturii')} · totalurile si costul contabil sunt calculate in lei.`}</p></section>
       </div>
       <section class="shop-nir-editor-section documents ${editable ? '' : 'is-confirmed'}"><header><b class="shop-nir-step-badge optional">${nirUiIcon('document')}<i>+</i></b><span><strong>Documente furnizor</strong><small>${editable ? 'Le poti alege acum; sunt incarcate numai cand apesi Salveaza' : `${(document.attachments || []).length} documente salvate impreuna cu acest NIR`}</small></span>${editable ? '<button type="button" id="shop-nir-import">Alege documente</button>' : (document.attachments || []).length ? `<button type="button" id="shop-nir-download-all">${nirUiIcon('download')} Descarca toate</button>` : ''}</header><div class="shop-nir-attachments shop-nir-dropzone ${editable ? '' : 'is-confirmed'}" role="${editable ? 'button' : 'group'}" tabindex="${editable ? '0' : '-1'}" aria-label="${editable ? 'Adauga documentele furnizorului' : 'Documentele furnizorului'}">${editable ? `<div class="shop-nir-drop-hint"><span><i></i>${nirUiIcon('document')}</span><div><strong>Trage factura aici</strong><small>Documentele raman local pana apesi Salveaza ciorna</small><em>PDF · JPG · PNG · WEBP · XLSX · XML</em></div></div>` : ''}${attachments || pendingAttachments ? `<div class="shop-nir-attachment-list">${attachments}${pendingAttachments}</div>` : '<p>Nu exista documente atasate acestui NIR.</p>'}</div></section>
@@ -3318,6 +4037,10 @@
         state.nirEditor.supplier_alias = selectedSupplier?.alias || null;
         scheduleNirAutosave(); renderNirEditor(); return;
       }
+      if (field === 'reception_location_id') {
+        const selectedLocation = state.nirReceiptLocations.find(item => item.id === input.value);
+        state.nirEditor.reception_location = selectedLocation ? [selectedLocation.name, [selectedLocation.address, selectedLocation.city, selectedLocation.county, selectedLocation.postal_code].filter(Boolean).join(', ')].filter(Boolean).join(' — ') : state.nirEditor.reception_location;
+      }
       if (field === 'currency') input.value = state.nirEditor.currency;
       if (field === 'currency' && state.nirEditor.currency === 'RON') { state.nirEditor.exchange_rate = '1'; state.nirEditor.exchange_rate_date = state.nirEditor.nir_date; renderNirEditor(); }
       if (field === 'supplier_invoice_date' && state.nirEditor.currency === 'RON') { state.nirEditor.exchange_rate_date = input.value; scheduleNirAutosave(); renderNirEditor(); return; }
@@ -3466,7 +4189,7 @@
 
   function nirUpdatePayload(document, rowVersion = document.row_version) {
     const lines = (document.lines || []).map(line => ({ ...line, rejected_quantity: '0' }));
-    return { row_version: rowVersion, supplier_id: document.supplier_id || null, warehouse_id: document.warehouse_id, supplier_invoice_series: document.supplier_invoice_series || null, supplier_invoice_number: document.supplier_invoice_number || null, supplier_invoice_date: document.supplier_invoice_date || null, nir_date: document.nir_date, nir_time: document.nir_time || null, reception_date: document.reception_date, reception_time: document.reception_time || null, currency: document.currency, exchange_rate: document.exchange_rate, exchange_rate_date: document.exchange_rate_date || null, notes: document.notes || null, lines };
+    return { row_version: rowVersion, supplier_id: document.supplier_id || null, warehouse_id: document.warehouse_id, reception_location_id: document.reception_location_id || null, reception_location: document.reception_location || null, supplier_invoice_series: document.supplier_invoice_series || null, supplier_invoice_number: document.supplier_invoice_number || null, supplier_invoice_date: document.supplier_invoice_date || null, nir_date: document.nir_date, nir_time: document.nir_time || null, reception_date: document.reception_date, reception_time: document.reception_time || null, currency: document.currency, exchange_rate: document.exchange_rate, exchange_rate_date: document.exchange_rate_date || null, notes: document.notes || null, lines };
   }
 
   async function saveNir(silent = false, includeAttachments = true) {
@@ -3713,7 +4436,7 @@
         const parsed = new Date(String(value || '').replace(' ', 'T'));
         return Number.isNaN(parsed.getTime()) ? String(value || '—') : parsed.toLocaleString('ro-RO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
       };
-      const movementType = value => ({ NIR_IN: 'INTRARE NIR', NIR_REVERSAL: 'STORNARE NIR', SALE_OUT: 'IESIRE VANZARE', MANUAL_ADJUSTMENT: 'AJUSTARE MANUALA' }[String(value || '').toUpperCase()] || String(value || 'MISCARE STOC').replaceAll('_', ' '));
+      const movementType = value => ({ NIR_IN: 'INTRARE NIR', NIR_REVERSAL: 'RETUR FURNIZOR', RETURN_IN: 'RETUR CLIENT', SALE_OUT: 'IESIRE VANZARE', MANUAL_ADJUSTMENT: 'AJUSTARE MANUALA' }[String(value || '').toUpperCase()] || String(value || 'MISCARE STOC').replaceAll('_', ' '));
       const summary = movements.reduce((totals, movement) => {
         const delta = Number(movement.accounting_quantity_delta ?? movement.quantity_delta ?? 0);
         totals.entries += delta > 0 ? delta : 0;

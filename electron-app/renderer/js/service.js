@@ -14,6 +14,11 @@
   const sortEl = document.getElementById('service-sort');
   const refreshBtn = document.getElementById('service-refresh-btn');
   const newBtn = document.getElementById('service-new-btn');
+  const pagePrevBtn = document.getElementById('service-page-prev');
+  const pageNextBtn = document.getElementById('service-page-next');
+  const pageSizeSelectEl = document.getElementById('service-page-size-select');
+  const pageSizeValueEl = document.getElementById('service-page-size-value');
+  const pageSizeButtons = Array.from(document.querySelectorAll('[data-service-page-size]'));
   const columnHeaderButtons = Array.from(document.querySelectorAll('.service-th-btn'));
   const paymentFilterButtons = Array.from(document.querySelectorAll('[data-service-payment-filter]'));
   const sortChipButtons = Array.from(document.querySelectorAll('[data-service-sort-chip]'));
@@ -30,6 +35,7 @@
   let searchTimer = null;
   let closeTimer = null;
   let loading = false;
+  let serviceLoadRevision = 0;
   let sortBy = '';
   let sortDir = '';
   let filterColumn = '';
@@ -42,6 +48,28 @@
   let sheetsDataVersion = '';
   let sheetsHaveLoaded = false;
   let financialEntryActive = false;
+  let servicePage = 1;
+  let serviceTotal = 0;
+  let serviceHasMore = false;
+  let serviceCacheToken = window.AUTH?.getToken?.() || '';
+  let serviceCacheGeneration = 0;
+  let serviceLastFreshAt = 0;
+  let cancelServiceIdleRefresh = null;
+  const SERVICE_PAGE_SIZE_KEY = 'gtrots.serviceSheetsPageSize.v1';
+  const SERVICE_PAGE_SIZES = [10, 15, 25, 50, 100];
+  const SERVICE_REVISIT_TTL_MS = 30000;
+  const savedServicePageSize = Number(localStorage.getItem(SERVICE_PAGE_SIZE_KEY) || 10);
+  let servicePageSize = SERVICE_PAGE_SIZES.includes(savedServicePageSize) ? savedServicePageSize : 10;
+  const servicePageCache = new Map();
+  const servicePageRequests = new Map();
+
+  function invalidateServicePageCache() {
+    serviceCacheGeneration += 1;
+    serviceLastFreshAt = 0;
+    cancelScheduledServiceRefresh();
+    servicePageCache.clear();
+    servicePageRequests.clear();
+  }
 
   const COLUMN_LABELS = {
     sheet_number: 'Nr fisa',
@@ -466,8 +494,9 @@
 
   function query() {
     const params = {
-      search: filterColumn ? '' : (searchEl?.value?.trim() || ''),
+      search: searchEl?.value?.trim() || '',
     };
+    if (filterColumn) params.filterColumn = filterColumn;
     if (sortBy) {
       params.sortBy = sortBy;
       params.sortDir = sortDir || DEFAULT_SORT_DIRS[sortBy] || 'asc';
@@ -503,10 +532,7 @@
   }
 
   function visibleSheets() {
-    const term = normalizeText(searchEl?.value?.trim() || '');
-    let rows = term && filterColumn
-      ? sheets.filter((sheet) => normalizeText(columnSearchText(sheet, filterColumn)).includes(term))
-      : [...sheets];
+    let rows = [...sheets];
     if (paymentFilter) {
       rows = rows.filter((sheet) => sheet.payment_status === paymentFilter);
     }
@@ -565,11 +591,38 @@
     updateColumnHeaderState();
     updateServiceChipState();
     updateSearchPlaceholder();
+    servicePage = 1;
     loadSheets(selectedSheet?.id || '');
   }
 
   function isModalOpen() {
     return Boolean(modalEl && !modalEl.hidden);
+  }
+
+  function isServiceTabActive() {
+    return document.getElementById('tab-service')?.classList.contains('active');
+  }
+
+  function cancelScheduledServiceRefresh() {
+    cancelServiceIdleRefresh?.();
+    cancelServiceIdleRefresh = null;
+  }
+
+  function scheduleServiceIdleRefresh() {
+    cancelScheduledServiceRefresh();
+    if (Date.now() - serviceLastFreshAt < SERVICE_REVISIT_TTL_MS) return;
+    const refresh = () => {
+      cancelServiceIdleRefresh = null;
+      if (!isServiceTabActive() || isModalOpen() || loading) return;
+      void loadSheets(selectedSheet?.id || '', { silent: true });
+    };
+    if ('requestIdleCallback' in window) {
+      const handle = window.requestIdleCallback(refresh, { timeout: 800 });
+      cancelServiceIdleRefresh = () => window.cancelIdleCallback?.(handle);
+    } else {
+      const handle = window.setTimeout(refresh, 120);
+      cancelServiceIdleRefresh = () => window.clearTimeout(handle);
+    }
   }
 
   function openModal() {
@@ -595,8 +648,64 @@
 
   function updateCount() {
     if (!countEl) return;
-    const count = visibleSheets().length;
-    countEl.textContent = `${count} ${count === 1 ? 'fisa' : 'fise'}`;
+    const first = serviceTotal ? ((servicePage - 1) * servicePageSize) + 1 : 0;
+    const last = Math.min(servicePage * servicePageSize, serviceTotal);
+    countEl.textContent = serviceTotal ? `${first}–${last} din ${serviceTotal}` : '0 fișe';
+    if (pageSizeValueEl) pageSizeValueEl.textContent = String(servicePageSize);
+    if (pagePrevBtn) pagePrevBtn.disabled = servicePage <= 1;
+    if (pageNextBtn) pageNextBtn.disabled = !serviceHasMore;
+    pageSizeButtons.forEach((button) => {
+      const active = Number(button.dataset.servicePageSize) === servicePageSize;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+      button.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+  }
+
+  function serviceRequest(page = servicePage) {
+    return { ...query(), page, pageSize: servicePageSize };
+  }
+
+  function serviceRequestKey(request) {
+    return JSON.stringify([serviceCacheToken, request.search || '', request.filterColumn || '', request.paymentStatus || '', request.sortBy || '', request.sortDir || '', request.page || 1, request.pageSize || 10]);
+  }
+
+  function rememberServicePage(key, value) {
+    if (servicePageCache.has(key)) servicePageCache.delete(key);
+    const limit = Math.max(5, Math.min(12, Math.floor(500 / Math.max(servicePageSize, 10))));
+    while (servicePageCache.size >= limit) servicePageCache.delete(servicePageCache.keys().next().value);
+    servicePageCache.set(key, value);
+    return value;
+  }
+
+  function rememberServiceWindow(request, result) {
+    rememberServicePage(serviceRequestKey(request), result);
+    (result?.prefetch_pages || []).forEach((prefetched) => {
+      const prefetchedRequest = { ...request, page: prefetched.page };
+      rememberServicePage(serviceRequestKey(prefetchedRequest), {
+        ...result,
+        items: prefetched.items,
+        page: prefetched.page,
+        has_more: prefetched.has_more,
+        prefetch_pages: undefined,
+      });
+    });
+    return result;
+  }
+
+  function fetchServicePage(request, preferCache = false) {
+    const key = serviceRequestKey(request);
+    if (preferCache && servicePageCache.has(key)) return Promise.resolve(servicePageCache.get(key));
+    if (preferCache && servicePageRequests.has(key)) return servicePageRequests.get(key);
+    const generation = serviceCacheGeneration;
+    const pending = window.API.getServiceSheetsPage(request, preferCache);
+    servicePageRequests.set(key, pending);
+    void pending.then((result) => {
+      if (generation === serviceCacheGeneration) rememberServiceWindow(request, result);
+    }, () => {}).finally(() => {
+      if (servicePageRequests.get(key) === pending) servicePageRequests.delete(key);
+    });
+    return pending;
   }
 
   function tableMessage(message, type = 'empty-state') {
@@ -613,7 +722,7 @@
     listEl.innerHTML = tableMessage(message, 'error-box');
   }
 
-  async function loadSheets(selectId = selectedSheet?.id || '') {
+  async function loadSheets(selectId = selectedSheet?.id || '', options = {}) {
     if (!listEl) return;
     if (!token()) {
       sheets = [];
@@ -622,14 +731,34 @@
       listEl.innerHTML = tableMessage('Autentificare necesara.');
       return;
     }
+    const loadRevision = ++serviceLoadRevision;
+    const requestedPage = Math.max(Number(options.page || servicePage || 1), 1);
     loading = true;
+    updateCount();
     if (!sheets.length) setListLoading();
     try {
-      const [nextSheets, nextExpenseCategories] = await Promise.all([
-        window.API.getServiceSheets(query()),
-        window.API.getExpenseCategories().catch(() => expenseCategories),
-      ]);
-      expenseCategories = Array.isArray(nextExpenseCategories) ? nextExpenseCategories : [];
+      const request = serviceRequest(requestedPage);
+      const cacheKey = serviceRequestKey(request);
+      const cachedResult = options.preferCache ? servicePageCache.get(cacheKey) : undefined;
+      const servedFromUiCache = cachedResult !== undefined;
+      const result = servedFromUiCache
+        ? cachedResult
+        : await fetchServicePage(request, options.preferCache);
+      if (loadRevision !== serviceLoadRevision) return;
+      if (!servedFromUiCache) serviceLastFreshAt = Date.now();
+      if (!expenseCategories.length) {
+        void window.API.getExpenseCategories().then((items) => {
+          if (loadRevision === serviceLoadRevision && Array.isArray(items)) expenseCategories = items;
+        }).catch(() => {});
+      }
+      const nextSheets = Array.isArray(result?.items) ? result.items : [];
+      serviceTotal = Number(result?.total || 0);
+      servicePage = Math.max(Number(result?.page || servicePage), 1);
+      serviceHasMore = Boolean(result?.has_more);
+      const furthestPrefetchedPage = (result?.prefetch_pages || []).reduce((max, item) => Math.max(max, Number(item.page) || 0), servicePage);
+      if ((furthestPrefetchedPage * Number(result?.page_size || servicePageSize)) < serviceTotal) {
+        void fetchServicePage({ ...request, page: furthestPrefetchedPage + 1 }, true).catch(() => {});
+      }
       const nextVersion = nextSheets
         .map((sheet) => `${sheet.id}:${sheet.updated_at || sheet.created_at || ''}:${sheet.is_finalized ? 1 : 0}:${sheet.payment_status || ''}:${sheet.final_price || sheet.total_price || 0}`)
         .join('|');
@@ -639,24 +768,28 @@
         sheetsDataVersion = nextVersion;
         sheetsHaveLoaded = true;
       }
-      const keep = selectId
+      const keepSummary = selectId
         ? sheets.find((sheet) => sheet.id === selectId)
         : selectedSheet?.id
           ? sheets.find((sheet) => sheet.id === selectedSheet.id)
           : null;
+      const keep = isModalOpen() && selectedSheet?.id === keepSummary?.id ? selectedSheet : keepSummary;
       if (keep) {
         selectedSheet = keep;
       } else if (!isModalOpen()) {
         selectedSheet = null;
       }
       if (dataChanged) renderList();
-      if (keep && isModalOpen() && dataChanged) {
-        renderEditor(keep);
-      }
     } catch (error) {
-      showListError(error.message || 'Fisele nu au putut fi incarcate.');
+      if (loadRevision !== serviceLoadRevision) return;
+      if (!options.silent || !sheets.length) {
+        showListError(error.message || 'Fisele nu au putut fi incarcate.');
+      }
     } finally {
-      loading = false;
+      if (loadRevision === serviceLoadRevision) {
+        loading = false;
+        updateCount();
+      }
     }
   }
 
@@ -1467,8 +1600,16 @@
   async function selectSheet(id, fetchFresh = true) {
     financialEntryActive = false;
     const local = sheets.find((sheet) => sheet.id === id);
-    if (local) renderEditor(local);
-    if (!fetchFresh || !id) return;
+    if (local) {
+      selectedSheet = local;
+      renderList();
+      openModal();
+      editorEl.innerHTML = '<div class="loading">Se incarca detaliile fisei...</div>';
+    }
+    if (!fetchFresh || !id) {
+      if (local) renderEditor(local);
+      return;
+    }
     try {
       const fresh = await window.API.getServiceSheetById(token(), id);
       const index = sheets.findIndex((sheet) => sheet.id === id);
@@ -1496,6 +1637,7 @@
       const saved = id
         ? await window.API.updateServiceSheet(token(), id, payload, financialEntryActive)
         : await window.API.createServiceSheet(token(), payload);
+      invalidateServicePageCache();
       if (!canNormallyViewFinancials() && financialEntryActive) {
         financialEntryActive = false;
       }
@@ -1671,10 +1813,21 @@
     if (!confirm(`Stergi fisa ${selectedSheet.sheet_number}?`)) return;
     try {
       await window.API.deleteServiceSheet(token(), selectedSheet.id);
+      invalidateServicePageCache();
+      const nextTotal = Math.max(0, serviceTotal - 1);
+      const targetPage = Math.min(servicePage, Math.max(1, Math.ceil(nextTotal / servicePageSize)));
       sheets = sheets.filter((sheet) => sheet.id !== selectedSheet.id);
+      if (targetPage !== servicePage) sheets = [];
+      serviceTotal = nextTotal;
+      servicePage = targetPage;
+      serviceHasMore = targetPage * servicePageSize < nextTotal;
+      sheetsDataVersion = sheets
+        .map((sheet) => `${sheet.id}:${sheet.updated_at || sheet.created_at || ''}:${sheet.is_finalized ? 1 : 0}:${sheet.payment_status || ''}:${sheet.final_price || sheet.total_price || 0}`)
+        .join('|');
       selectedSheet = null;
       renderList();
       closeModal();
+      void loadSheets('', { page: targetPage, preferCache: true, silent: true });
     } catch (error) {
       showEditorError(error.message || 'Fisa nu a putut fi stearsa.');
     }
@@ -1800,13 +1953,11 @@
     editorEl.innerHTML = '<div class="loading">Se pregateste fisa de service...</div>';
     try {
       const existing = forceNew
-        ? []
-        : await window.API.getServiceSheets({ clientId: client.id, sortBy: 'updated_at', sortDir: 'desc' });
+        ? { items: [] }
+        : await window.API.getServiceSheetsPage({ clientId: client.id, sortBy: 'updated_at', sortDir: 'desc', page: 1, pageSize: 10 });
       let sheet;
-      if (existing.length > 0) {
-        sheet = fromScanner
-          ? await window.API.getServiceSheetById(token(), existing[0].id, true)
-          : existing[0];
+      if (existing.items.length > 0) {
+        sheet = await window.API.getServiceSheetById(token(), existing.items[0].id, fromScanner);
       } else {
         let showCompanyDetails = false;
         if (!fromScanner) {
@@ -1852,11 +2003,15 @@
 
   searchEl?.addEventListener('input', () => {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => loadSheets(''), 250);
+    searchTimer = setTimeout(() => {
+      servicePage = 1;
+      loadSheets('');
+    }, 250);
   });
 
   sortEl?.addEventListener('change', () => {
     syncSortFromSelect(false);
+    servicePage = 1;
     loadSheets(selectedSheet?.id || '');
   });
   paymentFilterButtons.forEach((button) => {
@@ -1864,7 +2019,7 @@
       const next = button.dataset.servicePaymentFilter || '';
       paymentFilter = paymentFilter === next ? '' : next;
       updateServiceChipState();
-      renderList();
+      servicePage = 1;
       loadSheets(selectedSheet?.id || '');
     });
   });
@@ -1884,11 +2039,33 @@
       updateColumnHeaderState();
       updateServiceChipState();
       updateSearchPlaceholder();
-      renderList();
+      servicePage = 1;
       loadSheets(selectedSheet?.id || '');
     });
   });
   refreshBtn?.addEventListener('click', () => loadSheets(selectedSheet?.id || ''));
+  pagePrevBtn?.addEventListener('click', () => {
+    if (servicePage <= 1) return;
+    loadSheets('', { page: servicePage - 1, preferCache: true });
+  });
+  pageNextBtn?.addEventListener('click', () => {
+    if (!serviceHasMore) return;
+    loadSheets('', { page: servicePage + 1, preferCache: true });
+  });
+  pageSizeButtons.forEach((button) => button.addEventListener('click', () => {
+    pageSizeSelectEl?.removeAttribute('open');
+    const nextSize = Number(button.dataset.servicePageSize);
+    if (!SERVICE_PAGE_SIZES.includes(nextSize) || nextSize === servicePageSize) return;
+    servicePageSize = nextSize;
+    servicePage = 1;
+    invalidateServicePageCache();
+    localStorage.setItem(SERVICE_PAGE_SIZE_KEY, String(nextSize));
+    updateCount();
+    loadSheets('');
+  }));
+  document.addEventListener('click', (event) => {
+    if (pageSizeSelectEl?.open && !pageSizeSelectEl.contains(event.target)) pageSizeSelectEl.removeAttribute('open');
+  });
   newBtn?.addEventListener('click', () => renderEditor(blankSheet()));
   columnHeaderButtons.forEach((button) => {
     button.addEventListener('click', () => setColumnSort(button.dataset.serviceColumn || ''));
@@ -1905,19 +2082,72 @@
   window.openServiceSheetForClient = openClientSheet;
 
   window.addEventListener('tab-change', ({ detail }) => {
-    if (detail !== 'service') return;
+    if (detail !== 'service') {
+      cancelScheduledServiceRefresh();
+      return;
+    }
     const scannedClient = window.SCANNER_CLIENT;
     if (scannedClient) {
       openClientSheet(scannedClient, false, true);
       return;
     }
-    if (!sheets.length && !loading) loadSheets();
+    if (!sheetsHaveLoaded && !loading) void loadSheets('', { preferCache: true });
+    else scheduleServiceIdleRefresh();
   });
 
-  window.addEventListener('service-sheets-change', () => loadSheets(selectedSheet?.id || ''));
+  window.addEventListener('service-sheets-change', () => {
+    invalidateServicePageCache();
+    loadSheets(selectedSheet?.id || '');
+  });
   window.addEventListener('clients-change', () => {
     if (document.getElementById('tab-service')?.classList.contains('active')) {
+      invalidateServicePageCache();
       loadSheets(selectedSheet?.id || '');
+    }
+  });
+
+  window.addEventListener('api-config-change', () => {
+    const currentToken = String(window.AUTH?.getToken?.() || '');
+    serviceCacheToken = currentToken;
+    serviceLoadRevision += 1;
+    loading = false;
+    invalidateServicePageCache();
+    sheets = [];
+    selectedSheet = null;
+    sheetsDataVersion = '';
+    sheetsHaveLoaded = false;
+    servicePage = 1;
+    serviceTotal = 0;
+    serviceHasMore = false;
+    expenseCategories = [];
+    if (isModalOpen()) closeModal();
+    updateCount();
+    if (listEl) listEl.innerHTML = tableMessage(currentToken ? 'Se incarca...' : 'Autentificare necesara.');
+    if (currentToken && isServiceTabActive() && window.AUTH?.canViewServiceSheets?.()) {
+      void loadSheets('');
+    }
+  });
+
+  window.addEventListener('auth-change', (event) => {
+    const nextToken = String(event.detail?.token || '');
+    if (nextToken === serviceCacheToken) return;
+    serviceCacheToken = nextToken;
+    serviceLoadRevision += 1;
+    loading = false;
+    invalidateServicePageCache();
+    sheets = [];
+    selectedSheet = null;
+    sheetsDataVersion = '';
+    sheetsHaveLoaded = false;
+    servicePage = 1;
+    serviceTotal = 0;
+    serviceHasMore = false;
+    expenseCategories = [];
+    if (isModalOpen()) closeModal();
+    updateCount();
+    if (listEl) listEl.innerHTML = tableMessage(nextToken ? 'Se incarca...' : 'Autentificare necesara.');
+    if (nextToken && document.getElementById('tab-service')?.classList.contains('active') && window.AUTH?.canViewServiceSheets?.()) {
+      void loadSheets('', { preferCache: true });
     }
   });
 

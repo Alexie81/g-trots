@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Building2, Check, Landmark, MapPin, Save, ShieldCheck, Stamp, Trash2, Upload } from 'lucide-react-native';
+import { Building2, Check, Landmark, MapPin, Pencil, Plus, Save, ShieldCheck, Stamp, Trash2, Upload, X } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { ShopCompanySettings, shopApi } from '@/services/shopApi';
+import { ShopCompanySettings, ShopReceiptLocation, shopApi } from '@/services/shopApi';
 
 const FieldFocusContext = React.createContext<((target: number) => void) | undefined>(undefined);
 
@@ -16,6 +16,10 @@ export default function ShopCompanySettingsManager({ onFieldFocus }: { onFieldFo
   const [companies, setCompanies] = useState<ShopCompanySettings[]>([]);
   const [company, setCompany] = useState<ShopCompanySettings>(emptyCompany());
   const [stampPreview, setStampPreview] = useState<string | null>(null);
+  const [receiptLocations, setReceiptLocations] = useState<ShopReceiptLocation[]>([]);
+  const [editingReceiptLocationId, setEditingReceiptLocationId] = useState<string | null>(null);
+  const [receiptDraft, setReceiptDraft] = useState<Omit<ShopReceiptLocation, 'id'> | null>(null);
+  const [receiptSaving, setReceiptSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -27,8 +31,9 @@ export default function ShopCompanySettingsManager({ onFieldFocus }: { onFieldFo
     if (!token) return;
     setLoading(true);
     try {
-      const list = await shopApi.listCompanySettings(token);
+      const [list, locations] = await Promise.all([shopApi.listCompanySettings(token), shopApi.listReceiptLocations(token, preferredId)]);
       setCompanies(list);
+      setReceiptLocations(locations);
       selectCompany(list.find((item) => item.id === preferredId) || list.find((item) => item.is_default) || list[0] || emptyCompany());
     } catch (error) { Alert.alert('Firmele nu s-au putut încărca', error instanceof Error ? error.message : 'Încearcă din nou.'); }
     finally { setLoading(false); }
@@ -65,6 +70,34 @@ export default function ShopCompanySettingsManager({ onFieldFocus }: { onFieldFo
       catch (error) { Alert.alert('Firma nu s-a putut șterge', error instanceof Error ? error.message : 'Încearcă din nou.'); }
     } }]);
   };
+  const newReceiptLocation = () => {
+    if (!company.id) return Alert.alert('Salvează firma', 'Salvează mai întâi datele firmei.');
+    setEditingReceiptLocationId(null);
+    setReceiptDraft({ company_id: company.id, name: '', address: '', city: '', county: '', postal_code: '', is_default: receiptLocations.length === 0, sort_order: receiptLocations.length });
+  };
+  const editReceiptLocation = (location: ShopReceiptLocation) => {
+    setEditingReceiptLocationId(location.id);
+    setReceiptDraft({ ...location });
+  };
+  const saveReceiptLocation = async () => {
+    if (!token || !receiptDraft || receiptSaving) return;
+    if (!receiptDraft.name.trim()) return Alert.alert('Denumire obligatorie', 'Completează denumirea punctului de recepție.');
+    setReceiptSaving(true);
+    try {
+      if (editingReceiptLocationId) await shopApi.updateReceiptLocation(token, editingReceiptLocationId, receiptDraft);
+      else await shopApi.createReceiptLocation(token, receiptDraft);
+      setReceiptDraft(null); setEditingReceiptLocationId(null);
+      setReceiptLocations(await shopApi.listReceiptLocations(token, company.id));
+    } catch (error) { Alert.alert('Punctul nu s-a putut salva', error instanceof Error ? error.message : 'Încearcă din nou.'); }
+    finally { setReceiptSaving(false); }
+  };
+  const deleteReceiptLocation = (location: ShopReceiptLocation) => {
+    if (!token) return;
+    Alert.alert('Ștergi punctul de recepție?', `„${location.name}” nu va mai putea fi ales pe NIR-uri noi. Documentele existente își păstrează locul salvat.`, [{ text: 'Renunță', style: 'cancel' }, { text: 'Șterge', style: 'destructive', onPress: async () => {
+      try { await shopApi.deleteReceiptLocation(token, location.id); setReceiptLocations(await shopApi.listReceiptLocations(token, company.id)); }
+      catch (error) { Alert.alert('Punctul nu s-a putut șterge', error instanceof Error ? error.message : 'Încearcă din nou.'); }
+    } }]);
+  };
 
   if (loading) return <View style={styles.loading}><ActivityIndicator color="#FE8C19" /><Text style={styles.loadingText}>Se încarcă firmele</Text></View>;
   return <FieldFocusContext.Provider value={onFieldFocus}><View style={styles.page}>
@@ -85,6 +118,11 @@ export default function ShopCompanySettingsManager({ onFieldFocus }: { onFieldFo
       <Row><Field label="COD POȘTAL" value={company.postal_code} onChangeText={(value) => update('postal_code', value)} /><Field label="ȚARĂ" value={company.country} onChangeText={(value) => update('country', value)} /></Row>
       <Row><Field label="E-MAIL" value={company.email} onChangeText={(value) => update('email', value)} keyboardType="email-address" autoCapitalize="none" /><Field label="TELEFON" value={company.phone} onChangeText={(value) => update('phone', value)} keyboardType="phone-pad" /></Row>
       <Field label="WEBSITE" value={company.website} onChangeText={(value) => update('website', value)} autoCapitalize="none" />
+    </Section>
+    <Section Icon={MapPin} title="Puncte de recepție" description="Locurile fizice care pot fi selectate pe NIR-uri.">
+      <View style={styles.receiptHeader}><View style={styles.defaultCopy}><Text style={styles.toggleTitle}>Locuri disponibile</Text><Text style={styles.toggleText}>Punctul implicit este ales automat pe orice NIR nou.</Text></View><TouchableOpacity style={styles.receiptAdd} onPress={newReceiptLocation}><Plus size={17} color="#1A0B01" /><Text style={styles.receiptAddText}>Adaugă</Text></TouchableOpacity></View>
+      {receiptLocations.map((location) => <View key={location.id} style={[styles.receiptCard, location.is_default && styles.receiptCardDefault]}><View style={styles.receiptPin}><MapPin size={18} color={location.is_default ? '#4ADE80' : '#FEA13B'} /></View><View style={styles.receiptCopy}><View style={styles.receiptTitleRow}><Text style={styles.receiptTitle}>{location.name}</Text>{location.is_default ? <Text style={styles.receiptDefaultBadge}>IMPLICIT</Text> : null}</View><Text style={styles.receiptMeta}>{[location.address, location.city, location.county, location.postal_code].filter(Boolean).join(', ') || 'Fără adresă detaliată'}</Text></View><TouchableOpacity style={styles.receiptIconButton} onPress={() => editReceiptLocation(location)}><Pencil size={16} color="#C8C0C6" /></TouchableOpacity><TouchableOpacity style={styles.receiptDeleteButton} onPress={() => deleteReceiptLocation(location)}><Trash2 size={16} color="#FB7185" /></TouchableOpacity></View>)}
+      {receiptDraft ? <View style={styles.receiptEditor}><View style={styles.receiptEditorHead}><View><Text style={styles.receiptEditorTitle}>{editingReceiptLocationId ? 'Editează punctul' : 'Punct nou'}</Text><Text style={styles.receiptEditorText}>Denumirea și adresa vor apărea în selectorul NIR.</Text></View><TouchableOpacity style={styles.receiptClose} onPress={() => { setReceiptDraft(null); setEditingReceiptLocationId(null); }}><X size={18} color="#AAA2A8" /></TouchableOpacity></View><Field label="DENUMIRE *" value={receiptDraft.name} onChangeText={(name) => setReceiptDraft({ ...receiptDraft, name })} placeholder="Ex: Gestiune principală" /><Field label="ADRESĂ" value={receiptDraft.address} onChangeText={(address) => setReceiptDraft({ ...receiptDraft, address })} /><Row><Field label="LOCALITATE" value={receiptDraft.city} onChangeText={(city) => setReceiptDraft({ ...receiptDraft, city })} /><Field label="JUDEȚ" value={receiptDraft.county} onChangeText={(county) => setReceiptDraft({ ...receiptDraft, county })} /></Row><Row><Field label="COD POȘTAL" value={receiptDraft.postal_code} onChangeText={(postal_code) => setReceiptDraft({ ...receiptDraft, postal_code })} /><View style={styles.receiptDefaultToggle}><View style={styles.defaultCopy}><Text style={styles.toggleTitle}>Punct implicit</Text><Text style={styles.toggleText}>Selectat automat pe NIR.</Text></View><Switch value={receiptDraft.is_default} onValueChange={(is_default) => setReceiptDraft({ ...receiptDraft, is_default })} trackColor={{ false: '#3B363D', true: '#24563F' }} thumbColor={receiptDraft.is_default ? '#4ADE80' : '#8D858E'} /></View></Row><TouchableOpacity disabled={receiptSaving} style={[styles.receiptSave, receiptSaving && styles.disabled]} onPress={() => void saveReceiptLocation()}>{receiptSaving ? <ActivityIndicator color="#1A0B01" /> : <><Save size={17} color="#1A0B01" /><Text style={styles.receiptSaveText}>Salvează punctul</Text></>}</TouchableOpacity></View> : null}
     </Section>
     <Section Icon={Landmark} title="Date bancare" description="Informații folosite în documentele financiare.">
       <Row><Field label="BANCA" value={company.bank_name} onChangeText={(value) => update('bank_name', value)} /><Field label="IBAN" value={company.iban} onChangeText={(value) => update('iban', value.toUpperCase().replace(/\s/g, ''))} autoCapitalize="characters" /></Row>
@@ -110,5 +148,6 @@ const styles = StyleSheet.create({
   toggle: { minHeight: 65, padding: 11, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#353138', borderRadius: 17, backgroundColor: '#201D22' }, toggleTitle: { color: '#FFF', fontSize: 11, fontWeight: '900' }, toggleText: { marginTop: 3, color: '#777079', fontSize: 9 },
   vatRateCard: { minHeight: 74, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#774816', borderRadius: 18, backgroundColor: '#291D13' }, vatRateInput: { width: 92, height: 48, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#A6601B', borderRadius: 14, backgroundColor: '#130F0C' }, vatRateText: { flex: 1, color: '#FEA13B', fontSize: 17, fontWeight: '900', textAlign: 'right' }, vatRateSuffix: { marginLeft: 4, color: '#FEA13B', fontSize: 13, fontWeight: '900' },
   stampRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 }, stampPreview: { width: 150, height: 110, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#484149', borderRadius: 18, backgroundColor: '#F2EEE8' }, stampImage: { width: '100%', height: '100%' }, stampActions: { minWidth: 180, flex: 1, justifyContent: 'center', gap: 8 }, stampButton: { minHeight: 48, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#785128', borderRadius: 15, backgroundColor: '#2B2017' }, stampDelete: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, backgroundColor: '#3A1E26' },
+  receiptHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 }, receiptAdd: { minHeight: 41, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 13, backgroundColor: '#FE8C19' }, receiptAddText: { color: '#1A0B01', fontSize: 10, fontWeight: '900' }, receiptCard: { minHeight: 72, padding: 10, flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: 1, borderColor: '#39343B', borderRadius: 17, backgroundColor: '#151317' }, receiptCardDefault: { borderColor: '#315B43', backgroundColor: '#16221C' }, receiptPin: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: '#FFFFFF0A' }, receiptCopy: { minWidth: 0, flex: 1 }, receiptTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 }, receiptTitle: { color: '#FFF', fontSize: 11, fontWeight: '900' }, receiptDefaultBadge: { paddingHorizontal: 6, paddingVertical: 3, overflow: 'hidden', borderRadius: 6, color: '#4ADE80', backgroundColor: '#21452F', fontSize: 7, fontWeight: '900' }, receiptMeta: { marginTop: 4, color: '#827A82', fontSize: 9, lineHeight: 13 }, receiptIconButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#29252B' }, receiptDeleteButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#351D24' }, receiptEditor: { padding: 12, gap: 10, borderWidth: 1, borderColor: '#65401F', borderRadius: 18, backgroundColor: '#211912' }, receiptEditorHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, receiptEditorTitle: { color: '#FFF', fontSize: 13, fontWeight: '900' }, receiptEditorText: { marginTop: 3, color: '#8A817A', fontSize: 9 }, receiptClose: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#2B272B' }, receiptDefaultToggle: { minWidth: 220, minHeight: 66, padding: 11, flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#3C373E', borderRadius: 15, backgroundColor: '#151317' }, receiptSave: { minHeight: 49, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 15, backgroundColor: '#FE8C19' }, receiptSaveText: { color: '#1A0B01', fontSize: 11, fontWeight: '900' },
   actions: { flexDirection: 'row', gap: 8 }, save: { minHeight: 59, paddingLeft: 18, paddingRight: 6, flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 19, backgroundColor: '#FE8C19' }, disabled: { opacity: .62 }, saveText: { color: '#1A0B01', fontSize: 12, fontWeight: '900' }, saveIcon: { width: 47, height: 47, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: '#FFFFFF42' }, deleteCompany: { width: 59, height: 59, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: '#3A1D25' },
 });

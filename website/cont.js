@@ -12,6 +12,8 @@
     processing: ["În pregătire", "Produsele sunt pregătite pentru expediere."],
     shipped: ["Predată curierului", "Pachetul este în drum spre tine."],
     completed: ["Livrată", "Comanda a ajuns la destinație."],
+    return_requested: ["Retur solicitat", "Solicitarea de retur este în curs de verificare."],
+    return_confirmed: ["Retur confirmat", "Returul a fost confirmat și urmează rambursarea."],
     refunded: ["Rambursată", "Valoarea comenzii a fost rambursată."],
     cancelled: ["Anulată", "Comanda nu mai este procesată."]
   };
@@ -23,6 +25,7 @@
   const formField = (form, name) => form?.elements?.namedItem(name) || null;
   const safeImage = value => { try { const url = new URL(String(value || ""), location.origin); return ["http:", "https:"].includes(url.protocol) ? url.href : ""; } catch { return ""; } };
   const firstName = name => String(name || "client").trim().split(/\s+/)[0] || "client";
+  const orderCustomerDisplayName = order => String(order?.customer_display_name || (order?.customer_type === "company" ? order?.company_name : order?.customer_name) || "").trim();
 
   function shopDeviceToken() {
     try {
@@ -367,7 +370,7 @@
 
   function renderOrderDetail(order) {
     const stages = ["new", "confirmed", "processing", "shipped", "completed"];
-    const currentIndex = stages.indexOf(order.status);
+    const currentIndex = ["return_requested", "return_confirmed", "refunded"].includes(order.status) ? stages.length - 1 : stages.indexOf(order.status);
     const isProductPromotion = order.promotion_scope === "product";
     const productRows = order.items.map(item => {
       const image = safeImage(item.image_url);
@@ -386,8 +389,10 @@
     const hasVat = Boolean(order.vat_payer);
     const subtotalLabel = `${isProductPromotion && discount > 0 ? "Subtotal după reduceri" : "Subtotal"}${hasVat ? " (TVA inclus)" : ""}`;
     const subtotal = Number(order.subtotal || 0) - (isProductPromotion ? discount : 0);
-    const companyBlock = order.customer_type === "company" ? `<section class="order-company"><h3><span class="customer-type-badge is-company">PJ</span> PERSOANĂ JURIDICĂ</h3><p><strong>${escapeHtml(order.company_name)}</strong></p><p>CUI/CIF: ${escapeHtml(order.company_cui)} · RC: ${escapeHtml(order.company_registration_number)}</p><p>${escapeHtml(order.company_address)}</p></section>` : `<section class="order-company is-individual"><h3><span class="customer-type-badge">PF</span> PERSOANĂ FIZICĂ</h3><p>Comandă plasată pe numele <strong>${escapeHtml(order.customer_name)}</strong>.</p></section>`;
-    return `<div class="order-detail"><header class="order-detail-head"><img class="order-detail-logo" src="assets/logo.png" alt=""><span><small>REZUMAT COMANDĂ</small><strong>${escapeHtml(order.order_number)}</strong></span><em class="order-status-pill">${escapeHtml(orderStatus(order)[0])}</em></header><div class="order-products">${productRows}</div><div class="order-totals"><p><span>${subtotalLabel}</span><b>${escapeHtml(money(subtotal))}</b></p>${discountRow}<p><span>Livrare · ${escapeHtml(order.shipping_method_name)}</span><b>${escapeHtml(money(order.shipping_cost))}</b></p><p><span>Plată · ${order.payment_method === "card" ? "Card online" : "Ramburs la curier"}</span><b>${escapeHtml(order.payment_status === "paid" ? "Plătită" : "În așteptare")}</b></p><p class="total"><span>Total de plată${hasVat ? " (TVA inclus)" : ""}</span><b>${escapeHtml(money(order.total))}</b></p></div>${companyBlock}<section class="order-delivery"><h3>LIVRARE</h3><p><strong>${escapeHtml(order.customer_name)}</strong> · ${escapeHtml(order.customer_phone)}</p><p>${escapeHtml(order.address)}, ${escapeHtml(order.city)}, ${escapeHtml(order.county || "")}${order.postal_code ? ` · ${escapeHtml(order.postal_code)}` : ""}</p></section><div class="order-timeline">${timeline}</div>${order.tracking_token ? `<a class="track-order-button" href="/urmarire-comanda?token=${encodeURIComponent(order.tracking_token)}"><span>Urmărește comanda</span><b>›</b></a>` : ""}</div>`;
+    const displayName = orderCustomerDisplayName(order);
+    const contactName = order.customer_contact_name || order.customer_name || "";
+    const companyBlock = order.customer_type === "company" ? `<section class="order-company"><h3><span class="customer-type-badge is-company">PJ</span> PERSOANĂ JURIDICĂ</h3><p><strong>${escapeHtml(displayName)}</strong></p><p>Persoană de contact: ${escapeHtml(contactName)}</p><p>CUI/CIF: ${escapeHtml(order.company_cui)} · RC: ${escapeHtml(order.company_registration_number)}</p><p>${escapeHtml(order.company_address)}</p></section>` : `<section class="order-company is-individual"><h3><span class="customer-type-badge">PF</span> PERSOANĂ FIZICĂ</h3><p>Comandă plasată pe numele <strong>${escapeHtml(displayName)}</strong>.</p></section>`;
+    return `<div class="order-detail"><header class="order-detail-head"><img class="order-detail-logo" src="assets/logo.png" alt=""><span><small>REZUMAT COMANDĂ</small><strong>${escapeHtml(order.order_number)}</strong></span><em class="order-status-pill">${escapeHtml(orderStatus(order)[0])}</em></header><div class="order-products">${productRows}</div><div class="order-totals"><p><span>${subtotalLabel}</span><b>${escapeHtml(money(subtotal))}</b></p>${discountRow}<p><span>Livrare · ${escapeHtml(order.shipping_method_name)}</span><b>${escapeHtml(money(order.shipping_cost))}</b></p><p><span>Plată · ${order.payment_method === "card" ? "Card online" : "Ramburs la curier"}</span><b>${escapeHtml(order.payment_status === "paid" ? "Plătită" : "În așteptare")}</b></p><p class="total"><span>Total de plată${hasVat ? " (TVA inclus)" : ""}</span><b>${escapeHtml(money(order.total))}</b></p></div>${companyBlock}<section class="order-delivery"><h3>LIVRARE</h3><p><strong>${escapeHtml(contactName || displayName)}</strong> · ${escapeHtml(order.customer_phone)}</p><p>${escapeHtml(order.address)}, ${escapeHtml(order.city)}, ${escapeHtml(order.county || "")}${order.postal_code ? ` · ${escapeHtml(order.postal_code)}` : ""}</p></section><div class="order-timeline">${timeline}</div>${order.tracking_token ? `<a class="track-order-button" href="/urmarire-comanda?token=${encodeURIComponent(order.tracking_token)}"><span>Urmărește comanda</span><b>›</b></a>` : ""}</div>`;
   }
 
   function openOrder(id) {

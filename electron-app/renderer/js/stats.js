@@ -12,6 +12,11 @@
   let currentStats = null;
   let currentChartSeries = [];
   let loading = false;
+  let statsLoadedAt = 0;
+  let statsLoadRevision = 0;
+  let statsIdleHandle = null;
+  let statsToken = window.AUTH?.getToken?.() || '';
+  const STATS_TTL_MS = 30000;
   let chartMode = 'auto';
   let chartVisibility = {
     clients: true,
@@ -525,12 +530,14 @@
     URL.revokeObjectURL(link.href);
   }
 
-  async function load() {
-    if (loading) return;
+  async function load(options = {}) {
+    const quiet = Boolean(options?.quiet && currentStats);
+    const revision = ++statsLoadRevision;
     loading = true;
-    contentEl.innerHTML = '<div class="stats-loading"><span></span><strong>Pregatim imaginea completa...</strong><small>Calculam activitatea pentru perioada selectata</small></div>';
+    if (!quiet) contentEl.innerHTML = '<div class="stats-loading"><span></span><strong>Pregatim imaginea completa...</strong><small>Calculam activitatea pentru perioada selectata</small></div>';
     try {
       const stats = await window.API.getStats(currentQuery);
+      if (revision !== statsLoadRevision) return;
       const breakdownReady = (stats.collaboratorStats || []).every(item =>
         item.paidCost !== undefined && item.onHoldCost !== undefined
       );
@@ -543,12 +550,34 @@
           }));
         }
       }
+      if (revision !== statsLoadRevision) return;
       render(stats);
+      statsLoadedAt = Date.now();
     } catch (error) {
-      contentEl.innerHTML = `<div class="stats-error"><strong>Statisticile nu au putut fi incarcate</strong><span>${escapeHtml(error.message || 'Eroare necunoscuta')}</span><button type="button" class="btn-primary" id="stats-retry">Reincearca</button></div>`;
+      if (revision !== statsLoadRevision) return;
+      if (!quiet) contentEl.innerHTML = `<div class="stats-error"><strong>Statisticile nu au putut fi incarcate</strong><span>${escapeHtml(error.message || 'Eroare necunoscuta')}</span><button type="button" class="btn-primary" id="stats-retry">Reincearca</button></div>`;
     } finally {
-      loading = false;
+      if (revision === statsLoadRevision) loading = false;
     }
+  }
+
+  function cancelScheduledStatsLoad() {
+    if (statsIdleHandle === null) return;
+    if ('cancelIdleCallback' in window) window.cancelIdleCallback(statsIdleHandle);
+    else clearTimeout(statsIdleHandle);
+    statsIdleHandle = null;
+  }
+
+  function scheduleStatsLoad(quiet) {
+    cancelScheduledStatsLoad();
+    const run = () => {
+      statsIdleHandle = null;
+      if (!document.getElementById('tab-stats')?.classList.contains('active')) return;
+      void load({ quiet });
+    };
+    statsIdleHandle = 'requestIdleCallback' in window
+      ? window.requestIdleCallback(run, { timeout: 700 })
+      : window.setTimeout(run, 40);
   }
 
   function selectPeriod(period) {
@@ -647,6 +676,25 @@
   });
 
   window.addEventListener('tab-change', ({ detail }) => {
-    if (detail === 'stats') load();
+    if (detail !== 'stats') {
+      cancelScheduledStatsLoad();
+      return;
+    }
+    if (currentStats && Date.now() - statsLoadedAt < STATS_TTL_MS) return;
+    if (currentStats) scheduleStatsLoad(true);
+    else void load();
+  });
+
+  window.addEventListener('auth-change', (event) => {
+    const nextToken = String(event.detail?.token || '');
+    if (nextToken === statsToken) return;
+    statsToken = nextToken;
+    statsLoadRevision += 1;
+    loading = false;
+    statsLoadedAt = 0;
+    currentStats = null;
+    currentChartSeries = [];
+    contentEl.innerHTML = '<div class="stats-loading"><strong>Statisticile nu au fost incarcate.</strong></div>';
+    if (nextToken && document.getElementById('tab-stats')?.classList.contains('active')) void load();
   });
 })();

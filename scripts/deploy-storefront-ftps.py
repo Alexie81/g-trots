@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from ftplib import FTP_TLS, error_perm
 from pathlib import Path
+import argparse
 import os
 import ssl
 
@@ -12,11 +13,18 @@ WEBSITE_ROOT = PROJECT_ROOT / "website"
 REMOTE_ROOT = "/g-trots.ro"
 FILES = (
     "login.html",
+    "cont.html",
     "cont-nou.html",
     "cont.js",
     "cont.css",
     "checkout.html",
     "checkout.js",
+    "checkout-status.js",
+    "plata-finalizata.html",
+    "plata-esuata.html",
+    "urmarire-comanda.html",
+    "urmarire-comanda.css",
+    "urmarire-comanda.js",
 )
 
 
@@ -35,9 +43,17 @@ def connect() -> FTP_TLS:
     return ftp
 
 
+def selected_files() -> tuple[str, ...]:
+    parser = argparse.ArgumentParser(description="Publică fișiere storefront prin FTPS.")
+    parser.add_argument("--files", nargs="+", choices=FILES, help="Publică doar fișierele indicate.")
+    arguments = parser.parse_args()
+    return tuple(arguments.files) if arguments.files else FILES
+
+
 def main() -> None:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    local_files = {name: WEBSITE_ROOT / name for name in FILES}
+    files = selected_files()
+    local_files = {name: WEBSITE_ROOT / name for name in files}
     for name, path in local_files.items():
         if not path.is_file():
             raise SystemExit(f"Fisier local lipsa: {name}")
@@ -57,7 +73,7 @@ def main() -> None:
             temporary_names[name] = temporary
             print(f"Verificat: {name} ({remote_size} bytes)", flush=True)
 
-        for name in FILES:
+        for name in files:
             backup = f"{name}.bak-codex-storefront-{timestamp}"
             try:
                 ftp.rename(name, backup)

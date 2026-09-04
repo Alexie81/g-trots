@@ -41,7 +41,7 @@ const dateTime = (value?: string | null) => value
   : 'Nicio activitate';
 
 const orderStatus: Record<string, string> = {
-  new: 'În procesare', confirmed: 'Confirmată', processing: 'În pregătire', shipped: 'Predată curierului', completed: 'Livrată', refunded: 'Rambursată', cancelled: 'Anulată',
+  new: 'În procesare', confirmed: 'Confirmată', processing: 'În pregătire', shipped: 'Predată curierului', completed: 'Livrată', return_requested: 'Retur solicitat', return_refused: 'Retur refuzat', return_confirmed: 'Retur confirmat', refunded: 'Rambursată', cancelled: 'Anulată',
 };
 const CUSTOMER_PAGE_SIZE = 8;
 

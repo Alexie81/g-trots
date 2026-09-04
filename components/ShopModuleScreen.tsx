@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -13,18 +15,37 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { Gesture, GestureDetector, type NativeGesture } from 'react-native-gesture-handler';
+import Reanimated, {
+  cancelAnimation,
+  Easing as ReanimatedEasing,
+  runOnJS,
+  useAnimatedProps,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as SecureStore from 'expo-secure-store';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  BarChart3,
   Boxes,
+  CalendarDays,
   Camera,
+  Check,
+  ChevronDown,
   ChevronRight,
+  CircleHelp,
   CircleEllipsis,
-  CloudUpload,
   CreditCard,
   FileText,
   FileCog,
@@ -46,7 +67,6 @@ import {
   Sparkles,
   Tags,
   Trash2,
-  TrendingUp,
   Truck,
   UsersRound,
   Zap,
@@ -64,11 +84,15 @@ import ShopNirManager from '@/components/ShopNirManager';
 import ShopInvoiceConfigurator from '@/components/ShopInvoiceConfigurator';
 import ShopInvoicesManager from '@/components/ShopInvoicesManager';
 import ShopAutomationsManager from '@/components/ShopAutomationsManager';
+import ShopSpvManager from '@/components/ShopSpvManager';
+import ShopNotificationsButton from '@/components/ShopNotificationsButton';
+import type { ShopNotification } from '@/services/shopApi';
 import { ShopPaymentMethodsManager, ShopProductSourcesManager, ShopShippingManager } from '@/components/ShopMoreManagers';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   shopApi,
+  shopOrderCustomerDisplayName,
   ShopBrand,
   ShopBrandPayload,
   ShopCategory,
@@ -83,12 +107,140 @@ type SettingsView = 'sources' | 'suppliers' | 'nirs' | 'invoices' | 'invoice-con
 type PrimaryTab = 'home' | 'orders' | 'products' | 'inventory' | 'more';
 type ShopView = PrimaryTab | CatalogView | SettingsView;
 type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; item: ShopBrand } | { type: 'manufacturer'; item: ShopManufacturer };
+type DashboardSeriesKey = 'revenue' | 'returns' | 'orders' | 'acquisitions' | 'profit';
+type DashboardPeriod = '24h' | 'today' | 'yesterday' | '7d' | '14d' | '28d' | '30d' | '3m' | '6m' | '12m' | '16m' | 'current_week_sun' | 'current_week_mon' | 'previous_week_sun' | 'previous_week_mon' | 'current_month' | 'previous_month' | 'current_year' | 'previous_year' | 'all' | 'custom';
+type DashboardGranularity = 'hour' | 'day' | 'week' | 'month';
+const AnimatedSvgCircle = Animated.createAnimatedComponent(Circle);
+const ReanimatedSvgPath = Reanimated.createAnimatedComponent(Path);
+function AnafShieldIcon({ size = 24 }: { size?: number; color?: string }) {
+  const frameSize = size + 4;
+  return <View style={{ width: frameSize, height: frameSize, overflow: 'hidden', alignItems: 'center', justifyContent: 'flex-start', borderRadius: Math.max(5, frameSize * 0.2), backgroundColor: '#FFFFFF' }}><Image source={require('../assets/images/anaf-shield.png')} resizeMode="contain" style={{ width: size * 0.78, height: size * 1.34 }} /></View>;
+}
+const dashboardGranularityLabels: Record<DashboardGranularity, string> = { hour: 'Orar', day: 'Zilnic', week: 'Săptămânal', month: 'Lunar' };
+const dashboardGranularityShortLabels: Record<DashboardGranularity, string> = { hour: 'OR', day: 'ZI', week: 'SĂP', month: 'LUN' };
+const dashboardGranularityDescriptions: Record<DashboardGranularity, string> = { hour: 'Detaliu pe fiecare oră', day: 'Detaliu pentru fiecare zi', week: 'Rezumat pe săptămâni', month: 'Rezumat pe luni' };
+const shopMoneyFormatter = new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const shopCompactMoneyFormatter = new Intl.NumberFormat('ro-RO', { notation: 'compact', maximumFractionDigits: 2 });
+const dashboardMobilePeriods: [DashboardPeriod, string][] = [
+  ['24h', 'Ultimele 24 de ore'],
+  ['today', 'Astăzi'],
+  ['yesterday', 'Ieri'],
+  ['7d', 'Ultimele 7 zile'],
+  ['14d', 'Ultimele 14 zile'],
+  ['28d', 'Ultimele 28 de zile'],
+  ['30d', 'Ultimele 30 de zile'],
+  ['3m', 'Ultimele 3 luni'],
+  ['6m', 'Ultimele 6 luni'],
+  ['12m', 'Ultimele 12 luni'],
+  ['16m', 'Ultimele 16 luni'],
+  ['current_week_sun', 'Săptămâna aceasta (Du – Azi)'],
+  ['current_week_mon', 'Săptămâna aceasta (Lu – Azi)'],
+  ['previous_week_sun', 'Săptămâna trecută (Du – Sâ)'],
+  ['previous_week_mon', 'Săptămâna trecută (Lu – Du)'],
+  ['current_month', 'Luna aceasta'],
+  ['previous_month', 'Luna trecută'],
+  ['current_year', 'Anul curent'],
+  ['previous_year', 'Anul trecut'],
+  ['all', 'Toată perioada'],
+];
+
+function dashboardRangeDayCount(startDate = '', endDate = '') {
+  if (!isValidIsoDate(startDate) || !isValidIsoDate(endDate)) return 30;
+  const start = localDateFromIso(startDate).getTime();
+  const end = localDateFromIso(endDate).getTime();
+  return Number.isFinite(start) && Number.isFinite(end) ? Math.max(1, Math.round((end - start) / 86400000) + 1) : 30;
+}
+
+function allowedDashboardGranularities(period: DashboardPeriod, startDate = '', endDate = ''): DashboardGranularity[] {
+  if (period === '24h' || period === 'today' || period === 'yesterday') return ['hour'];
+  if (period === '7d' || period === '14d' || period.startsWith('current_week') || period.startsWith('previous_week')) return ['day'];
+  if (period === '28d' || period === '30d' || period === 'current_month' || period === 'previous_month') return ['day', 'week', 'month'];
+  if (period === '3m' || period === '6m' || period === '12m' || period === '16m' || period === 'current_year' || period === 'previous_year' || period === 'all') return ['day', 'week', 'month'];
+  const days = dashboardRangeDayCount(startDate, endDate);
+  if (days <= 14) return ['day'];
+  if (days < 28) return ['day', 'week'];
+  if (days <= 730) return ['day', 'week', 'month'];
+  return ['month'];
+}
+
+function preferredDashboardGranularity(period: DashboardPeriod, startDate = '', endDate = ''): DashboardGranularity {
+  const allowed = allowedDashboardGranularities(period, startDate, endDate);
+  if (allowed.includes('hour')) return 'hour';
+  if (period === '6m' || period === '12m' || period === '16m' || period === 'current_year' || period === 'previous_year' || period === 'all' || (period === 'custom' && dashboardRangeDayCount(startDate, endDate) > 120)) return 'month';
+  if (allowed.includes('day')) return 'day';
+  if (allowed.includes('month')) return 'month';
+  return 'week';
+}
 
 // Revalidarea sesiunii poate reconstrui layout-ul Expo. Pastram sectiunea
 // SHOP activa, astfel incat utilizatorul sa nu fie trimis inapoi pe Acasa.
 let persistedShopView: ShopView = 'home';
+type ShopDashboardSnapshot = {
+  token: string;
+  period: DashboardPeriod;
+  startDate: string;
+  endDate: string;
+  granularity: DashboardGranularity;
+  data: ShopDashboardStats;
+};
+// Pastreaza suficienta rezolutie pentru grafice, fara sa mentina sute sau mii
+// de obiecte SVG in memorie pe telefon. Esantionarea uniforma conserva atat
+// inceputul, cat si sfarsitul intervalului (spre deosebire de un simplu slice).
+const MAX_SNAPSHOT_CHART_ROWS = 240;
+const MAX_SNAPSHOT_RECENT_ORDERS = 5;
+let persistedShopDashboardSnapshot: ShopDashboardSnapshot | null = null;
 const SHOP_VIEW_STORAGE_KEY = 'gtrots.shopView.v2';
+const SHOP_DASHBOARD_PREFERENCES_STORAGE_KEY = 'gtrots.shopDashboardPreferences.v1';
 const shopViews = new Set<ShopView>(['home', 'orders', 'products', 'inventory', 'more', 'categories', 'brands', 'manufacturers', 'sources', 'suppliers', 'nirs', 'invoices', 'invoice-configurator', 'automations', 'spv', 'payments', 'shipping', 'customers', 'discounts', 'company']);
+const dashboardPeriodValues = new Set<DashboardPeriod>(['24h', 'today', 'yesterday', '7d', '14d', '28d', '30d', '3m', '6m', '12m', '16m', 'current_week_sun', 'current_week_mon', 'previous_week_sun', 'previous_week_mon', 'current_month', 'previous_month', 'current_year', 'previous_year', 'all', 'custom']);
+
+function readStoredDashboardPreferences(raw: string | null) {
+  const fallback = { period: '7d' as DashboardPeriod, startDate: '', endDate: '', granularity: 'day' as DashboardGranularity };
+  if (!raw) return fallback;
+  try {
+    const stored = JSON.parse(raw) as { period?: DashboardPeriod; startDate?: string; endDate?: string; granularity?: DashboardGranularity };
+    if (!stored.period || !dashboardPeriodValues.has(stored.period)) return fallback;
+    const validDate = (value?: string) => Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T12:00:00`).getTime()));
+    const startDate = validDate(stored.startDate) ? stored.startDate! : '';
+    const endDate = validDate(stored.endDate) ? stored.endDate! : '';
+    if (stored.period === 'custom' && (!startDate || !endDate || startDate > endDate)) return fallback;
+    const allowed = allowedDashboardGranularities(stored.period, startDate, endDate);
+    const granularity = stored.granularity && allowed.includes(stored.granularity) ? stored.granularity : preferredDashboardGranularity(stored.period, startDate, endDate);
+    return { period: stored.period, startDate: stored.period === 'custom' ? startDate : '', endDate: stored.period === 'custom' ? endDate : '', granularity };
+  } catch {
+    return fallback;
+  }
+}
+
+function compactDashboardSnapshot(data: ShopDashboardStats): ShopDashboardStats {
+  const chartRows = data.daily_stats.length <= MAX_SNAPSHOT_CHART_ROWS
+    ? data.daily_stats
+    : Array.from({ length: MAX_SNAPSHOT_CHART_ROWS }, (_, index) => (
+      data.daily_stats[Math.round(index * (data.daily_stats.length - 1) / (MAX_SNAPSHOT_CHART_ROWS - 1))]
+    ));
+  return {
+    ...data,
+    daily_stats: chartRows.map((row) => ({
+      date: row.date,
+      orders_count: row.orders_count,
+      gross_revenue: row.gross_revenue,
+      returns_count: row.returns_count,
+      returns_total: row.returns_total,
+      revenue: row.revenue,
+      acquisitions: row.acquisitions,
+      cost_of_goods_sold: row.cost_of_goods_sold,
+      profit: row.profit,
+    })),
+    recent_orders: data.recent_orders.slice(0, MAX_SNAPSHOT_RECENT_ORDERS).map((order) => ({
+      ...order,
+      items: [],
+      status_history: undefined,
+      email_notification: undefined,
+      invoice_automation: undefined,
+      invoice: undefined,
+    })),
+  };
+}
 
 const orderStatusLabels: Record<string, string> = {
   new: 'NOUĂ',
@@ -96,6 +248,9 @@ const orderStatusLabels: Record<string, string> = {
   processing: 'ÎN PREGĂTIRE',
   shipped: 'PREDATĂ CURIERULUI',
   completed: 'LIVRATĂ',
+  return_requested: 'RETUR SOLICITAT',
+  return_refused: 'RETUR REFUZAT',
+  return_confirmed: 'RETUR CONFIRMAT',
   refunded: 'RAMBURSATĂ',
   cancelled: 'COMANDĂ ANULATĂ',
 };
@@ -106,16 +261,6 @@ const primaryTabs = [
   { key: 'products', title: 'Produse', Icon: Package },
   { key: 'inventory', title: 'Stocuri', Icon: Boxes },
   { key: 'more', title: 'Mai multe', Icon: CircleEllipsis },
-] as const;
-
-const homeAreas = [
-  { key: 'orders', title: 'Comenzi', description: 'Fluxul comenzilor si statusurile lor.', Icon: ShoppingCart, color: '#38BDF8' },
-  { key: 'products', title: 'Produse', description: 'Catalog, preturi si informatii comerciale.', Icon: Package, color: '#A78BFA' },
-  { key: 'inventory', title: 'Stocuri', description: 'Cantitati, miscari si alerte de stoc.', Icon: Boxes, color: '#22C55E' },
-  { key: 'categories', title: 'Categorii', description: 'Categorii, subcategorii si imagini.', Icon: FolderTree, color: '#FB7185' },
-  { key: 'brands', title: 'Compatibilitati branduri', description: 'Marcile cu care sunt compatibile produsele.', Icon: Tags, color: '#2DD4BF' },
-  { key: 'manufacturers', title: 'Producatori', description: 'Companiile care fabrica produsele.', Icon: Factory, color: '#818CF8' },
-  { key: 'invoices', title: 'Facturi emise', description: 'Documentele emise și situația încasărilor.', Icon: FileText, color: '#F59E0B' },
 ] as const;
 
 const primaryTabDetails = {
@@ -189,15 +334,34 @@ const moreAreaGroups = [
       { key: 'payments', title: 'Metode de plată', description: 'Activează plata cu cardul sau ramburs la curier.', Icon: CreditCard, color: '#A78BFA' },
       { key: 'invoice-configurator', title: 'Configurator factură', description: 'Structura, aspectul și tema facturilor viitoare.', Icon: FileCog, color: '#FB923C' },
       { key: 'automations', title: 'Automatizări', description: 'Emitere și trimitere automată a facturilor.', Icon: Zap, color: '#F59E0B' },
-      { key: 'spv', title: 'SPV / e-Factura', description: 'Conectarea ANAF și trimiterea facturilor vor fi configurate aici.', Icon: CloudUpload, color: '#60A5FA' },
+      { key: 'spv', title: 'SPV - RO e-Factura', description: 'Conectarea ANAF și trimiterea facturilor vor fi configurate aici.', Icon: AnafShieldIcon, color: '#6872A5' },
       { key: 'company', title: 'Datele firmei', description: 'Identitate juridică, adresă, contact și date bancare.', Icon: Building2, color: '#FE8C19' },
     ],
   },
 ] as const;
 
 export default function ShopModuleScreen() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+  const persistedDashboard = persistedShopDashboardSnapshot?.token === token
+    ? persistedShopDashboardSnapshot
+    : null;
+  const prewarmedDashboard = !persistedDashboard && token
+    ? shopApi.peekDashboardStats(token, { period: '7d', granularity: 'day' })
+    : null;
+  const initialDashboardSnapshot = persistedDashboard || (prewarmedDashboard ? {
+    token,
+    period: '7d' as DashboardPeriod,
+    startDate: '',
+    endDate: '',
+    granularity: 'day' as DashboardGranularity,
+    data: compactDashboardSnapshot(prewarmedDashboard),
+  } : null);
+  const [homeGreeting, setHomeGreeting] = useState(() => {
+    const hour = new Date().getHours();
+    return hour < 12 ? 'Bună dimineața' : hour < 18 ? 'Bună ziua' : 'Bună seara';
+  });
   const [view, setView] = useState<ShopView>(persistedShopView);
   const viewRef = useRef<ShopView>(persistedShopView);
   const settingsScrollRef = useRef<ScrollView | null>(null);
@@ -211,8 +375,52 @@ export default function ShopModuleScreen() {
   const [initialOrderId, setInitialOrderId] = useState<string | null>(null);
   const [initialNirId, setInitialNirId] = useState<string | null>(null);
   const [initialInvoiceId, setInitialInvoiceId] = useState<string | null>(null);
-  const [dashboard, setDashboard] = useState<ShopDashboardStats | null>(null);
-  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [dashboard, setDashboard] = useState<ShopDashboardStats | null>(() => initialDashboardSnapshot?.data || null);
+  const [dashboardLoading, setDashboardLoading] = useState(() => !initialDashboardSnapshot);
+  const dashboardLoadedRef = useRef(Boolean(initialDashboardSnapshot));
+  const dashboardRequestRef = useRef(0);
+  const dashboardTooltipDismissRef = useRef<(() => void) | null>(null);
+  const [dashboardPeriod, setDashboardPeriod] = useState<DashboardPeriod>(() => initialDashboardSnapshot?.period || '7d');
+  const [dashboardGranularity, setDashboardGranularity] = useState<DashboardGranularity>(() => initialDashboardSnapshot?.granularity || 'day');
+  const [dashboardGranularityMenu, setDashboardGranularityMenu] = useState(false);
+  const dashboardGranularityTriggerRef = useRef<React.ElementRef<typeof View> | null>(null);
+  const [dashboardGranularityMenuPosition, setDashboardGranularityMenuPosition] = useState({ top: 0, left: 0, width: 214 });
+  const [dashboardStartDate, setDashboardStartDate] = useState(() => initialDashboardSnapshot?.startDate || '');
+  const [dashboardEndDate, setDashboardEndDate] = useState(() => initialDashboardSnapshot?.endDate || '');
+  const [dashboardAppliedStartDate, setDashboardAppliedStartDate] = useState(() => initialDashboardSnapshot?.startDate || '');
+  const [dashboardAppliedEndDate, setDashboardAppliedEndDate] = useState(() => initialDashboardSnapshot?.endDate || '');
+  const [dashboardRangeModal, setDashboardRangeModal] = useState(false);
+  const [dashboardCustomEditor, setDashboardCustomEditor] = useState(false);
+  const [dashboardDatePicker, setDashboardDatePicker] = useState<'start' | 'end' | null>(null);
+  const [dashboardSeries, setDashboardSeries] = useState<DashboardSeriesKey[]>(['revenue', 'returns', 'orders', 'acquisitions', 'profit']);
+  const [dashboardPreferencesReady, setDashboardPreferencesReady] = useState(false);
+  const [dashboardRangeMotion] = useState(() => new Animated.Value(0));
+  const [dashboardCustomMotion] = useState(() => new Animated.Value(0));
+  const [dashboardGranularityMotion] = useState(() => new Animated.Value(0));
+  const [homeEntranceMotion] = useState(() => new Animated.Value(0));
+  const [homeScrollMotion] = useState(() => new Animated.Value(0));
+  const [homePulseMotion] = useState(() => new Animated.Value(0));
+  const [homeWaveMotion] = useState(() => new Animated.Value(0));
+  const homeIconDrawProgress = useSharedValue(0);
+  const homeIconLineAnimatedProps = useAnimatedProps(() => {
+    const progress = Math.min(1, homeIconDrawProgress.value / 0.76);
+    return {
+      opacity: 0.38 + progress * 0.62,
+      strokeDashoffset: 60 * (1 - progress),
+    };
+  });
+  const homeIconArrowAnimatedProps = useAnimatedProps(() => {
+    const progress = Math.max(0, Math.min(1, (homeIconDrawProgress.value - 0.58) / 0.42));
+    return {
+      opacity: progress,
+      strokeDashoffset: 24 * (1 - progress),
+    };
+  });
+  const homeIconMotionStyle = useAnimatedStyle(() => ({
+    opacity: 0.72 + homeIconDrawProgress.value * 0.28,
+    transform: [{ translateY: 4 * (1 - homeIconDrawProgress.value) }],
+  }));
+  const dashboardScrollGesture = useMemo(() => Gesture.Native().disallowInterruption(false), []);
   const [categories, setCategories] = useState<ShopCategory[]>([]);
   const [brands, setBrands] = useState<ShopBrand[]>([]);
   const [manufacturers, setManufacturers] = useState<ShopManufacturer[]>([]);
@@ -256,6 +464,45 @@ export default function ShopModuleScreen() {
     void SecureStore.setItemAsync(SHOP_VIEW_STORAGE_KEY, view).catch(() => {});
   }, [view]);
 
+  useEffect(() => {
+    let active = true;
+    void SecureStore.getItemAsync(SHOP_DASHBOARD_PREFERENCES_STORAGE_KEY)
+      .then((stored) => {
+        if (!active) return;
+        const preferences = readStoredDashboardPreferences(stored);
+        setDashboardPeriod(preferences.period);
+        setDashboardStartDate(preferences.startDate);
+        setDashboardEndDate(preferences.endDate);
+        setDashboardAppliedStartDate(preferences.startDate);
+        setDashboardAppliedEndDate(preferences.endDate);
+        setDashboardGranularity(preferences.granularity);
+      })
+      .catch(() => {})
+      .finally(() => { if (active) setDashboardPreferencesReady(true); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!dashboardPreferencesReady) return;
+    void SecureStore.setItemAsync(SHOP_DASHBOARD_PREFERENCES_STORAGE_KEY, JSON.stringify({
+      period: dashboardPeriod,
+      startDate: dashboardPeriod === 'custom' ? dashboardAppliedStartDate : '',
+      endDate: dashboardPeriod === 'custom' ? dashboardAppliedEndDate : '',
+      granularity: dashboardGranularity,
+    })).catch(() => {});
+  }, [dashboardAppliedEndDate, dashboardAppliedStartDate, dashboardGranularity, dashboardPeriod, dashboardPreferencesReady]);
+
+  useEffect(() => {
+    if (view !== 'home') return;
+    const updateGreeting = () => {
+      const hour = new Date().getHours();
+      setHomeGreeting(hour < 12 ? 'Bună dimineața' : hour < 18 ? 'Bună ziua' : 'Bună seara');
+    };
+    updateGreeting();
+    const timer = setInterval(updateGreeting, 60000);
+    return () => clearInterval(timer);
+  }, [view]);
+
   const loadCatalog = useCallback(async (quiet = false) => {
     if (!token) return;
     if (!quiet) setLoading(true);
@@ -278,13 +525,76 @@ export default function ShopModuleScreen() {
 
   const loadDashboard = useCallback(async () => {
     if (!token) return;
-    setDashboardLoading(true);
-    try { setDashboard(await shopApi.getDashboardStats(token)); }
-    catch { setDashboard(null); }
-    finally { setDashboardLoading(false); }
-  }, [token]);
+    const requestId = ++dashboardRequestRef.current;
+    setDashboardLoading(!dashboardLoadedRef.current);
+    try {
+      const nextDashboard = await shopApi.getDashboardStats(token, { period: dashboardPeriod, start_date: dashboardAppliedStartDate || undefined, end_date: dashboardAppliedEndDate || undefined, granularity: dashboardGranularity });
+      if (requestId !== dashboardRequestRef.current) return;
+      const compactDashboard = compactDashboardSnapshot(nextDashboard);
+      persistedShopDashboardSnapshot = {
+        token,
+        period: dashboardPeriod,
+        startDate: dashboardAppliedStartDate,
+        endDate: dashboardAppliedEndDate,
+        granularity: nextDashboard.range?.granularity || dashboardGranularity,
+        data: compactDashboard,
+      };
+      setDashboard(compactDashboard);
+      if (nextDashboard.range?.granularity && nextDashboard.range.granularity !== dashboardGranularity) setDashboardGranularity(nextDashboard.range.granularity);
+      dashboardLoadedRef.current = true;
+    } catch {
+      if (requestId === dashboardRequestRef.current && !dashboardLoadedRef.current) setDashboard(null);
+    } finally {
+      if (requestId === dashboardRequestRef.current) setDashboardLoading(false);
+    }
+  }, [token, dashboardPeriod, dashboardAppliedStartDate, dashboardAppliedEndDate, dashboardGranularity]);
 
-  useEffect(() => { if (view === 'home') void loadDashboard(); }, [view, loadDashboard]);
+  useEffect(() => { if (view === 'home' && dashboardPreferencesReady) void loadDashboard(); }, [view, loadDashboard, dashboardPreferencesReady]);
+
+  useEffect(() => {
+    if (view !== 'home') return;
+    homeEntranceMotion.setValue(0);
+    homeScrollMotion.setValue(0);
+    requestAnimationFrame(() => Animated.timing(homeEntranceMotion, { toValue: 1, duration: 360, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start());
+  }, [homeEntranceMotion, homeScrollMotion, view]);
+
+  useEffect(() => {
+    if (view !== 'home') return;
+    homePulseMotion.setValue(0);
+    homeWaveMotion.setValue(0);
+    homeIconDrawProgress.value = 0;
+    const pulse = Animated.loop(Animated.sequence([
+      Animated.timing(homePulseMotion, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true, isInteraction: false }),
+      Animated.timing(homePulseMotion, { toValue: 0, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true, isInteraction: false }),
+    ]));
+    const wave = Animated.loop(Animated.sequence([
+      Animated.delay(700),
+      Animated.timing(homeWaveMotion, { toValue: 1, duration: 130, easing: Easing.out(Easing.quad), useNativeDriver: true, isInteraction: false }),
+      Animated.timing(homeWaveMotion, { toValue: -1, duration: 150, easing: Easing.inOut(Easing.quad), useNativeDriver: true, isInteraction: false }),
+      Animated.timing(homeWaveMotion, { toValue: 1, duration: 150, easing: Easing.inOut(Easing.quad), useNativeDriver: true, isInteraction: false }),
+      Animated.timing(homeWaveMotion, { toValue: 0, duration: 150, easing: Easing.out(Easing.quad), useNativeDriver: true, isInteraction: false }),
+      Animated.delay(1700),
+    ]));
+    homeIconDrawProgress.value = withRepeat(withSequence(
+      withTiming(1, { duration: 1080, easing: ReanimatedEasing.out(ReanimatedEasing.cubic) }),
+      withDelay(1150, withTiming(0, { duration: 320, easing: ReanimatedEasing.in(ReanimatedEasing.quad) })),
+      withDelay(260, withTiming(0, { duration: 1 })),
+    ), -1, false);
+    pulse.start();
+    wave.start();
+    return () => { pulse.stop(); wave.stop(); cancelAnimation(homeIconDrawProgress); };
+  }, [homeIconDrawProgress, homePulseMotion, homeWaveMotion, view]);
+
+  useEffect(() => {
+    if (!dashboardRangeModal) return;
+    dashboardRangeMotion.setValue(0);
+    requestAnimationFrame(() => Animated.timing(dashboardRangeMotion, { toValue: 1, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start());
+  }, [dashboardRangeModal, dashboardRangeMotion]);
+
+  const closeDashboardRange = useCallback(() => {
+    setDashboardDatePicker(null);
+    Animated.timing(dashboardRangeMotion, { toValue: 0, duration: 140, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => setDashboardRangeModal(false));
+  }, [dashboardRangeMotion]);
 
   const openCatalog = (next: CatalogView) => {
     setView(next);
@@ -307,6 +617,12 @@ export default function ShopModuleScreen() {
     setView('invoices');
   };
 
+  const openShopNotification = (item: ShopNotification) => {
+    if (item.entity_type === 'order' && item.entity_id) openOrders('all', item.entity_id);
+    else if (item.entity_type === 'invoice' && item.entity_id) openInvoiceFromOrder(item.entity_id);
+  };
+  const notificationButton = <ShopNotificationsButton onOpenEntity={openShopNotification} />;
+
   const openCategoryForm = (category?: ShopCategory) => {
     const current = category || null;
     setEditingCategory(current);
@@ -318,6 +634,18 @@ export default function ShopModuleScreen() {
     setCategoryImageBase64(null);
     setCategoryImageRemoved(false);
     setCategoryModal(true);
+  };
+
+  const closeCategoryForm = () => {
+    setCategoryModal(false);
+    setEditingCategory(null);
+    setCategoryName('');
+    setCategoryDescription('');
+    setCategoryParent(null);
+    setCategoryActive(true);
+    setCategoryImage(null);
+    setCategoryImageBase64(null);
+    setCategoryImageRemoved(false);
   };
 
   const openBrandForm = (brand?: ShopBrand) => {
@@ -377,7 +705,7 @@ export default function ShopModuleScreen() {
       };
       if (editingCategory) await shopApi.updateCategory(token, editingCategory.id, payload);
       else await shopApi.createCategory(token, payload);
-      setCategoryModal(false);
+      closeCategoryForm();
       await loadCatalog(true);
     } catch (saveError) {
       Alert.alert('Nu s-a putut salva', saveError instanceof Error ? saveError.message : 'Incearca din nou.');
@@ -459,32 +787,167 @@ export default function ShopModuleScreen() {
   );
 
   if (view === 'home') {
+    const toggleDashboardSeries = (key: DashboardSeriesKey) => setDashboardSeries((current) => (
+      current.includes(key) ? (current.length === 1 ? current : current.filter((item) => item !== key)) : [...current, key]
+    ));
+    const selectDashboardPeriod = (period: DashboardPeriod) => {
+      setDashboardPeriod(period);
+      setDashboardGranularity(preferredDashboardGranularity(period));
+      setDashboardGranularityMenu(false);
+      if (period !== 'custom') { setDashboardAppliedStartDate(''); setDashboardAppliedEndDate(''); }
+    };
+    const openDashboardRange = () => {
+      const now = new Date();
+      const startValue = new Date(now);
+      startValue.setDate(startValue.getDate() - 29);
+      const today = isoDateFromLocalDate(now);
+      const start = isoDateFromLocalDate(startValue);
+      if (!dashboardStartDate) setDashboardStartDate(start);
+      if (!dashboardEndDate) setDashboardEndDate(today);
+      setDashboardCustomEditor(false);
+      dashboardCustomMotion.setValue(0);
+      setDashboardDatePicker(null);
+      setDashboardRangeModal(true);
+    };
+    const openDashboardCustomEditor = () => {
+      setDashboardDatePicker(null);
+      dashboardCustomMotion.setValue(0);
+      setDashboardCustomEditor(true);
+      requestAnimationFrame(() => Animated.timing(dashboardCustomMotion, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start());
+    };
+    const closeDashboardCustomEditor = () => {
+      setDashboardDatePicker(null);
+      Animated.timing(dashboardCustomMotion, { toValue: 0, duration: 180, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }).start(() => setDashboardCustomEditor(false));
+    };
+    const granularityChoices = allowedDashboardGranularities(dashboardPeriod, dashboardAppliedStartDate, dashboardAppliedEndDate);
+    const closeDashboardGranularityMenu = () => {
+      Animated.timing(dashboardGranularityMotion, { toValue: 0, duration: 145, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }).start(() => setDashboardGranularityMenu(false));
+    };
+    const openDashboardGranularityMenu = () => {
+      if (dashboardGranularityMenu) { closeDashboardGranularityMenu(); return; }
+      const showMenu = (x: number, y: number, triggerWidth: number, triggerHeight: number) => {
+        const menuWidth = Math.min(232, Math.max(214, viewportWidth - 24));
+        const menuHeight = 278;
+        const left = Math.max(12, Math.min(x + triggerWidth - menuWidth, viewportWidth - menuWidth - 12));
+        const below = y + triggerHeight + 8;
+        const top = below + menuHeight <= viewportHeight - 10 ? below : Math.max(insets.top + 8, y - menuHeight - 8);
+        setDashboardGranularityMenuPosition({ top, left, width: menuWidth });
+        dashboardGranularityMotion.setValue(0);
+        setDashboardGranularityMenu(true);
+        requestAnimationFrame(() => Animated.spring(dashboardGranularityMotion, { toValue: 1, damping: 18, stiffness: 245, mass: 0.72, useNativeDriver: true }).start());
+      };
+      dashboardGranularityTriggerRef.current?.measureInWindow(showMenu);
+    };
+    const todayDate = new Date();
+    const customRangeValid = Boolean(isValidIsoDate(dashboardStartDate) && isValidIsoDate(dashboardEndDate) && dashboardStartDate <= dashboardEndDate && dashboardEndDate <= isoDateFromLocalDate(todayDate));
+    const handleDashboardDateChange = (event: DateTimePickerEvent, picked?: Date) => {
+      const target = dashboardDatePicker;
+      if (event.type === 'dismissed' || !picked || !target) { setDashboardDatePicker(null); return; }
+      const value = isoDateFromLocalDate(picked);
+      if (target === 'start') {
+        setDashboardStartDate(value);
+        if (dashboardEndDate && value > dashboardEndDate) setDashboardEndDate(value);
+      } else {
+        setDashboardEndDate(value);
+        if (dashboardStartDate && value < dashboardStartDate) setDashboardStartDate(value);
+      }
+      if (Platform.OS !== 'ios') setDashboardDatePicker(null);
+    };
+    const homeDisplayName = String(user?.display_name || user?.username || 'utilizator').trim();
     return (
       <View style={styles.container}>
-        <Header title="Acasă" />
-        <ScrollView
-          contentContainerStyle={[styles.content, { paddingBottom: 94 + insets.bottom }]}
-          showsVerticalScrollIndicator={false}>
-          <View style={styles.hero}>
-            <View style={styles.heroTop}><View style={styles.heroIcon}><TrendingUp size={21} color="#38BDF8" /></View><TouchableOpacity style={styles.heroRefresh} onPress={() => void loadDashboard()}><RefreshCw size={17} color={Colors.textSecondary} /></TouchableOpacity></View>
-            <Text style={styles.kicker}>DASHBOARD COMERCIAL</Text>
-            <Text style={styles.title}>Magazinul tău, pe scurt.</Text>
-            <Text style={styles.subtitle}>Vânzări, comenzi, achiziții și profit actualizate direct din baza magazinului online.</Text>
-            <View style={styles.statusPill}><View style={styles.statusDot} /><Text style={styles.statusText}>Date sincronizate cu magazinul</Text></View>
-          </View>
-          <View style={styles.sectionHeader}><View><Text style={styles.sectionKicker}>PERFORMANTA SHOP</Text><Text style={styles.sectionTitle}>Statistici generale</Text></View><BarChart3 size={20} color={Colors.textMuted} /></View>
-          {dashboardLoading ? <View style={styles.dashboardLoading}><ActivityIndicator color={Colors.orange} /><Text style={styles.dashboardLoadingText}>Se actualizeaza statisticile...</Text></View> : <View style={styles.dashboardMetrics}>
-            <DashboardMetric title="VÂNZĂRI" value={formatShopMoney(dashboard?.revenue || 0)} color="#38BDF8" />
-            <DashboardMetric title="COMENZI" value={String(dashboard?.orders_count || 0)} color="#A78BFA" />
-            <DashboardMetric title="ACHIZIȚII" value={formatShopMoney(dashboard?.acquisitions || 0)} color="#F59E0B" />
-            <DashboardMetric title="PROFIT" value={formatShopMoney(dashboard?.profit || 0)} color="#22C55E" />
-          </View>}
+        <Header title="Acasă" right={notificationButton} />
+        <Animated.View style={[styles.homePageMotion, { opacity: homeEntranceMotion }]}>
+          <GestureDetector gesture={dashboardScrollGesture}>
+          <Animated.ScrollView
+            style={styles.homeScroll}
+            contentContainerStyle={styles.homePage}
+            onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: homeScrollMotion } } }], { useNativeDriver: true })}
+            onScrollBeginDrag={() => dashboardTooltipDismissRef.current?.()}
+            onTouchStart={() => dashboardTooltipDismissRef.current?.()}
+            scrollEventThrottle={16}
+            showsVerticalScrollIndicator={false}>
+          <Animated.View style={[styles.homeHero, { opacity: homeScrollMotion.interpolate({ inputRange: [0, 175], outputRange: [1, 0.52], extrapolate: 'clamp' }), transform: [{ translateY: homeScrollMotion.interpolate({ inputRange: [0, 200], outputRange: [0, 58], extrapolate: 'clamp' }) }, { scale: homeEntranceMotion.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }] }]}>
+            <LinearGradient colors={['#FF9000', '#FF7900', '#E95800']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.homeHeroGradient} />
+            <View style={styles.homeHeroGlowLarge} />
+            <Animated.View style={[styles.homeHeroGlowSmall, { opacity: homePulseMotion.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }), transform: [{ scale: homePulseMotion.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1.22] }) }] }]} />
+            <View style={styles.homeHeroCopy}>
+              <View style={styles.homeHeroTitleRow}><Text style={styles.homeHeroTitle}>{homeGreeting}, {homeDisplayName}!</Text><Animated.Text style={[styles.homeHeroWave, { transform: [{ rotate: homeWaveMotion.interpolate({ inputRange: [-1, 0, 1], outputRange: ['-15deg', '0deg', '18deg'] }) }] }]}>👋</Animated.Text></View>
+              <View style={styles.homeHeroHint}><CircleHelp size={18} color="#FFF7EA" strokeWidth={2.2} /><Text style={styles.homeHeroText}>Ai control rapid asupra comenzilor, vânzărilor și profitului magazinului tău.</Text></View>
+            </View>
+            <Reanimated.View style={[styles.homeHeroChartIcon, homeIconMotionStyle]}><Svg width={48} height={44} viewBox="0 0 48 44"><ReanimatedSvgPath animatedProps={homeIconLineAnimatedProps} d="M5 35 17 23l9 7 16-19" fill="none" stroke="#FFF7EA" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="60 60" /><ReanimatedSvgPath animatedProps={homeIconArrowAnimatedProps} d="M31 11h11v11" fill="none" stroke="#FFF7EA" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="24 24" /></Svg></Reanimated.View>
+          </Animated.View>
+          <Animated.View style={[styles.homeSheet, { transform: [{ translateY: homeEntranceMotion.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }] }]}>
+            <View pointerEvents="none" style={styles.homeSheetTopShadow} />
+            <View style={styles.homeSheetAccent} />
+            <View style={[styles.content, styles.homeContent, { paddingBottom: 94 + insets.bottom }]}>
+          <View style={styles.homeOverviewHeader}><View style={styles.homeOverviewIcon}><Sparkles size={20} color="#4C8DFF" /></View><View><Text style={styles.homeOverviewTitle}>Privire de ansamblu</Text><Text style={styles.homeOverviewText}>Indicatorii esențiali ai magazinului</Text></View></View>
           <View style={styles.newOrdersBanner}><View style={styles.newOrdersIcon}><ShoppingCart size={21} color="#38BDF8" /></View><View style={styles.newOrdersCopy}><Text style={styles.newOrdersValue}>{dashboard?.new_orders_count || 0}</Text><Text style={styles.newOrdersLabel}>comenzi noi</Text></View><TouchableOpacity style={styles.newOrdersButton} onPress={() => openOrders('new')}><Text style={styles.newOrdersButtonText}>Vezi comenzile</Text><ChevronRight size={16} color={Colors.white} /></TouchableOpacity></View>
+          <View style={styles.mobileAnalytics}>
+            <View style={styles.analyticsToolbar}>
+              <TouchableOpacity style={styles.analyticsDateTrigger} onPress={openDashboardRange} activeOpacity={0.72}><CalendarDays size={19} color="#9AA0A6" /><Text numberOfLines={1} style={styles.analyticsDateText}>{formatDashboardRangeLabel(dashboardPeriod, dashboard?.range, dashboardAppliedStartDate, dashboardAppliedEndDate)}</Text><ChevronRight size={17} color="#9AA0A6" /></TouchableOpacity>
+              <View ref={dashboardGranularityTriggerRef} collapsable={false} style={styles.analyticsGranularityAnchor}><TouchableOpacity style={[styles.analyticsGranularityTrigger, dashboardGranularityMenu && styles.analyticsGranularityTriggerOpen]} onPress={openDashboardGranularityMenu} activeOpacity={0.78} accessibilityRole="button" accessibilityLabel="Alege gruparea graficului" accessibilityState={{ expanded: dashboardGranularityMenu }}><View><Text style={styles.analyticsGranularityTriggerLabel}>GRUPARE</Text><Text style={styles.analyticsGranularityText}>{dashboardGranularityLabels[dashboardGranularity]}</Text></View><Animated.View style={{ transform: [{ rotate: dashboardGranularityMotion.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}><ChevronDown size={16} color="#D2E3FC" /></Animated.View></TouchableOpacity></View>
+            </View>
+            <Modal visible={dashboardGranularityMenu} transparent animationType="none" statusBarTranslucent onRequestClose={closeDashboardGranularityMenu}><Pressable style={styles.analyticsGranularityBackdrop} onPress={closeDashboardGranularityMenu}><Animated.View style={[styles.analyticsGranularityMenu, dashboardGranularityMenuPosition, { opacity: dashboardGranularityMotion, transform: [{ translateY: dashboardGranularityMotion.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }, { scale: dashboardGranularityMotion.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }] }]}><Pressable onPress={(event) => event.stopPropagation()}><View style={styles.analyticsGranularityMenuHeader}><Text style={styles.analyticsGranularityMenuKicker}>AFIȘARE GRAFIC</Text><Text style={styles.analyticsGranularityMenuTitle}>Alege nivelul de detaliu</Text></View>{(Object.keys(dashboardGranularityLabels) as DashboardGranularity[]).map((granularity) => {
+              const enabled = granularityChoices.includes(granularity);
+              const active = dashboardGranularity === granularity;
+              return <TouchableOpacity key={granularity} disabled={!enabled} activeOpacity={0.75} accessibilityRole="menuitem" accessibilityState={{ selected: active, disabled: !enabled }} style={[styles.analyticsGranularityOption, active && styles.analyticsGranularityOptionActive, !enabled && styles.analyticsGranularityOptionDisabled]} onPress={() => { setDashboardGranularity(granularity); closeDashboardGranularityMenu(); }}><View style={[styles.analyticsGranularityOptionMark, active && styles.analyticsGranularityOptionMarkActive]}><Text style={[styles.analyticsGranularityOptionMarkText, active && styles.analyticsGranularityOptionMarkTextActive]}>{dashboardGranularityShortLabels[granularity]}</Text></View><View style={styles.analyticsGranularityOptionCopy}><Text style={[styles.analyticsGranularityOptionText, active && styles.analyticsGranularityOptionTextActive]}>{dashboardGranularityLabels[granularity]}</Text><Text style={styles.analyticsGranularityOptionDescription}>{enabled ? dashboardGranularityDescriptions[granularity] : 'Indisponibil pentru interval'}</Text></View><View style={[styles.analyticsGranularityCheck, active && styles.analyticsGranularityCheckActive]}>{active && <Check size={14} color="#0B1526" strokeWidth={2.8} />}</View></TouchableOpacity>;
+            })}</Pressable></Animated.View></Pressable></Modal>
+            {dashboardLoading ? <View style={styles.analyticsLoading}><ActivityIndicator color="#8AB4F8" /><Text style={styles.dashboardLoadingText}>Se actualizează...</Text></View> : <>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.metricPills}>
+                <DashboardMetric title="Vânzări nete" value={compactShopMoney(dashboard?.revenue || 0)} color="#8AB4F8" selected={dashboardSeries.includes('revenue')} onPress={() => toggleDashboardSeries('revenue')} />
+                <DashboardMetric title={`Retururi · ${dashboard?.returns_count || 0}`} value={compactShopMoney(dashboard?.returns_total || 0)} color="#F472B6" selected={dashboardSeries.includes('returns')} onPress={() => toggleDashboardSeries('returns')} />
+                <DashboardMetric title="Comenzi" value={String(dashboard?.orders_count || 0)} color="#F28B82" selected={dashboardSeries.includes('orders')} onPress={() => toggleDashboardSeries('orders')} />
+                <DashboardMetric title="Achiziții" value={compactShopMoney(dashboard?.acquisitions || 0)} color="#FDD663" selected={dashboardSeries.includes('acquisitions')} onPress={() => toggleDashboardSeries('acquisitions')} />
+                <DashboardMetric title="Profit" value={compactShopMoney(dashboard?.profit || 0)} color="#81C995" selected={dashboardSeries.includes('profit')} onPress={() => toggleDashboardSeries('profit')} />
+              </ScrollView>
+              <DashboardTrendChart rows={dashboard?.daily_stats || []} selected={dashboardSeries} granularity={dashboard?.range?.granularity || dashboardGranularity} dismissRef={dashboardTooltipDismissRef} scrollGesture={dashboardScrollGesture} />
+            </>}
+          </View>
+          {!dashboardLoading && <MobileProfitMargin revenue={dashboard?.revenue || 0} costOfGoodsSold={dashboard?.cost_of_goods_sold || 0} profit={dashboard?.profit || 0} />}
           <View style={styles.sectionHeader}><View><Text style={styles.sectionKicker}>SCURTATURI</Text><Text style={styles.sectionTitle}>Acțiuni rapide</Text></View></View>
           <View style={styles.quickActions}><TouchableOpacity style={styles.quickAction} onPress={() => setView('products')}><View style={[styles.cardIcon, { backgroundColor: '#A78BFA14' }]}><Package size={22} color="#A78BFA" /></View><View style={styles.quickActionCopy}><Text style={styles.quickActionTitle}>Produse</Text><Text style={styles.quickActionText}>Adaugă sau editează catalogul.</Text></View><ChevronRight size={18} color="#A78BFA" /></TouchableOpacity><TouchableOpacity style={styles.quickAction} onPress={() => openOrders()}><View style={[styles.cardIcon, { backgroundColor: '#38BDF814' }]}><ShoppingCart size={22} color="#38BDF8" /></View><View style={styles.quickActionCopy}><Text style={styles.quickActionTitle}>Comenzi</Text><Text style={styles.quickActionText}>Verifică și procesează comenzile.</Text></View><ChevronRight size={18} color="#38BDF8" /></TouchableOpacity><TouchableOpacity style={[styles.quickAction, styles.quickActionInvoice]} onPress={() => setView('invoices')}><View style={[styles.cardIcon, { backgroundColor: '#F59E0B16' }]}><FileText size={22} color="#F59E0B" /></View><View style={styles.quickActionCopy}><Text style={styles.quickActionTitle}>Facturi emise</Text><Text style={styles.quickActionText}>Vezi documentele fiscale și starea lor.</Text></View><ChevronRight size={18} color="#F59E0B" /></TouchableOpacity></View>
           <View style={styles.sectionHeader}><View><Text style={styles.sectionKicker}>ACTIVITATE RECENTA</Text><Text style={styles.sectionTitle}>Ultimele comenzi</Text></View><TouchableOpacity style={styles.sectionSeeAll} onPress={() => openOrders('new')}><Text style={styles.sectionSeeAllText}>Vezi toate</Text><ChevronRight size={15} color={Colors.white} /></TouchableOpacity></View>
-          <View style={styles.recentOrders}>{dashboard?.recent_orders?.filter((order) => order.status === 'new').length ? dashboard.recent_orders.filter((order) => order.status === 'new').slice(0, 5).map((order) => <TouchableOpacity key={order.id} style={styles.recentOrder} onPress={() => openOrders('new', order.id)}><View><Text style={styles.recentOrderNumber}>{order.order_number}</Text><Text style={styles.recentOrderMeta}>{order.customer_name} · {order.created_at}</Text></View><View style={styles.recentOrderRight}><Text style={styles.recentOrderTotal}>{formatShopMoney(order.total)}</Text><Text style={[styles.recentOrderStatus, styles.recentOrderNew]}>{orderStatusLabels[order.status] || order.status.toUpperCase()}</Text></View></TouchableOpacity>) : <Text style={styles.dashboardEmpty}>Nu există comenzi noi.</Text>}</View>
-        </ScrollView>
+          <View style={styles.recentOrders}>{dashboard?.recent_orders?.filter((order) => order.status === 'new').length ? dashboard.recent_orders.filter((order) => order.status === 'new').slice(0, 5).map((order) => <TouchableOpacity key={order.id} style={styles.recentOrder} onPress={() => openOrders('new', order.id)}><View><Text style={styles.recentOrderNumber}>{order.order_number}</Text><Text style={styles.recentOrderMeta}>{shopOrderCustomerDisplayName(order)} · {order.created_at}</Text></View><View style={styles.recentOrderRight}><Text style={styles.recentOrderTotal}>{formatShopMoney(order.total)}</Text><Text style={[styles.recentOrderStatus, styles.recentOrderNew]}>{orderStatusLabels[order.status] || order.status.toUpperCase()}</Text></View></TouchableOpacity>) : <Text style={styles.dashboardEmpty}>Nu există comenzi noi.</Text>}</View>
+            </View>
+          </Animated.View>
+          </Animated.ScrollView>
+          </GestureDetector>
+        </Animated.View>
+
+        <Modal visible={dashboardRangeModal} transparent animationType="none" statusBarTranslucent onRequestClose={dashboardCustomEditor ? closeDashboardCustomEditor : closeDashboardRange}>
+          <View style={styles.rangeModalBackdrop}>
+          <Animated.View style={[styles.rangeScreen, { paddingTop: insets.top, transform: [{ translateX: dashboardRangeMotion.interpolate({ inputRange: [0, 1], outputRange: [520, 0] }) }] }]}>
+            <View style={styles.rangeScreenHeader}><TouchableOpacity style={styles.rangeScreenClose} onPress={() => { if (dashboardCustomEditor) closeDashboardCustomEditor(); else closeDashboardRange(); }}><X size={25} color="#E8EAED" /></TouchableOpacity><Text style={styles.rangeScreenTitle}>{dashboardCustomEditor ? 'Interval personalizat' : 'Interval de date'}</Text></View>
+            {dashboardCustomEditor ? <Animated.View style={[styles.rangeCustomMotion, { opacity: dashboardCustomMotion, transform: [{ translateX: dashboardCustomMotion.interpolate({ inputRange: [0, 1], outputRange: [120, 0] }) }] }]}><ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.rangeCustomScreen}>
+              <Text style={styles.rangeCustomHint}>Alege prima și ultima zi. Calendarul păstrează automat intervalul în ordine și nu permite date din viitor.</Text>
+              <View style={styles.smartDateFields}>
+                <View><Text style={styles.customDateLabel}>DATA DE ÎNCEPUT</Text>{Platform.OS === 'web' ? <TextInput style={styles.customDateInput} value={dashboardStartDate} onChangeText={setDashboardStartDate} placeholder="AAAA-LL-ZZ" placeholderTextColor={Colors.textMuted} /> : <TouchableOpacity style={[styles.smartDateButton, dashboardDatePicker === 'start' && styles.smartDateButtonActive]} onPress={() => setDashboardDatePicker('start')} activeOpacity={0.72}><View style={styles.smartDateIcon}><CalendarDays size={19} color="#8AB4F8" /></View><View style={styles.smartDateCopy}><Text style={styles.smartDateValue}>{formatDashboardPickerDate(dashboardStartDate)}</Text><Text style={styles.smartDateIso}>{dashboardStartDate || 'AAAA-LL-ZZ'}</Text></View><ChevronRight size={19} color="#9AA0A6" /></TouchableOpacity>}</View>
+                <View style={styles.smartDateConnector}><View style={styles.smartDateConnectorLine} /><Text style={styles.smartDateConnectorText}>până la</Text><View style={styles.smartDateConnectorLine} /></View>
+                <View><Text style={styles.customDateLabel}>DATA DE SFÂRȘIT</Text>{Platform.OS === 'web' ? <TextInput style={styles.customDateInput} value={dashboardEndDate} onChangeText={setDashboardEndDate} placeholder="AAAA-LL-ZZ" placeholderTextColor={Colors.textMuted} /> : <TouchableOpacity style={[styles.smartDateButton, dashboardDatePicker === 'end' && styles.smartDateButtonActive]} onPress={() => setDashboardDatePicker('end')} activeOpacity={0.72}><View style={styles.smartDateIcon}><CalendarDays size={19} color="#8AB4F8" /></View><View style={styles.smartDateCopy}><Text style={styles.smartDateValue}>{formatDashboardPickerDate(dashboardEndDate)}</Text><Text style={styles.smartDateIso}>{dashboardEndDate || 'AAAA-LL-ZZ'}</Text></View><ChevronRight size={19} color="#9AA0A6" /></TouchableOpacity>}</View>
+              </View>
+              {dashboardDatePicker && Platform.OS !== 'web' && <View style={styles.smartPickerPanel}>
+                <View style={styles.smartPickerHeader}><View><Text style={styles.smartPickerKicker}>{dashboardDatePicker === 'start' ? 'PRIMA ZI' : 'ULTIMA ZI'}</Text><Text style={styles.smartPickerTitle}>{dashboardDatePicker === 'start' ? 'Alege începutul' : 'Alege sfârșitul'}</Text></View>{Platform.OS === 'ios' && <TouchableOpacity style={styles.smartPickerDone} onPress={() => setDashboardDatePicker(null)}><Text style={styles.smartPickerDoneText}>Gata</Text></TouchableOpacity>}</View>
+                <DateTimePicker
+                  value={localDateFromIso(dashboardDatePicker === 'start' ? dashboardStartDate : dashboardEndDate, todayDate)}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  locale="ro-RO"
+                  themeVariant="dark"
+                  maximumDate={dashboardDatePicker === 'start' && dashboardEndDate ? localDateFromIso(dashboardEndDate, todayDate) : todayDate}
+                  minimumDate={dashboardDatePicker === 'end' && dashboardStartDate ? localDateFromIso(dashboardStartDate, todayDate) : undefined}
+                  onChange={handleDashboardDateChange}
+                />
+              </View>}
+              <View style={styles.rangeCustomSummary}><CalendarDays size={17} color={customRangeValid ? '#81C995' : '#F28B82'} /><Text style={[styles.rangeCustomSummaryText, !customRangeValid && styles.rangeCustomSummaryInvalid]}>{customRangeValid ? `${formatDashboardPickerDate(dashboardStartDate)} – ${formatDashboardPickerDate(dashboardEndDate)}` : 'Alege un interval valid.'}</Text></View>
+              <TouchableOpacity disabled={!customRangeValid} style={[styles.rangeCustomApply, !customRangeValid && styles.rangeCustomApplyDisabled]} onPress={() => { if (!customRangeValid) return; setDashboardAppliedStartDate(dashboardStartDate); setDashboardAppliedEndDate(dashboardEndDate); setDashboardGranularity(preferredDashboardGranularity('custom', dashboardStartDate, dashboardEndDate)); setDashboardGranularityMenu(false); setDashboardPeriod('custom'); closeDashboardRange(); }}><Text style={styles.rangeApplyText}>Aplică intervalul</Text></TouchableOpacity>
+            </ScrollView></Animated.View> : <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.rangeList}>
+              <TouchableOpacity style={styles.rangeListRow} onPress={openDashboardCustomEditor}><Text style={styles.rangeListText}>Personalizată</Text>{dashboardPeriod === 'custom' ? <Text style={styles.rangeListCheck}>✓</Text> : <ChevronRight size={20} color="#9AA0A6" />}</TouchableOpacity>
+              {dashboardMobilePeriods.map(([period, label]) => <TouchableOpacity key={period} style={styles.rangeListRow} onPress={() => { selectDashboardPeriod(period); closeDashboardRange(); }}><Text style={[styles.rangeListText, dashboardPeriod === period && styles.rangeListTextActive]}>{label}</Text>{dashboardPeriod === period && <Text style={styles.rangeListCheck}>✓</Text>}</TouchableOpacity>)}
+            </ScrollView>}
+          </Animated.View>
+          </View>
+        </Modal>
 
         <ShopBottomNavigation activeTab="home" onSelect={(tab) => tab === 'orders' ? openOrders() : setView(tab)} bottomInset={insets.bottom} />
       </View>
@@ -498,7 +961,7 @@ export default function ShopModuleScreen() {
 
     return (
       <View style={styles.container}>
-        <Header title={details.title} />
+        <Header title={details.title} right={notificationButton} />
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: 94 + insets.bottom }]}
           showsVerticalScrollIndicator={false}>
@@ -574,7 +1037,7 @@ export default function ShopModuleScreen() {
   if (view === 'nirs') {
     return (
       <View style={styles.container}>
-        <Header title="NIR-uri" showBack onBack={() => setView('more')} />
+        <Header title="NIR-uri" showBack onBack={() => setView('more')} right={notificationButton} />
         <ShopNirManager initialNirId={initialNirId} onInitialNirHandled={() => setInitialNirId(null)} />
       </View>
     );
@@ -583,7 +1046,7 @@ export default function ShopModuleScreen() {
   if (view === 'invoice-configurator') {
     return (
       <View style={styles.container}>
-        <Header title="Configurator factură" showBack onBack={() => setView('more')} />
+        <Header title="Configurator factură" showBack onBack={() => setView('more')} right={notificationButton} />
         <ShopInvoiceConfigurator bottomInset={insets.bottom} />
         <ShopBottomNavigation activeTab="more" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
       </View>
@@ -593,7 +1056,7 @@ export default function ShopModuleScreen() {
   if (view === 'invoices') {
     return (
       <View style={styles.container}>
-        <Header title="Facturi emise" showBack onBack={() => setView('more')} />
+        <Header title="Facturi emise" showBack onBack={() => setView('more')} right={notificationButton} />
         <ShopInvoicesManager initialInvoiceId={initialInvoiceId} onInitialInvoiceHandled={() => setInitialInvoiceId(null)} onOpenSpv={() => setView('spv')} />
         <ShopBottomNavigation activeTab="more" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
       </View>
@@ -603,21 +1066,8 @@ export default function ShopModuleScreen() {
   if (view === 'spv') {
     return (
       <View style={styles.container}>
-        <Header title="SPV / e-Factura" showBack onBack={() => setView('more')} />
-        <ScrollView contentContainerStyle={[styles.spvContent, { paddingBottom: 120 + insets.bottom }]} showsVerticalScrollIndicator={false}>
-          <View style={styles.spvHero}>
-            <View style={styles.spvGlow} />
-            <View style={styles.spvIcon}><CloudUpload size={33} color="#A8C7FA" /></View>
-            <View style={styles.spvState}><View style={styles.spvStateDot} /><Text style={styles.spvStateText}>ÎN LUCRU</Text></View>
-            <Text style={styles.spvKicker}>CONFIGURARE ANAF</Text>
-            <Text style={styles.spvTitle}>SPV și RO e-Factura</Text>
-            <Text style={styles.spvText}>Aici vom configura autentificarea, firmele autorizate și transmiterea facturilor către ANAF.</Text>
-          </View>
-          <View style={styles.spvInfo}>
-            <ShieldCheck size={24} color="#6EE7B7" />
-            <View style={styles.spvInfoCopy}><Text style={styles.spvInfoTitle}>Secțiune pregătită</Text><Text style={styles.spvInfoText}>Momentan nu se trimit date și nu se solicită niciun certificat. Continuăm când stabilești fluxul dorit.</Text></View>
-          </View>
-        </ScrollView>
+        <Header title="SPV - RO e-Factura" showBack onBack={() => setView('more')} right={notificationButton} />
+        <ShopSpvManager />
         <ShopBottomNavigation activeTab="more" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
       </View>
     );
@@ -627,7 +1077,7 @@ export default function ShopModuleScreen() {
     const title = view === 'sources' ? 'Surse de aprovizionare' : view === 'suppliers' ? 'Furnizori' : view === 'payments' ? 'Metode de plată' : view === 'shipping' ? 'Livrări' : view === 'customers' ? 'Clienți' : view === 'company' ? 'Datele firmei' : view === 'automations' ? 'Automatizări' : 'Reduceri';
     return (
       <View style={styles.container}>
-        <Header title={title} showBack onBack={() => setView('more')} />
+        <Header title={title} showBack onBack={() => setView('more')} right={notificationButton} />
         <KeyboardAvoidingView style={styles.settingsKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
           <ScrollView
             ref={settingsScrollRef}
@@ -701,12 +1151,12 @@ export default function ShopModuleScreen() {
 
       <ShopBottomNavigation activeTab="more" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
 
-      <Modal visible={categoryModal} transparent animationType="slide" onRequestClose={() => !saving && setCategoryModal(false)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => !saving && setCategoryModal(false)}>
+      <Modal visible={categoryModal} transparent animationType="slide" onRequestClose={() => !saving && closeCategoryForm()}>
+        <Pressable style={styles.modalBackdrop} onPress={() => !saving && closeCategoryForm()}>
           <Pressable style={[styles.modalCard, { paddingBottom: Math.max(20, insets.bottom) }]} onPress={(event) => event.stopPropagation()}>
             <View style={styles.modalHeader}>
               <View><Text style={styles.modalKicker}>CATEGORIE SHOP</Text><Text style={styles.modalTitle}>{editingCategory ? 'Editeaza categoria' : 'Categorie noua'}</Text></View>
-              <TouchableOpacity style={styles.closeButton} onPress={() => setCategoryModal(false)} disabled={saving}><X size={20} color={Colors.textSecondary} /></TouchableOpacity>
+              <TouchableOpacity style={styles.closeButton} onPress={closeCategoryForm} disabled={saving}><X size={20} color={Colors.textSecondary} /></TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <Text style={styles.fieldLabel}>MINIATURA</Text>
@@ -923,12 +1373,272 @@ function ManufacturerTable({ manufacturers, onEdit, onDelete }: { manufacturers:
 }
 
 function formatShopMoney(value: number) {
-  return `${new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0))} lei`;
+  return `${shopMoneyFormatter.format(Number(value || 0))} lei`;
 }
 
-function DashboardMetric({ title, value, color }: { title: string; value: string; color: string }) {
-  return <View style={styles.dashboardMetric}><View style={[styles.dashboardMetricDot, { backgroundColor: color }]} /><Text style={styles.dashboardMetricTitle}>{title}</Text><Text numberOfLines={1} adjustsFontSizeToFit style={[styles.dashboardMetricValue, { color }]}>{value}</Text></View>;
+function compactShopMoney(value: number) {
+  return `${shopCompactMoneyFormatter.format(Number(value || 0))} lei`;
 }
+
+function isoDateFromLocalDate(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function localDateFromIso(value: string, fallback = new Date()) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return fallback;
+  const parsed = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12);
+  return Number.isNaN(parsed.getTime()) || isoDateFromLocalDate(parsed) !== value ? fallback : parsed;
+}
+
+function isValidIsoDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  return isoDateFromLocalDate(localDateFromIso(value, new Date(0))) === value;
+}
+
+function formatDashboardPickerDate(value: string) {
+  if (!value) return 'Alege data';
+  return new Intl.DateTimeFormat('ro-RO', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }).format(localDateFromIso(value)).replace('.', '');
+}
+
+function formatDashboardRangeLabel(period: DashboardPeriod, range?: ShopDashboardStats['range'], customStart = '', customEnd = '') {
+  const label = dashboardMobilePeriods.find(([value]) => value === period)?.[1];
+  if (period !== 'custom') return label || (period === '24h' ? 'Ultimele 24 de ore' : 'Alege perioada');
+  const rangeStart = customStart || range?.start || '';
+  const rangeEnd = customEnd || range?.end || '';
+  if (!rangeStart || !rangeEnd) return 'Interval personalizat';
+  const start = new Date(`${rangeStart}T12:00:00`);
+  const end = new Date(`${rangeEnd}T12:00:00`);
+  const startText = new Intl.DateTimeFormat('ro-RO', { day: 'numeric', month: 'short' }).format(start).replace('.', '');
+  const endText = new Intl.DateTimeFormat('ro-RO', { day: 'numeric', month: 'short', year: 'numeric' }).format(end).replace('.', '');
+  return rangeStart === rangeEnd ? endText : `${startText} – ${endText}`;
+}
+
+function chartLineGeometry(values: number[], maximum: number, width: number, height: number, visualOffset = 0) {
+  const bottom = height - 12;
+  const step = values.length > 1 ? (width - 24) / (values.length - 1) : 0;
+  let length = 0;
+  let previous: { x: number; y: number } | null = null;
+  const points = values.map((value, index) => {
+    const x = 12 + index * step;
+    const numericValue = Math.max(0, Number(value || 0));
+    const rawY = bottom - (numericValue / Math.max(1, maximum)) * (height - 28);
+    const y = numericValue > 0 ? Math.max(6, Math.min(bottom, rawY + visualOffset)) : rawY;
+    if (previous) length += Math.hypot(x - previous.x, y - previous.y);
+    previous = { x, y };
+    return `${index ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+  });
+  return { path: points.join(' '), length: Math.max(1, length) };
+}
+
+function chartPointY(value: number, maximum: number, height: number, visualOffset = 0) {
+  const bottom = height - 12;
+  const numericValue = Math.max(0, Number(value || 0));
+  const rawY = bottom - (numericValue / Math.max(1, maximum)) * (height - 28);
+  return numericValue > 0 ? Math.max(6, Math.min(bottom, rawY + visualOffset)) : rawY;
+}
+
+function dashboardBucketDate(value: string) {
+  const normalized = /^\d{4}-\d{2}$/.test(value) ? `${value}-01` : value.slice(0, 19);
+  const parsed = new Date(normalized.includes(' ') ? normalized.replace(' ', 'T') : `${normalized}T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? new Date(2000, 0, 1, 12) : parsed;
+}
+
+function dashboardAxisLabel(value: string, granularity: DashboardGranularity, rowCount: number) {
+  const date = dashboardBucketDate(value);
+  const options: Intl.DateTimeFormatOptions = granularity === 'hour'
+    ? { hour: '2-digit' }
+    : granularity === 'month'
+      ? (rowCount > 12 ? { month: 'short', year: '2-digit' } : { month: 'short' })
+      : granularity === 'week'
+        ? { day: 'numeric', month: 'short' }
+        : rowCount <= 8 ? { weekday: 'short' } : { day: 'numeric', month: 'short' };
+  return new Intl.DateTimeFormat('ro-RO', options).format(date).replace('.', '');
+}
+
+function dashboardTooltipDate(value: string, granularity: DashboardGranularity) {
+  const options: Intl.DateTimeFormatOptions = granularity === 'hour'
+    ? { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
+    : granularity === 'month'
+      ? { month: 'long', year: 'numeric' }
+      : granularity === 'week'
+        ? { day: 'numeric', month: 'short', year: 'numeric' }
+        : { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
+  return new Intl.DateTimeFormat('ro-RO', options).format(dashboardBucketDate(value)).replace('.', '');
+}
+
+const AnimatedChartLine = React.memo(function AnimatedChartLine({ values, maximum, width, height, color, selected, visualOffset = 0, strokeWidth = 2.4 }: { values: number[]; maximum: number; width: number; height: number; color: string; selected: boolean; visualOffset?: number; strokeWidth?: number }) {
+  const motion = useSharedValue(selected ? 1 : 0);
+  const previousPath = useRef('');
+  const geometry = useMemo(() => chartLineGeometry(values, maximum, width, height, visualOffset), [height, maximum, values, visualOffset, width]);
+  useEffect(() => {
+    cancelAnimation(motion);
+    if (selected && previousPath.current !== geometry.path) motion.value = 0;
+    previousPath.current = geometry.path;
+    motion.value = withTiming(selected ? 1 : 0, {
+      duration: selected ? 560 : 460,
+      easing: ReanimatedEasing.bezier(0.2, 0.8, 0.2, 1),
+    });
+    return () => cancelAnimation(motion);
+  }, [geometry.path, motion, selected]);
+  const animatedProps = useAnimatedProps(() => ({
+    opacity: 0.06 + motion.value * 0.94,
+    transform: [
+      { translateY: height - 12 },
+      { scaleY: Math.max(0.001, motion.value) },
+      { translateY: -(height - 12) },
+    ],
+  }));
+  return <ReanimatedSvgPath animatedProps={animatedProps} d={geometry.path} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />;
+});
+
+function DashboardTrendChart({ rows, selected, granularity, dismissRef, scrollGesture }: { rows: ShopDashboardStats['daily_stats']; selected: DashboardSeriesKey[]; granularity: DashboardGranularity; dismissRef: React.MutableRefObject<(() => void) | null>; scrollGesture: NativeGesture }) {
+  const { width: windowWidth } = useWindowDimensions();
+  const width = Math.max(260, Math.min(windowWidth - 64, 720));
+  const height = 176;
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const gestureStartX = useSharedValue(0);
+  const gestureStartY = useSharedValue(0);
+  const safeRows = useMemo(() => rows.length ? rows : Array.from({ length: 7 }, (_, index) => ({ date: `2000-01-${String(index + 1).padStart(2, '0')}`, gross_revenue: 0, returns_count: 0, returns_total: 0, revenue: 0, orders_count: 0, acquisitions: 0, cost_of_goods_sold: 0, profit: 0 })), [rows]);
+  const chartValues = useMemo(() => ({
+    revenue: safeRows.map((row) => Number(row.revenue || 0)),
+    returns: safeRows.map((row) => Number(row.returns_total || 0)),
+    orders: safeRows.map((row) => Number(row.orders_count || 0)),
+    acquisitions: safeRows.map((row) => Number(row.acquisitions || 0)),
+    profit: safeRows.map((row) => Number(row.profit || 0)),
+  }), [safeRows]);
+  const moneyMaximum = useMemo(() => Math.max(1, ...chartValues.revenue, ...chartValues.returns, ...chartValues.acquisitions, ...chartValues.profit), [chartValues]);
+  const orderMaximum = useMemo(() => Math.max(1, ...chartValues.orders), [chartValues]);
+  const labels = useMemo(() => rows.length ? safeRows
+    .map((row, index) => ({ row, index }))
+    .filter(({ index }) => index === 0 || index === safeRows.length - 1 || index % Math.max(1, Math.ceil(safeRows.length / 4)) === 0)
+    .map(({ row, index }) => ({ key: `${row.date}-${index}`, text: dashboardAxisLabel(String(row.date), granularity, safeRows.length) })) : [], [granularity, rows.length, safeRows]);
+  const selectedIndex = activeIndex === null ? null : Math.max(0, Math.min(safeRows.length - 1, activeIndex));
+  const selectedRow = selectedIndex === null ? null : safeRows[selectedIndex];
+  const selectedX = selectedIndex === null ? 12 : 12 + (safeRows.length > 1 ? selectedIndex * (width - 24) / (safeRows.length - 1) : 0);
+  const selectTouchPoint = useCallback((locationX: number) => {
+    const ratio = Math.max(0, Math.min(1, (locationX - 12) / Math.max(1, width - 24)));
+    const nextIndex = Math.round(ratio * Math.max(0, safeRows.length - 1));
+    setActiveIndex((current) => current === nextIndex ? current : nextIndex);
+  }, [safeRows.length, width]);
+  const chartGesture = useMemo(() => {
+    const horizontalPan = Gesture.Pan()
+      .manualActivation(true)
+      .averageTouches(true)
+      .shouldCancelWhenOutside(false)
+      // Tine scrollul vertical in asteptare doar pana cand directia miscarii
+      // devine clara: orizontal = grafic, vertical = pagina.
+      .blocksExternalGesture(scrollGesture)
+      .onTouchesDown((event, state) => {
+        'worklet';
+        const touch = event.allTouches[0];
+        if (!touch || event.numberOfTouches !== 1) { state.fail(); return; }
+        // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values are mutable on the UI thread.
+        gestureStartX.value = touch.x;
+        // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values are mutable on the UI thread.
+        gestureStartY.value = touch.y;
+      })
+      .onTouchesMove((event, state) => {
+        'worklet';
+        const touch = event.allTouches[0];
+        if (!touch || event.numberOfTouches !== 1) { state.fail(); return; }
+        const deltaX = Math.abs(touch.x - gestureStartX.value);
+        const deltaY = Math.abs(touch.y - gestureStartY.value);
+        // Decide directia devreme, ca pagina si graficul sa nu poata raspunde
+        // simultan la aceeasi glisare.
+        if (deltaY >= 4 && deltaY >= deltaX * 0.9) state.fail();
+        else if (deltaX >= 7 && deltaX > deltaY * 1.12) state.activate();
+        else if (Math.max(deltaX, deltaY) >= 18) state.fail();
+      })
+      .onStart((event) => {
+        'worklet';
+        runOnJS(selectTouchPoint)(event.x);
+      })
+      .onUpdate((event) => {
+        'worklet';
+        runOnJS(selectTouchPoint)(event.x);
+      });
+    const pointTap = Gesture.Tap()
+      .maxDistance(7)
+      .maxDuration(350)
+      .simultaneousWithExternalGesture(scrollGesture)
+      .onEnd((event, success) => {
+        'worklet';
+        if (success) runOnJS(selectTouchPoint)(event.x);
+      });
+    return Gesture.Exclusive(horizontalPan, pointTap);
+  }, [gestureStartX, gestureStartY, scrollGesture, selectTouchPoint]);
+  useEffect(() => {
+    const dismiss = () => setActiveIndex(null);
+    dismissRef.current = dismiss;
+    return () => { if (dismissRef.current === dismiss) dismissRef.current = null; };
+  }, [dismissRef]);
+  const allTooltipRows: { key: DashboardSeriesKey; label: string; color: string; value: string }[] = selectedRow ? [
+    { key: 'revenue', label: 'Vânzări nete', color: '#8AB4F8', value: formatShopMoney(Number(selectedRow.revenue || 0)) },
+    { key: 'returns', label: `Retururi (${Number(selectedRow.returns_count || 0)})`, color: '#F472B6', value: formatShopMoney(Number(selectedRow.returns_total || 0)) },
+    { key: 'orders', label: 'Comenzi', color: '#F28B82', value: String(Number(selectedRow.orders_count || 0)) },
+    { key: 'acquisitions', label: 'Achiziții', color: '#FDD663', value: formatShopMoney(Number(selectedRow.acquisitions || 0)) },
+    { key: 'profit', label: 'Profit', color: '#81C995', value: formatShopMoney(Number(selectedRow.profit || 0)) },
+  ] : [];
+  const tooltipRows = allTooltipRows.filter((item) => selected.includes(item.key));
+  return <View style={styles.trendCard}>
+    <View style={styles.trendChartWrap}>
+      <GestureDetector gesture={chartGesture}>
+      <View style={[styles.trendTouchSurface, { width, height }]}>
+        <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+          <Line x1="12" y1="12" x2={width - 12} y2="12" stroke="#FFFFFF10" strokeWidth="1" />
+          <Line x1="12" y1={height / 2} x2={width - 12} y2={height / 2} stroke="#FFFFFF10" strokeWidth="1" />
+          <Line x1="12" y1={height - 12} x2={width - 12} y2={height - 12} stroke="#FFFFFF1A" strokeWidth="1" />
+          <AnimatedChartLine values={chartValues.revenue} maximum={moneyMaximum} width={width} height={height} color="#8AB4F8" selected={selected.includes('revenue')} />
+          <AnimatedChartLine values={chartValues.returns} maximum={moneyMaximum} width={width} height={height} color="#F472B6" selected={selected.includes('returns')} />
+          <AnimatedChartLine values={chartValues.acquisitions} maximum={moneyMaximum} width={width} height={height} color="#FDD663" selected={selected.includes('acquisitions')} />
+          <AnimatedChartLine values={chartValues.profit} maximum={moneyMaximum} width={width} height={height} color="#81C995" selected={selected.includes('profit')} visualOffset={4} />
+          <AnimatedChartLine values={chartValues.orders} maximum={orderMaximum} width={width} height={height} color="#F28B82" selected={selected.includes('orders')} visualOffset={-5} strokeWidth={3.2} />
+          {selectedRow && <><Line x1={selectedX} y1="10" x2={selectedX} y2={height - 12} stroke="#BDC1C6" strokeWidth="1" strokeDasharray="3 3" opacity="0.62" />
+            {selected.includes('revenue') && <Circle cx={selectedX} cy={chartPointY(Number(selectedRow.revenue || 0), moneyMaximum, height)} r="4" fill="#18171C" stroke="#8AB4F8" strokeWidth="2" />}
+            {selected.includes('returns') && <Circle cx={selectedX} cy={chartPointY(Number(selectedRow.returns_total || 0), moneyMaximum, height)} r="4" fill="#18171C" stroke="#F472B6" strokeWidth="2" />}
+            {selected.includes('acquisitions') && <Circle cx={selectedX} cy={chartPointY(Number(selectedRow.acquisitions || 0), moneyMaximum, height)} r="4" fill="#18171C" stroke="#FDD663" strokeWidth="2" />}
+            {selected.includes('profit') && <Circle cx={selectedX} cy={chartPointY(Number(selectedRow.profit || 0), moneyMaximum, height, 4)} r="4" fill="#18171C" stroke="#81C995" strokeWidth="2" />}
+            {selected.includes('orders') && <Circle cx={selectedX} cy={chartPointY(Number(selectedRow.orders_count || 0), orderMaximum, height, -5)} r="4.5" fill="#18171C" stroke="#F28B82" strokeWidth="2.6" />}</>}
+        </Svg>
+        {selectedRow && <View pointerEvents="none" style={[styles.trendTooltip, { left: Math.max(4, Math.min(width - 190, selectedX - 93)) }]}><Text style={styles.trendTooltipDate}>{dashboardTooltipDate(String(selectedRow.date), granularity)}</Text>{tooltipRows.map((item) => <View key={item.key} style={styles.trendTooltipRow}><View style={[styles.trendTooltipDot, { backgroundColor: item.color }]} /><Text style={styles.trendTooltipLabel}>{item.label}</Text><Text style={styles.trendTooltipValue}>{item.value}</Text></View>)}</View>}
+      </View>
+      </GestureDetector>
+      <View style={[styles.trendLabels, { width }]}>{labels.map((label) => <Text key={label.key} style={styles.trendLabel}>{label.text}</Text>)}</View>
+      <Text style={styles.trendTouchHint}>Atinge sau glisează pe grafic pentru detalii</Text>
+    </View>
+  </View>;
+}
+
+function DashboardMetric({ title, value, color, selected, onPress }: { title: string; value: string; color: string; selected: boolean; onPress: () => void }) {
+  return <TouchableOpacity activeOpacity={0.78} onPress={onPress} style={[styles.dashboardMetric, { borderColor: selected ? color : '#5F6368', backgroundColor: selected ? color : 'transparent' }]}><Text style={[styles.dashboardMetricTitle, selected && styles.dashboardMetricSelectedText]}>{title}</Text><Text numberOfLines={1} adjustsFontSizeToFit style={[styles.dashboardMetricValue, selected && styles.dashboardMetricSelectedText]}>{value}</Text></TouchableOpacity>;
+}
+
+const MobileProfitMargin = React.memo(function MobileProfitMargin({ revenue, costOfGoodsSold, profit }: { revenue: number; costOfGoodsSold: number; profit: number }) {
+  const margin = revenue > 0 ? Math.max(0, Math.min(100, profit / revenue * 100)) : 0;
+  const [motion] = useState(() => new Animated.Value(0));
+  const [showValue, setShowValue] = useState(false);
+  useEffect(() => {
+    motion.stopAnimation();
+    motion.setValue(0);
+    const animation = Animated.timing(motion, { toValue: margin / 100, duration: 520, easing: Easing.bezier(0.2, 0.8, 0.2, 1), useNativeDriver: false, isInteraction: false });
+    animation.start();
+    return () => animation.stop();
+  }, [margin, motion]);
+  const radius = 59;
+  const circumference = 2 * Math.PI * radius;
+  return <View style={styles.mobileMarginCard}>
+    <View style={styles.mobileMarginHeader}><View><Text style={styles.mobileMarginKicker}>REZULTAT · PERIOADA ALEASĂ</Text><Text style={styles.mobileMarginTitle}>Marjă de profit</Text></View><Text style={styles.mobileMarginHint}>Apasă inelul</Text></View>
+    <TouchableOpacity style={styles.mobileMarginRing} activeOpacity={0.82} onPress={() => setShowValue((value) => !value)}>
+      <Svg width={142} height={142} viewBox="0 0 142 142" style={styles.mobileMarginSvg}><Circle cx="71" cy="71" r={radius} fill="none" stroke="#FFFFFF12" strokeWidth="12" /><AnimatedSvgCircle cx="71" cy="71" r={radius} fill="none" stroke="#34A853" strokeWidth="12" strokeLinecap="round" strokeDasharray={`${circumference} ${circumference}`} strokeDashoffset={motion.interpolate({ inputRange: [0, 1], outputRange: [circumference, 0] })} /></Svg>
+      <View style={styles.mobileMarginCenter}><Text numberOfLines={1} adjustsFontSizeToFit style={[styles.mobileMarginPercent, showValue && styles.mobileMarginMoney]}>{showValue ? compactShopMoney(profit) : `${margin.toFixed(0)}%`}</Text><Text style={styles.mobileMarginCaption}>{showValue ? 'profit în perioadă' : 'din vânzări'}</Text></View>
+    </TouchableOpacity>
+    <View style={styles.mobileMarginValues}><View style={styles.mobileMarginValueBox}><View style={[styles.mobileMarginDot, { backgroundColor: '#34A853' }]} /><Text style={styles.mobileMarginValueLabel}>Profit</Text><Text style={styles.mobileMarginValue}>{formatShopMoney(profit)}</Text></View><View style={styles.mobileMarginValueBox}><View style={[styles.mobileMarginDot, { backgroundColor: '#F9AB00' }]} /><Text style={styles.mobileMarginValueLabel}>Cost marfă FIFO</Text><Text style={styles.mobileMarginValue}>{formatShopMoney(costOfGoodsSold)}</Text></View></View>
+  </View>;
+});
 
 function StatusBadge({ active }: { active: boolean }) {
   return <View style={[styles.badge, active ? styles.badgeActive : styles.badgeInactive]}><View style={[styles.badgeDot, { backgroundColor: active ? Colors.success : Colors.textMuted }]} /><Text style={[styles.badgeText, { color: active ? '#9CD9AE' : Colors.textSecondary }]}>{active ? 'Activa' : 'Inactiva'}</Text></View>;
@@ -946,6 +1656,52 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
   settingsKeyboard: { flex: 1 },
   content: { padding: 16, paddingBottom: 38 },
+  homePageMotion: { flex: 1, backgroundColor: '#080706' },
+  homePage: { paddingTop: 11 },
+  homeHero: { minHeight: 182, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', borderRadius: 29, marginHorizontal: 9, paddingHorizontal: 25, paddingTop: 20, paddingBottom: 34, backgroundColor: '#FF9000', shadowColor: '#FF9000', shadowOpacity: 0.28, shadowRadius: 18, shadowOffset: { width: 0, height: 9 }, elevation: 9 },
+  homeHeroGradient: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
+  homeHeroGlowLarge: { position: 'absolute', right: -4, top: 33, width: 126, height: 126, borderRadius: 63, backgroundColor: '#FFFFFF18' },
+  homeHeroGlowSmall: { position: 'absolute', right: 43, top: 86, width: 14, height: 14, borderRadius: 7, backgroundColor: '#FFE0B8' },
+  homeHeroCopy: { zIndex: 1, flex: 1, maxWidth: '70%' },
+  homeHeroTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: 6 },
+  homeHeroTitle: { flexShrink: 1, color: '#FFFFFF', fontFamily: 'Inter-Bold', fontSize: 23, lineHeight: 29, letterSpacing: -0.6 },
+  homeHeroWave: { fontSize: 34, lineHeight: 38 },
+  homeHeroHint: { maxWidth: 258, flexDirection: 'row', alignItems: 'flex-start', gap: 8, borderWidth: 1, borderColor: '#FFFFFF24', borderRadius: 13, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#7A310026', marginTop: 8 },
+  homeHeroText: { minWidth: 0, flex: 1, color: '#FFF4E7', fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 15 },
+  homeHeroChartIcon: { width: 84, height: 84, zIndex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 42, backgroundColor: '#FFFFFF17' },
+  homeSheet: {
+    zIndex: 2,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: '#FFFFFF14',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    marginTop: -28,
+    backgroundColor: '#0E0C0B',
+  },
+  homeSheetTopShadow: {
+    height: 46,
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    left: 0,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    backgroundColor: '#0E0C0B',
+    shadowColor: '#000',
+    shadowOpacity: 0.34,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: -6 },
+    elevation: 10,
+  },
+  homeSheetAccent: { width: 52, height: 4, zIndex: 1, alignSelf: 'center', borderRadius: 2, backgroundColor: '#5C4030', marginTop: 10 },
+  homeScroll: { flex: 1 },
+  homeContent: { paddingTop: 8 },
+  homeOverviewHeader: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 2 },
+  homeOverviewIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1, borderColor: '#4285F42B', backgroundColor: '#4285F414' },
+  homeOverviewTitle: { color: '#F1F3F4', fontFamily: 'Inter-Bold', fontSize: 18 },
+  homeOverviewText: { color: '#8D9AB1', fontFamily: 'Inter-Regular', fontSize: 10, marginTop: 4 },
   hero: { overflow: 'hidden', borderWidth: 0, borderRadius: 28, padding: 24, backgroundColor: '#151B1E' },
   heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }, heroIcon: { width: 44, height: 44, borderWidth: 1, borderColor: 'rgba(56,189,248,0.30)', borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(56,189,248,0.10)' }, heroRefresh: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.06)' },
   kicker: { color: '#38BDF8', fontSize: 9, fontFamily: 'Inter-Bold', letterSpacing: 1.5 },
@@ -954,12 +1710,82 @@ const styles = StyleSheet.create({
   statusPill: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, borderWidth: 1, borderColor: 'rgba(34,197,94,0.22)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: 'rgba(34,197,94,0.07)', marginTop: 18 },
   statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.success },
   statusText: { color: '#9CD9AE', fontSize: 9, fontFamily: 'Inter-SemiBold' },
+  periodSelector: { flexDirection: 'row', paddingTop: 14, paddingBottom: 2 },
+  periodButton: { minHeight: 42, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRightWidth: 0, borderColor: '#45474D', borderRadius: 0, paddingHorizontal: 15, backgroundColor: '#17181C' },
+  periodButtonActive: { borderColor: '#4D78B8', backgroundColor: '#273A57' },
+  periodMoreButton: { borderRightWidth: 1, borderTopRightRadius: 12, borderBottomRightRadius: 12 },
+  periodButtonText: { color: '#BDC1C6', fontFamily: 'Inter-SemiBold', fontSize: 11 },
+  periodButtonTextActive: { color: '#D2E3FC' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 26, marginBottom: 13, paddingHorizontal: 2 },
   sectionKicker: { color: Colors.orange, fontSize: 8, fontFamily: 'Inter-Bold', letterSpacing: 1.3 },
   sectionTitle: { color: Colors.textPrimary, fontSize: 17, fontFamily: 'Inter-Bold', marginTop: 4 },
   sectionSeeAll: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, borderWidth: 1, borderColor: '#4A4650', borderRadius: 999, paddingHorizontal: 13, backgroundColor: '#343139' },
   sectionSeeAllText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 },
-  dashboardLoading: { minHeight: 120, alignItems: 'center', justifyContent: 'center', gap: 10, borderRadius: 22, backgroundColor: '#1B1B1F' }, dashboardLoadingText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10 }, dashboardMetrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, dashboardMetric: { width: '48%', minHeight: 112, flexGrow: 1, borderRadius: 22, padding: 16, backgroundColor: '#1B1B1F' }, dashboardMetricDot: { width: 8, height: 8, borderRadius: 4 }, dashboardMetricTitle: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.9, marginTop: 12 }, dashboardMetricValue: { fontFamily: 'Inter-Bold', fontSize: 18, marginTop: 7 },
+  mobileAnalytics: { minHeight: 345, overflow: 'hidden', borderWidth: 1, borderColor: '#FFFFFF0D', borderRadius: 24, paddingTop: 14, paddingHorizontal: 12, paddingBottom: 10, backgroundColor: '#18171C', marginTop: 11 },
+  analyticsToolbar: { zIndex: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  analyticsDateTrigger: { minWidth: 0, minHeight: 38, flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7, borderRadius: 10, paddingHorizontal: 2 }, analyticsDateText: { minWidth: 0, flexShrink: 1, color: '#DADCE0', fontFamily: 'Inter-SemiBold', fontSize: 12 },
+  analyticsGranularityAnchor: { flexShrink: 0 },
+  analyticsGranularityTrigger: { minWidth: 102, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderWidth: 1, borderColor: '#FFFFFF22', borderRadius: 14, paddingHorizontal: 12, backgroundColor: '#222329' },
+  analyticsGranularityTriggerOpen: { borderColor: '#8AB4F8A8', backgroundColor: '#282D36' },
+  analyticsGranularityTriggerLabel: { color: '#7E91AE', fontFamily: 'Inter-Bold', fontSize: 6.5, letterSpacing: 1.05, marginBottom: 2 },
+  analyticsGranularityText: { color: '#F1F3F4', fontFamily: 'Inter-SemiBold', fontSize: 11 },
+  analyticsGranularityBackdrop: { flex: 1, backgroundColor: 'rgba(4,6,9,0.18)' },
+  analyticsGranularityMenu: { position: 'absolute', zIndex: 30, overflow: 'hidden', borderWidth: 1, borderColor: '#FFFFFF1F', borderRadius: 20, padding: 7, backgroundColor: '#24252A', shadowColor: '#000', shadowOpacity: 0.28, shadowRadius: 18, shadowOffset: { width: 0, height: 9 }, elevation: 14 },
+  analyticsGranularityMenuHeader: { minHeight: 55, justifyContent: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#FFFFFF12', paddingHorizontal: 11 },
+  analyticsGranularityMenuKicker: { color: '#8AB4F8', fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 1.2 },
+  analyticsGranularityMenuTitle: { color: '#F1F3F4', fontFamily: 'Inter-SemiBold', fontSize: 12, marginTop: 4 },
+  analyticsGranularityOption: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, paddingHorizontal: 8, marginTop: 3 },
+  analyticsGranularityOptionActive: { backgroundColor: '#8AB4F818' },
+  analyticsGranularityOptionDisabled: { opacity: 0.36 },
+  analyticsGranularityOptionMark: { width: 35, height: 35, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FFFFFF16', borderRadius: 11, backgroundColor: '#FFFFFF08' },
+  analyticsGranularityOptionMarkActive: { borderColor: '#8AB4F860', backgroundColor: '#8AB4F81D' },
+  analyticsGranularityOptionMarkText: { color: '#9AA0A6', fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.35 },
+  analyticsGranularityOptionMarkTextActive: { color: '#AECBFA' },
+  analyticsGranularityOptionCopy: { minWidth: 0, flex: 1 },
+  analyticsGranularityOptionText: { color: '#E8EAED', fontFamily: 'Inter-SemiBold', fontSize: 12 },
+  analyticsGranularityOptionTextActive: { color: '#D2E3FC', fontFamily: 'Inter-Bold' },
+  analyticsGranularityOptionDescription: { color: '#858A91', fontFamily: 'Inter-Regular', fontSize: 7.5, marginTop: 2 },
+  analyticsGranularityCheck: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FFFFFF13', borderRadius: 11 },
+  analyticsGranularityCheckActive: { borderColor: '#8AB4F8', backgroundColor: '#8AB4F8' },
+  analyticsLoading: { minHeight: 235, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  metricPills: { alignItems: 'center', gap: 9, paddingTop: 14, paddingBottom: 9, paddingRight: 4 },
+  dashboardLoading: { minHeight: 120, alignItems: 'center', justifyContent: 'center', gap: 10, borderRadius: 22, backgroundColor: '#1B1B1F' }, dashboardLoadingText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10 }, dashboardMetrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, dashboardMetric: { minWidth: 118, minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1, borderRadius: 28, paddingHorizontal: 17 }, dashboardMetricTitle: { color: '#DADCE0', fontFamily: 'Inter-Regular', fontSize: 11 }, dashboardMetricValue: { color: '#F1F3F4', fontFamily: 'Inter-Regular', fontSize: 17 }, dashboardMetricSelectedText: { color: '#202124' },
+  trendCard: { overflow: 'hidden', paddingTop: 3, backgroundColor: 'transparent' },
+  trendHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  trendKicker: { color: '#8AB4F8', fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 1.2 },
+  trendTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 16, marginTop: 4 },
+  trendTotal: { alignItems: 'flex-end' }, trendTotalLabel: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 9 }, trendTotalValue: { color: '#D2E3FC', fontFamily: 'Inter-Bold', fontSize: 12, marginTop: 3 },
+  trendChartWrap: { overflow: 'hidden', alignItems: 'center', marginTop: 2 },
+  trendTouchSurface: { position: 'relative' },
+  trendLabels: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4, marginTop: 3 },
+  trendLabel: { color: '#80868B', fontFamily: 'Inter-Regular', fontSize: 8 },
+  trendTouchHint: { color: '#6F7479', fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 8 },
+  trendTooltip: { width: 186, position: 'absolute', top: 7, zIndex: 8, gap: 6, borderWidth: 1, borderColor: '#FFFFFF24', borderRadius: 13, padding: 11, backgroundColor: '#27282CDC', shadowColor: '#000', shadowOpacity: 0.34, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 12 },
+  trendTooltipDate: { color: '#F1F3F4', fontFamily: 'Inter-Bold', fontSize: 10, marginBottom: 2 }, trendTooltipRow: { flexDirection: 'row', alignItems: 'center', gap: 7 }, trendTooltipDot: { width: 6, height: 6, borderRadius: 3 }, trendTooltipLabel: { flex: 1, color: '#BDC1C6', fontFamily: 'Inter-Regular', fontSize: 9 }, trendTooltipValue: { color: '#F1F3F4', fontFamily: 'Inter-SemiBold', fontSize: 9 },
+  rangeOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16, backgroundColor: 'rgba(4,6,9,0.74)' },
+  rangeDialog: { width: '100%', maxWidth: 520, overflow: 'hidden', borderWidth: 1, borderColor: '#FFFFFF1A', borderRadius: 27, padding: 20, backgroundColor: '#202124' },
+  rangeDialogHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#FFFFFF18', paddingBottom: 15, marginBottom: 7 },
+  rangeDialogKicker: { color: '#8AB4F8', fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 1.2 }, rangeDialogTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 22, marginTop: 4 },
+  rangeClose: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: '#FFFFFF0D' },
+  rangeOption: { minHeight: 51, flexDirection: 'row', alignItems: 'center', gap: 12 }, rangeOptionText: { color: '#E8EAED', fontFamily: 'Inter-Regular', fontSize: 14 },
+  rangeRadio: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#9AA0A6', borderRadius: 10 }, rangeRadioActive: { borderColor: '#8AB4F8' }, rangeRadioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#8AB4F8' },
+  customDates: { gap: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#FFFFFF18', paddingTop: 15, marginTop: 5 }, customDateLabel: { color: '#9AA0A6', fontFamily: 'Inter-Regular', fontSize: 10, marginBottom: 6 }, customDateInput: { minHeight: 46, borderWidth: 1, borderColor: '#5F6368', borderRadius: 11, paddingHorizontal: 12, color: '#E8EAED', backgroundColor: '#202124', fontFamily: 'Inter-Regular', fontSize: 13 },
+  rangeFooter: { flexDirection: 'row', justifyContent: 'flex-end', gap: 9, marginTop: 18 }, rangeCancel: { minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, paddingHorizontal: 17 }, rangeCancelText: { color: '#8AB4F8', fontFamily: 'Inter-Bold', fontSize: 12 }, rangeApply: { minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, paddingHorizontal: 19, backgroundColor: '#8AB4F8' }, rangeApplyText: { color: '#0B1526', fontFamily: 'Inter-Bold', fontSize: 12 },
+  rangeModalBackdrop: { flex: 1, overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.28)' }, rangeScreen: { flex: 1, backgroundColor: '#1B1A1F' }, rangeCustomMotion: { flex: 1 },
+  rangeScreenHeader: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#5F6368', paddingHorizontal: 8 }, rangeScreenClose: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19 }, rangeScreenTitle: { color: '#E8EAED', fontFamily: 'Inter-SemiBold', fontSize: 17 },
+  rangeList: { paddingBottom: 28 }, rangeListKicker: { minHeight: 48, paddingTop: 20, paddingHorizontal: 7, color: '#E8EAED', fontFamily: 'Inter-Bold', fontSize: 14 },
+  rangeListRow: { minHeight: 61, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#5F6368', paddingHorizontal: 7 }, rangeListText: { flex: 1, color: '#F1F3F4', fontFamily: 'Inter-SemiBold', fontSize: 14 }, rangeListTextActive: { color: '#8AB4F8' }, rangeListCheck: { color: '#8AB4F8', fontFamily: 'Inter-Bold', fontSize: 24, marginRight: 7 },
+  rangeCustomScreen: { flexGrow: 1, padding: 20, paddingBottom: 38 }, rangeCustomHint: { color: '#9AA0A6', fontFamily: 'Inter-Regular', fontSize: 13, lineHeight: 20, marginBottom: 20 }, rangeCustomApply: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 24, backgroundColor: '#8AB4F8', marginTop: 18 }, rangeCustomApplyDisabled: { opacity: 0.34 },
+  smartDateFields: { gap: 4 },
+  smartDateButton: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#4D5156', borderRadius: 16, paddingHorizontal: 13, backgroundColor: '#202124' }, smartDateButtonActive: { borderColor: '#8AB4F8', backgroundColor: '#25364C' },
+  smartDateIcon: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#8AB4F816' }, smartDateCopy: { minWidth: 0, flex: 1 }, smartDateValue: { color: '#F1F3F4', fontFamily: 'Inter-SemiBold', fontSize: 13 }, smartDateIso: { color: '#9AA0A6', fontFamily: 'Inter-Regular', fontSize: 9, marginTop: 4 },
+  smartDateConnector: { height: 30, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 18 }, smartDateConnectorText: { color: '#80868B', fontFamily: 'Inter-Regular', fontSize: 9 }, smartDateConnectorLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: '#FFFFFF18' },
+  smartPickerPanel: { overflow: 'hidden', borderWidth: 1, borderColor: '#FFFFFF1A', borderRadius: 19, padding: 12, backgroundColor: '#202124', marginTop: 17 }, smartPickerHeader: { minHeight: 45, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 5 }, smartPickerKicker: { color: '#8AB4F8', fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 1.1 }, smartPickerTitle: { color: '#F1F3F4', fontFamily: 'Inter-SemiBold', fontSize: 15, marginTop: 3 }, smartPickerDone: { minHeight: 35, alignItems: 'center', justifyContent: 'center', borderRadius: 18, paddingHorizontal: 14, backgroundColor: '#8AB4F8' }, smartPickerDoneText: { color: '#0B1526', fontFamily: 'Inter-Bold', fontSize: 11 },
+  rangeCustomSummary: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 9, borderRadius: 14, paddingHorizontal: 12, backgroundColor: '#FFFFFF08', marginTop: 16 }, rangeCustomSummaryText: { minWidth: 0, flex: 1, color: '#C4E5CD', fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 15 }, rangeCustomSummaryInvalid: { color: '#F28B82' },
+  mobileMarginCard: { overflow: 'hidden', borderWidth: 1, borderColor: '#FFFFFF14', borderRadius: 24, padding: 18, backgroundColor: '#1B1B1F', marginTop: 11 },
+  mobileMarginHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }, mobileMarginKicker: { color: '#8AB4F8', fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 1.05 }, mobileMarginTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 18, marginTop: 5 }, mobileMarginHint: { color: '#80868B', fontFamily: 'Inter-Regular', fontSize: 9, marginTop: 3 },
+  mobileMarginRing: { width: 142, height: 142, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', borderRadius: 71, marginVertical: 14 }, mobileMarginSvg: { position: 'absolute', transform: [{ rotate: '-90deg' }] }, mobileMarginCenter: { width: 108, alignItems: 'center' }, mobileMarginPercent: { width: 108, color: '#E6F4EA', fontFamily: 'Inter-Bold', fontSize: 29, textAlign: 'center' }, mobileMarginMoney: { fontSize: 15 }, mobileMarginCaption: { color: '#9AA0A6', fontFamily: 'Inter-Regular', fontSize: 9, marginTop: 2 },
+  mobileMarginValues: { flexDirection: 'row', gap: 8 }, mobileMarginValueBox: { flex: 1, minWidth: 0, borderWidth: 1, borderColor: '#FFFFFF12', borderRadius: 15, paddingTop: 11, paddingRight: 10, paddingBottom: 11, paddingLeft: 25, backgroundColor: '#FFFFFF05' }, mobileMarginDot: { width: 6, height: 6, position: 'absolute', left: 10, top: 14, borderRadius: 3 }, mobileMarginValueLabel: { color: '#9AA0A6', fontFamily: 'Inter-Regular', fontSize: 9 }, mobileMarginValue: { color: '#E8EAED', fontFamily: 'Inter-Bold', fontSize: 11, marginTop: 5 },
   newOrdersBanner: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: 'rgba(56,189,248,0.16)', borderRadius: 22, padding: 13, backgroundColor: 'rgba(56,189,248,0.07)', marginTop: 11 }, newOrdersIcon: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: 'rgba(56,189,248,0.11)' }, newOrdersCopy: { flex: 1 }, newOrdersValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 20 }, newOrdersLabel: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 13, marginTop: 2 }, newOrdersButton: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 13, paddingHorizontal: 11, backgroundColor: '#1684B4' }, newOrdersButtonText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 },
   quickActions: { gap: 9 }, quickAction: { minHeight: 80, flexDirection: 'row', alignItems: 'center', gap: 13, borderWidth: 1, borderColor: 'transparent', borderRadius: 20, padding: 13, backgroundColor: '#1B1B1F' }, quickActionInvoice: { borderColor: '#F59E0B30', backgroundColor: '#211D17' }, quickActionCopy: { flex: 1 }, quickActionTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 13 }, quickActionText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 9, marginTop: 3 }, recentOrders: { overflow: 'hidden', borderRadius: 21, backgroundColor: '#1B1B1F' }, recentOrder: { minHeight: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#353137', paddingHorizontal: 14 }, recentOrderNumber: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 11 }, recentOrderMeta: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 4 }, recentOrderRight: { alignItems: 'flex-end' }, recentOrderTotal: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 11 }, recentOrderStatus: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, marginTop: 4 }, recentOrderNew: { color: '#38BDF8' }, dashboardEmpty: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 10, padding: 22, textAlign: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
@@ -994,7 +1820,8 @@ const styles = StyleSheet.create({
   spvContent: { width: '100%', maxWidth: 760, alignSelf: 'center', gap: 12, padding: 15 },
   spvHero: { minHeight: 310, justifyContent: 'center', overflow: 'hidden', borderWidth: 1, borderColor: '#35527A', borderRadius: 30, padding: 24, backgroundColor: '#18202C' },
   spvGlow: { position: 'absolute', right: -70, top: -80, width: 230, height: 230, borderRadius: 115, borderWidth: 38, borderColor: '#60A5FA0D', backgroundColor: '#60A5FA08' },
-  spvIcon: { width: 67, height: 67, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: '#60A5FA18', marginBottom: 18 },
+  spvIcon: { width: 232, height: 68, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 17, backgroundColor: '#FFFFFF', marginBottom: 18 },
+  spvLogoImage: { width: 205, height: 56 },
   spvState: { position: 'absolute', right: 20, top: 20, flexDirection: 'row', alignItems: 'center', gap: 7, borderRadius: 99, paddingHorizontal: 11, paddingVertical: 7, backgroundColor: '#A8C7FA12' },
   spvStateDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#A8C7FA' },
   spvStateText: { color: '#A8C7FA', fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.9 },

@@ -43,6 +43,7 @@ import {
   FilePlus2,
   ImagePlus,
   Link2,
+  MapPin,
   PackageSearch,
   PencilLine,
   Plus,
@@ -67,6 +68,7 @@ import {
   ShopNirLine,
   ShopNirPage,
   ShopProduct,
+  ShopReceiptLocation,
   ShopSupplier,
   ShopWarehouse,
 } from '@/services/shopApi';
@@ -77,10 +79,13 @@ const isLocalNir = (document: ShopNirDocument) => document.id.startsWith('local-
 const cloneNir = (document: ShopNirDocument) => JSON.parse(JSON.stringify(document)) as ShopNirDocument;
 const isNirReversalDocument = (document: ShopNirDocument | null | undefined) => document?.source_type === 'reversal'
   || Boolean((document as (ShopNirDocument & { reversal_of_id?: string | null }) | null | undefined)?.reversal_of_id);
-const isNirStornoActionLocked = (document: ShopNirDocument | null | undefined) => isNirReversalDocument(document);
+const isCustomerReturnDocument = (document: ShopNirDocument | null | undefined) => document?.operation_type === 'customer_return'
+  || document?.source_type === 'customer_return'
+  || document?.document_kind === 'customer_return';
+const isNirStornoActionLocked = (document: ShopNirDocument | null | undefined) => isNirReversalDocument(document) || isCustomerReturnDocument(document);
 const isNirCorrectionLocked = (document: ShopNirDocument | null | undefined) => {
   if (!document) return false;
-  if (isNirReversalDocument(document)) return true;
+  if (isNirReversalDocument(document) || isCustomerReturnDocument(document)) return true;
   const state = document.storno_state || document.storno?.state || 'none';
   return state === 'partial'
     || state === 'full'
@@ -119,9 +124,16 @@ const statusInfo = {
   confirmed: { label: 'CONFIRMAT', color: '#22C55E', Icon: CheckCircle2 },
   reversed: { label: 'STORNAT', color: '#EF4444', Icon: AlertTriangle },
 } as const;
-const nirDisplayStatus = (document: ShopNirDocument) => isNirReversalDocument(document)
-  ? statusInfo.reversed
-  : document.status === 'draft' ? statusInfo.draft : statusInfo.confirmed;
+const nirDisplayStatus = (document: ShopNirDocument) => isCustomerReturnDocument(document)
+  ? { label: 'RETUR CLIENT', color: '#2DD4BF', Icon: RotateCcw }
+  : isNirReversalDocument(document)
+    ? { label: 'RETUR FURNIZOR', color: '#FB7185', Icon: RotateCcw }
+    : document.status === 'draft' ? statusInfo.draft : { ...statusInfo.confirmed, label: 'RECEPȚIE' };
+const nirOperationInfo = (document: ShopNirDocument) => isCustomerReturnDocument(document)
+  ? { label: 'RETUR CLIENT', color: '#2DD4BF', Icon: RotateCcw }
+  : isNirReversalDocument(document)
+    ? { label: 'RETUR FURNIZOR', color: '#FB7185', Icon: RotateCcw }
+    : { label: 'RECEPȚIE', color: '#22C55E', Icon: CheckCircle2 };
 
 const differenceReasons = [
   ['shortage', 'Lipsă'], ['surplus', 'Surplus'], ['damaged', 'Deteriorat'], ['wrong_product', 'Produs greșit'],
@@ -249,6 +261,7 @@ function isValidIsoDate(value: string) {
 function nirDraftPayload(document: ShopNirDocument) {
   return {
     row_version: document.row_version, supplier_id: document.supplier_id, warehouse_id: document.warehouse_id,
+    reception_location_id: document.reception_location_id, reception_location: document.reception_location,
     supplier_invoice_series: document.supplier_invoice_series, supplier_invoice_number: document.supplier_invoice_number,
     supplier_invoice_date: document.supplier_invoice_date, nir_date: document.nir_date, nir_time: document.nir_time,
     reception_date: document.reception_date, reception_time: document.reception_time,
@@ -288,8 +301,10 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
   const [reversing, setReversing] = useState(false);
   const [suppliers, setSuppliers] = useState<ShopSupplier[]>([]);
   const [warehouses, setWarehouses] = useState<ShopWarehouse[]>([]);
+  const [receiptLocations, setReceiptLocations] = useState<ShopReceiptLocation[]>([]);
   const [supplierPicker, setSupplierPicker] = useState(false);
   const [warehousePicker, setWarehousePicker] = useState(false);
+  const [receiptLocationPicker, setReceiptLocationPicker] = useState(false);
   const [supplierSearch, setSupplierSearch] = useState('');
   const [newSupplier, setNewSupplier] = useState<{ alias: string; name: string; cui: string } | null>(null);
   const [productPickerLine, setProductPickerLine] = useState<number | null>(null);
@@ -350,9 +365,10 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
   const loadLookups = useCallback(async () => {
     if (!token) return;
     try {
-      const [supplierRows, warehouseRows] = await Promise.all([shopApi.searchSuppliers(token), shopApi.listWarehouses(token)]);
+      const [supplierRows, warehouseRows, receiptRows] = await Promise.all([shopApi.searchSuppliers(token), shopApi.listWarehouses(token), shopApi.listReceiptLocations(token)]);
       setSuppliers(supplierRows);
       setWarehouses(warehouseRows);
+      setReceiptLocations(receiptRows);
     } catch {
       // Registrul rămâne utilizabil, iar editorul va afișa eroarea la salvare.
     }
@@ -410,12 +426,13 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     if (saving || createDraftInFlight.current) return;
     createDraftInFlight.current = true;
     const warehouse = warehouses.find((item) => item.is_default) || warehouses[0];
+    const receiptLocation = receiptLocations.find((item) => item.is_default) || receiptLocations[0];
     const date = today();
     const time = currentTime();
     const document: ShopNirDocument = {
       id: `local-nir-${Date.now()}`,
       temporary_number: 'NIR nesalvat', nir_number: null, status: 'draft', supplier_id: null,
-      warehouse_id: warehouse?.id || '', supplier_invoice_series: null, supplier_invoice_number: null,
+      warehouse_id: warehouse?.id || '', reception_location_id: receiptLocation?.id || null, reception_location: receiptLocation?.name || 'Gestiune principală', supplier_invoice_series: null, supplier_invoice_number: null,
       supplier_invoice_date: date, nir_date: date, nir_time: time, reception_date: date, reception_time: time, currency: 'RON', exchange_rate: '1',
       exchange_rate_date: date, notes: null, source_type: 'manual', row_version: 0,
       confirmed_at: null, confirmed_by: null, reversed_at: null, reversed_by: null,
@@ -1176,6 +1193,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
             <View style={styles.stepHint}><Text style={styles.stepHintNumber}>2</Text><Text style={styles.stepHintText}>Data și ora păstrează ordinea exactă a recepțiilor.</Text></View>
             <View style={styles.dateTimeCard}><DateTimeSelector label="DATA ȘI ORA NIR *" date={editor.nir_date} time={editor.nir_time} color="#38BDF8" disabled={!editable} onPress={() => openDateTimePicker('nir')} /><DateTimeSelector label="DATA ȘI ORA RECEPȚIEI *" date={editor.reception_date} time={editor.reception_time} color="#5EEAD4" disabled={!editable} onPress={() => openDateTimePicker('reception')} /></View>
             <TouchableOpacity style={styles.selector} disabled={!editable} activeOpacity={0.78} onPress={() => setWarehousePicker(true)}><View><Text style={styles.label}>GESTIUNE *</Text><Text style={styles.selectorValue}>{warehouses.find((item) => item.id === editor.warehouse_id)?.name || editor.warehouse_name || 'Selectează gestiunea'}</Text></View>{editable ? <ChevronRight size={19} color="#22C55E" /> : <Boxes size={18} color="#22C55E" />}</TouchableOpacity>
+            <TouchableOpacity style={styles.selector} disabled={!editable} activeOpacity={0.78} onPress={() => setReceiptLocationPicker(true)}><View style={{ flex: 1 }}><Text style={styles.label}>LOC RECEPȚIE *</Text><Text style={styles.selectorValue}>{receiptLocations.find((item) => item.id === editor.reception_location_id)?.name || editor.reception_location || 'Gestiune principală'}</Text></View>{editable ? <ChevronRight size={19} color="#38BDF8" /> : <MapPin size={18} color="#38BDF8" />}</TouchableOpacity>
           </View></Reveal>
 
           <Reveal delay={120}><View style={styles.editorStepCard}>
@@ -1256,6 +1274,8 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
         <Modal visible={currencyPicker} transparent animationType="slide" onRequestClose={() => setCurrencyPicker(false)}><Pressable style={styles.backdrop} onPress={() => setCurrencyPicker(false)}><Pressable style={[styles.sheet, styles.currencySheet, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}><SheetHeader title="Alege moneda facturii" onClose={() => setCurrencyPicker(false)} /><SearchBox value={currencySearch} onChangeText={setCurrencySearch} placeholder="Caută după cod sau denumire" /><View style={styles.currencyCount}><CircleDollarSign size={15} color="#F59E0B" /><Text style={styles.currencyCountText}>{filteredCurrencies.length} monede disponibile</Text></View><ScrollView style={{ maxHeight: 510 }} contentContainerStyle={styles.currencyList}>{filteredCurrencies.map((currency) => <TouchableOpacity key={currency} style={[styles.currencyOption, currency === editor.currency && styles.currencyOptionActive]} onPress={() => selectCurrency(currency)}><View style={[styles.currencyOptionCode, currency === editor.currency && styles.currencyOptionCodeActive]}><Text style={[styles.currencyOptionCodeText, currency === editor.currency && styles.currencyOptionCodeTextActive]}>{currency}</Text></View><Text numberOfLines={1} style={styles.currencyOptionName}>{currencyName(currency)}</Text>{currency === editor.currency ? <CheckCircle2 size={18} color="#5EEAA4" /> : <ChevronRight size={17} color={Colors.textMuted} />}</TouchableOpacity>)}</ScrollView></Pressable></Pressable></Modal>
 
         <Modal visible={warehousePicker} transparent animationType="slide" onRequestClose={() => setWarehousePicker(false)}><Pressable style={styles.backdrop} onPress={() => setWarehousePicker(false)}><Pressable style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}><SheetHeader title="Alege gestiunea" onClose={() => setWarehousePicker(false)} /><Text style={styles.pickerExplanation}>Aici va intra efectiv marfa după confirmarea NIR-ului.</Text><ScrollView style={{ maxHeight: 430 }}>{warehouses.map((warehouse) => <TouchableOpacity style={styles.pickerRow} key={warehouse.id} onPress={() => { patchEditor({ warehouse_id: warehouse.id, warehouse_name: warehouse.name }); setWarehousePicker(false); }}><View style={styles.pickerIcon}><Boxes size={19} color="#5EEAA4" /></View><View style={{ flex: 1 }}><Text style={styles.pickerTitle}>{warehouse.name}</Text><Text style={styles.pickerMeta}>{warehouse.is_default ? 'Gestiune implicită' : 'Gestiune disponibilă'}</Text></View>{warehouse.id === editor.warehouse_id ? <CheckCircle2 size={18} color="#5EEAA4" /> : <ChevronRight size={18} color={Colors.textMuted} />}</TouchableOpacity>)}</ScrollView></Pressable></Pressable></Modal>
+
+        <Modal visible={receiptLocationPicker} transparent animationType="slide" onRequestClose={() => setReceiptLocationPicker(false)}><Pressable style={styles.backdrop} onPress={() => setReceiptLocationPicker(false)}><Pressable style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}><SheetHeader title="Alege locul recepției" onClose={() => setReceiptLocationPicker(false)} /><Text style={styles.pickerExplanation}>Locul fizic va rămâne salvat în document, separat de gestiunea contabilă.</Text><ScrollView style={{ maxHeight: 430 }}>{receiptLocations.map((location) => <TouchableOpacity style={styles.pickerRow} key={location.id} onPress={() => { patchEditor({ reception_location_id: location.id, reception_location: [location.name, [location.address, location.city, location.county, location.postal_code].filter(Boolean).join(', ')].filter(Boolean).join(' — ') }); setReceiptLocationPicker(false); }}><View style={styles.pickerIcon}><MapPin size={19} color="#38BDF8" /></View><View style={{ flex: 1 }}><Text style={styles.pickerTitle}>{location.name}</Text><Text style={styles.pickerMeta}>{[location.address, location.city, location.county, location.postal_code].filter(Boolean).join(', ') || (location.is_default ? 'Punct implicit' : 'Punct de recepție')}</Text></View>{location.id === editor.reception_location_id ? <CheckCircle2 size={18} color="#38BDF8" /> : <ChevronRight size={18} color={Colors.textMuted} />}</TouchableOpacity>)}</ScrollView></Pressable></Pressable></Modal>
 
         <Modal visible={supplierPicker} transparent animationType="slide" onRequestClose={() => setSupplierPicker(false)}><Pressable style={styles.backdrop} onPress={() => setSupplierPicker(false)}><Pressable style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}><SheetHeader title="Selectează furnizorul" onClose={() => setSupplierPicker(false)} /><SearchBox value={supplierSearch} onChangeText={setSupplierSearch} placeholder="Alias, denumire juridică sau CUI" />{newSupplier ? <View style={styles.inlineCreate}><Field label="ALIAS AFIȘAT *" value={newSupplier.alias} onChangeText={(alias) => setNewSupplier({ ...newSupplier, alias })} placeholder="Ex: Furnizor principal" /><Field label="DENUMIRE JURIDICĂ *" value={newSupplier.name} onChangeText={(name) => setNewSupplier({ ...newSupplier, name })} placeholder="Firma furnizoare SRL" /><Field label="CUI" value={newSupplier.cui} onChangeText={(cui) => setNewSupplier({ ...newSupplier, cui })} placeholder="RO123456" /><TouchableOpacity style={styles.confirmAction} onPress={() => void addSupplier()}><Check size={18} color={Colors.white} /><Text style={styles.confirmActionText}>Creează și selectează</Text></TouchableOpacity></View> : <><ScrollView style={{ maxHeight: 430 }}>{filteredSuppliers.map((supplier) => <TouchableOpacity style={styles.pickerRow} key={supplier.id} onPress={() => { const supplierCurrency = supplier.default_currency || editor.currency; patchEditor({ supplier_id: supplier.id, supplier_name: supplier.name, supplier_alias: supplier.alias }); setSupplierPicker(false); if (supplierCurrency !== editor.currency) selectCurrency(supplierCurrency); }}><View style={styles.pickerIcon}><Building2 size={18} color="#5EEAD4" /></View><View style={{ flex: 1 }}><Text style={styles.pickerTitle}>{shopSupplierDisplayName(supplier)}</Text><Text style={styles.pickerMeta}>{supplier.name}{supplier.cui ? ` · CUI ${supplier.cui}` : ''}</Text></View><ChevronRight size={18} color={Colors.textMuted} /></TouchableOpacity>)}</ScrollView>{can('SUPPLIER_CREATE') && <TouchableOpacity style={styles.addLine} onPress={() => setNewSupplier({ alias: supplierSearch, name: '', cui: '' })}><Plus size={18} color={Colors.orange} /><Text style={styles.addLineText}>Furnizor nou</Text></TouchableOpacity>}</>}</Pressable></Pressable></Modal>
 
@@ -1513,8 +1533,9 @@ function SheetHeader({ title, onClose }: { title: string; onClose: () => void })
 function Tab({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) { return <TouchableOpacity style={[styles.detailTab, active && styles.detailTabActive]} onPress={onPress}><Text style={[styles.detailTabText, active && styles.detailTabTextActive]}>{label}</Text></TouchableOpacity>; }
 
 function NirRegistryCard({ document, onPress, canViewCosts }: { document: ShopNirDocument; onPress: () => void; canViewCosts: boolean }) {
-  const info = nirDisplayStatus(document);
-  return <TouchableOpacity style={styles.registryCard} activeOpacity={0.75} onPress={onPress}><View style={[styles.registryAccent, { backgroundColor: info.color }]} /><RegistryDocumentIcon color={info.color} /><View style={styles.registryCardMain}><View style={styles.registryCardTop}><View style={{ flex: 1 }}><Text style={styles.registryNumber}>{document.nir_number || document.temporary_number}</Text><Text style={styles.registrySupplier}>{shopSupplierDisplayName(document, 'Furnizor neselectat')}</Text></View><View style={[styles.statusChip, { backgroundColor: `${info.color}16`, borderColor: `${info.color}40` }]}><info.Icon size={13} color={info.color} /><Text style={[styles.statusChipText, { color: info.color }]}>{info.label}</Text></View></View><View style={styles.registryMeta}><Text style={styles.registryMetaText}>◷ {document.nir_date} · {String(document.nir_time || document.reception_time || '').slice(0, 5) || '—'}</Text><Text style={styles.registryMetaText}>▧ {document.line_count || 0} produse</Text><Text style={styles.registryMetaText}>Factura {document.supplier_invoice_number || '—'}</Text></View>{canViewCosts && <Text style={styles.registryTotal}>{money(document.grand_total_ron)}</Text>}</View><ChevronRight size={20} color={Colors.textMuted} /></TouchableOpacity>;
+  const info = nirOperationInfo(document);
+  const counterparty = isCustomerReturnDocument(document) ? (document.customer_name || 'Client') : shopSupplierDisplayName(document, 'Furnizor neselectat');
+  return <TouchableOpacity style={styles.registryCard} activeOpacity={0.75} onPress={onPress}><View style={[styles.registryAccent, { backgroundColor: info.color }]} /><RegistryDocumentIcon color={info.color} /><View style={styles.registryCardMain}><View style={styles.registryCardTop}><View style={{ flex: 1 }}><Text style={styles.registryNumber}>{document.nir_number || document.temporary_number}</Text><Text style={styles.registrySupplier}>{counterparty}</Text></View><View style={[styles.statusChip, { backgroundColor: `${info.color}16`, borderColor: `${info.color}40` }]}><info.Icon size={13} color={info.color} /><Text style={[styles.statusChipText, { color: info.color }]}>{document.operation_label || info.label}</Text></View></View><View style={styles.registryMeta}><Text style={styles.registryMetaText}>◷ {document.nir_date} · {String(document.nir_time || document.reception_time || '').slice(0, 5) || '—'}</Text><Text style={styles.registryMetaText}>▧ {document.line_count || 0} produse</Text><Text style={styles.registryMetaText}>{isCustomerReturnDocument(document) ? 'Factura retur' : 'Factura'} {document.supplier_invoice_series || ''} {document.supplier_invoice_number || '—'}</Text></View>{canViewCosts && <Text style={styles.registryTotal}>{money(document.grand_total_ron)}</Text>}</View><ChevronRight size={20} color={Colors.textMuted} /></TouchableOpacity>;
 }
 
 function RegistryDocumentIcon({ color }: { color: string }) {

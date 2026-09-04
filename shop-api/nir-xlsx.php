@@ -271,7 +271,7 @@ function shopNirReferenceXlsxStyles(string $currency = 'RON'): string
         return '<xf' . $attrs . '><alignment vertical="center"' . $align . '/></xf>';
     };
     $xfs[0] = $xf(0, 0, 0);
-    for ($i = 1; $i <= 41; $i++) $xfs[$i] = $xf(0, 0, 0);
+    for ($i = 1; $i <= 42; $i++) $xfs[$i] = $xf(0, 0, 0);
     $xfs[1] = $xf(2, 0, 0, ' horizontal="center" wrapText="1"');
     $xfs[3] = $xf(1, 3, 1, ' horizontal="center" wrapText="1"');
     $xfs[4] = $xf(1, 4, 1, ' wrapText="1"');
@@ -298,13 +298,14 @@ function shopNirReferenceXlsxStyles(string $currency = 'RON'): string
     $xfs[39] = $xf(7, 8, 1, ' horizontal="center"');
     $xfs[40] = $xf(8, 0, 1, ' horizontal="center"');
     $xfs[41] = $xf(0, 0, 1, ' horizontal="center"');
+    $xfs[42] = $xf(8, 0, 0, ' horizontal="center"');
     ksort($xfs);
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
         . '<numFmts count="2"><numFmt numFmtId="165" formatCode="0.####;[Red]-0.####"/><numFmt numFmtId="166" formatCode="' . $moneyFormat . '"/></numFmts>'
         . '<fonts count="9"><font><sz val="9"/><color rgb="FF203A5F"/><name val="Aptos"/></font><font><b/><sz val="9"/><color rgb="FF071B3E"/><name val="Aptos"/></font><font><b/><sz val="18"/><color rgb="FF071B3E"/><name val="Aptos Display"/></font><font><b/><sz val="8"/><color rgb="FFFFFFFF"/><name val="Aptos"/></font><font><b/><sz val="24"/><color rgb="FFFFFFFF"/><name val="Aptos Display"/></font><font><sz val="8"/><color rgb="FF687B96"/><name val="Aptos"/></font><font><b/><sz val="13"/><color rgb="FFFF7900"/><name val="Aptos Display"/></font><font><sz val="9"/><color rgb="FFFF1E1E"/><name val="Aptos"/></font><font><sz val="9"/><color rgb="FF00A441"/><name val="Aptos"/></font></fonts>'
         . '<fills count="9"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF002654"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEAF2FA"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF3F6FA"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFEEEE"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFF7900"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFAF0"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFECEC"/></patternFill></fill></fills>'
         . '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFD8E1EC"/></left><right style="thin"><color rgb="FFD8E1EC"/></right><top style="thin"><color rgb="FFD8E1EC"/></top><bottom style="thin"><color rgb="FFD8E1EC"/></bottom><diagonal/></border></borders>'
-        . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="42">' . implode('', $xfs) . '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles><dxfs count="0"/><tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/></styleSheet>';
+        . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="43">' . implode('', $xfs) . '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles><dxfs count="0"/><tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/></styleSheet>';
 }
 
 function shopNirPremiumXlsxPositionColumns(): array
@@ -1264,13 +1265,19 @@ function shopNirRenderStrictXlsx(array $document): string
     $relationship = is_array($context['relationship'] ?? null) ? $context['relationship'] : [];
     $lines = array_values(is_array($document['lines'] ?? null) ? $document['lines'] : []);
     $isStorno = shopNirPremiumXlsxIsStornoDocument($document);
+    $isCustomerReturn = strtolower(trim((string)($document['source_type'] ?? ''))) === 'customer_return'
+        || strtolower(trim((string)($document['operation_type'] ?? ''))) === 'customer_return';
     $companyName = trim((string)($company['legal_name'] ?? $company['trade_name'] ?? 'G-Trots România'));
     $companyIdentity = implode(' | ', array_values(array_filter([
         trim((string)($company['cui'] ?? '')) !== '' ? 'CUI ' . $company['cui'] : '',
         trim((string)($company['registration_number'] ?? '')) !== '' ? 'Reg. Com. ' . $company['registration_number'] : '',
     ], static fn(string $value): bool => $value !== '')));
-    $supplierName = trim((string)($supplier['name'] ?? $document['supplier_name'] ?? ''));
-    $supplierCui = trim((string)($supplier['cui'] ?? $supplier['vat_number'] ?? $document['supplier_cui'] ?? ''));
+    $supplierName = $isCustomerReturn
+        ? trim((string)($document['customer_name'] ?? $supplier['name'] ?? 'Client'))
+        : trim((string)($supplier['name'] ?? $document['supplier_name'] ?? ''));
+    $supplierCui = $isCustomerReturn
+        ? trim((string)($document['customer_email'] ?? $supplier['email'] ?? ''))
+        : trim((string)($supplier['cui'] ?? $supplier['vat_number'] ?? $document['supplier_cui'] ?? ''));
     $warehouseName = trim((string)($warehouse['name'] ?? $document['warehouse_name'] ?? ''));
     $location = trim((string)($document['reception_location'] ?? $document['receipt_location'] ?? ''));
     if ($location === '') $location = implode(', ', array_values(array_filter([$warehouseName, $warehouse['address'] ?? '', $warehouse['city'] ?? ''], static fn($value): bool => trim((string)$value) !== '')));
@@ -1292,15 +1299,15 @@ function shopNirRenderStrictXlsx(array $document): string
     $merges = ['A1:B3', 'C1:F1', 'C2:F2', 'C3:F3', 'G1:L2', 'G3:L3', 'M1:M3', 'A5:F6', 'G5:M6'];
     $rows .= shopNirPremiumXlsxRow(1, [1 => shopNirPremiumXlsxCellSpec('', 'string', 29), 3 => shopNirPremiumXlsxCellSpec('G-TROTS', 'string', 30), 7 => shopNirPremiumXlsxCellSpec('NOTĂ DE RECEPȚIE ȘI CONSTATARE DE DIFERENȚE', 'string', 1), 13 => shopNirPremiumXlsxCellSpec("Cod formular:\nNIR", 'string', 3)], 32);
     $rows .= shopNirPremiumXlsxRow(2, [3 => shopNirPremiumXlsxCellSpec($companyName, 'string', 31)], 24);
-    $rows .= shopNirPremiumXlsxRow(3, [3 => shopNirPremiumXlsxCellSpec($companyIdentity, 'string', 32), 7 => shopNirPremiumXlsxCellSpec('(NIR)', 'string', 33)], 20);
+    $rows .= shopNirPremiumXlsxRow(3, [3 => shopNirPremiumXlsxCellSpec($companyIdentity, 'string', 32), 7 => shopNirPremiumXlsxCellSpec($isCustomerReturn ? '(Intrare în stoc – retur client)' : '(NIR)', 'string', $isCustomerReturn ? 42 : 33)], 20);
     $rows .= shopNirPremiumXlsxRow(4, [], 8);
     $rows .= shopNirPremiumXlsxRow(5, [1 => shopNirPremiumXlsxCellSpec("Nr. NIR\n" . $documentNumber, 'string', 34), 7 => shopNirPremiumXlsxCellSpec("din data de\n" . $documentDate, 'string', $isStorno ? 28 : 35)], 24);
     $rows .= shopNirPremiumXlsxRow(6, [], 24);
     $fieldRows = [
-        ['Furnizor:', $supplierName, 'Factura furnizor nr. / data:', $currentInvoice],
-        ['CUI furnizor:', $supplierCui, 'Factura inițială stornată nr. / data:', $originalInvoice],
-        ['Gestiune:', $warehouseName, 'Tip operațiune:', $isStorno ? 'Stornare' : 'Recepție'],
-        ['Loc recepție:', $location, 'Motiv stornare / retur / diferență:', $reason],
+        [$isCustomerReturn ? 'Client:' : 'Furnizor:', $supplierName, $isCustomerReturn ? 'Factura de retur nr. / data:' : 'Factura furnizor nr. / data:', $currentInvoice],
+        [$isCustomerReturn ? 'E-mail client:' : 'CUI furnizor:', $supplierCui, $isCustomerReturn ? 'Factura fiscală inițială nr. / data:' : 'Factura inițială stornată nr. / data:', $originalInvoice],
+        ['Gestiune:', $warehouseName, 'Tip operațiune:', $isCustomerReturn ? 'Retur client' : ($isStorno ? 'Retur către furnizor (Stornare)' : 'Recepție furnizor')],
+        ['Loc recepție:', $location, $isCustomerReturn ? 'Motiv retur:' : 'Motiv storno / retur / diferență:', $reason],
     ];
     $rowNumber = 7;
     foreach ($fieldRows as $fields) {

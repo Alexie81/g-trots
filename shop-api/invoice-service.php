@@ -112,6 +112,13 @@ final class GtrotsInvoiceService
 
             $originalPayload = json_decode((string)($original['payload_json'] ?? ''), true, 512, JSON_THROW_ON_ERROR);
             if (!is_array($originalPayload)) throw new RuntimeException('Datele facturii inițiale nu mai sunt disponibile.');
+            $returnSelection = self::returnSelection($db, $orderId);
+            $orderStmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ? LIMIT 1' . (strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite' ? '' : ' FOR UPDATE'));
+            $orderStmt->execute([$orderId]);
+            $returnOrder = $orderStmt->fetch() ?: [];
+            $hasReturnRequest = trim((string)($returnOrder['return_requested_at'] ?? '')) !== '';
+            $returnIsFull = $hasReturnRequest ? !empty($returnOrder['return_is_full']) : true;
+            $returnRefundTotal = $hasReturnRequest ? (float)($returnOrder['return_refund_amount'] ?? 0) : abs((float)$original['total']);
             $documentSettings = GtrotsInvoiceThemeStore::settings($db);
             $series = (string)($documentSettings['invoice_series'] ?? $original['series'] ?? 'GT');
             $number = self::nextNumber($db, $series);
@@ -120,6 +127,31 @@ final class GtrotsInvoiceService
             $assignedBy = mb_substr(trim((string)($actor['display_name'] ?? $actor['username'] ?? 'Sistem anulări')), 0, 180);
 
             $payload = $originalPayload;
+            $selectionByOrderItem = [];
+            $selectionByProduct = [];
+            foreach ($returnSelection as $selectionItem) {
+                $selectionByOrderItem[(string)$selectionItem['order_item_id']] = $selectionItem;
+                $productKey = trim((string)($selectionItem['product_id'] ?? ''));
+                if ($productKey !== '') $selectionByProduct[$productKey][] = $selectionItem;
+            }
+            $returnPayloadItems = [];
+            foreach ((array)($originalPayload['items'] ?? []) as $sourceItem) {
+                if ((string)($sourceItem['sku'] ?? '') === 'TRANSPORT') {
+                    if ($returnIsFull) $returnPayloadItems[] = $sourceItem;
+                    continue;
+                }
+                $selectionItem = $selectionByOrderItem[(string)($sourceItem['order_item_id'] ?? '')] ?? null;
+                if (!$selectionItem) {
+                    $productKey = trim((string)($sourceItem['product_id'] ?? ''));
+                    if ($productKey !== '' && !empty($selectionByProduct[$productKey])) $selectionItem = array_shift($selectionByProduct[$productKey]);
+                }
+                if (!$selectionItem) continue;
+                $sourceItem['quantity'] = (float)$selectionItem['accepted_quantity'];
+                $sourceItem['order_item_id'] = (string)$selectionItem['order_item_id'];
+                $returnPayloadItems[] = $sourceItem;
+            }
+            if (!$returnPayloadItems) throw new InvalidArgumentException('Returul nu are niciun produs acceptat care poate fi facturat.');
+            $payload['items'] = $returnPayloadItems;
             $payload['document_id'] = $invoiceId;
             $payload['status'] = 'return';
             $payload['series'] = $series;
@@ -129,6 +161,13 @@ final class GtrotsInvoiceService
             $payload['delivery_date'] = $issueDate;
             $payload['amount_paid'] = 0;
             $payload['return_reason'] = $reason;
+            $payload['return_items'] = $returnSelection;
+            $payload['return_scope'] = $returnIsFull ? 'full' : 'partial';
+            $payload['return_shipping_cost'] = $hasReturnRequest ? max(0.0, round((float)($returnOrder['return_shipping_cost'] ?? 0), 2)) : 0.0;
+            $payload['return_shipping_cost_vat_rate'] = (float)($returnOrder['vat_rate'] ?? 0);
+            $payload['return_items_gross'] = round((float)($returnOrder['return_items_gross'] ?? 0), 2);
+            $payload['return_delivery_refund'] = round((float)($returnOrder['return_delivery_refund'] ?? 0), 2);
+            $payload['total'] = round($returnRefundTotal, 2);
             $payload['order_reference'] = trim((string)($original['order_number'] ?? $originalPayload['order_reference'] ?? ''));
             $payload['related_order'] = [
                 'order_number' => $payload['order_reference'],
@@ -163,7 +202,7 @@ final class GtrotsInvoiceService
                 $issueDate,
                 $issueDate,
                 (string)$original['currency'],
-                -abs((float)$original['total']),
+                -abs($returnRefundTotal),
                 (string)$original['buyer_name'],
                 (string)($original['buyer_cui'] ?? ''),
                 $encoded,
@@ -172,7 +211,7 @@ final class GtrotsInvoiceService
             // Emiterea facturii de retur reprezintă și recepția fizică. Stocul
             // este însă justificat de documentul separat „Retur client”, nu de
             // factura fiscală în sine. Ambele sunt create în aceeași tranzacție.
-            self::postReturnStock($db, $original, $invoiceId, $series, $number, $reason, $actor);
+            self::postReturnStock($db, $original, $returnSelection, $invoiceId, $series, $number, $reason, $actor);
             if (class_exists('GtrotsSpvService')) GtrotsSpvService::enqueue($db, $invoiceId, 'credit_note');
             if ($manageTransaction) $db->commit();
 
@@ -1000,7 +1039,7 @@ final class GtrotsInvoiceService
         $items = $db->prepare('SELECT id, product_id, quantity, unit_price, line_total, discounted_unit_price, discounted_line_total FROM shop_order_items WHERE order_id = ? AND product_id IS NOT NULL');
         $items->execute([(string)$order['id']]);
         $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
-        $product = $db->prepare('SELECT id, name, stock_mode, stock_quantity, accounting_stock_quantity FROM shop_products WHERE id = ?' . ($driver === 'sqlite' ? '' : ' FOR UPDATE'));
+        $product = $db->prepare('SELECT id, name, stock_mode, stock_quantity, accounting_stock_quantity, is_accounting_stock_tracked FROM shop_products WHERE id = ?' . ($driver === 'sqlite' ? '' : ' FOR UPDATE'));
         $existing = $db->prepare("SELECT id FROM shop_inventory_movements WHERE order_id = ? AND product_id = ? AND movement_type = 'sale' LIMIT 1");
         $updateExisting = $db->prepare("UPDATE shop_inventory_movements SET sales_invoice_id = ?, sales_invoice_line_id = ?, warehouse_id = ?, accounting_quantity_delta = ?, accounting_quantity_after = ?, inventory_unit_cost_ron = ?, inventory_cost_total_ron = ?, sale_unit_price_ron = ?, sale_total_ron = ?, fifo_status = ?, fifo_quantity_allocated = ?, fifo_quantity_pending = ?, note = ? WHERE order_id = ? AND product_id = ? AND movement_type = 'sale'");
         $updateStock = $db->prepare('UPDATE shop_products SET stock_quantity = ?, accounting_stock_quantity = ? WHERE id = ?');
@@ -1028,36 +1067,40 @@ final class GtrotsInvoiceService
             $saleUnitPrice = round($saleTotal / $quantity, 6);
             $product->execute([$productId]);
             $row = $product->fetch();
-            if (!$row || (string)$row['stock_mode'] !== 'tracked') continue;
+            if (!$row) continue;
+            $onlineTracked = (string)$row['stock_mode'] === 'tracked';
+            $accountingTracked = !array_key_exists('is_accounting_stock_tracked', $row) || (bool)$row['is_accounting_stock_tracked'];
+            if (!$onlineTracked && !$accountingTracked) continue;
             $accountingCurrent = (float)($row['accounting_stock_quantity'] ?? $row['stock_quantity'] ?? 0);
             $fifo = ['consumptions' => [], 'allocated_quantity' => 0, 'shortage_quantity' => $quantity, 'total_cost_ron' => 0];
-            if ($warehouseId !== '' && function_exists('shopNirConsumeFifoAvailable')) {
+            if ($accountingTracked && $warehouseId !== '' && function_exists('shopNirConsumeFifoAvailable')) {
                 $fifo = shopNirConsumeFifoAvailable($db, $productId, $warehouseId, $quantity, 'SALES_INVOICE', $invoiceId, (string)$item['id'], 'invoice:' . $invoiceId . ':' . (string)$item['id'], false);
             }
             $fifoConsumptions = (array)($fifo['consumptions'] ?? []);
-            $fifoAllocated = round((float)($fifo['allocated_quantity'] ?? array_reduce($fifoConsumptions, static fn(float $sum, array $allocation): float => $sum + (float)($allocation['quantity'] ?? 0), 0.0)), 4);
-            $fifoPending = round(max(0.0, $quantity - $fifoAllocated), 4);
+            $fifoAllocated = $accountingTracked ? round((float)($fifo['allocated_quantity'] ?? array_reduce($fifoConsumptions, static fn(float $sum, array $allocation): float => $sum + (float)($allocation['quantity'] ?? 0), 0.0)), 4) : 0.0;
+            $fifoPending = $accountingTracked ? round(max(0.0, $quantity - $fifoAllocated), 4) : 0.0;
             $fifoTotalCost = round((float)($fifo['total_cost_ron'] ?? array_reduce($fifoConsumptions, static fn(float $sum, array $allocation): float => $sum + (float)($allocation['cost_ron'] ?? $allocation['total_cost_ron'] ?? 0), 0.0)), 2);
             $fifoUnitCost = $fifoAllocated > 0 ? round($fifoTotalCost / $fifoAllocated, 6) : null;
-            $fifoStatus = $fifoPending <= 0.00005 ? 'allocated' : ($fifoAllocated > 0 ? 'partial' : 'pending');
-            $accountingAfter = round($accountingCurrent - $quantity, 4);
+            $fifoStatus = !$accountingTracked ? 'not_tracked' : ($fifoPending <= 0.00005 ? 'allocated' : ($fifoAllocated > 0 ? 'partial' : 'pending'));
+            $accountingAfter = $accountingTracked ? round($accountingCurrent - $quantity, 4) : $accountingCurrent;
             $note = 'Ieșire prin factura ' . $invoiceLabel . ' · comanda ' . (string)$order['order_number'];
-            if ($fifoStatus !== 'allocated') $note .= ' · proveniența FIFO se completează la confirmarea NIR-ului';
+            if ($fifoStatus === 'not_tracked') $note .= ' · produs exclus din Stocuri Conta';
+            elseif ($fifoStatus !== 'allocated') $note .= ' · proveniența FIFO se completează la confirmarea NIR-ului';
             $existing->execute([(string)$order['id'], $productId]);
             if ($existing->fetchColumn()) {
                 // Comenzile create înaintea acestei funcționalități au rezervat deja stocul.
                 // Le legăm de factură fără o a doua scădere.
                 $updateStock->execute([(int)$row['stock_quantity'], $accountingAfter, $productId]);
-                $updateExisting->execute([$invoiceId, (string)$item['id'], $warehouseId ?: null, -$quantity, $accountingAfter, $fifoUnitCost, $fifoAllocated > 0 ? $fifoTotalCost : null, $saleUnitPrice, $saleTotal, $fifoStatus, $fifoAllocated, $fifoPending, $note, (string)$order['id'], $productId]);
+                $updateExisting->execute([$invoiceId, (string)$item['id'], $accountingTracked ? ($warehouseId ?: null) : null, $accountingTracked ? -$quantity : 0, $accountingAfter, $fifoUnitCost, $fifoAllocated > 0 ? $fifoTotalCost : null, $saleUnitPrice, $saleTotal, $fifoStatus, $fifoAllocated, $fifoPending, $note, (string)$order['id'], $productId]);
                 continue;
             }
             $current = (int)$row['stock_quantity'];
-            if ($current < $quantity) {
+            if ($onlineTracked && $current < $quantity) {
                 throw new InvalidArgumentException('Stoc insuficient pentru emiterea facturii: ' . (string)($row['name'] ?? 'produs') . '. Disponibil ' . $current . ', necesar ' . $quantity . '.');
             }
-            $after = $current - $quantity;
+            $after = $onlineTracked ? $current - $quantity : $current;
             $updateStock->execute([$after, $accountingAfter, $productId]);
-            $movement->execute([self::uuid(), $productId, $warehouseId ?: null, (string)$order['id'], $invoiceId, (string)$item['id'], 'sale', -$quantity, $after, -$quantity, $accountingAfter, $fifoUnitCost, $fifoAllocated > 0 ? $fifoTotalCost : null, $saleUnitPrice, $saleTotal, $fifoStatus, $fifoAllocated, $fifoPending, $note, $actorName]);
+            $movement->execute([self::uuid(), $productId, $accountingTracked ? ($warehouseId ?: null) : null, (string)$order['id'], $invoiceId, (string)$item['id'], 'sale', $onlineTracked ? -$quantity : 0, $after, $accountingTracked ? -$quantity : 0, $accountingAfter, $fifoUnitCost, $fifoAllocated > 0 ? $fifoTotalCost : null, $saleUnitPrice, $saleTotal, $fifoStatus, $fifoAllocated, $fifoPending, $note, $actorName]);
         }
     }
 
@@ -1066,7 +1109,7 @@ final class GtrotsInvoiceService
      * This method is called only after the return invoice was inserted, so an
      * order without a return invoice can never add stock accidentally.
      */
-    private static function postReturnStock(PDO $db, array $original, string $returnInvoiceId, string $series, string $number, string $reason, array $actor): void
+    private static function postReturnStock(PDO $db, array $original, array $returnSelection, string $returnInvoiceId, string $series, string $number, string $reason, array $actor): void
     {
         $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
         $lock = $driver === 'sqlite' ? '' : ' FOR UPDATE';
@@ -1113,9 +1156,22 @@ final class GtrotsInvoiceService
         $returnLabel = trim($series . ' ' . $number);
         $originalLabel = trim((string)$original['series'] . ' ' . (string)$original['invoice_number']);
         $orderNumber = trim((string)($original['order_number'] ?? ''));
-        $inventoryTotal = round(array_reduce($saleMovements, static fn(float $sum, array $movement): float => $sum + abs((float)($movement['inventory_cost_total_ron'] ?? 0)), 0.0), 2);
+        $selectionByLine = [];
+        foreach ($returnSelection as $item) $selectionByLine[(string)$item['order_item_id']] = $item;
+        $saleMovements = array_values(array_filter($saleMovements, static fn(array $movement): bool => isset($selectionByLine[(string)($movement['sales_invoice_line_id'] ?? '')])));
+        if (!$saleMovements) throw new RuntimeException('Produsele acceptate nu mai pot fi asociate ieșirilor de stoc ale facturii inițiale.');
+        $inventoryTotal = 0.0;
         $notes = 'Intrare în stoc – Retur client. Factura de retur ' . $returnLabel . ' corectează factura fiscală ' . $originalLabel . ($orderNumber !== '' ? ' pentru comanda ' . $orderNumber : '') . '.';
         if (trim($reason) !== '') $notes .= ' Motiv: ' . trim($reason);
+        $returnCost = 0.0;
+        try {
+            $returnCostStmt = $db->prepare('SELECT return_shipping_cost FROM shop_orders WHERE id = ? LIMIT 1');
+            $returnCostStmt->execute([(string)($original['order_id'] ?? '')]);
+            $returnCost = max(0.0, round((float)($returnCostStmt->fetchColumn() ?: 0), 2));
+        } catch (PDOException $error) {
+            $returnCost = 0.0;
+        }
+        if ($returnCost > 0) $notes .= ' Cost direct retur curier reținut din rambursare: ' . number_format($returnCost, 2, ',', '.') . ' RON; acest cost nu intră în valoarea contabilă a stocului recepționat.';
 
         $insertDocument = $db->prepare(
             'INSERT INTO shop_nir_documents
@@ -1144,7 +1200,7 @@ final class GtrotsInvoiceService
               conversion_factor, stock_quantity, unit_price, discount_percent, discount_value, vat_rate, line_net, line_vat,
               line_total, line_net_ron, line_vat_ron, line_total_ron, allocated_cost_ron, inventory_unit_cost_ron,
               inventory_cost_total_ron, resolution_status, match_method, match_confidence, is_stock_item, row_version)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, "buc", "buc", ?, ?, ?, 0, 1, ?, ?, 0, 0, 0, ?, 0, ?, ?, 0, ?, 0, ?, ?, "matched", "return_invoice", 1, 1, 1)'
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, "buc", "buc", ?, ?, ?, 0, 1, ?, ?, 0, 0, 0, ?, 0, ?, ?, 0, ?, 0, ?, ?, "matched", "return_invoice", 1, ?, 1)'
         );
         $product = $db->prepare('SELECT stock_quantity, accounting_stock_quantity FROM shop_products WHERE id = ?' . $lock);
         $updateProduct = $db->prepare('UPDATE shop_products SET stock_quantity = ?, accounting_stock_quantity = ? WHERE id = ?');
@@ -1154,8 +1210,9 @@ final class GtrotsInvoiceService
              (id, product_id, warehouse_id, order_id, nir_document_id, nir_line_id, sales_invoice_id, sales_invoice_line_id, movement_type, quantity_delta, quantity_after,
               accounting_quantity_delta, accounting_quantity_after, inventory_unit_cost_ron, inventory_cost_total_ron, sale_unit_price_ron,
               sale_total_ron, fifo_status, fifo_quantity_allocated, fifo_quantity_pending, reversal_of_movement_id, note, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, "RETURN_IN", ?, ?, ?, ?, ?, ?, ?, ?, "restored", ?, 0, ?, ?, ?)'
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, "RETURN_IN", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)'
         );
+        $lineConsumptions = $db->prepare("SELECT quantity, unit_cost_ron FROM shop_inventory_layer_consumptions WHERE source_document_type = 'SALES_INVOICE' AND source_document_id = ? AND source_line_id = ? AND reversed_at IS NULL ORDER BY created_at, id" . $lock);
 
         foreach ($saleMovements as $index => $movement) {
             $movementId = (string)($movement['id'] ?? '');
@@ -1166,18 +1223,40 @@ final class GtrotsInvoiceService
             $product->execute([$productId]);
             $current = $product->fetch();
             if (!$current) continue;
-            $quantity = abs((float)($movement['quantity_delta'] ?? 0));
-            $accountingQuantity = abs((float)($movement['accounting_quantity_delta'] ?? $quantity));
-            $costTotal = abs((float)($movement['inventory_cost_total_ron'] ?? 0));
-            $unitCost = $accountingQuantity > 0 ? round($costTotal / $accountingQuantity, 6) : abs((float)($movement['inventory_unit_cost_ron'] ?? 0));
+            $selectionItem = $selectionByLine[(string)($movement['sales_invoice_line_id'] ?? '')];
+            $quantity = (float)$selectionItem['accepted_quantity'];
+            $onlineWasTracked = abs((float)($movement['quantity_delta'] ?? 0)) > 0.00005;
+            $accountingMovement = array_key_exists('accounting_quantity_delta', $movement) && $movement['accounting_quantity_delta'] !== null
+                ? (float)$movement['accounting_quantity_delta']
+                : (float)($movement['quantity_delta'] ?? 0);
+            $accountingWasTracked = abs($accountingMovement) > 0.00005;
+            $onlineQuantity = $onlineWasTracked ? $quantity : 0.0;
+            $accountingQuantity = $accountingWasTracked ? $quantity : 0.0;
+            $lineConsumptions->execute([(string)$original['id'], (string)($movement['sales_invoice_line_id'] ?? '')]);
+            $costRemaining = $accountingQuantity;
+            $costTotal = 0.0;
+            foreach ($lineConsumptions->fetchAll() as $fifoConsumption) {
+                if ($costRemaining <= 0.00005) break;
+                $used = min($costRemaining, (float)$fifoConsumption['quantity']);
+                $costTotal += $used * (float)$fifoConsumption['unit_cost_ron'];
+                $costRemaining -= $used;
+            }
+            if ($accountingQuantity > 0 && $costRemaining > 0.00005) {
+                $fallbackUnit = abs((float)($movement['inventory_unit_cost_ron'] ?? 0));
+                $costTotal += $costRemaining * $fallbackUnit;
+            }
+            $costTotal = round($costTotal, 2);
+            $unitCost = $accountingQuantity > 0 ? round($costTotal / $accountingQuantity, 6) : 0.0;
+            $inventoryTotal = round($inventoryTotal + $costTotal, 2);
             $lineId = self::uuid();
             $insertLine->execute([
                 $lineId, $receiptId, $index + 1, $productId, (string)($movement['product_sku'] ?? ''),
                 (string)($movement['product_name'] ?? 'Produs'), (string)($movement['product_name'] ?? 'Produs'),
-                (string)($movement['product_sku'] ?? ''), $quantity, $quantity, $quantity, $quantity,
+                (string)($movement['product_sku'] ?? ''), $quantity, $quantity, $quantity, $accountingQuantity,
                 $unitCost, $costTotal, $costTotal, $costTotal, $costTotal, $unitCost, $costTotal,
+                $accountingWasTracked ? 1 : 0,
             ]);
-            $stockAfter = round((float)($current['stock_quantity'] ?? 0) + $quantity, 4);
+            $stockAfter = round((float)($current['stock_quantity'] ?? 0) + $onlineQuantity, 4);
             $accountingAfter = round((float)($current['accounting_stock_quantity'] ?? 0) + $accountingQuantity, 4);
             $updateProduct->execute([$stockAfter, $accountingAfter, $productId]);
             $insertReturn->execute([
@@ -1187,29 +1266,77 @@ final class GtrotsInvoiceService
                 $costTotal,
                 $movement['sale_unit_price_ron'] ?? null,
                 isset($movement['sale_total_ron']) ? -abs((float)$movement['sale_total_ron']) : null,
-                (float)($movement['fifo_quantity_allocated'] ?? 0), $movementId,
+                $accountingWasTracked ? 'restored' : 'not_tracked',
+                min($accountingQuantity, (float)($movement['fifo_quantity_allocated'] ?? 0)), $movementId,
                 'Intrare în stoc prin ' . $nirNumber . ' · retur client · factura de retur ' . $returnLabel . ' · corectează ' . $originalLabel,
                 $actorName,
             ]);
         }
 
+        $db->prepare('UPDATE shop_nir_documents SET subtotal = ?, grand_total = ?, subtotal_ron = ?, grand_total_ron = ?, inventory_cost_total_ron = ? WHERE id = ?')
+            ->execute([$inventoryTotal, $inventoryTotal, $inventoryTotal, $inventoryTotal, $inventoryTotal, $receiptId]);
+
         $consumptions = $db->prepare(
             "SELECT c.* FROM shop_inventory_layer_consumptions c
-             WHERE c.source_document_type = 'SALES_INVOICE' AND c.source_document_id = ? AND c.reversed_at IS NULL" . $lock
+             WHERE c.source_document_type = 'SALES_INVOICE' AND c.source_document_id = ? AND c.reversed_at IS NULL ORDER BY c.source_line_id, c.created_at, c.id" . $lock
         );
         $consumptions->execute([(string)$original['id']]);
         $layer = $db->prepare('SELECT original_quantity, remaining_quantity, is_reversed FROM shop_inventory_cost_layers WHERE id = ?' . $lock);
         $updateLayer = $db->prepare('UPDATE shop_inventory_cost_layers SET remaining_quantity = ?, status = ?, row_version = row_version + 1 WHERE id = ?');
         $reverseConsumption = $db->prepare('UPDATE shop_inventory_layer_consumptions SET reversed_at = CURRENT_TIMESTAMP, reversal_consumption_id = ?, row_version = row_version + 1 WHERE id = ? AND reversed_at IS NULL');
+        $remainingByLine = [];
+        foreach ($returnSelection as $item) $remainingByLine[(string)$item['order_item_id']] = (float)$item['accepted_quantity'];
+        $partialConsumption = $db->prepare('UPDATE shop_inventory_layer_consumptions SET original_quantity = COALESCE(original_quantity, quantity), quantity = ?, total_cost_ron = ?, reversed_quantity = reversed_quantity + ?, reversal_consumption_id = ?, row_version = row_version + 1 WHERE id = ? AND reversed_at IS NULL');
         foreach ($consumptions->fetchAll() as $consumption) {
+            $lineKey = (string)($consumption['source_line_id'] ?? '');
+            $toRestore = min((float)($remainingByLine[$lineKey] ?? 0), (float)$consumption['quantity']);
+            if ($toRestore <= 0.00005) continue;
             $layer->execute([(string)$consumption['inventory_cost_layer_id']]);
             $current = $layer->fetch();
             if (!$current || !empty($current['is_reversed'])) continue;
-            $remaining = min((float)$current['original_quantity'], (float)$current['remaining_quantity'] + (float)$consumption['quantity']);
+            $remaining = min((float)$current['original_quantity'], (float)$current['remaining_quantity'] + $toRestore);
             $status = abs($remaining - (float)$current['original_quantity']) <= 0.00005 ? 'open' : 'partially_consumed';
             $updateLayer->execute([round($remaining, 4), $status, (string)$consumption['inventory_cost_layer_id']]);
-            $reverseConsumption->execute([$receiptId, (string)$consumption['id']]);
+            if (abs($toRestore - (float)$consumption['quantity']) <= 0.00005) {
+                $reverseConsumption->execute([$receiptId, (string)$consumption['id']]);
+            } else {
+                $remainingConsumption = round((float)$consumption['quantity'] - $toRestore, 4);
+                $remainingCost = round($remainingConsumption * (float)$consumption['unit_cost_ron'], 2);
+                $partialConsumption->execute([$remainingConsumption, $remainingCost, $toRestore, $receiptId, (string)$consumption['id']]);
+            }
+            $remainingByLine[$lineKey] = round((float)$remainingByLine[$lineKey] - $toRestore, 4);
         }
+    }
+
+    private static function returnSelection(PDO $db, string $orderId): array
+    {
+        $items = [];
+        $selectionTableAvailable = true;
+        try {
+            $stmt = $db->prepare("SELECT ri.*, oi.quantity AS ordered_quantity
+                FROM shop_order_return_items ri
+                INNER JOIN shop_order_items oi ON oi.id = ri.order_item_id
+                WHERE ri.order_id = ? AND ri.decision_status = 'accepted' AND ri.accepted_quantity > 0
+                ORDER BY ri.created_at, ri.id");
+            $stmt->execute([$orderId]);
+            $items = $stmt->fetchAll();
+        } catch (PDOException $error) {
+            $selectionTableAvailable = false;
+        }
+        if (!$items) {
+            if ($selectionTableAvailable) {
+                $count = $db->prepare('SELECT COUNT(*) FROM shop_order_return_items WHERE order_id = ?');
+                $count->execute([$orderId]);
+                if ((int)$count->fetchColumn() > 0) throw new InvalidArgumentException('Evaluează produsele și acceptă cel puțin unul înainte de emiterea facturii de retur.');
+            }
+            // Anularea unei comenzi cu factură rămâne un retur fiscal integral,
+            // fără cerere comercială prealabilă și fără cost de curier reținut.
+            $fallback = $db->prepare('SELECT id AS order_item_id, product_id, product_name, product_sku, quantity AS ordered_quantity, quantity AS requested_quantity, quantity AS accepted_quantity FROM shop_order_items WHERE order_id = ? ORDER BY id');
+            $fallback->execute([$orderId]);
+            $items = $fallback->fetchAll();
+        }
+        if (!$items) throw new InvalidArgumentException('Comanda nu are produse care pot fi incluse în factura de retur.');
+        return $items;
     }
 
     private static function payload(PDO $db, array $order, array $company, string $invoiceId, string $series, string $number, string $issueDate, string $dueDate, string $status, string $defaultNotes = ''): array
@@ -1250,6 +1377,7 @@ final class GtrotsInvoiceService
             $grossUnit = $originalGross / $quantity;
             $netUnit = $vatRate > 0 ? $grossUnit / (1 + $vatRate / 100) : $grossUnit;
             $items[] = [
+                'order_item_id' => (string)($item['id'] ?? ''),
                 'product_id' => trim((string)($item['product_id'] ?? '')) ?: null,
                 'name' => (string)($item['product_name'] ?? 'Produs'),
                 'sku' => (string)($item['product_sku'] ?? ''),

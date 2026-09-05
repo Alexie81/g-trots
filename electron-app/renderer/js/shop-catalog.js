@@ -1,4 +1,5 @@
 (function () {
+  const SECOND_HAND_CATEGORY_SYSTEM_KEY = 'second_hand_scooters';
   const state = {
     categories: [],
     brands: [],
@@ -12,6 +13,17 @@
     imageRemoved: false,
     deleteTarget: null,
   };
+
+  function secondHandCategoryFirst(categories) {
+    return categories
+      .map((category, index) => ({ category, index }))
+      .sort((left, right) => {
+        const leftPriority = left.category?.system_key === SECOND_HAND_CATEGORY_SYSTEM_KEY ? 0 : 1;
+        const rightPriority = right.category?.system_key === SECOND_HAND_CATEGORY_SYSTEM_KEY ? 0 : 1;
+        return leftPriority - rightPriority || left.index - right.index;
+      })
+      .map(({ category }) => category);
+  }
 
   const byId = (id) => document.getElementById(id);
   const categoryState = byId('shop-category-state');
@@ -111,6 +123,15 @@
     return button;
   }
 
+  function protectedCategoryIndicator() {
+    const indicator = document.createElement('span');
+    indicator.className = 'shop-table-action locked';
+    indicator.title = 'Categorie protejata impotriva stergerii';
+    indicator.setAttribute('aria-label', indicator.title);
+    indicator.innerHTML = '<svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>';
+    return indicator;
+  }
+
   function renderCategories() {
     byId('shop-category-count').textContent = String(state.categories.length);
     categoryBody.replaceChildren();
@@ -161,7 +182,8 @@
 
       const actionsCell = document.createElement('td');
       actionsCell.className = 'shop-table-actions';
-      actionsCell.append(actionButton('Editeaza categoria', 'edit', () => openCategory(category)), actionButton('Sterge categoria', 'delete', () => requestDelete('category', category)));
+      actionsCell.append(actionButton('Editeaza categoria', 'edit', () => openCategory(category)));
+      actionsCell.append(category.is_protected ? protectedCategoryIndicator() : actionButton('Sterge categoria', 'delete', () => requestDelete('category', category)));
       row.appendChild(actionsCell);
       categoryBody.appendChild(row);
     });
@@ -249,7 +271,7 @@
     }
     try {
       const [categories, brands, manufacturers] = await Promise.all([window.SHOP_API.listCategories(), window.SHOP_API.listBrands(), window.SHOP_API.listManufacturers()]);
-      state.categories = Array.isArray(categories) ? categories : [];
+      state.categories = Array.isArray(categories) ? secondHandCategoryFirst(categories) : [];
       state.brands = Array.isArray(brands) ? brands : [];
       state.manufacturers = Array.isArray(manufacturers) ? manufacturers : [];
       state.loaded = true;
@@ -302,6 +324,9 @@
     updateCategoryPreview(category?.thumbnail_url || '');
     byId('shop-category-image-remove').hidden = !category?.thumbnail_url;
     byId('shop-category-image-input').value = '';
+    const systemNote = byId('shop-category-system-note');
+    systemNote.hidden = !category?.is_protected;
+    byId('shop-category-system-key').textContent = category?.is_protected ? `ID: ${category.system_key || category.id}` : '';
     openModal(categoryModal);
     setTimeout(() => byId('shop-category-name').focus(), 80);
   }
@@ -327,6 +352,10 @@
   }
 
   function requestDelete(type, item) {
+    if (type === 'category' && item?.is_protected) {
+      toast('Categoria pentru trotinete second-hand poate fi redenumita sau dezactivata, dar nu poate fi stearsa.', 'error');
+      return;
+    }
     state.deleteTarget = { type, item };
     byId('shop-delete-title').textContent = type === 'category' ? 'Stergi categoria?' : type === 'brand' ? 'Stergi compatibilitatea?' : 'Stergi producatorul?';
     byId('shop-delete-message').textContent = type === 'category'

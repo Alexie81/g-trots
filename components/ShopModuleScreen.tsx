@@ -55,6 +55,7 @@ import {
   Handshake,
   House,
   ImageIcon,
+  LockKeyhole,
   Package,
   Pencil,
   Plus,
@@ -112,6 +113,19 @@ type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; 
 type DashboardSeriesKey = 'revenue' | 'returns' | 'orders' | 'acquisitions' | 'profit';
 type DashboardPeriod = '24h' | 'today' | 'yesterday' | '7d' | '14d' | '28d' | '30d' | '3m' | '6m' | '12m' | '16m' | 'current_week_sun' | 'current_week_mon' | 'previous_week_sun' | 'previous_week_mon' | 'current_month' | 'previous_month' | 'current_year' | 'previous_year' | 'all' | 'custom';
 type DashboardGranularity = 'hour' | 'day' | 'week' | 'month';
+const SECOND_HAND_CATEGORY_SYSTEM_KEY = 'second_hand_scooters';
+
+function secondHandCategoryFirst(categories: ShopCategory[]): ShopCategory[] {
+  return categories
+    .map((category, index) => ({ category, index }))
+    .sort((left, right) => {
+      const leftPriority = left.category.system_key === SECOND_HAND_CATEGORY_SYSTEM_KEY ? 0 : 1;
+      const rightPriority = right.category.system_key === SECOND_HAND_CATEGORY_SYSTEM_KEY ? 0 : 1;
+      return leftPriority - rightPriority || left.index - right.index;
+    })
+    .map(({ category }) => category);
+}
+
 const AnimatedSvgCircle = Animated.createAnimatedComponent(Circle);
 const ReanimatedSvgPath = Reanimated.createAnimatedComponent(Path);
 function AnafShieldIcon({ size = 24 }: { size?: number; color?: string }) {
@@ -516,7 +530,7 @@ export default function ShopModuleScreen() {
         shopApi.listBrands(token),
         shopApi.listManufacturers(token),
       ]);
-      setCategories(nextCategories);
+      setCategories(secondHandCategoryFirst(nextCategories));
       setBrands(nextBrands);
       setManufacturers(nextManufacturers);
     } catch (loadError) {
@@ -768,6 +782,11 @@ export default function ShopModuleScreen() {
 
   const performDelete = async () => {
     if (!token || !deleteTarget || saving) return;
+    if (deleteTarget.type === 'category' && deleteTarget.item.is_protected) {
+      setDeleteTarget(null);
+      Alert.alert('Categorie protejata', 'Categoria pentru trotinete second-hand poate fi redenumita sau dezactivata, dar nu poate fi stearsa.');
+      return;
+    }
     setSaving(true);
     try {
       if (deleteTarget.type === 'category') await shopApi.deleteCategory(token, deleteTarget.item.id);
@@ -1166,6 +1185,10 @@ export default function ShopModuleScreen() {
               <TouchableOpacity style={styles.closeButton} onPress={closeCategoryForm} disabled={saving}><X size={20} color={Colors.textSecondary} /></TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {editingCategory?.is_protected ? <View style={styles.systemCategoryNote}>
+                <View style={styles.systemCategoryNoteIcon}><LockKeyhole size={18} color={Colors.orange} /></View>
+                <View style={styles.systemCategoryNoteCopy}><Text style={styles.systemCategoryNoteTitle}>Categorie permanenta a magazinului</Text><Text style={styles.systemCategoryNoteText}>O poti redenumi si activa sau dezactiva. ID-ul intern ramane stabil, iar categoria nu poate fi stearsa.</Text><Text selectable style={styles.systemCategoryKey}>ID: {editingCategory.system_key || editingCategory.id}</Text></View>
+              </View> : null}
               <Text style={styles.fieldLabel}>MINIATURA</Text>
               <View style={styles.imageRow}>
                 <TouchableOpacity style={styles.imagePicker} onPress={() => void pickCategoryImage()}>
@@ -1340,10 +1363,10 @@ function CategoryTable({ categories, onEdit, onDelete }: { categories: ShopCateg
       <View style={[styles.tableRow, styles.tableHead]}><Text style={[styles.th, styles.colImage]}>POZA</Text><Text style={[styles.th, styles.colName]}>CATEGORIE</Text><Text style={[styles.th, styles.colParent]}>PARINTE</Text><Text style={[styles.th, styles.colStatus]}>STATUS</Text><Text style={[styles.th, styles.colActions]}>ACTIUNI</Text></View>
       {categories.map((category) => <View key={category.id} style={styles.tableRow}>
         <View style={styles.colImage}>{category.thumbnail_url ? <Image source={{ uri: category.thumbnail_url }} style={styles.tableImage} /> : category.parent_id ? <View style={styles.tableImageFallback}><ImageIcon size={18} color={Colors.textMuted} /></View> : null}</View>
-        <View style={styles.colName}><Text style={styles.cellTitle}>{category.name}</Text><Text style={styles.cellSub} numberOfLines={1}>/{category.slug}</Text>{category.description ? <Text style={styles.cellDescription} numberOfLines={1}>{category.description}</Text> : null}</View>
+        <View style={styles.colName}><View style={styles.cellTitleRow}><Text style={styles.cellTitle}>{category.name}</Text></View><Text style={styles.cellSub} numberOfLines={1}>/{category.slug}</Text>{category.description ? <Text style={styles.cellDescription} numberOfLines={1}>{category.description}</Text> : null}</View>
         <View style={styles.colParent}><Text style={category.parent_name ? styles.cellText : styles.cellMuted}>{category.parent_name || 'Categorie principala'}</Text></View>
         <View style={styles.colStatus}><StatusBadge active={category.is_active} /></View>
-        <View style={[styles.colActions, styles.actionRow]}><TableAction label="Editeaza" onPress={() => onEdit(category)} icon={<Pencil size={16} color="#38BDF8" />} /><TableAction label="Sterge" onPress={() => onDelete(category)} icon={<Trash2 size={16} color={Colors.error} />} danger /></View>
+        <View style={[styles.colActions, styles.actionRow]}><TableAction label="Editeaza" onPress={() => onEdit(category)} icon={<Pencil size={16} color="#38BDF8" />} />{category.is_protected ? <View accessibilityLabel="Categorie protejata impotriva stergerii" style={styles.tableActionLocked}><LockKeyhole size={16} color="#FFC37A" /></View> : <TableAction label="Sterge" onPress={() => onDelete(category)} icon={<Trash2 size={16} color={Colors.error} />} danger />}</View>
       </View>)}
     </View></ScrollView></View>
   );
@@ -1875,6 +1898,7 @@ const styles = StyleSheet.create({
   tableImage: { width: 42, height: 42, borderRadius: 11 },
   tableImageFallback: { width: 42, height: 42, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.04)' },
   cellTitle: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 12 },
+  cellTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   cellSub: { color: Colors.orange, fontFamily: 'Inter-Regular', fontSize: 9, marginTop: 2 },
   cellDescription: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 9, marginTop: 2, maxWidth: 225 },
   cellText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 11 },
@@ -1882,6 +1906,7 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   tableAction: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 0, backgroundColor: 'rgba(56,189,248,0.11)' },
   tableActionDanger: { backgroundColor: 'rgba(239,68,68,0.11)' },
+  tableActionLocked: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(240,127,0,0.12)' },
   badge: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, borderWidth: 1 },
   badgeActive: { borderColor: 'rgba(34,197,94,0.22)', backgroundColor: 'rgba(34,197,94,0.07)' },
   badgeInactive: { borderColor: 'rgba(255,255,255,0.08)', backgroundColor: 'rgba(255,255,255,0.03)' },
@@ -1897,6 +1922,12 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   modalKicker: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 1.2 },
   modalTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 20, marginTop: 3 },
+  systemCategoryNote: { flexDirection: 'row', gap: 11, marginBottom: 18, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: 'rgba(240,127,0,0.26)', backgroundColor: 'rgba(240,127,0,0.08)' },
+  systemCategoryNoteIcon: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(240,127,0,0.14)' },
+  systemCategoryNoteCopy: { flex: 1 },
+  systemCategoryNoteTitle: { color: '#FFE1BC', fontFamily: 'Inter-Bold', fontSize: 11 },
+  systemCategoryNoteText: { marginTop: 4, color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 9.5, lineHeight: 14 },
+  systemCategoryKey: { marginTop: 7, color: Colors.orange, fontFamily: 'Inter-SemiBold', fontSize: 8.5 },
   closeButton: { width: 39, height: 39, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.05)' },
   fieldLabel: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 9, letterSpacing: 0.8, marginBottom: 7, marginTop: 3 },
   fieldHint: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 9, marginTop: -3, marginBottom: 7 },

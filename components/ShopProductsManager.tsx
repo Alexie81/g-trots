@@ -153,10 +153,27 @@ type FormState = {
   discount_value: string;
   category_id: string | null;
   manufacturer_id: string | null;
+  manufacturer_address: string;
+  manufacturer_email: string;
+  eu_responsible_person_name: string;
+  eu_responsible_person_address: string;
+  eu_responsible_person_email: string;
+  product_model: string;
+  product_identifier: string;
+  safety_warnings_ro: string;
+  safety_documents: string;
+  ce_marking_applicable: boolean | null;
+  compliance_documents: string;
+  legal_warranty_months: string;
+  commercial_warranty_months: string;
+  software_updates_until: string;
+  repairability_info: string;
+  spare_parts_info: string;
   brand_ids: string[];
   stock_mode: 'tracked' | 'unlimited';
   stock_quantity: string;
   supplier_stock_quantity: string;
+  is_accounting_stock_tracked: boolean;
   low_stock_threshold: string;
   is_active: boolean;
   is_featured: boolean;
@@ -188,10 +205,27 @@ function emptyForm(): FormState {
     discount_value: '',
     category_id: null,
     manufacturer_id: null,
+    manufacturer_address: '',
+    manufacturer_email: '',
+    eu_responsible_person_name: '',
+    eu_responsible_person_address: '',
+    eu_responsible_person_email: '',
+    product_model: '',
+    product_identifier: '',
+    safety_warnings_ro: '',
+    safety_documents: '',
+    ce_marking_applicable: null,
+    compliance_documents: '',
+    legal_warranty_months: '',
+    commercial_warranty_months: '',
+    software_updates_until: '',
+    repairability_info: '',
+    spare_parts_info: '',
     brand_ids: [],
     stock_mode: 'tracked',
     stock_quantity: '0',
     supplier_stock_quantity: '0',
+    is_accounting_stock_tracked: true,
     low_stock_threshold: '3',
     is_active: true,
     is_featured: false,
@@ -484,10 +518,27 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
         discount_value: full.discount_value ? String(full.discount_value) : '',
         category_id: full.category_id,
         manufacturer_id: full.manufacturer_id,
+        manufacturer_address: full.manufacturer_address || '',
+        manufacturer_email: full.manufacturer_email || '',
+        eu_responsible_person_name: full.eu_responsible_person_name || '',
+        eu_responsible_person_address: full.eu_responsible_person_address || '',
+        eu_responsible_person_email: full.eu_responsible_person_email || '',
+        product_model: full.product_model || '',
+        product_identifier: full.product_identifier || '',
+        safety_warnings_ro: full.safety_warnings_ro || '',
+        safety_documents: (full.safety_documents || []).join('\n'),
+        ce_marking_applicable: full.ce_marking_applicable ?? null,
+        compliance_documents: (full.compliance_documents || []).join('\n'),
+        legal_warranty_months: full.legal_warranty_months == null ? '' : String(full.legal_warranty_months),
+        commercial_warranty_months: full.commercial_warranty_months == null ? '' : String(full.commercial_warranty_months),
+        software_updates_until: full.software_updates_until || '',
+        repairability_info: full.repairability_info || '',
+        spare_parts_info: full.spare_parts_info || '',
         brand_ids: full.brand_ids || [],
         stock_mode: full.stock_mode,
         stock_quantity: String(full.stock_quantity),
         supplier_stock_quantity: String(full.supplier_stock_quantity || 0),
+        is_accounting_stock_tracked: full.is_accounting_stock_tracked !== false,
         low_stock_threshold: String(full.low_stock_threshold),
         is_active: full.is_active,
         is_featured: full.is_featured,
@@ -675,12 +726,29 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
       currency: 'RON',
       stock_mode: form.stock_mode,
       stock_quantity: Math.max(0, Number.parseInt(form.stock_quantity || '0', 10) || 0),
+      is_accounting_stock_tracked: form.is_accounting_stock_tracked,
       low_stock_threshold: Math.max(0, Number.parseInt(form.low_stock_threshold || '0', 10) || 0),
       is_active: form.is_active,
       is_featured: form.is_featured,
       images: form.images.map(({ id, base64, alt_text }, index) => ({ id, base64, alt_text: alt_text || form.name.trim(), sort_order: index })),
       specifications: form.specifications.map(({ group, label, value }) => ({ group: group.trim(), label: label.trim(), value: value.trim() })),
       questions: form.questions.map(({ question, answer }) => ({ question: question.trim(), answer: answer.trim() })),
+      manufacturer_address: form.manufacturer_address.trim(),
+      manufacturer_email: form.manufacturer_email.trim(),
+      eu_responsible_person_name: form.eu_responsible_person_name.trim(),
+      eu_responsible_person_address: form.eu_responsible_person_address.trim(),
+      eu_responsible_person_email: form.eu_responsible_person_email.trim(),
+      product_model: form.product_model.trim(),
+      product_identifier: form.product_identifier.trim(),
+      safety_warnings_ro: form.safety_warnings_ro.trim(),
+      safety_documents: form.safety_documents.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
+      ce_marking_applicable: form.ce_marking_applicable,
+      compliance_documents: form.compliance_documents.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
+      legal_warranty_months: form.legal_warranty_months.trim() ? Math.max(0, Number.parseInt(form.legal_warranty_months, 10) || 0) : null,
+      commercial_warranty_months: form.commercial_warranty_months.trim() ? Math.max(0, Number.parseInt(form.commercial_warranty_months, 10) || 0) : null,
+      software_updates_until: form.software_updates_until.trim() || null,
+      repairability_info: form.repairability_info.trim(),
+      spare_parts_info: form.spare_parts_info.trim(),
     };
     setSaving(true);
     try {
@@ -689,8 +757,15 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
         : await shopApi.createProduct(token, payload);
       resetEditor();
       await load(true, { page, pageSize, query, includeMetadata: false });
+      const saveWarnings = [];
       if (saved.stripe_sync_status === 'error') {
-        Alert.alert('Produs salvat in catalog', `Produsul este salvat, dar oglinda Stripe nu s-a actualizat: ${saved.stripe_sync_error || 'sincronizarea va trebui reincercata.'}`);
+        saveWarnings.push(`Stripe: ${saved.stripe_sync_error || 'sincronizarea va trebui reincercata.'}`);
+      }
+      if (saved.seo_page && !saved.seo_page.success) {
+        saveWarnings.push(`Pagina Google: ${saved.seo_page.error || 'generarea trebuie reincercata.'}`);
+      }
+      if (saveWarnings.length) {
+        Alert.alert('Produs salvat in catalog', `Produsul este salvat, dar exista avertizari:\n\n${saveWarnings.join('\n')}`);
       }
     } catch (saveError) {
       Alert.alert('Nu s-a putut salva', saveError instanceof Error ? saveError.message : 'Incearca din nou.');
@@ -802,7 +877,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
             }) : <Text style={styles.detailEmpty}>Produsul nu apare in nicio comanda.</Text>}
             <DetailGooglePagination label="comenzi" page={detailSalesSafePage} pageSize={DETAIL_SALES_PAGE_SIZE} total={detailSalesTotal} onPageChange={setDetailSalesPage} />
             <SectionTitle number="02" title="Recenzii" text="Raspunde clientilor sau sterge recenziile direct de aici." />
-            {detail.reviews.length ? pagedDetailReviews.map((review) => <View key={review.id} style={styles.reviewCard}><View style={styles.reviewHead}><View><Text style={styles.reviewName}>{review.customer_name}</Text><Text style={styles.reviewMeta}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)} · {review.created_at}</Text></View><TouchableOpacity style={styles.reviewDelete} onPress={() => removeReview(review)}><Trash2 size={16} color={Colors.error} /></TouchableOpacity></View><Text style={styles.reviewMessage}>{review.message}</Text><TextInput value={reviewReplies[review.id] || ''} onChangeText={(value) => setReviewReplies((current) => ({ ...current, [review.id]: value }))} placeholder="Scrie raspunsul magazinului..." placeholderTextColor={Colors.textMuted} multiline style={styles.reviewReply} /><TouchableOpacity style={styles.reviewSave} onPress={() => void saveReviewReply(review)}><MessageSquare size={15} color={Colors.white} /><Text style={styles.reviewSaveText}>Salveaza raspunsul</Text></TouchableOpacity></View>) : <Text style={styles.detailEmpty}>Produsul nu are inca recenzii.</Text>}
+            {detail.reviews.length ? pagedDetailReviews.map((review) => <View key={review.id} style={styles.reviewCard}><View style={styles.reviewHead}><View><Text style={styles.reviewName}>{review.customer_name}</Text>{review.verified_purchase ? <View style={styles.reviewVerified}><Text style={styles.reviewVerifiedText}>✓ ACHIZIȚIE VERIFICATĂ</Text></View> : review.review_source && review.review_source !== 'g-trots.ro' ? <Text style={styles.reviewSource}>Sursa: {review.review_source}</Text> : null}<Text style={styles.reviewMeta}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)} · {review.created_at}</Text></View><TouchableOpacity style={styles.reviewDelete} onPress={() => removeReview(review)}><Trash2 size={16} color={Colors.error} /></TouchableOpacity></View><Text style={styles.reviewMessage}>{review.message}</Text><TextInput value={reviewReplies[review.id] || ''} onChangeText={(value) => setReviewReplies((current) => ({ ...current, [review.id]: value }))} placeholder="Scrie raspunsul magazinului..." placeholderTextColor={Colors.textMuted} multiline style={styles.reviewReply} /><TouchableOpacity style={styles.reviewSave} onPress={() => void saveReviewReply(review)}><MessageSquare size={15} color={Colors.white} /><Text style={styles.reviewSaveText}>Salveaza raspunsul</Text></TouchableOpacity></View>) : <Text style={styles.detailEmpty}>Produsul nu are inca recenzii.</Text>}
             <DetailGooglePagination label="recenzii" page={detailReviewSafePage} pageSize={DETAIL_REVIEWS_PAGE_SIZE} total={detailReviewTotal} onPageChange={setDetailReviewPage} />
             <SectionTitle number="03" title="Furnizori" text="Firmele de la care a fost sau poate fi cumpărat acest produs." />
             {productSuppliers.length ? productSuppliers.map((supplier) => { const invoiceNames = supplier.aliases.filter((alias) => alias.type === 'name').map((alias) => alias.value); const supplierCodes = supplier.aliases.filter((alias) => alias.type === 'code').map((alias) => alias.value); const aliasSummary = [`Pe factură: ${invoiceNames.join(', ')}`, `Cod: ${supplierCodes.join(', ')}`].filter((part) => !part.endsWith(': ')).join(' · '); return <View key={supplier.key} style={[styles.referenceCard, !supplier.isActive && styles.referenceInactive]}><View style={styles.referenceIcon}><Building2 size={18} color="#2DD4BF" /></View><View style={styles.referenceCopy}><View style={styles.referenceHeading}><Text numberOfLines={1} style={styles.referenceSupplier}>{supplier.supplierName}</Text><View style={styles.referencePrimary}><Text style={styles.referencePrimaryText}>CUMPĂRAT PRIN NIR</Text></View></View><Text style={styles.referenceMeta}>{supplier.purchaseCount ? `${supplier.purchaseCount} ${supplier.purchaseCount === 1 ? 'recepție confirmată' : 'recepții confirmate'}` : 'Furnizor asociat produsului'}</Text>{aliasSummary ? <Text numberOfLines={2} style={styles.referenceAliases}>{aliasSummary}</Text> : null}<Text numberOfLines={1} style={styles.referenceCost}>{supplier.lastCostRon ? `Ultimul cost cu TVA ${money(Number(supplier.lastCostRon))}${supplier.lastPurchaseAt ? ` · ${supplier.lastPurchaseAt}` : ''}` : 'Fără cost confirmat'}</Text></View></View>; }) : <Text style={styles.detailEmpty}>Produsul nu are furnizori în istoricul NIR.</Text>}
@@ -883,10 +958,28 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
             <Text style={styles.label}>COMPATIBILITATI</Text>
             <MultiSelectDropdown items={brands} selectedIds={form.brand_ids} onChange={(ids) => patchForm('brand_ids', ids)} />
 
-            <SectionTitle number="08" title="Stoc" text={form.source_domain.toLowerCase() === 'boomag.ro' ? 'Stocul online este egal cu stocul furnizorului si se actualizeaza zilnic din feed.' : 'Alege stoc online nelimitat sau cantitate urmarita automat.'} />
-            {form.source_domain.toLowerCase() === 'boomag.ro' ? <View style={styles.nirNote}><Text style={styles.nirNoteTitle}>Stoc furnizor: {form.supplier_stock_quantity} buc.</Text><Text style={styles.nirNoteText}>Stoc online: {form.stock_quantity} buc. · Actualizare automata Boomag · Stocul conta ramane separat si va fi calculat din facturi.</Text></View> : <><View style={styles.sourceRow}><Choice label="Stoc cu numar" selected={form.stock_mode === 'tracked'} onPress={() => patchForm('stock_mode', 'tracked')} /><Choice label="Stoc nelimitat" selected={form.stock_mode === 'unlimited'} onPress={() => patchForm('stock_mode', 'unlimited')} /></View>{form.stock_mode === 'tracked' ? <View style={styles.twoColumns}><View style={styles.column}><Field label="CANTITATE" value={form.stock_quantity} onChangeText={(value) => patchForm('stock_quantity', value)} placeholder="0" keyboardType="number-pad" /></View><View style={styles.column}><Field label="ALERTA SUB" value={form.low_stock_threshold} onChangeText={(value) => patchForm('low_stock_threshold', value)} placeholder="3" keyboardType="number-pad" /></View></View> : null}</>}
+            <SectionTitle number="08" title="Siguranta si conformitate" text="Date GPSR, avertismente, documente si garantii. Campurile goale nu sunt inventate pe site." />
+            <Field label="ADRESA PRODUCATOR" value={form.manufacturer_address} onChangeText={(value) => patchForm('manufacturer_address', value)} placeholder="Adresa postala completa" multiline />
+            <Field label="E-MAIL PRODUCATOR" value={form.manufacturer_email} onChangeText={(value) => patchForm('manufacturer_email', value)} placeholder="contact@producator.ro" autoCapitalize="none" keyboardType="email-address" />
+            <Field label="PERSOANA RESPONSABILA IN UE" value={form.eu_responsible_person_name} onChangeText={(value) => patchForm('eu_responsible_person_name', value)} placeholder="Denumire operator economic" />
+            <Field label="ADRESA PERSOANA RESPONSABILA UE" value={form.eu_responsible_person_address} onChangeText={(value) => patchForm('eu_responsible_person_address', value)} placeholder="Adresa postala completa" multiline />
+            <Field label="E-MAIL PERSOANA RESPONSABILA UE" value={form.eu_responsible_person_email} onChangeText={(value) => patchForm('eu_responsible_person_email', value)} placeholder="contact@operator.eu" autoCapitalize="none" keyboardType="email-address" />
+            <View style={styles.twoColumns}><View style={styles.column}><Field label="MODEL" value={form.product_model} onChangeText={(value) => patchForm('product_model', value)} placeholder="Model comercial" /></View><View style={styles.column}><Field label="IDENTIFICATOR PRODUS" value={form.product_identifier} onChangeText={(value) => patchForm('product_identifier', value)} placeholder="Cod, lot sau tip" /></View></View>
+            <Field label="AVERTISMENTE DE SIGURANTA (RO)" value={form.safety_warnings_ro} onChangeText={(value) => patchForm('safety_warnings_ro', value)} placeholder="Cate un avertisment clar, in limba romana" multiline />
+            <Field label="DOCUMENTE SIGURANTA · UN URL PE LINIE" value={form.safety_documents} onChangeText={(value) => patchForm('safety_documents', value)} placeholder="https://.../manual.pdf" multiline autoCapitalize="none" />
+            <Text style={styles.label}>MARCAJ CE APLICABIL</Text>
+            <View style={styles.sourceRow}><Choice label="Necunoscut" selected={form.ce_marking_applicable === null} onPress={() => patchForm('ce_marking_applicable', null)} /><Choice label="Da" selected={form.ce_marking_applicable === true} onPress={() => patchForm('ce_marking_applicable', true)} /><Choice label="Nu" selected={form.ce_marking_applicable === false} onPress={() => patchForm('ce_marking_applicable', false)} /></View>
+            <Field label="DOCUMENTE CONFORMITATE · UN URL PE LINIE" value={form.compliance_documents} onChangeText={(value) => patchForm('compliance_documents', value)} placeholder="https://.../declaratie-conformitate.pdf" multiline autoCapitalize="none" />
+            <View style={styles.twoColumns}><View style={styles.column}><Field label="GARANTIE LEGALA · LUNI" value={form.legal_warranty_months} onChangeText={(value) => patchForm('legal_warranty_months', value)} keyboardType="number-pad" placeholder="24" /></View><View style={styles.column}><Field label="GARANTIE COMERCIALA · LUNI" value={form.commercial_warranty_months} onChangeText={(value) => patchForm('commercial_warranty_months', value)} keyboardType="number-pad" placeholder="Optional" /></View></View>
+            <Field label="ACTUALIZARI SOFTWARE PANA LA" value={form.software_updates_until} onChangeText={(value) => patchForm('software_updates_until', value)} placeholder="AAAA-LL-ZZ · daca se aplica" autoCapitalize="none" />
+            <Field label="INFORMATII REPARABILITATE" value={form.repairability_info} onChangeText={(value) => patchForm('repairability_info', value)} placeholder="Informatii disponibile despre reparare" multiline />
+            <Field label="PIESE DE SCHIMB" value={form.spare_parts_info} onChangeText={(value) => patchForm('spare_parts_info', value)} placeholder="Disponibilitate si conditii" multiline />
 
-            <SectionTitle number="09" title="SEO si Google" text="Controleaza titlul si descrierea din rezultatele cautarii." />
+            <SectionTitle number="09" title="Stoc" text={form.source_domain.toLowerCase() === 'boomag.ro' ? 'Stocul online este egal cu stocul furnizorului si se actualizeaza zilnic din feed.' : 'Alege stoc online nelimitat sau cantitate urmarita automat.'} />
+            {form.source_domain.toLowerCase() === 'boomag.ro' ? <View style={styles.nirNote}><Text style={styles.nirNoteTitle}>Stoc furnizor: {form.supplier_stock_quantity} buc.</Text><Text style={styles.nirNoteText}>Stoc online: {form.stock_quantity} buc. · Actualizare automata Boomag · Stocul conta ramane separat si va fi calculat din facturi.</Text></View> : <><View style={styles.sourceRow}><Choice label="Stoc cu numar" selected={form.stock_mode === 'tracked'} onPress={() => patchForm('stock_mode', 'tracked')} /><Choice label="Stoc nelimitat" selected={form.stock_mode === 'unlimited'} onPress={() => patchForm('stock_mode', 'unlimited')} /></View>{form.stock_mode === 'tracked' ? <View style={styles.twoColumns}><View style={styles.column}><Field label="CANTITATE" value={form.stock_quantity} onChangeText={(value) => patchForm('stock_quantity', value)} placeholder="0" keyboardType="number-pad" /></View><View style={styles.column}><Field label="ALERTA SUB" value={form.low_stock_threshold} onChangeText={(value) => patchForm('low_stock_threshold', value)} placeholder="3" keyboardType="number-pad" /></View></View> : null}</>}
+            <View style={[styles.toggleCard, styles.accountingToggleCard]}><View style={styles.toggleCopy}><Text style={styles.toggleTitle}>Urmărește în stocul contabil</Text><Text style={styles.toggleText}>Activ implicit. Oprit: produsul nu apare în Stocuri Conta și nu generează mișcări contabile. Stocul online rămâne editabil, iar facturarea și SPV funcționează normal.</Text></View><Switch accessibilityLabel="Urmărește în stocul contabil" value={form.is_accounting_stock_tracked} onValueChange={(value) => patchForm('is_accounting_stock_tracked', value)} trackColor={{ false: '#39363D', true: '#34D39955' }} thumbColor={form.is_accounting_stock_tracked ? '#34D399' : '#8A8A8A'} /></View>
+
+            <SectionTitle number="10" title="SEO si Google" text="Controleaza titlul si descrierea din rezultatele cautarii." />
             <Field label="META TITLU" value={form.meta_title} onChangeText={(value) => patchForm('meta_title', value)} placeholder={form.name || 'Titlul produsului'} />
             <Field label="META DESCRIERE" value={form.meta_description} onChangeText={(value) => patchForm('meta_description', value)} placeholder="Descriere pentru Google" multiline />
             <View style={styles.googlePreview}>
@@ -971,7 +1064,7 @@ const styles = StyleSheet.create({
   detailLoading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }, detailContent: { width: '100%', maxWidth: 920, alignSelf: 'center', padding: 16 }, detailGallery: { gap: 10, paddingBottom: 12 }, detailImage: { width: 210, height: 190, overflow: 'hidden', borderRadius: 20, backgroundColor: '#211F24' },
   metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }, metricCard: { width: '48%', minHeight: 72, justifyContent: 'space-between', borderWidth: 1, borderColor: '#343137', borderRadius: 16, padding: 11, backgroundColor: '#1B1B1F' }, metricCardAccent: { borderColor: 'rgba(34,197,94,0.35)', backgroundColor: 'rgba(34,197,94,0.07)' }, metricLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5 }, metricLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.55 }, metricValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 14, marginTop: 6 }, metricValueAccent: { color: '#9CD9AE' },
   saleCard: { marginTop: 10, padding: 14, borderRadius: 16, backgroundColor: '#201E23', borderWidth: 1, borderColor: '#343137' }, saleHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, saleLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.6 }, saleNumber: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 12, marginTop: 3 }, saleMeta: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 6 }, saleStatus: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5, backgroundColor: '#33251C' }, saleStatusText: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, textTransform: 'uppercase' }, saleStats: { flexDirection: 'row', gap: 7, marginTop: 12 }, saleStat: { flex: 1, minWidth: 0, padding: 9, borderRadius: 11, backgroundColor: '#17161A' }, saleValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10, marginTop: 5 }, saleProfit: { color: '#28D16F', fontFamily: 'Inter-Bold', fontSize: 10, marginTop: 5 }, detailEmpty: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 10, paddingVertical: 18 },
-  reviewCard: { borderWidth: 1, borderColor: '#37343B', borderRadius: 18, padding: 14, backgroundColor: '#1B1B1F', marginBottom: 10 }, reviewHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, reviewName: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 11 }, reviewMeta: { color: '#F59E0B', fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 3 }, reviewDelete: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: 'rgba(239,68,68,0.1)' }, reviewMessage: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 16, marginVertical: 12 }, reviewReply: { minHeight: 74, borderWidth: 1, borderColor: '#49454F', borderRadius: 13, padding: 11, color: Colors.textPrimary, backgroundColor: '#161519', fontFamily: 'Inter-Regular', fontSize: 10, textAlignVertical: 'top' }, reviewSave: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 13, backgroundColor: Colors.orange, marginTop: 8 }, reviewSaveText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 },
+  reviewCard: { borderWidth: 1, borderColor: '#37343B', borderRadius: 18, padding: 14, backgroundColor: '#1B1B1F', marginBottom: 10 }, reviewHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, reviewName: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 11 }, reviewVerified: { alignSelf: 'flex-start', marginTop: 5, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(45,212,191,0.32)', backgroundColor: 'rgba(45,212,191,0.1)' }, reviewVerifiedText: { color: '#5EEAD4', fontFamily: 'Inter-Bold', fontSize: 7 }, reviewSource: { color: Colors.textMuted, fontFamily: 'Inter-SemiBold', fontSize: 7, marginTop: 5 }, reviewMeta: { color: '#F59E0B', fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 5 }, reviewDelete: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: 'rgba(239,68,68,0.1)' }, reviewMessage: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 16, marginVertical: 12 }, reviewReply: { minHeight: 74, borderWidth: 1, borderColor: '#49454F', borderRadius: 13, padding: 11, color: Colors.textPrimary, backgroundColor: '#161519', fontFamily: 'Inter-Regular', fontSize: 10, textAlignVertical: 'top' }, reviewSave: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 13, backgroundColor: Colors.orange, marginTop: 8 }, reviewSaveText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 },
   detailPagination: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 10, marginBottom: 4 }, detailPageDirection: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: '#162B35' }, detailPageDisabled: { opacity: 0.28 }, detailPageButton: { minWidth: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'transparent', borderRadius: 11, backgroundColor: '#242228' }, detailPageButtonActive: { borderColor: '#FF9A4050', backgroundColor: '#FE8C19' }, detailPageText: { color: '#A39BA5', fontFamily: 'Inter-Bold', fontSize: 10 }, detailPageTextActive: { color: '#1D0C01' }, detailPageEllipsis: { width: 20, color: '#716A73', textAlign: 'center', fontFamily: 'Inter-Bold', fontSize: 14 }, detailPageTotal: { position: 'absolute', right: 2, color: Colors.textMuted, fontFamily: 'Inter-SemiBold', fontSize: 8 },
   sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: 11, borderTopWidth: 1, borderTopColor: '#2D2A30', paddingTop: 20, marginTop: 12, marginBottom: 16 }, sectionNumber: { width: 38, height: 38, textAlign: 'center', textAlignVertical: 'center', borderRadius: 12, color: Colors.orange, backgroundColor: Colors.orangeDim, fontFamily: 'Inter-Bold', fontSize: 10 }, sectionName: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 15 }, sectionText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 9, marginTop: 2, maxWidth: 650 },
   inlineAdd: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderWidth: 1, borderColor: 'rgba(255,107,0,0.28)', borderRadius: 14, backgroundColor: Colors.orangeDim, marginBottom: 10 }, inlineAddText: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 10 }, subEditorCard: { borderWidth: 1, borderColor: '#37343B', borderRadius: 17, padding: 13, backgroundColor: '#1B1B1F', marginBottom: 10 }, subEditorHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }, subEditorTitle: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.8 },
@@ -985,6 +1078,6 @@ const styles = StyleSheet.create({
   purchaseCard: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#37343B', borderRadius: 16, padding: 12, backgroundColor: '#1B1B1F', marginBottom: 8 }, purchaseNir: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 }, purchaseMeta: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 4 }, purchaseRight: { alignItems: 'flex-end' }, purchaseCost: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 11 },
   multiSelect: { marginBottom: 16 }, multiSelectButton: { minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderWidth: 1, borderColor: '#49454F', borderRadius: 13, paddingHorizontal: 14, backgroundColor: '#161519' }, multiSelectButtonOpen: { borderColor: Colors.orange }, multiSelectValue: { flex: 1, color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 10 }, multiSelectPlaceholder: { color: Colors.textMuted, fontFamily: 'Inter-Regular' }, multiSelectOptions: { marginTop: 6, overflow: 'hidden', borderWidth: 1, borderColor: '#49454F', borderRadius: 14, padding: 6, backgroundColor: '#211F24' }, multiSelectOption: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 10, paddingHorizontal: 10 }, multiSelectCheck: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#57515B', borderRadius: 7, backgroundColor: '#171519' }, multiSelectCheckActive: { borderColor: Colors.orange, backgroundColor: Colors.orange }, multiSelectOptionText: { color: Colors.textSecondary, fontFamily: 'Inter-SemiBold', fontSize: 10 }, multiSelectOptionTextActive: { color: Colors.orange },
   googlePreview: { flexDirection: 'row', gap: 12, borderWidth: 1, borderColor: '#343137', borderRadius: 19, padding: 14, backgroundColor: '#FFF', marginBottom: 18 }, googleImage: { width: 78, height: 78, borderRadius: 10, backgroundColor: '#EEE' }, googleCopy: { flex: 1, minWidth: 0 }, googleSite: { color: '#202124', fontFamily: 'Inter-Regular', fontSize: 9 }, googleTitle: { color: '#1A0DAB', fontFamily: 'Inter-Regular', fontSize: 15, lineHeight: 19, marginTop: 3 }, googleDescription: { color: '#4D5156', fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 14, marginTop: 3 }, googleUrl: { color: '#188038', fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 4 },
-  toggleCard: { minHeight: 65, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderRadius: 17, padding: 13, backgroundColor: '#1B1B1F', marginBottom: 9 }, toggleTitle: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 11 }, toggleText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 3 },
+  toggleCard: { minHeight: 65, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderRadius: 17, padding: 13, backgroundColor: '#1B1B1F', marginBottom: 9 }, accountingToggleCard: { borderWidth: 1, borderColor: 'rgba(52,211,153,0.22)', backgroundColor: '#17201E' }, toggleCopy: { flex: 1, minWidth: 0 }, toggleTitle: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 11 }, toggleText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 13, marginTop: 3 },
   saveBottom: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 17, backgroundColor: Colors.orange, marginTop: 14 }, saveBottomText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 11 },
 });

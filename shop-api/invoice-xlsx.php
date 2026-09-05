@@ -91,6 +91,8 @@ final class GtrotsInvoiceXlsx
             $value = $net * (1 + max(0.0, min(100.0, (float)($item['vat_rate'] ?? 0))) / 100);
             return $sum + ($status === 'return' ? -$value : $value);
         }, 0.0);
+        $returnShippingCost = $status === 'return' ? max(0.0, (float)($invoice['return_shipping_cost'] ?? 0)) : 0.0;
+        $grandTotal += $returnShippingCost;
         $totalRow = $dataRow + 1;
         $summaryRows = [];
         $discountTotal = max(0.0, (float)($invoice['discount_total'] ?? 0));
@@ -98,10 +100,13 @@ final class GtrotsInvoiceXlsx
             $discountCode = trim((string)($invoice['discount_code'] ?? ''));
             $summaryRows[] = ['REDUCERE APLICATĂ' . ($discountCode !== '' ? ' · ' . $discountCode : '') . ' (inclusă)', -$discountTotal, '', 12, 11];
         }
+        if ($returnShippingCost > 0) {
+            $summaryRows[] = ['COST DIRECT RETUR CURIER REȚINUT', $returnShippingCost, '', 12, 11];
+        }
         array_push($summaryRows,
             ['Subtotal fără TVA', $subtotal, 'SUM(I' . $firstDataRow . ':I' . $lastDataRow . ')', 12, 11],
             ['Total TVA', $grandTotal - $subtotal, 'SUM(J' . $firstDataRow . ':J' . $lastDataRow . ')-SUM(I' . $firstDataRow . ':I' . $lastDataRow . ')', 12, 11],
-            ['TOTAL FACTURĂ', $grandTotal, 'SUM(J' . $firstDataRow . ':J' . $lastDataRow . ')', 13, 14]
+            ['TOTAL FACTURĂ', $grandTotal, '', 13, 14]
         );
         foreach ($summaryRows as [$label, $value, $formula, $labelStyle, $valueStyle]) {
             $merges[] = 'G' . $totalRow . ':I' . $totalRow;

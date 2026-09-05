@@ -164,8 +164,9 @@ export default function ShopInventoryManager({ onOpenNir }: { onOpenNir?: (nirId
     try {
       const next = await shopApi.listInventory(token);
       if (currentRequest !== requestId.current) return;
-      rememberInventorySnapshot(token, next);
-      setProducts(next);
+      const accountingProducts = next.filter((product) => product.is_accounting_stock_tracked !== false);
+      rememberInventorySnapshot(token, accountingProducts);
+      setProducts(accountingProducts);
       setError('');
     }
     catch (loadError) {

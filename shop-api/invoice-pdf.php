@@ -241,7 +241,8 @@ final class GtrotsInvoicePdf
 
         $shipping = self::number($invoice['shipping'] ?? 0, 'transport');
         if ($status === 'return') $shipping = -abs($shipping);
-        $total = round($subtotal + $vatTotal + $shipping, 2);
+        $returnShippingCost = $status === 'return' ? abs(self::number($invoice['return_shipping_cost'] ?? 0, 'cost retur')) : 0.0;
+        $total = round($subtotal + $vatTotal + $shipping + $returnShippingCost, 2);
         $amountPaid = array_key_exists('amount_paid', $invoice)
             ? self::number($invoice['amount_paid'], 'sumă achitată')
             : ($status === 'paid' ? abs($total) : 0.0);
@@ -271,6 +272,7 @@ final class GtrotsInvoicePdf
             'discount_code' => trim((string)($invoice['discount_code'] ?? '')),
             'vat_total' => round($vatTotal, 2),
             'shipping' => round($shipping, 2),
+            'return_shipping_cost' => round($returnShippingCost, 2),
             'total' => $total,
             'amount_paid' => round($amountPaid, 2),
             'amount_due' => $amountDue,
@@ -360,6 +362,7 @@ final class GtrotsInvoicePdf
         ]);
         $metaHtml = $meta ? '<div class="micro-meta">' . self::e(implode('  •  ', $meta)) . '</div>' : '';
         $shippingRow = abs($d['shipping']) > 0.0001 ? '<tr><td>Transport</td><td>' . self::money($d['shipping'], $d['currency']) . '</td></tr>' : '';
+        $returnCostRow = $d['status'] === 'return' && $d['return_shipping_cost'] > 0.0001 ? '<tr class="return-cost-summary"><td>Cost direct retur curier reținut</td><td>+' . self::money($d['return_shipping_cost'], $d['currency']) . '</td></tr>' : '';
         $paidRow = $d['status'] === 'unpaid' && $d['amount_paid'] > 0
             ? '<tr class="paid-line"><td>Achitat parțial</td><td>-' . self::money($d['amount_paid'], $d['currency']) . '</td></tr>'
             : '';
@@ -393,7 +396,7 @@ final class GtrotsInvoicePdf
             . '<thead><tr><th>#</th><th>Foto</th><th>Articol facturat</th><th>U.M.</th><th>Cant.</th><th>Preț unitar<br><small>fără TVA</small></th><th>TVA</th><th>Valoare<br><small>fără TVA</small></th><th>Total</th></tr></thead><tbody>' . $rows . '</tbody></table>'
             . '<table class="bottom-layout"><tr><td class="left-bottom">' . $payment . $notes . '</td><td class="right-bottom">'
             . '<table class="vat-summary"><thead><tr><th>Sumar TVA</th><th>Bază</th><th>TVA</th></tr></thead><tbody>' . $vatRows . '</tbody></table>'
-            . '<table class="totals">' . $discountRow . '<tr><td>Subtotal fără TVA</td><td>' . self::money($d['subtotal'], $d['currency']) . '</td></tr>' . $shippingRow
+            . '<table class="totals">' . $discountRow . '<tr><td>Subtotal fără TVA</td><td>' . self::money($d['subtotal'], $d['currency']) . '</td></tr>' . $shippingRow . $returnCostRow
             . '<tr><td>Total TVA</td><td>' . self::money($d['vat_total'], $d['currency']) . '</td></tr><tr class="grand"><td>Total factură</td><td>' . self::money($d['total'], $d['currency']) . '</td></tr>' . $paidRow . '</table>'
             . '<div class="due-card"><small>' . self::e($dueLabel) . '</small><strong>' . self::money($dueValue, $d['currency']) . '</strong></div>'
             . '</td></tr></table>'

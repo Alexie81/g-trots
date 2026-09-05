@@ -54,7 +54,21 @@ final class GtrotsInvoiceUbl
         }
         foreach ($taxGroups as &$group) $group['tax'] = round($group['net'] * $group['rate'] / 100, 2);
         unset($group);
-        $exclusive = round(array_sum(array_column($lines, 'net')), 2);
+        $lineExtension = round(array_sum(array_column($lines, 'net')), 2);
+        $returnCostGross = $isReturn ? max(0.0, round((float)($invoice['return_shipping_cost'] ?? 0), 2)) : 0.0;
+        $returnCostRate = $isReturn ? round(max(0.0, min(100.0, (float)($invoice['return_shipping_cost_vat_rate'] ?? ($lines[0]['rate'] ?? 0)))), 2) : 0.0;
+        $returnCostNet = $returnCostGross > 0 ? round($returnCostGross / (1 + $returnCostRate / 100), 2) : 0.0;
+        if ($returnCostNet > $lineExtension) {
+            $returnCostNet = $lineExtension;
+            $returnCostGross = round($returnCostNet * (1 + $returnCostRate / 100), 2);
+        }
+        if ($returnCostNet > 0) {
+            $returnKey = ($returnCostRate > 0 ? 'S' : 'Z') . ':' . self::decimal($returnCostRate, 2);
+            if (!isset($taxGroups[$returnKey])) $taxGroups[$returnKey] = ['category' => $returnCostRate > 0 ? 'S' : 'Z', 'rate' => $returnCostRate, 'net' => 0.0, 'tax' => 0.0];
+            $taxGroups[$returnKey]['net'] = round(max(0.0, $taxGroups[$returnKey]['net'] - $returnCostNet), 2);
+            $taxGroups[$returnKey]['tax'] = round($taxGroups[$returnKey]['net'] * $returnCostRate / 100, 2);
+        }
+        $exclusive = round($lineExtension - $returnCostNet, 2);
         $tax = round(array_sum(array_column($taxGroups, 'tax')), 2);
         $inclusive = round($exclusive + $tax, 2);
         $declaredTotal = round((float)($invoice['total'] ?? $inclusive), 2);
@@ -109,6 +123,19 @@ final class GtrotsInvoiceUbl
             if ($bank !== '') self::cbc($document, $account, 'Name', self::text($bank, 200));
         }
 
+        if ($returnCostNet > 0) {
+            $allowance = self::cac($document, $root, 'AllowanceCharge');
+            self::cbc($document, $allowance, 'ChargeIndicator', 'false');
+            self::cbc($document, $allowance, 'AllowanceChargeReason', 'Cost direct al returului suportat de client');
+            self::amount($document, $allowance, 'Amount', $returnCostNet, $currency);
+            self::amount($document, $allowance, 'BaseAmount', $lineExtension, $currency);
+            $category = self::cac($document, $allowance, 'TaxCategory');
+            self::cbc($document, $category, 'ID', $returnCostRate > 0 ? 'S' : 'Z');
+            self::cbc($document, $category, 'Percent', self::decimal($returnCostRate, 2));
+            $scheme = self::cac($document, $category, 'TaxScheme');
+            self::cbc($document, $scheme, 'ID', 'VAT');
+        }
+
         $taxTotal = self::cac($document, $root, 'TaxTotal');
         self::amount($document, $taxTotal, 'TaxAmount', $tax, $currency);
         foreach ($taxGroups as $group) {
@@ -123,9 +150,10 @@ final class GtrotsInvoiceUbl
         }
 
         $totals = self::cac($document, $root, 'LegalMonetaryTotal');
-        self::amount($document, $totals, 'LineExtensionAmount', $exclusive, $currency);
+        self::amount($document, $totals, 'LineExtensionAmount', $lineExtension, $currency);
         self::amount($document, $totals, 'TaxExclusiveAmount', $exclusive, $currency);
         self::amount($document, $totals, 'TaxInclusiveAmount', $inclusive, $currency);
+        if ($returnCostNet > 0) self::amount($document, $totals, 'AllowanceTotalAmount', $returnCostNet, $currency);
         if ($paid > 0) self::amount($document, $totals, 'PrepaidAmount', $paid, $currency);
         if (abs($rounding) >= 0.005) self::amount($document, $totals, 'PayableRoundingAmount', $rounding, $currency);
         self::amount($document, $totals, 'PayableAmount', $payable, $currency);

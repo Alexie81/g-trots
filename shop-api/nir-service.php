@@ -1111,10 +1111,11 @@ function shopNirPrepareLines(PDO $db, array $lines, array $header): array {
     $productIds = array_values(array_unique(array_filter(array_map(static fn($line): string => is_array($line) ? trim((string)($line['product_id'] ?? '')) : '', $lines))));
     if ($productIds) {
         $placeholders = implode(',', array_fill(0, count($productIds), '?'));
-        $snapshotStmt = $db->prepare("SELECT id, name, sku, ean FROM shop_products WHERE id IN ({$placeholders})");
+        $snapshotStmt = $db->prepare("SELECT id, name, sku, ean, is_accounting_stock_tracked FROM shop_products WHERE id IN ({$placeholders})");
         $snapshotStmt->execute($productIds);
         foreach ($snapshotStmt->fetchAll() as $snapshot) $productSnapshots[(string)$snapshot['id']] = $snapshot;
     }
+    $singleSnapshotStmt = $db->prepare('SELECT id, name, sku, ean, is_accounting_stock_tracked FROM shop_products WHERE id = ? LIMIT 1');
     $totals = ['subtotal' => 0, 'vat_total' => 0, 'grand_total' => 0, 'subtotal_ron' => 0, 'vat_total_ron' => 0, 'grand_total_ron' => 0, 'inventory_cost_total_ron' => 0, 'total_difference_ron' => 0];
     foreach (array_values($lines) as $index => $line) {
         if (!is_array($line)) throw new InvalidArgumentException('O poziție NIR are format invalid.');
@@ -1142,11 +1143,21 @@ function shopNirPrepareLines(PDO $db, array $lines, array $header): array {
         $matchedByName = $productId !== null && ($referenceMatchedByName || ($referenceId === null && $requestedResolution === 'matched_name'));
         $resolution = $productId !== null ? ($matchedByName ? 'matched_name' : ($referenceId !== null ? 'matched_code' : 'matched_manual')) : 'unmatched';
         $snapshot = $productId !== null ? ($productSnapshots[$productId] ?? null) : null;
+        if ($productId !== null && $snapshot === null) {
+            $singleSnapshotStmt->execute([$productId]);
+            $snapshot = $singleSnapshotStmt->fetch() ?: null;
+            if ($snapshot !== null) $productSnapshots[$productId] = $snapshot;
+        }
         $receivedScaled = shopNirDecimalToScaled($line['received_quantity'] ?? $line['accepted_quantity'] ?? $line['invoiced_quantity'] ?? 0, 4, 'Cantitatea recepționată');
         $rejectedScaled = shopNirDecimalToScaled($line['rejected_quantity'] ?? 0, 4, 'Cantitatea respinsă');
         if ($receivedScaled < 0 || $rejectedScaled < 0) throw new InvalidArgumentException('Cantitățile recepționată și respinsă nu pot fi negative.');
         $receivedQuantity = shopNirScaledToDecimal($receivedScaled, 4);
         $isStockItem = array_key_exists('is_stock_item', $line) ? (bool)$line['is_stock_item'] : true;
+        // Un produs exclus din Stocuri Conta poate exista pe NIR ca poziție
+        // documentară, însă nu trebuie să modifice stocul contabil sau FIFO.
+        if ($snapshot !== null && isset($snapshot['is_accounting_stock_tracked']) && !(bool)$snapshot['is_accounting_stock_tracked']) {
+            $isStockItem = false;
+        }
         $legacyDifference = trim((string)($line['mismatch_reason'] ?? ''));
         $differenceReason = strtolower(trim((string)($line['difference_reason'] ?? ($legacyDifference !== '' ? 'other' : ''))));
         $allowedDifferenceReasons = ['shortage', 'surplus', 'damaged', 'wrong_product', 'price_difference', 'vat_difference', 'rejected', 'other'];
@@ -1173,7 +1184,7 @@ function shopNirPrepareLines(PDO $db, array $lines, array $header): array {
             'accepted_quantity' => $calculated['accepted_quantity'],
             'rejected_quantity' => shopNirScaledToDecimal($rejectedScaled, 4),
             'conversion_factor' => $calculated['conversion_factor'],
-            'stock_quantity' => $calculated['stock_quantity'],
+            'stock_quantity' => $isStockItem ? $calculated['stock_quantity'] : '0.0000',
             'unit_price' => $calculated['unit_price'],
             'discount_percent' => $calculated['discount_percent'],
             'discount_value' => $calculated['line_discount'],
@@ -1185,8 +1196,8 @@ function shopNirPrepareLines(PDO $db, array $lines, array $header): array {
             'line_vat_ron' => $calculated['line_vat_ron'],
             'line_total_ron' => $calculated['line_total_ron'],
             'allocated_cost_ron' => shopNirScaledToDecimal(shopNirDecimalToScaled($line['allocated_cost_ron'] ?? 0, 2, 'Costul alocat'), 2),
-            'inventory_unit_cost_ron' => $calculated['inventory_unit_cost_ron'],
-            'inventory_cost_total_ron' => $calculated['inventory_cost_total_ron'],
+            'inventory_unit_cost_ron' => $isStockItem ? $calculated['inventory_unit_cost_ron'] : '0.000000',
+            'inventory_cost_total_ron' => $isStockItem ? $calculated['inventory_cost_total_ron'] : '0.00',
             'resolution_status' => $resolution,
             'match_method' => $matchedByName ? 'name_exact' : ($referenceId !== null ? 'supplier_code' : ($productId !== null ? 'manual' : 'unmatched')),
             'match_confidence' => $referenceId !== null ? '1.0000' : ($productId !== null ? '1.0000' : '0.0000'),
@@ -2464,7 +2475,7 @@ function shopNirOpeningBalanceReport(PDO $db, array $user): array {
          INNER JOIN shop_nir_settings settings ON settings.id = 1
          INNER JOIN shop_warehouses w ON w.id = settings.default_warehouse_id
          LEFT JOIN shop_inventory_cost_layers l ON l.product_id = p.id AND l.warehouse_id = settings.default_warehouse_id
-         WHERE p.accounting_stock_quantity <> 0
+         WHERE p.is_accounting_stock_tracked = 1 AND p.accounting_stock_quantity <> 0
          GROUP BY p.id, p.name, p.sku, settings.default_warehouse_id, w.name, p.accounting_stock_quantity
          HAVING ABS(p.accounting_stock_quantity - COALESCE(SUM(CASE WHEN l.is_reversed = 0 THEN l.remaining_quantity ELSE 0 END), 0)) > 0.00005
          ORDER BY ABS(p.accounting_stock_quantity - COALESCE(SUM(CASE WHEN l.is_reversed = 0 THEN l.remaining_quantity ELSE 0 END), 0)) DESC, p.name ASC'
@@ -2487,10 +2498,12 @@ function shopNirCreateOpeningBalance(PDO $db, array $body, array $user): array {
     $totalCost = shopNirMultiplyScaled(shopNirDecimalToScaled($quantity, 4), 4, shopNirDecimalToScaled($unitCost, 6), 6, 2);
     $db->beginTransaction();
     try {
-        $product = $db->prepare('SELECT accounting_stock_quantity FROM shop_products WHERE id = ? FOR UPDATE');
+        $product = $db->prepare('SELECT accounting_stock_quantity, is_accounting_stock_tracked FROM shop_products WHERE id = ? FOR UPDATE');
         $product->execute([$productId]);
-        $accountingStock = $product->fetchColumn();
-        if ($accountingStock === false) throw new InvalidArgumentException('Produsul nu există.');
+        $productRow = $product->fetch();
+        if (!$productRow) throw new InvalidArgumentException('Produsul nu există.');
+        if (!(bool)$productRow['is_accounting_stock_tracked']) throw new InvalidArgumentException('Produsul este exclus din Stocuri Conta și nu poate primi sold inițial FIFO.');
+        $accountingStock = $productRow['accounting_stock_quantity'];
         $layers = $db->prepare('SELECT COALESCE(SUM(remaining_quantity), 0) FROM shop_inventory_cost_layers WHERE product_id = ? AND warehouse_id = ? AND is_reversed = 0 FOR UPDATE');
         $layers->execute([$productId, $warehouseId]);
         $layerQuantity = (string)$layers->fetchColumn();

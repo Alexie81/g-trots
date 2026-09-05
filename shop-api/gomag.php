@@ -936,7 +936,7 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
     foreach ($db->query('SELECT id, name FROM shop_categories')->fetchAll() as $category) {
         $categoryNames[(string)$category['id']] = (string)$category['name'];
     }
-    $stats = ['created' => 0, 'updated' => 0, 'duplicates_skipped' => 0, 'images_saved' => 0, 'images_missing' => 0, 'without_compatibility' => 0, 'errors' => []];
+    $stats = ['created' => 0, 'updated' => 0, 'duplicates_skipped' => 0, 'images_saved' => 0, 'images_missing' => 0, 'without_compatibility' => 0, 'seo_pages_generated' => 0, 'seo_errors' => [], 'errors' => []];
 
     foreach ($batch as $batchIndex => $row) {
         $externalId = trim((string)($row['id'] ?? ''));
@@ -1043,6 +1043,12 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
                 : ['saved' => 0, 'requested' => 0];
             $stats['images_saved'] += (int)$imageResult['saved'];
             if ((int)$imageResult['saved'] === 0) $stats['images_missing']++;
+            $seoResult = shopProductSeoSync($db, $config, $productId, $existing ? (string)($existing['slug'] ?? '') : null, false);
+            if (!empty($seoResult['generated'])) {
+                $stats['seo_pages_generated']++;
+            } elseif (empty($seoResult['success'])) {
+                $stats['seo_errors'][] = ['id' => $externalId, 'sku' => $supplierSku, 'message' => (string)($seoResult['error'] ?? 'Pagina SEO nu a putut fi generată.')];
+            }
         } catch (Throwable $error) {
             if ($db->inTransaction()) $db->rollBack();
             $stats['errors'][] = [
@@ -1052,6 +1058,12 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
                 'message' => mb_substr($error->getMessage(), 0, 500),
             ];
         }
+    }
+
+    try {
+        $stats['seo_sitemap'] = shopProductSeoRebuildSitemap($db, $config);
+    } catch (Throwable $error) {
+        $stats['seo_errors'][] = ['id' => '', 'sku' => '', 'message' => mb_substr($error->getMessage(), 0, 500)];
     }
 
     $nextOffset = min($total, $offset + count($batch));

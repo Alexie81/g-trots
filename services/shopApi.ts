@@ -2,6 +2,8 @@ export type ShopCategory = {
   id: string;
   parent_id: string | null;
   parent_name: string | null;
+  system_key: string | null;
+  is_protected: boolean;
   name: string;
   slug: string;
   description: string | null;
@@ -10,6 +12,19 @@ export type ShopCategory = {
   created_at: string;
   updated_at: string;
 };
+
+const SECOND_HAND_CATEGORY_SYSTEM_KEY = 'second_hand_scooters';
+
+function secondHandCategoryFirst(categories: ShopCategory[]): ShopCategory[] {
+  return categories
+    .map((category, index) => ({ category, index }))
+    .sort((left, right) => {
+      const leftPriority = left.category.system_key === SECOND_HAND_CATEGORY_SYSTEM_KEY ? 0 : 1;
+      const rightPriority = right.category.system_key === SECOND_HAND_CATEGORY_SYSTEM_KEY ? 0 : 1;
+      return leftPriority - rightPriority || left.index - right.index;
+    })
+    .map(({ category }) => category);
+}
 
 export type ShopBrand = {
   id: string;
@@ -371,6 +386,8 @@ export type ShopProductReview = {
   customer_name: string;
   rating: number;
   message: string;
+  verified_purchase: boolean;
+  review_source: string;
   admin_reply: string | null;
   replied_by: string | null;
   replied_at: string | null;
@@ -434,6 +451,7 @@ export type ShopProduct = {
   supplier_stock_status: boolean;
   supplier_stock_updated_at: string | null;
   accounting_stock_quantity: number;
+  is_accounting_stock_tracked: boolean;
   low_stock_threshold: number;
   stock_available: boolean;
   is_active: boolean;
@@ -441,6 +459,22 @@ export type ShopProduct = {
   images: ShopProductImage[];
   specifications: ShopProductSpecification[];
   questions: ShopProductQuestion[];
+  manufacturer_address: string;
+  manufacturer_email: string;
+  eu_responsible_person_name: string;
+  eu_responsible_person_address: string;
+  eu_responsible_person_email: string;
+  product_model: string;
+  product_identifier: string;
+  safety_warnings_ro: string;
+  safety_documents: string[];
+  ce_marking_applicable: boolean | null;
+  compliance_documents: string[];
+  legal_warranty_months: number | null;
+  commercial_warranty_months: number | null;
+  software_updates_until: string | null;
+  repairability_info: string;
+  spare_parts_info: string;
   review_count: number;
   review_average: number | null;
   view_count: number;
@@ -449,6 +483,13 @@ export type ShopProduct = {
   stripe_synced_at: string | null;
   stripe_sync_error: string | null;
   stripe_sync_status: 'pending' | 'synced' | 'error';
+  seo_page?: {
+    success: boolean;
+    generated: boolean;
+    url?: string;
+    error?: string;
+    reason?: 'deleted' | 'inactive' | 'inactive_source';
+  };
   brand_ids: string[];
   brands: Pick<ShopBrand, 'id' | 'name' | 'slug'>[];
   created_at: string;
@@ -481,12 +522,29 @@ export type ShopProductPayload = {
   currency: string;
   stock_mode: 'tracked' | 'unlimited';
   stock_quantity: number;
+  is_accounting_stock_tracked: boolean;
   low_stock_threshold: number;
   is_active: boolean;
   is_featured: boolean;
   images: ShopProductImage[];
   specifications: ShopProductSpecification[];
   questions: ShopProductQuestion[];
+  manufacturer_address: string;
+  manufacturer_email: string;
+  eu_responsible_person_name: string;
+  eu_responsible_person_address: string;
+  eu_responsible_person_email: string;
+  product_model: string;
+  product_identifier: string;
+  safety_warnings_ro: string;
+  safety_documents: string[];
+  ce_marking_applicable: boolean | null;
+  compliance_documents: string[];
+  legal_warranty_months: number | null;
+  commercial_warranty_months: number | null;
+  software_updates_until: string | null;
+  repairability_info: string;
+  spare_parts_info: string;
 };
 
 export type ShopProductSale = {
@@ -558,6 +616,20 @@ export type ShopOrderItem = {
   discounted_unit_price?: number;
   discounted_line_total?: number;
   image_url?: string;
+};
+
+export type ShopOrderReturnItem = {
+  id: string;
+  order_item_id: string;
+  product_id: string | null;
+  product_name: string;
+  product_sku: string | null;
+  requested_quantity: number;
+  decision_status: 'pending' | 'accepted' | 'refused';
+  accepted_quantity: number | null;
+  decision_reason: string | null;
+  unit_refund_value: number;
+  line_refund_value: number;
 };
 
 export type ShopOrderStatusHistory = {
@@ -730,6 +802,12 @@ export type ShopOrder = {
   return_confirmed_at?: string | null;
   return_confirmation_email_sent_at?: string | null;
   return_confirmation_email_error?: string | null;
+  return_policy_type?: 'b2c_withdrawal' | 'b2b_commercial' | null;
+  return_deadline_at?: string | null;
+  return_items_gross?: number | null;
+  return_delivery_refund?: number | null;
+  return_is_full?: boolean;
+  return_items?: ShopOrderReturnItem[];
   shipping_method_name: string;
   subtotal: number;
   discount_total?: number;
@@ -1338,14 +1416,17 @@ function peekShopDashboard(token: string, filters: ShopDashboardFilters = {}) {
 export const shopApi = {
   getDashboardStats: loadShopDashboard,
   peekDashboardStats: peekShopDashboard,
-  loadProductManager: (
+  loadProductManager: async (
     token: string,
     options: { page?: number; page_size?: number; q?: string; include_metadata?: boolean } = {},
-  ) => shopCall<ShopProductManagerBootstrap>('productManagerBootstrap', token, {
-    method: 'POST',
-    body: JSON.stringify(options),
-  }),
-  listCategories: (token: string) => shopCall<ShopCategory[]>('listCategories', token),
+  ) => {
+    const bootstrap = await shopCall<ShopProductManagerBootstrap>('productManagerBootstrap', token, {
+      method: 'POST',
+      body: JSON.stringify(options),
+    });
+    return { ...bootstrap, categories: secondHandCategoryFirst(bootstrap.categories || []) };
+  },
+  listCategories: async (token: string) => secondHandCategoryFirst(await shopCall<ShopCategory[]>('listCategories', token)),
   createCategory: (token: string, payload: ShopCategoryPayload) => shopCall<ShopCategory>('createCategory', token, { method: 'POST', body: JSON.stringify(payload) }),
   updateCategory: (token: string, id: string, payload: ShopCategoryPayload) => shopCall<ShopCategory>('updateCategory', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
   deleteCategory: (token: string, id: string) => shopCall<{ success: true }>('deleteCategory', token, { method: 'DELETE' }, id),
@@ -1436,7 +1517,7 @@ export const shopApi = {
     }
   },
   getOrder: (token: string, id: string) => shopCall<ShopOrder>('getOrder', token, undefined, id),
-  updateOrder: (token: string, id: string, payload: Pick<ShopOrder, 'status' | 'payment_status'> & { admin_notes: string; notify_customer: boolean; cancellation_reason?: string; return_reason?: string; return_bank_iban?: string; return_bank_account_holder?: string; address?: string; city?: string; county?: string; postal_code?: string }) => shopCall<ShopOrder>('updateOrder', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
+  updateOrder: (token: string, id: string, payload: Pick<ShopOrder, 'status' | 'payment_status'> & { admin_notes: string; notify_customer: boolean; cancellation_reason?: string; return_reason?: string; return_bank_iban?: string; return_bank_account_holder?: string; return_items?: Array<{ order_item_id: string; quantity?: number; decision_status?: 'accepted' | 'refused'; accepted_quantity?: number; decision_reason?: string }>; address?: string; city?: string; county?: string; postal_code?: string }) => shopCall<ShopOrder>('updateOrder', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
   issueInvoice: (token: string, orderId: string, sendEmail = false, sendReturnEmail = false) => shopCall<ShopIssuedInvoice>('issueInvoice', token, { method: 'POST', body: JSON.stringify({ order_id: orderId, send_email: sendEmail, send_return_email: sendReturnEmail }) }, orderId),
   listInvoices: (token: string) => shopCall<ShopIssuedInvoice[]>('listInvoices', token),
   getInvoice: (token: string, id: string) => shopCall<ShopIssuedInvoice>('getInvoice', token, undefined, id),

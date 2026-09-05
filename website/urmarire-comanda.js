@@ -44,6 +44,11 @@
   const returnConfirm = document.getElementById("return-confirm");
   const returnCost = document.getElementById("return-cost");
   const returnRefund = document.getElementById("return-refund");
+  const returnProductList = document.getElementById("return-product-list");
+  const returnRefundConsent = document.getElementById("return-refund-consent");
+  const returnDeadline = document.getElementById("return-deadline");
+  const returnReasonRequired = document.getElementById("return-reason-required");
+  const returnReasonHelp = document.getElementById("return-reason-help");
   const footerReturn = document.getElementById("tracking-footer-return");
   const params = new URLSearchParams(window.location.search);
   const cancellationIntent = params.get("anulare") === "1";
@@ -194,13 +199,23 @@
     returnReason.value = "";
     returnHolder.value = activeOrder.customer_contact_name || activeOrder.customer_name || "";
     returnIban.value = "";
+    returnRefundConsent.checked = false;
+    const eligibility = activeOrder.return_eligibility || {};
+    const isBusiness = eligibility.policy_type === "b2b_commercial";
+    returnConfirm.textContent = isBusiness ? "Trimite solicitarea de retur" : "Confirmați retragerea";
+    const deadline = eligibility.deadline_at ? new Date(String(eligibility.deadline_at).replace(" ", "T")) : null;
+    returnDeadline.innerHTML = `<strong>${isBusiness ? "Retur comercial PJ" : "Drept de retragere PF"}</strong><span>${deadline && !Number.isNaN(deadline.getTime()) ? `Solicitarea poate fi trimisă până la ${esc(deadline.toLocaleDateString("ro-RO", { dateStyle: "long" }))}, inclusiv` : "Termenul este verificat automat"}${Number.isFinite(Number(eligibility.days_remaining)) ? ` · ${Number(eligibility.days_remaining)} zile rămase` : ""}.</span>`;
+    returnReasonRequired.hidden = !isBusiness;
+    returnReasonHelp.textContent = isBusiness ? "Pentru returul comercial PJ, motivul ne ajută să verificăm condițiile acceptate de G-Trots." : "Pentru retragerea PF nu ești obligat(ă) să justifici decizia. Poți lăsa câmpul gol.";
+    returnProductList.innerHTML = (activeOrder.items || []).map(item => `<label class="return-product-option"><input type="checkbox" data-return-item="${esc(item.order_item_id)}" checked><span><strong>${esc(item.product_name)}</strong><small>${money(item.discounted_unit_price || item.unit_price, activeOrder.currency)} / buc.</small></span><select data-return-quantity>${Array.from({length:Number(item.quantity)},(_,index)=>`<option value="${index+1}">${index+1} din ${Number(item.quantity)}</option>`).join("")}</select></label>`).join("");
+    returnProductList.querySelectorAll('input,select').forEach(control => control.addEventListener('change', updateReturnEstimate));
     validateReturnIban(false);
     const cost = Number(activeOrder.configured_return_shipping_cost || 0);
     returnCost.textContent = money(cost, activeOrder.currency);
-    returnRefund.textContent = money(Math.max(0, Number(activeOrder.total || 0) - cost), activeOrder.currency);
+    updateReturnEstimate();
     returnModal.hidden = false;
     document.body.classList.add("return-open");
-    window.setTimeout(() => returnReason.focus(), 80);
+    window.setTimeout(() => (isBusiness ? returnReason : returnProductList.querySelector('input'))?.focus(), 80);
   }
   function closeReturn() {
     if (returnConfirm.disabled) return;
@@ -208,16 +223,20 @@
     document.body.classList.remove("return-open");
   }
   async function submitReturn() {
-    const reason = returnReason.value.trim();
+    const isBusiness = activeOrder?.return_eligibility?.policy_type === "b2b_commercial";
+    const reason = returnReason.value.trim() || (!isBusiness ? "Retragere fără motiv declarat" : "");
     const holder = returnHolder.value.trim();
     const iban = normalizeIban(returnIban.value);
-    if (reason.length < 3 || holder.length < 3) { returnError.textContent = "Completează motivul returului și titularul contului."; return; }
+    if ((isBusiness && reason.length < 3) || holder.length < 3) { returnError.textContent = isBusiness ? "Completează motivul returului și titularul contului." : "Completează titularul contului."; return; }
     if (!validateReturnIban(true)) { returnError.textContent = "IBAN-ul introdus nu este valid."; returnIban.focus(); return; }
+    const items = Array.from(returnProductList.querySelectorAll('.return-product-option')).filter(row => row.querySelector('[data-return-item]').checked).map(row => ({ order_item_id: row.querySelector('[data-return-item]').dataset.returnItem, quantity: Number(row.querySelector('[data-return-quantity]').value) }));
+    if (!items.length) { returnError.textContent = "Selectează cel puțin un produs pentru retur."; return; }
+    if (!returnRefundConsent.checked) { returnError.textContent = "Confirmă acordul pentru rambursarea în IBAN-ul indicat."; return; }
     returnError.textContent = "";
     returnConfirm.disabled = true;
     returnConfirm.textContent = "Se trimite…";
     try {
-      const response = await fetch(`${API_URL}?action=customerRequestReturn`, { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify({ ...activeAccess, reason, bank_account_holder: holder, bank_iban: iban }) });
+      const response = await fetch(`${API_URL}?action=customerRequestReturn`, { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify({ ...activeAccess, reason, bank_account_holder: holder, bank_iban: iban, items, refund_consent: true, withdrawal_statement: isBusiness ? "" : `Mă retrag din contractul aferent comenzii ${activeOrder.order_number}.` }) });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Solicitarea de retur nu a putut fi trimisă.");
       returnModal.hidden = true;
@@ -227,8 +246,22 @@
       returnError.textContent = error instanceof Error ? error.message : "Solicitarea de retur nu a putut fi trimisă.";
     } finally {
       returnConfirm.disabled = false;
-      returnConfirm.textContent = "Trimite solicitarea";
+      returnConfirm.textContent = isBusiness ? "Trimite solicitarea de retur" : "Confirmați retragerea";
     }
+  }
+  function updateReturnEstimate() {
+    let selected = 0;
+    let fullReturn = true;
+    Array.from(returnProductList.querySelectorAll('.return-product-option')).forEach((row, index) => {
+      const checked = row.querySelector('[data-return-item]').checked;
+      const quantity = Number(row.querySelector('[data-return-quantity]').value || 0);
+      if (!checked || quantity !== Number(activeOrder.items[index].quantity || 0)) fullReturn = false;
+      if (!checked) return;
+      const item = activeOrder.items[index];
+      selected += Number(item.discounted_unit_price || item.unit_price || 0) * quantity;
+    });
+    const initialDelivery = fullReturn && activeOrder.return_eligibility?.initial_shipping_refundable ? Number(activeOrder.shipping_cost || 0) : 0;
+    returnRefund.textContent = money(Math.max(0, selected + initialDelivery - Number(activeOrder.configured_return_shipping_cost || 0)), activeOrder.currency);
   }
   async function load(query, access) {
     activeAccess = access;

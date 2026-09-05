@@ -2,3 +2,4 @@ User-agent: *
 Allow: /
 
 Sitemap: https://g-trots.ro/sitemap.xml
+Sitemap: https://g-trots.ro/sitemap-index.xml

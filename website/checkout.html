@@ -139,13 +139,23 @@
             <div class="checkout-summary-total"><span><strong data-checkout-total-label>Total de plată</strong></span><b data-checkout-total>0,00 lei</b></div>
             <button class="checkout-submit" type="submit" data-checkout-submit>
               <span class="checkout-submit-lock" aria-hidden="true"></span>
-              <strong>Trimite comanda</strong>
+              <strong>Plasează comanda cu obligație de plată</strong>
               <b aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"></path></svg></b>
             </button>
             <label class="checkout-confirmation">
               <input type="checkbox" name="confirm_order" required>
               <span class="checkout-checkpoint" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="m7.2 12.4 3.15 3.15 6.7-7.05"></path></svg></span>
               <p><strong>Confirm că datele comenzii sunt corecte.</strong><small>Produsele și compatibilitatea pot fi reverificate de echipa G-Trots înainte de expediere.</small></p>
+            </label>
+            <label class="checkout-confirmation">
+              <input type="checkbox" name="accept_terms" required>
+              <span class="checkout-checkpoint" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="m7.2 12.4 3.15 3.15 6.7-7.05"></path></svg></span>
+              <p><strong>Accept <a href="/termeni-si-conditii" target="_blank" rel="noopener">Termenii și condițiile</a> și <a href="/politica-de-retur" target="_blank" rel="noopener">Politica de retur</a>.</strong><small>Aceste documente fac parte din contractul comenzii.</small></p>
+            </label>
+            <label class="checkout-confirmation checkout-confirmation--optional">
+              <input type="checkbox" name="newsletter_opt_in" value="1">
+              <span class="checkout-checkpoint" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="m7.2 12.4 3.15 3.15 6.7-7.05"></path></svg></span>
+              <p><strong>Vreau noutăți și oferte G-Trots.</strong><small>Opțional. Îți poți retrage acordul oricând.</small></p>
             </label>
             <p class="checkout-submit-message" data-checkout-message aria-live="polite"></p>
             <div class="checkout-security"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3.25 19 6v5.25c0 4.35-2.9 7.65-7 9.5-4.1-1.85-7-5.15-7-9.5V6Z"></path><path d="m8.8 12 2.05 2.05 4.4-4.4"></path></svg></span><p><strong>Date protejate și transmise în siguranță</strong><small>Nu salvăm date de card pe acest website.</small></p></div>
@@ -158,5 +168,5 @@
     <script src="promotions.js?v=20260828-usage-limits-v1" defer></script>
 <script src="favorites.js?v=20260829-vat-v1" defer></script>
 <script src="checkout.js?v=20260904-identity-v1" defer></script>
-  </body>
+  <script src="/legal-footer.js?v=20260905-17" defer></script></body>
 </html>

@@ -445,7 +445,7 @@
     const label = submit?.querySelector("strong");
     if (!label || submit.disabled) return;
     const paymentMethod = form?.querySelector('input[name="payment_method"]:checked')?.value || "";
-    label.textContent = paymentMethod === "card" ? "Plătește acum" : "Trimite comanda";
+    label.textContent = paymentMethod === "card" ? "Comandă și plătește" : "Plasează comanda cu obligație de plată";
   }
 
   function updateTotals(cart, config) {
@@ -531,6 +531,11 @@
     if (!confirmationField?.checked) {
       confirmationField?.closest("label")?.classList.add("is-invalid");
       errors.push(confirmationField);
+    }
+    const termsField = formField(form, "accept_terms");
+    if (!termsField?.checked) {
+      termsField?.closest("label")?.classList.add("is-invalid");
+      errors.push(termsField);
     }
     errors[0]?.focus?.({ preventScroll: true });
     errors[0]?.closest?.("label")?.scrollIntoView?.({ behavior: "smooth", block: "center" });

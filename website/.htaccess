@@ -17,6 +17,11 @@ DirectoryIndex index.html
   # /magazin este si directorul paginilor de produs; servim explicit catalogul.
   RewriteRule ^magazin/?$ /magazin.html [END]
 
+  # Paginile generate la salvarea produsului au HTML, canonical și schema proprii.
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteCond %{REQUEST_FILENAME}/index.html -f
+  RewriteRule ^magazin/produs/[^/]+/?$ - [END]
+
   RewriteRule ^magazin/produs/([^/]+)/?$ /produs.html?slug=$1 [END,QSA,NC]
 
   RewriteCond %{REQUEST_FILENAME} !-d

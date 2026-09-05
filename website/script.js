@@ -63,6 +63,84 @@ const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)
 
 const productCount = document.querySelector("[data-product-count]");
 
+const secondHandBanner = document.querySelector("[data-second-hand-banner]");
+if (secondHandBanner) {
+  const isLocalPreview = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)
+    || window.location.hostname.endsWith(".localhost");
+
+  if (!isLocalPreview) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 7000);
+    fetch("https://g-trots.ro/shop-api/api-v2.php?action=publicCatalogFilters", {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal: controller.signal
+    })
+      .then(response => response.ok ? response.json() : Promise.reject(new Error("Catalog indisponibil")))
+      .then(payload => {
+        const categories = Array.isArray(payload?.categories) ? payload.categories : [];
+        const systemKey = secondHandBanner.dataset.categorySystemKey;
+        const category = categories.find(item => item?.system_key === systemKey);
+        if (!category) {
+          secondHandBanner.hidden = true;
+          return;
+        }
+        const url = new URL(secondHandBanner.href, window.location.href);
+        url.searchParams.set("category_key", systemKey);
+        url.searchParams.set("category", category.slug || category.id);
+        url.searchParams.set("filters", "open");
+        secondHandBanner.href = `${url.pathname}${url.search}${url.hash}`;
+      })
+      .catch(() => {})
+      .finally(() => window.clearTimeout(timeout));
+  }
+}
+
+const secondHandTitle = document.querySelector(".second-hand-title");
+const secondHandTitleText = document.querySelector(".second-hand-title-typed");
+
+if (secondHandTitle && secondHandTitleText) {
+  const phrase = "Pregătite pentru încă un drum.";
+  const wait = duration => new Promise(resolve => window.setTimeout(resolve, duration));
+  let animationStarted = false;
+
+  const renderSecondHandTitle = length => {
+    secondHandTitleText.textContent = phrase.slice(0, length);
+  };
+
+  if (prefersReducedMotion) {
+    renderSecondHandTitle(phrase.length);
+  } else {
+    const animate = async (from, to, step, speed) => {
+      secondHandTitle.classList.add("is-typing");
+      for (let index = from; index !== to; index += step) {
+        renderSecondHandTitle(index);
+        await wait(speed);
+      }
+      renderSecondHandTitle(to);
+      secondHandTitle.classList.remove("is-typing");
+    };
+
+    const runSecondHandTypewriter = async () => {
+      while (true) {
+        await animate(0, phrase.length, 1, 67);
+        await wait(2600);
+        await animate(phrase.length, 0, -1, 39);
+        await wait(720);
+      }
+    };
+
+    renderSecondHandTitle(0);
+    const titleObserver = new IntersectionObserver(entries => {
+      if (!entries.some(entry => entry.isIntersecting) || animationStarted) return;
+      animationStarted = true;
+      titleObserver.disconnect();
+      window.setTimeout(runSecondHandTypewriter, 320);
+    }, { threshold: 0.35 });
+    titleObserver.observe(secondHandTitle);
+  }
+}
+
 if (productCount) {
   const finalCount = Number(productCount.dataset.countTo || 0);
   const formatCount = value => Math.round(value).toLocaleString("ro-RO");

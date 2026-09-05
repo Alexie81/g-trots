@@ -4,6 +4,7 @@
   const API_URL = "https://g-trots.ro/shop-api/api-v2.php";
   const CUSTOMER_TOKEN_KEY = "g-trots-customer-session-v1";
   const SHOP_DEVICE_KEY = "g-trots-shop-device-v1";
+  let liveShopConfig = null;
   const legacyImages = {
     "anvelopa-g10-all-terrain": 1,
     "display-smart-ride-s3": 2,
@@ -619,15 +620,28 @@
       article.className = "review-item";
       const header = document.createElement("header");
       const name = document.createElement("strong");
+      const identity = document.createElement("div");
       const stars = document.createElement("span");
       const message = document.createElement("p");
       const date = document.createElement("small");
       name.textContent = review.customer_name;
+      identity.append(name);
+      if (review.verified_purchase) {
+        const verified = document.createElement("em");
+        verified.className = "review-verified-badge";
+        verified.textContent = "✓ Achiziție verificată";
+        identity.append(verified);
+      } else if (review.review_source && review.review_source !== "g-trots.ro") {
+        const source = document.createElement("em");
+        source.className = "review-source-badge";
+        source.textContent = `Sursa: ${review.review_source}`;
+        identity.append(source);
+      }
       stars.textContent = `${"★".repeat(review.rating)}${"☆".repeat(5 - review.rating)}`;
       message.textContent = review.message;
       const parsedDate = new Date(String(review.created_at || "").replace(" ", "T"));
       date.textContent = Number.isNaN(parsedDate.getTime()) ? "Recenzie client" : new Intl.DateTimeFormat("ro-RO", { day: "numeric", month: "long", year: "numeric" }).format(parsedDate);
-      header.append(name, stars);
+      header.append(identity, stars);
       article.append(header, message, date);
       if (review.admin_reply) {
         const reply = document.createElement("div");
@@ -682,7 +696,7 @@
       submit.disabled = true;
       if (messageElement) messageElement.textContent = "Se publică recenzia…";
       try {
-        await api("createPublicReview", { method: "POST", body: { product_id: product.id, customer_name: String(data.get("name") || "").trim(), rating: Number(data.get("rating") || 0), message: String(data.get("message") || "").trim() } });
+        await api("createPublicReview", { method: "POST", body: { product_id: product.id, customer_name: String(data.get("name") || "").trim(), order_number: String(data.get("order_number") || "").trim(), customer_email: String(data.get("customer_email") || "").trim(), rating: Number(data.get("rating") || 0), message: String(data.get("message") || "").trim() } });
         form.reset();
         form.hidden = true;
         if (messageElement) messageElement.textContent = "Recenzia a fost publicată și este vizibilă pe site.";
@@ -743,7 +757,7 @@
     if (specs) {
       const rows = [
         ["Cod produs", product.sku || "—"],
-        ["Producător", product.manufacturer_name || "G-Trots"],
+        ["Producător", product.manufacturer_name || "—"],
         ["Disponibilitate", normalized.stock]
       ];
       specs.replaceChildren(...rows.map(([label, value]) => {
@@ -758,6 +772,27 @@
     }
     const whatsapp = document.querySelector("[data-product-whatsapp]");
     if (whatsapp) whatsapp.href = `https://wa.me/40762093915?text=${encodeURIComponent(`Bună, mă interesează ${normalized.name}. Vreau să verific compatibilitatea înainte de comandă.`)}`;
+
+    const safetySection = document.querySelector('[data-product-safety]');
+    const safetyTab = document.querySelector('[data-product-safety-tab]');
+    const safetyContent = document.querySelector('[data-product-safety-content]');
+    if (safetySection && safetyContent) {
+      const rows = [
+        ['Producător', product.manufacturer_name], ['Adresă producător', product.manufacturer_address], ['E-mail producător', product.manufacturer_email],
+        ['Persoană responsabilă în UE', product.eu_responsible_person_name], ['Adresă responsabil UE', product.eu_responsible_person_address], ['E-mail responsabil UE', product.eu_responsible_person_email],
+        ['Model', product.product_model], ['Identificator produs', product.product_identifier],
+        ['Marcaj CE', product.ce_marking_applicable == null ? '' : product.ce_marking_applicable ? 'Aplicabil' : 'Nu se aplică'],
+        ['Garanție legală', Number(product.legal_warranty_months || 0) > 0 ? `${Number(product.legal_warranty_months)} luni` : ''],
+        ['Garanție comercială', Number(product.commercial_warranty_months || 0) > 0 ? `${Number(product.commercial_warranty_months)} luni` : ''],
+        ['Actualizări software până la', product.software_updates_until], ['Reparabilitate', product.repairability_info], ['Piese de schimb', product.spare_parts_info]
+      ].filter(([, value]) => String(value || '').trim());
+      const documents = [...(product.safety_documents || []).map((url, index) => ({ url, label: `Document de siguranță ${index + 1}` })), ...(product.compliance_documents || []).map((url, index) => ({ url, label: `Document de conformitate ${index + 1}` }))].filter(item => safeUrl(item.url));
+      const warnings = String(product.safety_warnings_ro || '').trim();
+      const hasContent = rows.length > 0 || documents.length > 0 || warnings.length > 0;
+      safetySection.hidden = !hasContent;
+      if (safetyTab) safetyTab.hidden = !hasContent;
+      safetyContent.innerHTML = `${warnings ? `<article class="product-safety-warning"><small>AVERTISMENTE ÎN LIMBA ROMÂNĂ</small><p>${escapeHtml(warnings).replace(/\n/g, '<br>')}</p></article>` : ''}${rows.map(([label, value]) => `<article><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong></article>`).join('')}${documents.length ? `<article class="product-safety-documents"><small>DOCUMENTE</small>${documents.map(item => `<a href="${safeUrl(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.label)} <span>↗</span></a>`).join('')}</article>` : ''}`;
+    }
 
     document.title = product.meta_title || `${normalized.name} | G-Trots`;
     const metaDescription = product.meta_description || normalized.description;
@@ -775,10 +810,33 @@
     setMeta('meta[property="product:price:amount"]', String(product.promotion_price ?? product.sale_price ?? product.price ?? 0));
     setMeta('meta[property="product:price:currency"]', product.currency || "RON");
     setMeta('meta[property="product:availability"]', normalized.stock === "Stoc epuizat" ? "out of stock" : "in stock");
-    document.querySelectorAll('script[type="application/ld+json"]').forEach(script => script.remove());
+    document.querySelectorAll('script[type="application/ld+json"]:not([data-gt-organization-schema]):not([data-gt-breadcrumb-schema])').forEach(script => script.remove());
     const productSchema = document.createElement("script");
     productSchema.type = "application/ld+json";
-    productSchema.textContent = JSON.stringify({
+    const activePrice = Number(product.promotion_price ?? product.sale_price ?? product.price ?? 0);
+    const conditionText = `${normalized.name} ${metaDescription}`.toLocaleLowerCase("ro-RO");
+    const itemCondition = /second[\s-]*hand|recondiționat|reconditionat|refurbished|folosit/u.test(conditionText)
+      ? "https://schema.org/UsedCondition"
+      : "https://schema.org/NewCondition";
+    const shippingDetails = (liveShopConfig?.shipping_methods || []).map(method => {
+      const days = String(method.eta_label || method.description || "").match(/\d+/g)?.map(Number).filter(Number.isFinite) || [];
+      if (!days.length) return null;
+      const minDays = Math.max(0, Math.min(...days));
+      const maxDays = Math.max(minDays, Math.max(...days));
+      const shippingCost = method.free_above != null && activePrice >= Number(method.free_above) ? 0 : Number(method.cost || 0);
+      return {
+        "@type": "OfferShippingDetails",
+        shippingLabel: method.name || undefined,
+        shippingDestination: { "@type": "DefinedRegion", addressCountry: "RO" },
+        shippingRate: { "@type": "MonetaryAmount", value: shippingCost.toFixed(2), currency: product.currency || "RON" },
+        deliveryTime: {
+          "@type": "ShippingDeliveryTime",
+          handlingTime: { "@type": "QuantitativeValue", minValue: 0, maxValue: 0, unitCode: "DAY" },
+          transitTime: { "@type": "QuantitativeValue", minValue: minDays, maxValue: maxDays, unitCode: "DAY" }
+        }
+      };
+    }).filter(Boolean);
+    const schema = {
       "@context": "https://schema.org",
       "@type": "Product",
       name: normalized.name,
@@ -787,18 +845,27 @@
       url: canonicalUrl,
       sku: product.sku || undefined,
       mpn: product.supplier_product_code || product.sku || undefined,
-      gtin13: String(product.gtin || "").length === 13 ? String(product.gtin) : undefined,
       category: product.category_name || undefined,
-      brand: { "@type": "Brand", name: product.manufacturer_name || "G-Trots" },
+      brand: product.manufacturer_name ? { "@type": "Brand", name: product.manufacturer_name } : undefined,
+      manufacturer: product.manufacturer_name ? { "@type": "Organization", name: product.manufacturer_name, address: product.manufacturer_address || undefined, email: product.manufacturer_email || undefined } : undefined,
+      model: product.product_model || undefined,
+      productID: product.product_identifier || undefined,
       offers: {
         "@type": "Offer",
         priceCurrency: product.currency || "RON",
-        price: Number(product.promotion_price ?? product.sale_price ?? product.price ?? 0).toFixed(2),
+        price: activePrice.toFixed(2),
+        itemCondition,
         availability: normalized.stock === "Stoc epuizat" ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
         url: canonicalUrl,
-        seller: { "@type": "Organization", name: "G-Trots" }
+        seller: { "@type": "Organization", name: liveShopConfig?.company?.trade_name || liveShopConfig?.company?.legal_name || "G-Trots" },
+        hasMerchantReturnPolicy: { "@type": "MerchantReturnPolicy", applicableCountry: "RO", returnPolicyCountry: "RO", returnPolicyCategory: "https://schema.org/MerchantReturnFiniteReturnWindow", merchantReturnDays: 14, returnMethod: "https://schema.org/ReturnByMail", returnFees: "https://schema.org/ReturnFeesCustomerResponsibility", merchantReturnLink: "https://g-trots.ro/politica-de-retur" },
+        shippingDetails: shippingDetails.length ? shippingDetails : undefined
       }
-    });
+    };
+    const gtin = String(product.gtin || "").trim();
+    if ([8, 12, 13, 14].includes(gtin.length) && /^\d+$/.test(gtin)) schema[`gtin${gtin.length}`] = gtin;
+    if (Number(product.review_count || 0) > 0 && Number(product.review_average || 0) > 0) schema.aggregateRating = { "@type": "AggregateRating", ratingValue: Number(product.review_average).toFixed(2), reviewCount: Number(product.review_count) };
+    productSchema.textContent = JSON.stringify(schema);
     document.head.append(productSchema);
     const faqQuestions = Array.isArray(product.questions)
       ? product.questions.filter(item => item?.question && item?.answer).slice(0, 12)
@@ -817,7 +884,8 @@
       });
       document.head.append(faqSchema);
     }
-    document.querySelector('meta[name="robots"]')?.setAttribute("content", product.seo_ready ? "index, follow, max-image-preview:large" : "noindex, follow");
+    document.querySelector('meta[name="robots"]')?.setAttribute("content", "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1");
+    document.querySelector("[data-gt-static-product]")?.remove();
     applyProductImages(product, normalized);
     ensureProductCommerce(product, normalized);
     ensureRichDescription(product, normalized);
@@ -886,7 +954,9 @@
         </div>
         <fieldset><legend>Livrare</legend>${shippingOptions}</fieldset>
         <fieldset><legend>Plată</legend>${paymentOptions}</fieldset>
-        <div class="live-checkout-final"><div><span>Total comandă</span><strong data-checkout-total>—</strong></div><button type="submit">Trimite comanda <b aria-hidden="true">›</b></button></div>
+        <label class="live-checkout-consent"><input type="checkbox" name="accept_terms" required><span>Accept <a href="/termeni-si-conditii" target="_blank" rel="noopener">Termenii și condițiile</a> și <a href="/politica-de-retur" target="_blank" rel="noopener">Politica de retur</a>.</span></label>
+        <label class="live-checkout-consent"><input type="checkbox" name="newsletter_opt_in" value="1"><span>Vreau noutăți și oferte G-Trots (opțional).</span></label>
+        <div class="live-checkout-final"><div><span>Total comandă</span><strong data-checkout-total>—</strong></div><button type="submit"><span data-submit-label>Plasează comanda cu obligație de plată</span> <b aria-hidden="true">›</b></button></div>
         <p class="live-checkout-message" data-checkout-message aria-live="polite"></p>
       </form>`;
 
@@ -922,7 +992,12 @@
       }
     });
     panel.querySelector("[data-checkout-close]").addEventListener("click", () => { panel.hidden = true; });
-    form.addEventListener("change", updateTotals);
+    form.addEventListener("change", () => {
+      updateTotals();
+      const method = form.elements.payment_method?.value;
+      const label = form.querySelector('[data-submit-label]');
+      if (label) label.textContent = method === 'card' ? 'Comandă și plătește' : 'Plasează comanda cu obligație de plată';
+    });
     document.addEventListener("g-trots:cart-changed", () => window.setTimeout(updateTotals));
 
     form.addEventListener("submit", async event => {
@@ -970,7 +1045,17 @@
       const identifier = pathMatch ? decodeURIComponent(pathMatch[1]) : (params.get("slug") || params.get("id") || document.body.dataset.productId);
       if (identifier) {
         let productLoaded = false;
+        const bootstrapNode = document.getElementById("gt-product-bootstrap");
+        if (bootstrapNode?.textContent) {
+          try {
+            applyLiveProduct(JSON.parse(bootstrapNode.textContent));
+            productLoaded = true;
+          } catch {
+            // API-ul public rămâne sursa de rezervă pentru șabloanele vechi.
+          }
+        }
         try {
+          if (!liveShopConfig) liveShopConfig = await api("publicShopConfig").catch(() => null);
           let product;
           try {
             product = await api("publicProduct", { query: `&slug=${encodeURIComponent(identifier)}` });
@@ -983,9 +1068,11 @@
           applyLiveProduct(product);
           productLoaded = true;
         } catch {
-          document.body.classList.add("has-live-product-error");
-          productLoader?.classList.add("has-error");
-          productLoader?.setAttribute("aria-label", "Produsul nu s-a putut încărca");
+          if (!productLoaded) {
+            document.body.classList.add("has-live-product-error");
+            productLoader?.classList.add("has-error");
+            productLoader?.setAttribute("aria-label", "Produsul nu s-a putut încărca");
+          }
         } finally {
           document.body.classList.remove("is-live-product-loading");
           if (productLoaded) {

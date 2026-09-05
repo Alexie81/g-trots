@@ -70,7 +70,7 @@
     <link rel="preload" href="assets/magazin-produse-v1.png" as="image" type="image/png">
     <link rel="stylesheet" href="styles.css?v=20260827-shop-call">
     <link rel="stylesheet" href="magazin.css?v=20260827-2">
-    <link rel="stylesheet" href="produs.css?v=20260827-3">
+    <link rel="stylesheet" href="produs.css?v=20260905-product-seo">
     <link rel="stylesheet" href="favorites.css?v=20260828-line-promotions-v1">
     <link rel="stylesheet" href="shop-live.css?v=20260827-1">
   </head>
@@ -186,6 +186,7 @@
       <nav class="product-content-tabs shell" aria-label="Detalii produs">
         <a class="active" href="#descriere" data-product-tab>Descriere</a>
         <a href="#specificatii" data-product-tab hidden>Specificații</a>
+        <a href="#siguranta" data-product-safety-tab hidden>Siguranță și garanție</a>
         <a href="#recenzii" data-product-tab>Recenzii <span data-review-count>(0)</span></a>
         <a href="#intrebari" data-product-tab hidden>Întrebări și răspunsuri</a>
       </nav>
@@ -253,6 +254,11 @@
           <button class="product-expand-toggle" type="button" data-expand-toggle aria-expanded="false"><span>Vezi mai mult</span><i aria-hidden="true"></i></button>
         </section>
 
+        <section class="product-content-section product-safety-section" id="siguranta" aria-labelledby="siguranta-title" data-product-safety hidden>
+          <div class="product-section-heading compact"><span>GPSR și conformitate</span><h2 id="siguranta-title">Siguranță, trasabilitate și garanție</h2><p>Afișăm numai informațiile confirmate în catalogul G-Trots.</p></div>
+          <div class="product-safety-grid" data-product-safety-content></div>
+        </section>
+
         <section class="product-content-section" id="recenzii" aria-labelledby="recenzii-title">
           <div class="product-section-heading compact">
             <span>Experiențe reale</span>
@@ -284,9 +290,11 @@
                   <label><input type="radio" name="rating" value="5"><span>★</span></label>
                 </div></fieldset>
                 <label><span>Nume</span><input type="text" name="name" maxlength="40" placeholder="Prenumele tău" required></label>
+                <label><span>Număr comandă</span><input type="text" name="order_number" maxlength="40" autocomplete="off" placeholder="Ex: GT-20260905-ABC123" required></label>
+                <label><span>E-mailul folosit la comandă</span><input type="email" name="customer_email" maxlength="180" autocomplete="email" placeholder="nume@exemplu.ro" required></label>
                 <label><span>Recenzie</span><textarea name="message" minlength="20" maxlength="700" rows="5" placeholder="Ce ți-a plăcut și pentru ce model ai folosit produsul?" required></textarea></label>
                 <button class="review-submit" type="submit">Salvează recenzia</button>
-                <small>Recenzia va fi publicată pe pagina acestui produs.</small>
+                <small>Verificăm doar că produsul există într-o comandă livrată. Adresa de e-mail și numărul comenzii nu sunt publicate.</small>
               </form>
               <div class="review-list" data-review-list></div>
               <div class="reviews-empty" data-reviews-empty><span aria-hidden="true">☆</span><strong>Nu există încă recenzii.</strong><p>Fii primul care împărtășește experiența cu acest produs.</p></div>
@@ -347,6 +355,6 @@
 
     <script src="favorites.js?v=20260828-usage-limits-v1" defer></script>
     <script src="produs.js?v=20260826-12" defer></script>
-    <script src="shop-live.js?v=20260828-usage-limits-v1" defer></script>
-  </body>
+    <script src="shop-live.js?v=20260905-product-pages" defer></script>
+  <script src="/legal-footer.js?v=20260905-17" defer></script></body>
 </html>

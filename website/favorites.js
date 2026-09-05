@@ -1,4 +1,5 @@
 (() => {
+  if (!document.querySelector('script[src*="legal-footer.js"]')) { const legal = document.createElement('script'); legal.src = '/legal-footer.js?v=20260905-17'; legal.defer = true; document.head.append(legal); }
   if (window.GTrotsFavorites) return;
 
   const COMMERCE_PREVIEW = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)
@@ -132,7 +133,7 @@
   }
 
   function ensureCabItCredit() {
-    const footer = document.querySelector("footer .footer-inner");
+    const footer = document.querySelector("footer .gt-site-footer__bottom") || document.querySelector("footer .footer-inner");
     if (!footer || footer.querySelector(".cab-it-credit")) return;
 
     const credit = document.createElement("a");

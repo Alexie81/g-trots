@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Solicită chiar acum un retur | G-Trots România</title>
+  <meta name="description" content="Verifică rapid comanda G-Trots și trimite online solicitarea de retur pentru produsele eligibile.">
+  <meta name="robots" content="noindex,follow">
+  <meta name="theme-color" content="#0b0b0d">
+  <link rel="icon" href="/assets/logo.png">
+  <link rel="stylesheet" href="/legal.css?v=20260905-3">
+  <link rel="stylesheet" href="/solicita-retur.css?v=20260905-3">
+</head>
+<body>
+  <header class="legal-top">
+    <a class="legal-brand" href="/"><img src="/assets/logo.png" alt=""><span>G-Trots România</span></a>
+    <a class="legal-back" href="/politica-de-retur"><span>Politica de retur</span> →</a>
+  </header>
+
+  <main class="return-page">
+    <section class="return-page__intro">
+      <div class="return-page__copy">
+        <span class="legal-kicker">RETUR ONLINE · SIMPLU ȘI TRANSPARENT</span>
+        <h1>Solicită chiar acum <em>un retur.</em></h1>
+        <p>Verificăm în siguranță comanda, apoi alegi produsele și cantitățile care se întorc la G-Trots.</p>
+        <div class="return-intro__facts" aria-label="Avantajele procesului de retur">
+          <span><b>01</b> Comandă verificată</span>
+          <span><b>02</b> Produse selectabile</span>
+          <span><b>03</b> Rambursare în IBAN</span>
+        </div>
+      </div>
+      <div class="return-hero-visual" aria-hidden="true">
+        <div class="return-orbit return-orbit--one"></div>
+        <div class="return-orbit return-orbit--two"></div>
+        <div class="return-hero-visual__icon">
+          <svg viewBox="0 0 48 48"><path d="M17 14H8v-9M9 14C13 7 20 4 27 6c10 2 16 12 14 22-2 10-12 16-22 14-6-1-11-6-13-11"/><path d="M17 23h15M17 29h10"/></svg>
+        </div>
+        <div class="return-hero-visual__card"><small>FLUX G-TROTS</small><strong>3 pași clari</strong><span>de la verificare la confirmare</span></div>
+        <span class="return-hero-visual__chip">✓ Date protejate</span>
+      </div>
+      <div class="return-progress" aria-label="Progres solicitare">
+        <span class="active" data-progress="1"><b>1</b><em>Verifică</em></span><i></i>
+        <span data-progress="2"><b>2</b><em>Configurează</em></span><i></i>
+        <span data-progress="3"><b>3</b><em>Confirmat</em></span>
+      </div>
+    </section>
+
+    <section class="return-experience">
+      <aside class="return-assurance">
+        <span class="return-assurance__eyebrow">ASISTENȚĂ G-TROTS</span>
+        <h2>Returul tău, urmărit de la început până la final.</h2>
+        <p>Solicitarea ajunge direct în aplicațiile echipei noastre, asociată comenzii corecte.</p>
+        <div class="return-assurance__list">
+          <span><b>✓</b><i><strong>Verificare instant</strong><small>după numărul și e-mailul comenzii</small></i></span>
+          <span><b>✓</b><i><strong>Alegi exact ce returnezi</strong><small>un produs, mai multe sau întreaga comandă</small></i></span>
+          <span><b>✓</b><i><strong>Calcul transparent</strong><small>vezi costul returului și suma estimată</small></i></span>
+        </div>
+        <a href="/politica-de-retur">Consultă politica de retur <b>↗</b></a>
+      </aside>
+
+      <section class="return-panel">
+        <form id="return-verify" class="return-step" novalidate>
+          <header>
+            <span class="return-step__number">01</span>
+            <div><small>PASUL ÎNTÂI</small><h2>Găsește comanda</h2><p>Ai nevoie doar de numărul comenzii și adresa de e-mail cu care ai plasat-o.</p></div>
+          </header>
+          <div class="return-grid">
+            <label>Număr comandă <b>*</b><input name="order_number" required placeholder="GT-20260905-AB12CD34" autocomplete="off" spellcheck="false"></label>
+            <label>E-mail comandă <b>*</b><input name="email" type="email" required autocomplete="email" placeholder="client@exemplu.ro"></label>
+          </div>
+          <div class="return-security"><span>◆</span><p><b>Verificare privată</b><small>Datele trebuie să corespundă aceleiași comenzi. Nu afișăm informații dacă identificarea nu reușește.</small></p></div>
+          <p class="return-error" id="verify-error" role="alert" tabindex="-1"></p>
+          <button class="return-primary" type="submit"><span>Verifică eligibilitatea</span><b>→</b></button>
+        </form>
+
+        <form id="return-configure" class="return-step" hidden novalidate>
+          <header>
+            <span class="return-step__number">02</span>
+            <div><small>COMANDĂ VERIFICATĂ</small><h2>Alege ce se întoarce</h2><p id="verified-order"></p></div>
+          </header>
+          <div id="deadline-card" class="return-deadline"></div>
+          <section><div class="return-section-title"><h3>Produse și cantități</h3><small>Bifează numai produsele returnate</small></div><div id="return-products" class="return-products"></div></section>
+          <label>Motivul solicitării <b>*</b><select name="reason_choice" required><option value="">Alege o opțiune</option><option>Retragere fără motiv declarat</option><option>Produsul nu corespunde nevoilor mele</option><option>Am comandat din greșeală</option><option>Alt motiv</option></select></label>
+          <label id="reason-detail" hidden>Detalii<textarea name="reason_detail" rows="3" maxlength="1000" placeholder="Descrie pe scurt situația"></textarea></label>
+          <div class="return-grid"><label>Titular cont <b>*</b><input name="bank_account_holder" required maxlength="180" autocomplete="name"></label><label>IBAN valid <b>*</b><input name="bank_iban" required maxlength="34" autocomplete="off" placeholder="RO49AAAA1B31007593840000" spellcheck="false"></label></div>
+          <label class="return-check"><input name="refund_consent" type="checkbox" required><span><b>Sunt de acord cu rambursarea în IBAN-ul indicat</b><small>Suma aprobată va fi plătită în maximum 14 zile calendaristice, conform politicii aplicabile.</small></span></label>
+          <aside class="return-summary"><div><small>Produse + livrare eligibilă</small><strong id="selected-total">0,00 RON</strong></div><span>−</span><div><small>Cost direct retur</small><strong id="return-shipping-cost">0,00 RON</strong></div><span>=</span><div><small>Estimare restituire</small><strong id="refund-estimate">0,00 RON</strong></div></aside>
+          <p class="return-note">Echipa G-Trots acceptă sau refuză separat fiecare produs. Valoarea finală include numai cantitățile acceptate; livrarea inițială se restituie doar când condițiile aplicabile returului integral sunt îndeplinite.</p>
+          <p class="return-error" id="configure-error" role="alert" tabindex="-1"></p>
+          <div class="return-actions"><button type="button" id="return-back">← Înapoi</button><button class="return-primary" type="submit"><span>Trimite solicitarea</span><b>→</b></button></div>
+        </form>
+
+        <section id="return-success" class="return-step return-success" hidden>
+          <span>✓</span><small>SOLICITARE ÎNREGISTRATĂ</small><h2>Am primit returul tău.</h2><p>Ți-am trimis pe e-mail conținutul solicitării, împreună cu data și ora înregistrării. Produsele vor fi verificate individual.</p><a class="return-primary" href="/">Înapoi la G-Trots</a>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <script src="/solicita-retur.js?v=20260905-3" defer></script>
+  <script src="/legal-footer.js?v=20260905-17" defer></script>
+</body>
+</html>

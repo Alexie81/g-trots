@@ -696,15 +696,23 @@ function createCategoryNode(category, childMap, depth, openRoot, ancestry = new 
   const button = document.createElement("button");
   button.className = "category-filter";
   if (depth === 1) button.classList.add("category-filter-parent");
-  if (children.length === 0) button.classList.add("category-filter-leaf");
+  if (children.length === 0) button.classList.add(depth === 1 ? "category-filter-root-leaf" : "category-filter-leaf");
   button.type = "button";
   button.dataset.category = String(category.slug || category.id);
+  button.dataset.categoryId = String(category.id);
+  if (category.system_key) button.dataset.categoryKey = String(category.system_key);
 
   const visual = createCategoryVisual(category, depth);
   if (visual) button.append(visual);
   const label = document.createElement("span");
   label.textContent = String(category.name || "Categorie");
   button.append(label);
+  if (depth === 1 && children.length === 0) {
+    const arrow = document.createElement("i");
+    arrow.className = "category-root-link-arrow";
+    arrow.setAttribute("aria-hidden", "true");
+    button.append(arrow);
+  }
   node.append(button);
 
   if (children.length > 0) {
@@ -722,7 +730,15 @@ function createCategoryNode(category, childMap, depth, openRoot, ancestry = new 
 
 function renderCategoryFilters(categories) {
   if (!categoryTree) return;
-  const activeCategories = categories.filter(category => category && category.is_active !== false && category.id);
+  const activeCategories = categories
+    .filter(category => category && category.is_active !== false && category.id)
+    .map((category, index) => ({ category, index }))
+    .sort((left, right) => {
+      const leftPriority = left.category.system_key === "second_hand_scooters" ? 0 : 1;
+      const rightPriority = right.category.system_key === "second_hand_scooters" ? 0 : 1;
+      return leftPriority - rightPriority || left.index - right.index;
+    })
+    .map(({ category }) => category);
   const includedIds = new Set(activeCategories.map(category => String(category.id)));
   const childMap = new Map();
   activeCategories.forEach(category => {
@@ -1016,7 +1032,7 @@ function renderSmartSearch(rawQuery = searchInput?.value || "") {
   const results = smartSearchCards(query);
   if (searchCount) searchCount.textContent = `${results.length} ${results.length === 1 ? "produs" : "produse"}`;
   if (!results.length) {
-    smartSearchContent.innerHTML = `<div class="smart-search-empty"><i aria-hidden="true">⌕</i><strong>Nu am găsit încă piesa.</strong><p>Încearcă denumirea componentei, modelul trotinetei sau marca. Poți scrie și aproximativ — căutarea corectează greșelile mici.</p></div>`;
+    smartSearchContent.innerHTML = `<div class="smart-search-empty"><i aria-hidden="true">⌕</i><strong>Nu am găsit încă produsul.</strong><p>Încearcă denumirea componentei, modelul trotinetei sau marca. Poți scrie și aproximativ — căutarea corectează greșelile mici.</p></div>`;
     return 0;
   }
 
@@ -1329,7 +1345,12 @@ function resetFilters() {
   brandInputs.forEach(input => { input.checked = false; });
   stockInputs.forEach(input => { input.checked = false; });
   manufacturerInputs.forEach(input => { input.checked = false; });
-  categoryButtons.forEach(button => button.classList.toggle("active", button.dataset.category === "all"));
+  categoryButtons.forEach(button => {
+    const isActive = button.dataset.category === "all";
+    button.classList.toggle("active", isActive);
+    if (isActive) button.setAttribute("aria-current", "true");
+    else button.removeAttribute("aria-current");
+  });
   updateRangeAppearance();
   applyFilters();
 }
@@ -1351,7 +1372,12 @@ function bindFilterControls() {
       activeCategoryScope = activeCategory === "all"
         ? new Set()
         : new Set(String(button.dataset.categoryScope || activeCategory).split(" ").filter(Boolean));
-      categoryButtons.forEach(item => item.classList.toggle("active", item === button));
+      categoryButtons.forEach(item => {
+        const isActive = item === button;
+        item.classList.toggle("active", isActive);
+        if (isActive) item.setAttribute("aria-current", "true");
+        else item.removeAttribute("aria-current");
+      });
       applyFilters();
     });
   });
@@ -1361,6 +1387,53 @@ function bindFilterControls() {
     input.dataset.filterBound = "true";
     input.addEventListener("change", applyFilters);
   });
+}
+
+function applyCatalogDeepLink(categories = []) {
+  const params = new URLSearchParams(window.location.search);
+  const requestedKey = String(params.get("category_key") || "").trim();
+  const requestedCategory = String(params.get("category") || "").trim();
+  if (!requestedKey && !requestedCategory) return false;
+
+  const category = categories.find(item => (
+    (requestedKey && String(item?.system_key || "") === requestedKey)
+    || (requestedCategory && [item?.slug, item?.id].map(String).includes(requestedCategory))
+  ));
+  const target = categoryButtons.find(button => (
+    (requestedKey && button.dataset.categoryKey === requestedKey)
+    || (category && button.dataset.categoryId === String(category.id))
+    || (requestedCategory && button.dataset.category === requestedCategory)
+  ));
+  if (!target) return false;
+
+  let treeNode = target.closest(".category-tree-node");
+  while (treeNode) {
+    if (directTreeChild(treeNode, ".category-tree-children")) setTreeNodeExpanded(treeNode, true, false);
+    treeNode = treeNode.parentElement?.closest(".category-tree-node") || null;
+  }
+
+  activeCategory = target.dataset.category || "all";
+  activeCategoryScope = activeCategory === "all"
+    ? new Set()
+    : new Set(String(target.dataset.categoryScope || activeCategory).split(" ").filter(Boolean));
+  categoryButtons.forEach(button => {
+    const isActive = button === target;
+    button.classList.toggle("active", isActive);
+    if (isActive) button.setAttribute("aria-current", "true");
+    else button.removeAttribute("aria-current");
+  });
+  applyFilters();
+
+  if (window.location.hash === "#catalog") {
+    window.requestAnimationFrame(() => document.querySelector("#catalog")?.scrollIntoView({ block: "start" }));
+  }
+  if (params.get("filters") === "open" && window.matchMedia("(max-width: 900px)").matches) {
+    window.requestAnimationFrame(() => {
+      openFilters();
+      window.requestAnimationFrame(() => target.scrollIntoView({ block: "center", inline: "nearest" }));
+    });
+  }
+  return true;
 }
 
 async function loadCatalogFilters() {
@@ -1381,13 +1454,30 @@ async function loadCatalogFilters() {
       throw new Error("Răspuns SHOP invalid");
     }
 
-    renderCategoryFilters(payload.categories);
+    const isLocalPreview = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)
+      || window.location.hostname.endsWith(".localhost");
+    const categoryRows = isLocalPreview && !payload.categories.some(item => item?.system_key === "second_hand_scooters")
+      ? [{
+          id: "8f1ac397-76ab-4bd9-9f60-1cd239cf2573",
+          parent_id: null,
+          parent_name: null,
+          system_key: "second_hand_scooters",
+          is_protected: true,
+          name: "Trotinete second-hand",
+          slug: "trotinete-second-hand",
+          description: "Trotinete verificate in service si reconditionate.",
+          thumbnail_url: null,
+          is_active: true
+        }, ...payload.categories]
+      : payload.categories;
+
+    renderCategoryFilters(categoryRows);
     renderChoiceFilters(compatibilityOptions, payload.brands, "Nu există mărci active.");
     renderChoiceFilters(manufacturerOptions, payload.manufacturers, "Nu există producători activi.");
     activeCategory = "all";
     activeCategoryScope = new Set();
     bindFilterControls();
-    applyFilters();
+    if (!applyCatalogDeepLink(categoryRows)) applyFilters();
     filtersPanel?.setAttribute("data-catalog-source", "shop-api");
   } catch {
     filtersPanel?.setAttribute("data-catalog-source", "fallback");

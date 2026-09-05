@@ -2250,6 +2250,38 @@ body.smart-search-closing .smart-search-overlay {
   font-weight: 780;
 }
 
+.category-filter-root-leaf {
+  padding-right: 0.48rem;
+}
+
+.category-root-link-arrow {
+  width: 1.9rem;
+  height: 1.9rem;
+  flex: 0 0 1.9rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.045);
+  color: #8f8982;
+  transition: color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.category-root-link-arrow::before {
+  content: "";
+  width: 0.42rem;
+  height: 0.42rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateX(-0.1rem) rotate(-45deg);
+}
+
+.category-filter-root-leaf:hover .category-root-link-arrow,
+.category-filter-root-leaf.active .category-root-link-arrow {
+  background: rgba(240, 127, 0, 0.18);
+  color: var(--orange);
+  transform: scale(1.04);
+}
+
 .category-tree-marker {
   width: 2rem;
   height: 2rem;

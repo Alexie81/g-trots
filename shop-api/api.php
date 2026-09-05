@@ -4838,6 +4838,17 @@ try {
              FROM shop_categories c
              LEFT JOIN shop_categories p ON p.id = c.parent_id
              WHERE c.is_active = 1
+               AND (
+                    COALESCE(c.system_key, '') <> 'second_hand_scooters'
+                    OR EXISTS (
+                        SELECT 1
+                        FROM shop_products sh_product
+                        LEFT JOIN shop_product_sources sh_source ON sh_source.id = sh_product.source_id
+                        WHERE sh_product.category_id = c.id
+                          AND sh_product.is_active = 1
+                          AND (sh_product.source_id IS NULL OR COALESCE(sh_source.is_active, 1) = 1)
+                    )
+               )
              ORDER BY CASE WHEN c.system_key = 'second_hand_scooters' THEN 0 ELSE 1 END ASC,
                       COALESCE(p.name, c.name) ASC, c.parent_id IS NOT NULL ASC, c.name ASC"
         )->fetchAll();

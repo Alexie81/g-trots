@@ -65,35 +65,42 @@ const productCount = document.querySelector("[data-product-count]");
 
 const secondHandBanner = document.querySelector("[data-second-hand-banner]");
 if (secondHandBanner) {
-  const isLocalPreview = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)
-    || window.location.hostname.endsWith(".localhost");
-
-  if (!isLocalPreview) {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 7000);
-    fetch("https://g-trots.ro/shop-api/api-v2.php?action=publicCatalogFilters", {
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-      signal: controller.signal
+  const shopApiUrl = "https://g-trots.ro/shop-api/api-v2.php";
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 7000);
+  fetch(`${shopApiUrl}?action=publicCatalogFilters`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+    signal: controller.signal
+  })
+    .then(response => response.ok ? response.json() : Promise.reject(new Error("Catalog indisponibil")))
+    .then(async payload => {
+      const categories = Array.isArray(payload?.categories) ? payload.categories : [];
+      const systemKey = secondHandBanner.dataset.categorySystemKey;
+      const category = categories.find(item => item?.system_key === systemKey);
+      if (!category || category.is_active === false) return;
+      const productsUrl = new URL(shopApiUrl);
+      productsUrl.searchParams.set("action", "publicProductsPage");
+      productsUrl.searchParams.set("category_id", category.id);
+      productsUrl.searchParams.set("page", "1");
+      productsUrl.searchParams.set("page_size", "1");
+      const productsResponse = await fetch(productsUrl, {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+        signal: controller.signal
+      });
+      if (!productsResponse.ok) throw new Error("Produse second-hand indisponibile");
+      const productsPayload = await productsResponse.json();
+      if (Number(productsPayload?.total || 0) < 1) return;
+      const url = new URL(secondHandBanner.href, window.location.href);
+      url.searchParams.set("category_key", systemKey);
+      url.searchParams.set("category", category.slug || category.id);
+      url.searchParams.set("filters", "open");
+      secondHandBanner.href = `${url.pathname}${url.search}${url.hash}`;
+      secondHandBanner.hidden = false;
     })
-      .then(response => response.ok ? response.json() : Promise.reject(new Error("Catalog indisponibil")))
-      .then(payload => {
-        const categories = Array.isArray(payload?.categories) ? payload.categories : [];
-        const systemKey = secondHandBanner.dataset.categorySystemKey;
-        const category = categories.find(item => item?.system_key === systemKey);
-        if (!category) {
-          secondHandBanner.hidden = true;
-          return;
-        }
-        const url = new URL(secondHandBanner.href, window.location.href);
-        url.searchParams.set("category_key", systemKey);
-        url.searchParams.set("category", category.slug || category.id);
-        url.searchParams.set("filters", "open");
-        secondHandBanner.href = `${url.pathname}${url.search}${url.hash}`;
-      })
-      .catch(() => {})
-      .finally(() => window.clearTimeout(timeout));
-  }
+    .catch(() => {})
+    .finally(() => window.clearTimeout(timeout));
 }
 
 const secondHandTitle = document.querySelector(".second-hand-title");

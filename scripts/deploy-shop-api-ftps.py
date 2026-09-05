@@ -20,6 +20,8 @@ FILES = (
     "product-export.php",
     "api.php",
     "api-v2.php",
+    "product-page-service.php",
+    "gomag.php",
     "order-emails.php",
     "order-cancellation.php",
     "order-return.php",

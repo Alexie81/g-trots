@@ -1454,22 +1454,7 @@ async function loadCatalogFilters() {
       throw new Error("Răspuns SHOP invalid");
     }
 
-    const isLocalPreview = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)
-      || window.location.hostname.endsWith(".localhost");
-    const categoryRows = isLocalPreview && !payload.categories.some(item => item?.system_key === "second_hand_scooters")
-      ? [{
-          id: "8f1ac397-76ab-4bd9-9f60-1cd239cf2573",
-          parent_id: null,
-          parent_name: null,
-          system_key: "second_hand_scooters",
-          is_protected: true,
-          name: "Trotinete second-hand",
-          slug: "trotinete-second-hand",
-          description: "Trotinete verificate in service si reconditionate.",
-          thumbnail_url: null,
-          is_active: true
-        }, ...payload.categories]
-      : payload.categories;
+    const categoryRows = payload.categories;
 
     renderCategoryFilters(categoryRows);
     renderChoiceFilters(compatibilityOptions, payload.brands, "Nu există mărci active.");

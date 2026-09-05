@@ -41,6 +41,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import RichTextEditor from '@/components/RichTextEditor';
 import ShopPagination from '@/components/ShopPagination';
 import ShopProductPicture from '@/components/ShopProductPicture';
+import ShopProductExportButton from '@/components/ShopProductExportButton';
 import {
   shopApi,
   shopSupplierDisplayName,
@@ -738,6 +739,9 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
     <View style={styles.wrap}>
       <View style={styles.actions}>
         <View style={styles.search}><Search size={17} color={Colors.orange} /><TextInput value={query} onChangeText={(value) => { setQuery(value); setPage(1); }} placeholder="Caută semantic: nume, cod, model, compatibilitate" placeholderTextColor={Colors.textMuted} style={styles.searchInput} /></View>
+        <ShopProductExportButton sources={sources} total={productTotal} />
+      </View>
+      <View style={styles.actions}>
         <TouchableOpacity style={styles.refresh} onPress={() => void load(true, { page, pageSize, query, includeMetadata: false })}>{listRefreshing ? <ActivityIndicator size="small" color={Colors.orange} /> : <RefreshCw size={18} color={Colors.textSecondary} />}</TouchableOpacity>
         <TouchableOpacity style={styles.add} onPress={openNew}><Plus size={19} color={Colors.white} /><Text style={styles.addText}>Produs</Text></TouchableOpacity>
       </View>

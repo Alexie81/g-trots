@@ -79,6 +79,22 @@ function isCompanyOrder(order: ShopOrder) {
 
 const mainOrderFlow: ShopOrder['status'][] = ['new', 'confirmed', 'processing', 'shipped', 'completed', 'return_requested', 'return_refused', 'return_confirmed'];
 const terminalOrderStatuses: ShopOrder['status'][] = ['refunded', 'cancelled'];
+
+function canChangeOrderStatus(currentStatus: ShopOrder['status'], targetStatus: ShopOrder['status']) {
+  if (currentStatus === targetStatus) return true;
+  if (terminalOrderStatuses.includes(currentStatus)) return false;
+  if (targetStatus === 'cancelled') return true;
+
+  const flow: ShopOrder['status'][] = [...mainOrderFlow, 'refunded'];
+  const currentIndex = flow.indexOf(currentStatus);
+  const targetIndex = flow.indexOf(targetStatus);
+  if (currentIndex < 0 || targetIndex < 0) return false;
+  if (targetIndex > currentIndex) return true;
+
+  const editableReturnStatuses: ShopOrder['status'][] = ['return_requested', 'return_refused'];
+  return editableReturnStatuses.includes(currentStatus) && editableReturnStatuses.includes(targetStatus);
+}
+
 type OrderStatusFilter = 'all' | 'returned' | ShopOrder['status'];
 const emptyOrderSummary = {
   orders_count: 0,
@@ -617,9 +633,10 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
             <View style={styles.statusPicker}>{orderStatuses.map((item, index) => {
               const StatusIcon = item.icon;
               const active = status === item.value;
+              const allowed = canChangeOrderStatus(selected.status, item.value);
               return <View key={item.value} style={styles.statusTrackRow}>
                 <View style={styles.statusTrackRail}><View style={[styles.statusTrackDot, active && { borderColor: item.color, backgroundColor: item.color }]}>{active ? <Check size={12} color="#15110D" strokeWidth={3} /> : <Text style={styles.statusTrackIndex}>{String(index + 1).padStart(2, '0')}</Text>}</View>{index < orderStatuses.length - 1 ? <View style={styles.statusTrackLine} /> : null}</View>
-                <TouchableOpacity activeOpacity={0.76} style={[styles.statusOption, active && { borderColor: item.color, backgroundColor: `${item.color}12` }]} onPress={() => { setStatus(item.value); if (item.value === 'cancelled' && item.value !== selected.status) setNotifyCustomer(true); else if (item.value === selected.status) setNotifyCustomer(false); }}>
+                <TouchableOpacity accessibilityRole="radio" accessibilityState={{ checked: active, disabled: !allowed }} disabled={!allowed} activeOpacity={0.76} style={[styles.statusOption, !allowed && styles.statusOptionLocked, active && { borderColor: item.color, backgroundColor: `${item.color}12` }]} onPress={() => { setStatus(item.value); if (item.value === 'cancelled' && item.value !== selected.status) setNotifyCustomer(true); else if (item.value === selected.status) setNotifyCustomer(false); }}>
                   <View style={[styles.statusOptionIcon, { backgroundColor: `${item.color}18` }]}><StatusIcon size={17} color={item.color} /></View>
                   <View style={styles.statusOptionCopy}><Text style={[styles.statusOptionTitle, active && { color: item.color }]}>{item.label}</Text><Text style={styles.statusOptionText}>{item.description}</Text></View>
                   <View style={[styles.radio, active && { borderColor: item.color, backgroundColor: item.color }]}>{active ? <Check size={12} color="#14110F" strokeWidth={3} /> : null}</View>

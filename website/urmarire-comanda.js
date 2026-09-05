@@ -39,6 +39,7 @@
   const returnReason = document.getElementById("return-reason");
   const returnHolder = document.getElementById("return-holder");
   const returnIban = document.getElementById("return-iban");
+  const returnIbanFeedback = document.getElementById("return-iban-feedback");
   const returnError = document.getElementById("return-error");
   const returnConfirm = document.getElementById("return-confirm");
   const returnCost = document.getElementById("return-cost");
@@ -52,6 +53,36 @@
   const esc = value => String(value ?? "").replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
   const money = (value, currency = "RON") => `${new Intl.NumberFormat("ro-RO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0))} ${currency}`;
   const date = value => { const parsed = new Date(String(value || "").replace(" ", "T")); return Number.isNaN(parsed.getTime()) ? String(value || "") : parsed.toLocaleString("ro-RO", { dateStyle: "medium", timeStyle: "short" }); };
+  const normalizeIban = value => String(value || "").toUpperCase().replace(/\s+/g, "");
+  function isValidIban(value) {
+    const iban = normalizeIban(value);
+    if (iban.length < 15 || iban.length > 34 || !/^[A-Z]{2}[0-9]{2}[A-Z0-9]+$/.test(iban)) return false;
+    if (iban.startsWith("RO") && iban.length !== 24) return false;
+    const rearranged = `${iban.slice(4)}${iban.slice(0, 4)}`;
+    let remainder = 0;
+    for (const character of rearranged) {
+      const digits = /[A-Z]/.test(character) ? String(character.charCodeAt(0) - 55) : character;
+      for (const digit of digits) remainder = (remainder * 10 + Number(digit)) % 97;
+    }
+    return remainder === 1;
+  }
+  function validateReturnIban(showEmptyError = false) {
+    const iban = normalizeIban(returnIban.value);
+    const valid = isValidIban(iban);
+    const message = valid
+      ? "IBAN valid."
+      : iban || showEmptyError
+        ? "Introdu un IBAN valid, cu țara, cifrele de control și checksum corect."
+        : "IBAN-ul este verificat înainte de trimitere.";
+    returnIban.setCustomValidity(valid || (!iban && !showEmptyError) ? "" : message);
+    returnIban.setAttribute("aria-invalid", String(Boolean(iban || showEmptyError) && !valid));
+    returnIban.classList.toggle("is-valid", valid);
+    returnIban.classList.toggle("is-invalid", Boolean(iban || showEmptyError) && !valid);
+    returnIbanFeedback.textContent = message;
+    returnIbanFeedback.classList.toggle("is-valid", valid);
+    returnIbanFeedback.classList.toggle("is-invalid", Boolean(iban || showEmptyError) && !valid);
+    return valid;
+  }
 
   function showState(kind, title, message) {
     resultHost.hidden = true;
@@ -163,6 +194,7 @@
     returnReason.value = "";
     returnHolder.value = activeOrder.customer_contact_name || activeOrder.customer_name || "";
     returnIban.value = "";
+    validateReturnIban(false);
     const cost = Number(activeOrder.configured_return_shipping_cost || 0);
     returnCost.textContent = money(cost, activeOrder.currency);
     returnRefund.textContent = money(Math.max(0, Number(activeOrder.total || 0) - cost), activeOrder.currency);
@@ -178,8 +210,9 @@
   async function submitReturn() {
     const reason = returnReason.value.trim();
     const holder = returnHolder.value.trim();
-    const iban = returnIban.value.trim().toUpperCase().replace(/\s+/g, "");
-    if (reason.length < 3 || holder.length < 3 || !iban) { returnError.textContent = "Completează motivul, titularul contului și IBAN-ul."; return; }
+    const iban = normalizeIban(returnIban.value);
+    if (reason.length < 3 || holder.length < 3) { returnError.textContent = "Completează motivul returului și titularul contului."; return; }
+    if (!validateReturnIban(true)) { returnError.textContent = "IBAN-ul introdus nu este valid."; returnIban.focus(); return; }
     returnError.textContent = "";
     returnConfirm.disabled = true;
     returnConfirm.textContent = "Se trimite…";
@@ -224,7 +257,8 @@
   returnModal.querySelectorAll("[data-return-close]").forEach(button => button.addEventListener("click", closeReturn));
   footerReturn.addEventListener("click", openReturn);
   returnConfirm.addEventListener("click", () => void submitReturn());
-  returnIban.addEventListener("input", () => { const start = returnIban.selectionStart; returnIban.value = returnIban.value.toUpperCase(); returnIban.setSelectionRange(start, start); });
+  returnIban.addEventListener("input", () => { const start = returnIban.selectionStart; returnIban.value = returnIban.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""); returnIban.setSelectionRange(start, start); validateReturnIban(false); });
+  returnIban.addEventListener("blur", () => validateReturnIban(Boolean(normalizeIban(returnIban.value))));
   document.addEventListener("keydown", event => { if (event.key !== "Escape") return; if (!returnModal.hidden) closeReturn(); else if (!cancelModal.hidden) closeCancellation(); });
   const token = params.get("token")?.trim() || "";
   if (token) {

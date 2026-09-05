@@ -515,6 +515,7 @@ export type ShopProductStats = {
 
 export type ShopDashboardStats = {
   revenue: number;
+  collected_revenue: number;
   gross_revenue: number;
   returns_count: number;
   returns_total: number;
@@ -527,6 +528,7 @@ export type ShopDashboardStats = {
   daily_stats: Array<{
     date: string;
     orders_count: number;
+    collected_revenue: number;
     gross_revenue: number;
     returns_count: number;
     returns_total: number;
@@ -1168,7 +1170,7 @@ async function shopCall<T>(action: string, token: string, init?: RequestInit, id
   const controller = new AbortController();
   // Stergerea sincronizeaza arhivarea cu Stripe inainte de eliminarea locala.
   // O lasam sa se incheie si pe conexiuni mobile mai lente.
-  const timeoutMs = ['downloadNirBundle', 'downloadNirRegistryBundle'].includes(action) ? 1800000 : action === 'syncStripeCatalog' ? 90000 : ['syncBoomagTaxonomy', 'syncBoomagStock'].includes(action) ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
+  const timeoutMs = action === 'exportProducts' ? 180000 : ['exportInvoiceRegistry', 'downloadNirBundle', 'downloadNirRegistryBundle'].includes(action) ? 1800000 : action === 'syncStripeCatalog' ? 90000 : ['syncBoomagTaxonomy', 'syncBoomagStock'].includes(action) ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const isGet = !init?.method || init.method === 'GET';
   const cacheBuster = isGet ? `&_=${Date.now()}` : '';
@@ -1389,6 +1391,9 @@ export const shopApi = {
   createFifoOpeningBalance: (token: string, payload: { product_id: string; warehouse_id?: string; quantity: string; unit_cost_ron: string; reception_date: string; note: string }) => shopCall<Record<string, string>>('createFifoOpeningBalance', token, { method: 'POST', body: JSON.stringify(payload) }),
   syncBoomagTaxonomy: (token: string) => shopCall<ShopTaxonomySyncResult>('syncBoomagTaxonomy', token, { method: 'POST', body: '{}' }),
   syncBoomagStock: (token: string) => shopCall<{ success: true; feed_products: number; matched_products: number; prices_synced: number; prices_changed: number; stocks_changed: number; synced_at: string }>('syncBoomagStock', token, { method: 'POST', body: '{}' }),
+  exportProducts: (token: string, sourceIds: string[] | null) => shopCall<{ file_name: string; mime_type: string; content_base64: string; product_count: number }>('exportProducts', token, { method: 'POST', body: JSON.stringify({ source_ids: sourceIds }) }),
+  exportCatalog: (token: string, kind: 'categories' | 'brands' | 'manufacturers') => shopCall<{ file_name: string; mime_type: string; content_base64: string; item_count: number }>('exportCatalog', token, { method: 'POST', body: JSON.stringify({ kind }) }),
+  exportInvoiceRegistry: (token: string, from: string, to: string, includeDocuments: boolean) => shopCall<{ file_name: string; mime_type: string; content_base64: string; item_count: number }>('exportInvoiceRegistry', token, { method: 'POST', body: JSON.stringify({ from, to, include_documents: includeDocuments }) }),
   listProducts: (token: string) => shopCall<ShopProduct[]>('listProducts', token),
   listProductOptions: (token: string, options: { q?: string; ids?: string[]; supplier_id?: string; limit?: number } = {}) => shopCall<ShopProduct[]>('listProductOptions', token, { method: 'POST', body: JSON.stringify(options) }),
   listProductOptionIds: (token: string) => shopCall<string[]>('listProductOptionIds', token, { method: 'POST', body: '{}' }),

@@ -2,6 +2,37 @@
 declare(strict_types=1);
 
 /**
+ * Regula unică pentru schimbarea manuală a statusului unei comenzi.
+ * Statusurile obișnuite nu pot fi mutate înapoi. Înainte de confirmarea
+ * returului, operatorul poate reveni între „solicitat” și „refuzat”; după
+ * confirmare, returul poate continua doar către rambursare.
+ */
+function gtrotsCanChangeOrderStatus(string $currentStatus, string $targetStatus): bool
+{
+    $currentStatus = trim($currentStatus);
+    $targetStatus = trim($targetStatus);
+    if ($currentStatus === $targetStatus) return true;
+
+    $terminalStatuses = ['refunded', 'cancelled'];
+    if (in_array($currentStatus, $terminalStatuses, true)) return false;
+
+    // Anularea manuală rămâne o acțiune separată și este permisă inclusiv
+    // după predarea către curier sau după livrare.
+    if ($targetStatus === 'cancelled') return true;
+
+    $flow = ['new', 'confirmed', 'processing', 'shipped', 'completed', 'return_requested', 'return_refused', 'return_confirmed', 'refunded'];
+    $currentIndex = array_search($currentStatus, $flow, true);
+    $targetIndex = array_search($targetStatus, $flow, true);
+    if ($currentIndex === false || $targetIndex === false) return false;
+
+    if ($targetIndex > $currentIndex) return true;
+
+    $editableReturnStatuses = ['return_requested', 'return_refused'];
+    return in_array($currentStatus, $editableReturnStatuses, true)
+        && in_array($targetStatus, $editableReturnStatuses, true);
+}
+
+/**
  * Flux unic pentru solicitările de retur create de client sau de operator.
  * În această etapă nu se modifică factura, stocul ori plata: acestea rămân
  * pentru confirmarea și finalizarea ulterioară a returului.

@@ -5092,7 +5092,9 @@ try {
     $currentUser = validateAuthToken($db, $config, $body);
     // Pe PHP-FPM, răspunsul ajunge întâi la aplicație, iar coada SPV este
     // procesată apoi în fundal. Navigarea rămâne rapidă pe telefon și desktop.
-    GtrotsSpvService::scheduleWorkerAfterResponse($db, $config);
+    if (!in_array($action, ['exportProducts', 'exportCatalog', 'exportInvoiceRegistry'], true)) {
+        GtrotsSpvService::scheduleWorkerAfterResponse($db, $config);
+    }
 
     if ($action === 'getSpvConnection' && $method === 'GET') {
         GtrotsSpvService::reconcileOutbox($db);
@@ -5204,7 +5206,10 @@ try {
     }
 
     if ($action === 'getInvoice' && $method === 'GET') {
-        jsonResponse(GtrotsInvoiceService::get($db, trim((string)($_GET['id'] ?? '')), $config));
+        $invoiceId = trim((string)($_GET['id'] ?? ''));
+        $invoice = GtrotsInvoiceService::get($db, $invoiceId, $config);
+        $invoice['spv_job'] = GtrotsSpvService::invoiceState($db, $invoiceId);
+        jsonResponse($invoice);
     }
 
     if ($action === 'downloadInvoice' && $method === 'GET') {
@@ -5771,12 +5776,17 @@ try {
         $weekStartsOnSunday = in_array($period, ['current_week_sun', 'previous_week_sun'], true);
         $rangeStartSql = $rangeStart->format('Y-m-d H:i:s');
         $rangeEndSql = $endExclusive->format('Y-m-d H:i:s');
-        // Indicatorii financiari sunt conduși de documentele emise, nu de
-        // statusul curent al comenzii. Astfel, o factură de retur scade exact
-        // o dată vânzarea, iar ștergerea legală a unei facturi o elimină și din
-        // statistici fără corecții suplimentare după status.
+        // Încasările sunt conduse de plata efectivă a comenzii, chiar dacă
+        // operatorul nu a emis o factură. Comenzile anulate, cu retur confirmat
+        // sau deja rambursate nu mai reprezintă încasări curente. Facturile
+        // rămân sursa separată pentru evidența fiscală a retururilor.
         $ordersSummaryStatement = $db->prepare(
-            'SELECT COUNT(*) AS orders_count
+            'SELECT COUNT(*) AS orders_count,
+                    COALESCE(SUM(CASE
+                        WHEN payment_status = "paid"
+                         AND status NOT IN ("cancelled", "return_confirmed", "refunded")
+                        THEN total ELSE 0
+                    END), 0) AS collected_revenue
              FROM shop_orders
              WHERE created_at >= ? AND created_at < ?'
         );
@@ -5837,7 +5847,13 @@ try {
         $nirBucketExpression = $bucketExpressionFor('COALESCE(n.confirmed_at, n.created_at)');
 
         $ordersDailyStatement = $db->prepare(
-            'SELECT ' . $orderBucketExpression . ' AS day, COUNT(*) AS orders_count
+            'SELECT ' . $orderBucketExpression . ' AS day,
+                    COUNT(*) AS orders_count,
+                    COALESCE(SUM(CASE
+                        WHEN o.payment_status = "paid"
+                         AND o.status NOT IN ("cancelled", "return_confirmed", "refunded")
+                        THEN o.total ELSE 0
+                    END), 0) AS collected_revenue
              FROM shop_orders o
              WHERE o.created_at >= ? AND o.created_at < ?
              GROUP BY ' . $orderBucketExpression . '
@@ -5916,13 +5932,14 @@ try {
             $daily = $dailyByDate[$day] ?? [];
             $dailyGrossRevenue = round((float)($daily['gross_revenue'] ?? 0), 2);
             $dailyReturnsTotal = round((float)($daily['returns_total'] ?? 0), 2);
-            $dailyRevenue = round($dailyGrossRevenue - $dailyReturnsTotal, 2);
+            $dailyRevenue = round((float)($daily['collected_revenue'] ?? 0), 2);
             $dailyAcquisitions = round((float)($daily['acquisitions'] ?? 0), 2);
             $dailyCostOfGoodsSold = round((float)($daily['cost_of_goods_sold'] ?? 0), 2);
             $dailyStats[] = [
                 'date' => $day,
                 'orders_count' => (int)($daily['orders_count'] ?? 0),
                 'gross_revenue' => $dailyGrossRevenue,
+                'collected_revenue' => $dailyRevenue,
                 'returns_count' => (int)($daily['returns_count'] ?? 0),
                 'returns_total' => $dailyReturnsTotal,
                 'revenue' => $dailyRevenue,
@@ -5953,11 +5970,12 @@ try {
         $newOrdersCount = (int)$db->query('SELECT COUNT(*) FROM shop_orders WHERE status = "new"')->fetchColumn();
         $grossRevenue = round((float)($invoiceSummary['gross_revenue'] ?? 0), 2);
         $returnsTotal = round((float)($invoiceSummary['returns_total'] ?? 0), 2);
-        $revenue = round($grossRevenue - $returnsTotal, 2);
+        $revenue = round((float)($summary['collected_revenue'] ?? 0), 2);
         $acquisitions = round((float)($acquisitionSummary['acquisitions'] ?? 0), 2);
         $costOfGoodsSold = round((float)($costSummary['cost_of_goods_sold'] ?? 0), 2);
         jsonResponse([
             'revenue' => $revenue,
+            'collected_revenue' => $revenue,
             'gross_revenue' => $grossRevenue,
             'returns_count' => (int)($invoiceSummary['returns_count'] ?? 0),
             'returns_total' => $returnsTotal,
@@ -6057,6 +6075,23 @@ try {
     if ($action === 'syncBoomagStock' && $method === 'POST') {
         set_time_limit(0);
         jsonResponse(gomagSyncSupplierStock($db, $config));
+    }
+
+    if ($action === 'exportProducts' && $method === 'POST') {
+        require_once __DIR__ . '/product-export.php';
+        set_time_limit(180);
+        jsonResponse(GtrotsProductExport::download($db, $body));
+    }
+
+    if ($action === 'exportCatalog' && $method === 'POST') {
+        require_once __DIR__ . '/product-export.php';
+        jsonResponse(GtrotsProductExport::taxonomy($db, (string)($body['kind'] ?? '')));
+    }
+
+    if ($action === 'exportInvoiceRegistry' && $method === 'POST') {
+        require_once __DIR__ . '/invoice-export.php';
+        @set_time_limit(0);
+        jsonResponse(GtrotsInvoiceExport::download($db, $body, $config));
     }
 
     if ($action === 'listProductSources' && $method === 'GET') {
@@ -6574,19 +6609,14 @@ try {
                 'SELECT COUNT(*) AS orders_count,
                         SUM(CASE WHEN status = "new" THEN 1 ELSE 0 END) AS new_count,
                         SUM(CASE WHEN status = "processing" THEN 1 ELSE 0 END) AS processing_count,
-                        COALESCE(SUM(CASE WHEN status NOT IN ("cancelled", "refunded") AND payment_status = "paid" THEN total ELSE 0 END), 0) AS collected,
-                        COALESCE(SUM(CASE WHEN status NOT IN ("cancelled", "refunded") AND payment_method <> "card" AND payment_status = "pending" THEN total ELSE 0 END), 0) AS pending_cash
+                        COALESCE(SUM(CASE WHEN status NOT IN ("cancelled", "return_confirmed", "refunded") AND payment_status = "paid" THEN total ELSE 0 END), 0) AS collected,
+                        COALESCE(SUM(CASE WHEN status NOT IN ("cancelled", "return_confirmed", "refunded") AND payment_method <> "card" AND payment_status = "pending" THEN total ELSE 0 END), 0) AS pending_cash
                  FROM shop_orders'
             )->fetch() ?: [];
             $returnsSummary = $db->query(
                 'SELECT COUNT(*) AS returns_count,
-                        COALESCE(SUM(ABS(i.total)), 0) AS returns_total,
-                        COALESCE(SUM(CASE
-                            WHEN o.status NOT IN ("cancelled", "refunded") AND o.payment_status = "paid" THEN ABS(i.total)
-                            ELSE 0
-                        END), 0) AS collected_return_deduction
+                        COALESCE(SUM(ABS(i.total)), 0) AS returns_total
                  FROM shop_invoices i
-                 INNER JOIN shop_orders o ON o.id = i.order_id
                  WHERE i.invoice_type = "return"'
             )->fetch() ?: [];
             $db->commit();
@@ -6594,7 +6624,7 @@ try {
             if ($db->inTransaction()) $db->rollBack();
             throw $error;
         }
-        $collected = round((float)($summary['collected'] ?? 0) - (float)($returnsSummary['collected_return_deduction'] ?? 0), 2);
+        $collected = round((float)($summary['collected'] ?? 0), 2);
         $pendingCash = round((float)($summary['pending_cash'] ?? 0), 2);
 
         jsonResponse([
@@ -6643,6 +6673,12 @@ try {
         $currentOrderStatus = $currentOrderStatusStmt->fetchColumn();
         if ($currentOrderStatus === false) throw new InvalidArgumentException('Comanda nu există.');
         $requestedStatusChanged = $status !== (string)$currentOrderStatus;
+        if ($requestedStatusChanged && !gtrotsCanChangeOrderStatus((string)$currentOrderStatus, $status)) {
+            if ((string)$currentOrderStatus === 'return_confirmed') {
+                throw new InvalidArgumentException('Returul este deja confirmat. Poți continua doar către Rambursată; Retur solicitat și Retur refuzat nu mai sunt disponibile.');
+            }
+            throw new InvalidArgumentException('Statusul comenzii nu poate fi mutat la un pas anterior. Alege un status ulterior disponibil.');
+        }
         // Nu retrimitem niciodată e-mailul aceluiași status doar pentru că
         // formularul a fost salvat din nou (important mai ales la Anulată).
         if (!$requestedStatusChanged) $notifyCustomer = false;

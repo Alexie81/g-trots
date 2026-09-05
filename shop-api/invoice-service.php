@@ -227,6 +227,14 @@ final class GtrotsInvoiceService
         return $result;
     }
 
+    /** Read-only export: reuse the same fiscal snapshot and payment presentation as individual downloads. */
+    public static function snapshotForExport(PDO $db, array $invoice): array
+    {
+        $payload = json_decode((string)($invoice['payload_json'] ?? ''), true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($payload)) throw new RuntimeException('Datele facturii nu mai sunt disponibile.');
+        return self::detailPayload($db, $invoice, self::refreshPayloadState($invoice, $payload));
+    }
+
     public static function download(PDO $db, string $id, string $format = 'pdf', array $config = []): array
     {
         $invoice = self::find($db, trim($id));

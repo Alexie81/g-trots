@@ -46,11 +46,52 @@ spvAssert(($invoiceJob['status'] ?? '') === 'scheduled', 'Factura pozitivă treb
 spvAssert(($invoiceJob['scheduled_at'] ?? '') === '2026-09-08 00:00:00', 'Două zile lucrătoare după vineri trebuie să însemne întreaga zi de marți, fără condiție de oră.');
 spvAssert(($returnJob['status'] ?? '') === 'manual', 'Factura de retur veche nu trebuie trimisă din coada veche când regula curentă este manuală.');
 spvAssert(($returnJob['mode_snapshot'] ?? '') === 'manual', 'Coada veche trebuie rescrisă după automatizarea actuală.');
+$db->exec("UPDATE shop_spv_outbox SET status='rejected', attempts=2, upload_index='987654', last_error='BR-RO-TEST: total TVA incorect' WHERE invoice_id='invoice-1'");
+$visibleJob = GtrotsSpvService::invoiceState($db, 'invoice-1');
+spvAssert(($visibleJob['status'] ?? '') === 'rejected', 'Starea ANAF respinsă trebuie expusă aplicației.');
+spvAssert(($visibleJob['last_error'] ?? '') === 'BR-RO-TEST: total TVA incorect', 'Mesajul ANAF trebuie afișat integral în fișa facturii.');
+spvAssert(($visibleJob['attempts'] ?? 0) === 2 && ($visibleJob['upload_index'] ?? '') === '987654', 'Fișa trebuie să arate încercările și indexul de încărcare fără a expune tokenuri.');
 
 spvAssert(GtrotsSpvService::addWorkingDays('2026-09-04', 1) === '2026-09-07', 'Weekendul nu trebuie numărat în termenul SPV.');
 spvAssert(GtrotsSpvService::addWorkingDays('2026-09-04', 5) === '2026-09-11', 'Termenul legal trebuie calculat în zile lucrătoare.');
 spvAssert(GtrotsSpvService::addWorkingDays('2026-11-27', 1) === '2026-12-02', 'Sf. Andrei și Ziua Națională nu trebuie numărate ca zile lucrătoare.');
 spvAssert(GtrotsSpvService::addWorkingDays('2026-04-09', 1) === '2026-04-14', 'Vinerea Mare și a doua zi de Paște nu trebuie numărate ca zile lucrătoare.');
+
+$manualReminder = GtrotsSpvService::deadlineNotification([
+    'id' => 'invoice-manual', 'series' => 'GT', 'invoice_number' => '21', 'invoice_type' => 'invoice',
+    'issue_date' => '2026-09-04', 'outbox_status' => 'manual', 'mode_snapshot' => 'manual',
+], '2026-09-10');
+spvAssert(($manualReminder['bucket'] ?? '') === '1', 'Factura neprogramată trebuie avertizată cu o zi lucrătoare înainte de termen.');
+spvAssert(str_contains((string)($manualReminder['body'] ?? ''), 'Factura GT 21 nu are trimiterea programată'), 'Alerta trebuie să identifice explicit factura neprogramată.');
+
+$scheduledReminder = GtrotsSpvService::deadlineNotification([
+    'id' => 'invoice-scheduled', 'series' => 'GT', 'invoice_number' => '22', 'invoice_type' => 'invoice',
+    'issue_date' => '2026-09-04', 'outbox_status' => 'scheduled', 'mode_snapshot' => 'delayed',
+    'scheduled_at' => '2026-09-11 00:00:00', 'next_attempt_at' => '2026-09-11 00:00:00',
+], '2026-09-10');
+spvAssert($scheduledReminder === null, 'Factura care are încă o programare automată validă nu trebuie avertizată înainte de termen.');
+
+$dueTodayReminder = GtrotsSpvService::deadlineNotification([
+    'id' => 'invoice-due', 'series' => 'GT', 'invoice_number' => '23', 'invoice_type' => 'invoice',
+    'issue_date' => '2026-09-04', 'outbox_status' => 'scheduled', 'mode_snapshot' => 'delayed',
+    'scheduled_at' => '2026-09-11 00:00:00', 'next_attempt_at' => '2026-09-11 00:00:00',
+], '2026-09-11');
+spvAssert(($dueTodayReminder['bucket'] ?? '') === '0', 'În ziua-limită trebuie avertizată orice factură încă netrimisă, chiar dacă este programată.');
+spvAssert(str_contains((string)($dueTodayReminder['body'] ?? ''), 'Astăzi este ultima zi'), 'Mesajul din ziua-limită trebuie să fie explicit.');
+
+$weekendOverdueReminder = GtrotsSpvService::deadlineNotification([
+    'id' => 'invoice-weekend-overdue', 'series' => 'GT', 'invoice_number' => '25', 'invoice_type' => 'invoice',
+    'issue_date' => '2026-08-28', 'outbox_status' => 'scheduled', 'mode_snapshot' => 'delayed',
+    'scheduled_at' => '2026-09-04 00:00:00', 'next_attempt_at' => '2026-09-04 00:00:00',
+], '2026-09-05');
+spvAssert(($weekendOverdueReminder['bucket'] ?? '') === 'overdue', 'După o scadență de vineri, alerta trebuie să fie depășită și în weekend.');
+
+$missedScheduleReminder = GtrotsSpvService::deadlineNotification([
+    'id' => 'invoice-missed', 'series' => 'GT', 'invoice_number' => '24', 'invoice_type' => 'invoice',
+    'issue_date' => '2026-09-04', 'outbox_status' => 'scheduled', 'mode_snapshot' => 'delayed',
+    'scheduled_at' => '2026-09-08 00:00:00', 'next_attempt_at' => '2026-09-08 00:00:00',
+], '2026-09-10');
+spvAssert(($missedScheduleReminder['bucket'] ?? '') === '1', 'O programare automată depășită fără trimitere trebuie tratată ca neacoperită.');
 
 $db->exec("INSERT INTO shop_notifications (id,notification_type,title,body,entity_type,entity_id,severity,dedupe_key) VALUES ('notice-1','new_order','Comandă nouă','Test','order','order-1','success','test:1')");
 $marked = GtrotsSpvService::markNotification($db, 'notice-1');

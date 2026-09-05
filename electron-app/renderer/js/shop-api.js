@@ -11,7 +11,7 @@
     const controller = new AbortController();
     // Stergerea arhiveaza mai intai produsul si pretul in Stripe, deci poate
     // dura mai mult decat o cerere obisnuita pe o conexiune lenta.
-    const timeoutMs = ['downloadNirBundle', 'downloadNirRegistryBundle'].includes(action) ? 1800000 : action === 'syncStripeCatalog' ? 90000 : ['syncBoomagTaxonomy', 'syncBoomagStock'].includes(action) ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
+    const timeoutMs = action === 'exportProducts' ? 180000 : ['exportInvoiceRegistry', 'downloadNirBundle', 'downloadNirRegistryBundle'].includes(action) ? 1800000 : action === 'syncStripeCatalog' ? 90000 : ['syncBoomagTaxonomy', 'syncBoomagStock'].includes(action) ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const isGet = !options.method || options.method === 'GET';
     const cacheBuster = isGet ? `&_=${Date.now()}` : '';
@@ -181,6 +181,9 @@
     createFifoOpeningBalance: (payload) => call('createFifoOpeningBalance', json('POST', payload)),
     syncBoomagTaxonomy: () => call('syncBoomagTaxonomy', json('POST', {})),
     syncBoomagStock: () => call('syncBoomagStock', json('POST', {})),
+    exportProducts: (sourceIds) => call('exportProducts', json('POST', { source_ids: sourceIds })),
+    exportCatalog: (kind) => call('exportCatalog', json('POST', { kind })),
+    exportInvoiceRegistry: (from, to, includeDocuments) => call('exportInvoiceRegistry', json('POST', { from, to, include_documents: includeDocuments })),
     listProducts: () => call('listProducts'),
     listProductOptions: (options = {}) => call('listProductOptions', json('POST', options)),
     listProductOptionIds: () => call('listProductOptionIds', json('POST', {})),

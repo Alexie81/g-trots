@@ -16,6 +16,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 API_ROOT = PROJECT_ROOT / "shop-api"
 REMOTE_ROOT = "/g-trots.ro/shop-api"
 FILES = (
+    "invoice-export.php",
+    "product-export.php",
     "api.php",
     "api-v2.php",
     "order-emails.php",

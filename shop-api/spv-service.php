@@ -351,13 +351,41 @@ final class GtrotsSpvService
         $invoiceId = trim($invoiceId);
         if ($invoiceId === '') throw new InvalidArgumentException('Factura nu a fost selectată.');
         $invoice = self::invoice($db, $invoiceId);
-        if ((string)$invoice['spv_status'] === 'sent') return ['invoice' => GtrotsInvoiceService::get($db, $invoiceId, $config), 'job' => self::job($db, $invoiceId), 'already_sent' => true];
+        if ((string)$invoice['spv_status'] === 'sent') return ['invoice' => GtrotsInvoiceService::get($db, $invoiceId, $config), 'job' => self::invoiceState($db, $invoiceId), 'already_sent' => true];
         self::enqueue($db, $invoiceId, (string)$invoice['invoice_type'] === 'return' ? 'credit_note' : 'invoice');
         if (!self::isSqlite($db)) {
             $db->prepare("UPDATE shop_spv_outbox SET status='queued', scheduled_at=CURRENT_TIMESTAMP, next_attempt_at=CURRENT_TIMESTAMP, last_error=NULL WHERE invoice_id=? AND status <> 'processing'")->execute([$invoiceId]);
         }
         self::processInvoice($db, $config, $invoiceId);
-        return ['invoice' => GtrotsInvoiceService::get($db, $invoiceId, $config), 'job' => self::job($db, $invoiceId)];
+        return ['invoice' => GtrotsInvoiceService::get($db, $invoiceId, $config), 'job' => self::invoiceState($db, $invoiceId)];
+    }
+
+    /**
+     * Returnează numai starea operațională care poate fi afișată în aplicații.
+     * Tokenurile și configurația OAuth rămân exclusiv pe server.
+     */
+    public static function invoiceState(PDO $db, string $invoiceId): ?array
+    {
+        self::ensureSchema($db);
+        $invoiceId = trim($invoiceId);
+        if ($invoiceId === '') return null;
+        $job = self::job($db, $invoiceId);
+        if (!$job) return null;
+        $value = static fn(string $key): ?string => trim((string)($job[$key] ?? '')) !== '' ? (string)$job[$key] : null;
+        return [
+            'status' => (string)($job['status'] ?? ''),
+            'environment' => (string)($job['environment'] ?? 'test'),
+            'mode' => (string)($job['mode_snapshot'] ?? 'manual'),
+            'attempts' => (int)($job['attempts'] ?? 0),
+            'scheduled_at' => $value('scheduled_at'),
+            'next_attempt_at' => $value('next_attempt_at'),
+            'upload_index' => $value('upload_index'),
+            'download_id' => $value('download_id'),
+            'last_error' => $value('last_error'),
+            'sent_at' => $value('sent_at'),
+            'accepted_at' => $value('accepted_at'),
+            'updated_at' => $value('updated_at'),
+        ];
     }
 
     public static function runWorker(PDO $db, array $config, int $limit = 5): array
@@ -500,6 +528,70 @@ final class GtrotsSpvService
             if (self::isRomanianWorkingDay($cursor)) $remaining--;
         }
         return $cursor->format('Y-m-d');
+    }
+
+    /**
+     * Builds the current operational reminder for one unsent invoice.
+     *
+     * Before the legal due date we only warn for invoices which do not have a
+     * usable automatic submission scheduled. On the due date (and afterwards)
+     * every still-unsent invoice is surfaced, even if an automation exists.
+     */
+    public static function deadlineNotification(array $invoice, ?string $today = null): ?array
+    {
+        $invoiceId = trim((string)($invoice['id'] ?? ''));
+        $issueDate = trim((string)($invoice['issue_date'] ?? ''));
+        if ($invoiceId === '' || $issueDate === '') return null;
+
+        $today = substr(trim((string)($today ?: date('Y-m-d'))), 0, 10);
+        $deadline = self::addWorkingDays($issueDate, self::LEGAL_WORKING_DAYS);
+        $remaining = self::workingDaysBetween($today, $deadline);
+        // A due date that ended on Friday is already overdue during the
+        // weekend, even though no additional working day has elapsed yet.
+        if ($today > $deadline && $remaining === 0) $remaining = -1;
+        if ($remaining > 2) return null;
+
+        $jobStatus = strtolower(trim((string)($invoice['outbox_status'] ?? '')));
+        $mode = strtolower(trim((string)($invoice['mode_snapshot'] ?? 'manual')));
+        $scheduledAt = trim((string)($invoice['scheduled_at'] ?? ''));
+        $nextAttemptAt = trim((string)($invoice['next_attempt_at'] ?? ''));
+        $effectiveAt = $nextAttemptAt !== '' ? $nextAttemptAt : $scheduledAt;
+        $hasAutomaticSchedule = $mode !== 'manual' && (
+            in_array($jobStatus, ['processing', 'uploading'], true)
+            || (in_array($jobStatus, ['scheduled', 'queued', 'retry'], true)
+                && $effectiveAt !== ''
+                && substr($effectiveAt, 0, 10) >= $today)
+        );
+
+        if ($remaining > 0 && $hasAutomaticSchedule) return null;
+
+        $label = self::invoiceLabel($invoice);
+        if ($remaining < 0) {
+            $body = 'Termenul de încărcare în SPV pentru factura ' . $label . ' a fost depășit.';
+            $severity = 'error';
+            $bucket = 'overdue';
+        } elseif ($remaining === 0) {
+            $body = 'Astăzi este ultima zi pentru încărcarea facturii ' . $label . ' în SPV.';
+            $severity = 'warning';
+            $bucket = '0';
+        } elseif ($remaining === 1) {
+            $body = 'Factura ' . $label . ' nu are trimiterea programată. Mai ai o zi lucrătoare să o încarci în SPV.';
+            $severity = 'warning';
+            $bucket = '1';
+        } else {
+            $body = 'Factura ' . $label . ' nu are trimiterea programată. Mai ai 2 zile lucrătoare să o încarci în SPV.';
+            $severity = 'warning';
+            $bucket = '2';
+        }
+
+        return [
+            'title' => 'Termen SPV · ' . $label,
+            'body' => $body,
+            'severity' => $severity,
+            'bucket' => $bucket,
+            'deadline' => $deadline,
+            'remaining_working_days' => $remaining,
+        ];
     }
 
     private static function processInvoice(PDO $db, array $config, string $invoiceId): void
@@ -654,16 +746,25 @@ final class GtrotsSpvService
         $settings = self::settings($db);
         if (empty($settings['reminders_enabled'])) return;
         try {
-            $rows = $db->query("SELECT id,series,invoice_number,issue_date,invoice_type FROM shop_invoices WHERE spv_status <> 'sent' AND issue_date >= DATE_SUB(CURRENT_DATE, INTERVAL 45 DAY) ORDER BY issue_date ASC LIMIT 500")->fetchAll();
+            $rows = $db->query("SELECT i.id,i.series,i.invoice_number,i.issue_date,i.invoice_type,
+                    o.status AS outbox_status,o.mode_snapshot,o.scheduled_at,o.next_attempt_at
+                FROM shop_invoices i
+                LEFT JOIN shop_spv_outbox o ON o.invoice_id=i.id
+                WHERE i.spv_status <> 'sent'
+                ORDER BY i.issue_date ASC,i.issued_at ASC,i.id ASC
+                LIMIT 500")->fetchAll();
             foreach ($rows as $invoice) {
-                $deadline = self::addWorkingDays((string)$invoice['issue_date'], self::LEGAL_WORKING_DAYS);
-                $remaining = self::workingDaysBetween(date('Y-m-d'), $deadline);
-                if ($remaining > 2) continue;
-                $bucket = $remaining < 0 ? 'overdue' : (string)$remaining;
-                $label = self::invoiceLabel($invoice);
-                $body = $remaining < 0 ? 'Termenul legal calculat a fost depășit.' : ($remaining === 0 ? 'Termenul legal este astăzi.' : 'Mai sunt ' . $remaining . ' zile lucrătoare până la termenul legal.');
-                self::notify($db, 'spv_deadline', 'SPV · ' . $label, $body, 'invoice', (string)$invoice['id'], $remaining < 0 ? 'error' : 'warning', 'spv-deadline:' . (string)$invoice['id'] . ':' . $bucket);
+                $invoiceId = (string)$invoice['id'];
+                $notice = self::deadlineNotification($invoice);
+                if (!$notice) {
+                    $db->prepare("DELETE FROM shop_notifications WHERE notification_type='spv_deadline' AND entity_type='invoice' AND entity_id=?")->execute([$invoiceId]);
+                    continue;
+                }
+                $dedupe = 'spv-deadline:' . $invoiceId . ':' . (string)$notice['bucket'];
+                $db->prepare("DELETE FROM shop_notifications WHERE notification_type='spv_deadline' AND entity_type='invoice' AND entity_id=? AND dedupe_key<>?")->execute([$invoiceId, $dedupe]);
+                self::notify($db, 'spv_deadline', (string)$notice['title'], (string)$notice['body'], 'invoice', $invoiceId, (string)$notice['severity'], $dedupe);
             }
+            $db->exec("DELETE FROM shop_notifications WHERE notification_type='spv_deadline' AND NOT EXISTS (SELECT 1 FROM shop_invoices i WHERE i.id=shop_notifications.entity_id AND i.spv_status<>'sent')");
         } catch (Throwable $ignored) { }
     }
 

@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,400;8..144,500;8..144,600;8..144,700;8..144,800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="urmarire-comanda.css?v=20260904-return-v2">
+  <link rel="stylesheet" href="urmarire-comanda.css?v=20260905-return-v3">
 </head>
 <body>
   <div class="tracking-ambient" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -65,12 +65,12 @@
       <p>După trimitere, cererea va fi înregistrată imediat. Costul returului prin curier va fi scăzut din suma restituită.</p>
       <label for="return-reason">Motivul returului <b>*</b></label>
       <textarea id="return-reason" maxlength="1000" rows="4" placeholder="De exemplu: produsul nu corespunde nevoilor mele..." required></textarea>
-      <div class="return-fields"><label for="return-holder">Titularul contului <b>*</b><input id="return-holder" maxlength="180" autocomplete="name" placeholder="Nume și prenume"></label><label for="return-iban">IBAN pentru rambursare <b>*</b><input id="return-iban" maxlength="40" autocomplete="off" placeholder="RO..."></label></div>
+      <div class="return-fields"><label for="return-holder">Titularul contului <b>*</b><input id="return-holder" maxlength="180" autocomplete="name" placeholder="Nume și prenume"></label><label for="return-iban">IBAN pentru rambursare <b>*</b><input id="return-iban" maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="return-iban-feedback" placeholder="RO49 AAAA 1B31 0075 9384 0000"><small id="return-iban-feedback" class="return-field-feedback">IBAN-ul este verificat înainte de trimitere.</small></label></div>
       <div class="return-estimate"><span>Cost retur curier <b id="return-cost">0,00 RON</b></span><span>Estimare restituire <strong id="return-refund">0,00 RON</strong></span></div>
       <span id="return-error" class="return-error" role="alert"></span>
       <div class="return-actions"><button type="button" data-return-close>Renunță</button><button id="return-confirm" type="button">Trimite solicitarea</button></div>
     </section>
   </div>
-<script src="urmarire-comanda.js?v=20260904-return-v2" defer></script>
+<script src="urmarire-comanda.js?v=20260905-return-v3" defer></script>
 </body>
 </html>

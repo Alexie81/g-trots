@@ -102,6 +102,8 @@ import {
   ShopManufacturerPayload,
 } from '@/services/shopApi';
 
+import ShopRegistryExportButton from '@/components/ShopRegistryExportButton';
+
 type CatalogView = 'categories' | 'brands' | 'manufacturers';
 type SettingsView = 'sources' | 'suppliers' | 'nirs' | 'invoices' | 'invoice-configurator' | 'automations' | 'spv' | 'payments' | 'shipping' | 'customers' | 'discounts' | 'company';
 type PrimaryTab = 'home' | 'orders' | 'products' | 'inventory' | 'more';
@@ -223,6 +225,7 @@ function compactDashboardSnapshot(data: ShopDashboardStats): ShopDashboardStats 
     daily_stats: chartRows.map((row) => ({
       date: row.date,
       orders_count: row.orders_count,
+      collected_revenue: row.collected_revenue,
       gross_revenue: row.gross_revenue,
       returns_count: row.returns_count,
       returns_total: row.returns_total,
@@ -895,7 +898,7 @@ export default function ShopModuleScreen() {
             })}</Pressable></Animated.View></Pressable></Modal>
             {dashboardLoading ? <View style={styles.analyticsLoading}><ActivityIndicator color="#8AB4F8" /><Text style={styles.dashboardLoadingText}>Se actualizează...</Text></View> : <>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.metricPills}>
-                <DashboardMetric title="Vânzări nete" value={compactShopMoney(dashboard?.revenue || 0)} color="#8AB4F8" selected={dashboardSeries.includes('revenue')} onPress={() => toggleDashboardSeries('revenue')} />
+                <DashboardMetric title="Încasări" value={compactShopMoney(dashboard?.revenue || 0)} color="#8AB4F8" selected={dashboardSeries.includes('revenue')} onPress={() => toggleDashboardSeries('revenue')} />
                 <DashboardMetric title={`Retururi · ${dashboard?.returns_count || 0}`} value={compactShopMoney(dashboard?.returns_total || 0)} color="#F472B6" selected={dashboardSeries.includes('returns')} onPress={() => toggleDashboardSeries('returns')} />
                 <DashboardMetric title="Comenzi" value={String(dashboard?.orders_count || 0)} color="#F28B82" selected={dashboardSeries.includes('orders')} onPress={() => toggleDashboardSeries('orders')} />
                 <DashboardMetric title="Achiziții" value={compactShopMoney(dashboard?.acquisitions || 0)} color="#FDD663" selected={dashboardSeries.includes('acquisitions')} onPress={() => toggleDashboardSeries('acquisitions')} />
@@ -1141,13 +1144,16 @@ export default function ShopModuleScreen() {
         )}
       </ScrollView>
 
+      <View style={{ position: 'absolute', right: 22, bottom: 86 + insets.bottom, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
       <TouchableOpacity
-        style={[styles.fab, { bottom: 86 + insets.bottom }]}
+        style={[styles.fab, { position: 'relative', right: 0 }]}
         activeOpacity={0.82}
         accessibilityLabel={isCategories ? 'Adauga categorie' : isBrands ? 'Adauga compatibilitate brand' : 'Adauga producator'}
         onPress={() => isCategories ? openCategoryForm() : isBrands ? openBrandForm() : openManufacturerForm()}>
         <Plus size={28} color={Colors.white} strokeWidth={2.6} />
       </TouchableOpacity>
+      <ShopRegistryExportButton key={view} kind={isCategories ? 'categories' : isBrands ? 'brands' : 'manufacturers'} total={viewCount} />
+      </View>
 
       <ShopBottomNavigation activeTab="more" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
 
@@ -1502,7 +1508,7 @@ function DashboardTrendChart({ rows, selected, granularity, dismissRef, scrollGe
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const gestureStartX = useSharedValue(0);
   const gestureStartY = useSharedValue(0);
-  const safeRows = useMemo(() => rows.length ? rows : Array.from({ length: 7 }, (_, index) => ({ date: `2000-01-${String(index + 1).padStart(2, '0')}`, gross_revenue: 0, returns_count: 0, returns_total: 0, revenue: 0, orders_count: 0, acquisitions: 0, cost_of_goods_sold: 0, profit: 0 })), [rows]);
+  const safeRows = useMemo(() => rows.length ? rows : Array.from({ length: 7 }, (_, index) => ({ date: `2000-01-${String(index + 1).padStart(2, '0')}`, collected_revenue: 0, gross_revenue: 0, returns_count: 0, returns_total: 0, revenue: 0, orders_count: 0, acquisitions: 0, cost_of_goods_sold: 0, profit: 0 })), [rows]);
   const chartValues = useMemo(() => ({
     revenue: safeRows.map((row) => Number(row.revenue || 0)),
     returns: safeRows.map((row) => Number(row.returns_total || 0)),
@@ -1577,7 +1583,7 @@ function DashboardTrendChart({ rows, selected, granularity, dismissRef, scrollGe
     return () => { if (dismissRef.current === dismiss) dismissRef.current = null; };
   }, [dismissRef]);
   const allTooltipRows: { key: DashboardSeriesKey; label: string; color: string; value: string }[] = selectedRow ? [
-    { key: 'revenue', label: 'Vânzări nete', color: '#8AB4F8', value: formatShopMoney(Number(selectedRow.revenue || 0)) },
+    { key: 'revenue', label: 'Încasări', color: '#8AB4F8', value: formatShopMoney(Number(selectedRow.revenue || 0)) },
     { key: 'returns', label: `Retururi (${Number(selectedRow.returns_count || 0)})`, color: '#F472B6', value: formatShopMoney(Number(selectedRow.returns_total || 0)) },
     { key: 'orders', label: 'Comenzi', color: '#F28B82', value: String(Number(selectedRow.orders_count || 0)) },
     { key: 'acquisitions', label: 'Achiziții', color: '#FDD663', value: formatShopMoney(Number(selectedRow.acquisitions || 0)) },
@@ -1634,7 +1640,7 @@ const MobileProfitMargin = React.memo(function MobileProfitMargin({ revenue, cos
     <View style={styles.mobileMarginHeader}><View><Text style={styles.mobileMarginKicker}>REZULTAT · PERIOADA ALEASĂ</Text><Text style={styles.mobileMarginTitle}>Marjă de profit</Text></View><Text style={styles.mobileMarginHint}>Apasă inelul</Text></View>
     <TouchableOpacity style={styles.mobileMarginRing} activeOpacity={0.82} onPress={() => setShowValue((value) => !value)}>
       <Svg width={142} height={142} viewBox="0 0 142 142" style={styles.mobileMarginSvg}><Circle cx="71" cy="71" r={radius} fill="none" stroke="#FFFFFF12" strokeWidth="12" /><AnimatedSvgCircle cx="71" cy="71" r={radius} fill="none" stroke="#34A853" strokeWidth="12" strokeLinecap="round" strokeDasharray={`${circumference} ${circumference}`} strokeDashoffset={motion.interpolate({ inputRange: [0, 1], outputRange: [circumference, 0] })} /></Svg>
-      <View style={styles.mobileMarginCenter}><Text numberOfLines={1} adjustsFontSizeToFit style={[styles.mobileMarginPercent, showValue && styles.mobileMarginMoney]}>{showValue ? compactShopMoney(profit) : `${margin.toFixed(0)}%`}</Text><Text style={styles.mobileMarginCaption}>{showValue ? 'profit în perioadă' : 'din vânzări'}</Text></View>
+      <View style={styles.mobileMarginCenter}><Text numberOfLines={1} adjustsFontSizeToFit style={[styles.mobileMarginPercent, showValue && styles.mobileMarginMoney]}>{showValue ? compactShopMoney(profit) : `${margin.toFixed(0)}%`}</Text><Text style={styles.mobileMarginCaption}>{showValue ? 'profit în perioadă' : 'din încasări'}</Text></View>
     </TouchableOpacity>
     <View style={styles.mobileMarginValues}><View style={styles.mobileMarginValueBox}><View style={[styles.mobileMarginDot, { backgroundColor: '#34A853' }]} /><Text style={styles.mobileMarginValueLabel}>Profit</Text><Text style={styles.mobileMarginValue}>{formatShopMoney(profit)}</Text></View><View style={styles.mobileMarginValueBox}><View style={[styles.mobileMarginDot, { backgroundColor: '#F9AB00' }]} /><Text style={styles.mobileMarginValueLabel}>Cost marfă FIFO</Text><Text style={styles.mobileMarginValue}>{formatShopMoney(costOfGoodsSold)}</Text></View></View>
   </View>;

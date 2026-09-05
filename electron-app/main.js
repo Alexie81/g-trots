@@ -9,6 +9,7 @@ let whatsappWindow = null;
 let updateCheckInFlight = false;
 let updateDownloadInFlight = false;
 let updateCheckTimer = null;
+const updateStartupTimers = [];
 const updateState = {
   status: 'idle',
   currentVersion: app.getVersion(),
@@ -478,6 +479,16 @@ function setupAutoUpdater() {
   });
 }
 
+function runAutomaticUpdateCheck(source = 'periodic') {
+  if (!app.isPackaged || updateCheckInFlight || updateDownloadInFlight) return;
+  if (['available', 'downloading', 'downloaded', 'installing'].includes(updateState.status)) return;
+  updateCheckInFlight = true;
+  autoUpdater.checkForUpdates().catch((error) => {
+    updateCheckInFlight = false;
+    log.warn(`[G-Trots updater ${source} check]`, error?.message || error);
+  });
+}
+
 ipcMain.handle('app-update:get-state', () => ({ ...updateState, currentVersion: app.getVersion() }));
 
 ipcMain.handle('app-update:check', async () => {
@@ -545,27 +556,20 @@ app.whenReady().then(() => {
   setupAutoUpdater();
   createWindow();
   if (app.isPackaged) {
-    setTimeout(() => {
-      if (!updateCheckInFlight && updateState.status === 'idle') {
-        updateCheckInFlight = true;
-        autoUpdater.checkForUpdates().catch((error) => {
-          updateCheckInFlight = false;
-          log.warn('[G-Trots updater startup check]', error?.message || error);
-        });
-      }
-    }, 4000);
+    // GitHub poate servi pentru câteva secunde metadatele vechi imediat după
+    // publicarea unui release. Verificările scurte de după pornire elimină
+    // dependența de butonul manual fără a întrerupe activitatea utilizatorului.
+    [4000, 25000, 90000].forEach((delay, index) => {
+      updateStartupTimers.push(setTimeout(() => runAutomaticUpdateCheck(`startup-${index + 1}`), delay));
+    });
     updateCheckTimer = setInterval(() => {
-      if (updateCheckInFlight || updateDownloadInFlight || updateState.status === 'downloading') return;
-      updateCheckInFlight = true;
-      autoUpdater.checkForUpdates().catch((error) => {
-        updateCheckInFlight = false;
-        log.warn('[G-Trots updater periodic check]', error?.message || error);
-      });
-    }, 30 * 60 * 1000);
+      runAutomaticUpdateCheck('periodic');
+    }, 5 * 60 * 1000);
   }
 });
 app.on('window-all-closed', () => {
   if (updateCheckTimer) clearInterval(updateCheckTimer);
+  updateStartupTimers.splice(0).forEach(timer => clearTimeout(timer));
   if (process.platform !== 'darwin') app.quit();
 });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

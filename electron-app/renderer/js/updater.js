@@ -45,6 +45,7 @@
   };
   let installTriggered = false;
   let updateWasOffered = false;
+  let automaticOfferShown = false;
 
   const statusLabels = {
     idle: 'Pregatit',
@@ -226,6 +227,11 @@
     window.dispatchEvent(new CustomEvent('app-update-state-change', {
       detail: { ...currentState },
     }));
+
+    if (currentState.status === 'downloaded' && !automaticOfferShown) {
+      automaticOfferShown = true;
+      requestAnimationFrame(showModal);
+    }
 
   }
 

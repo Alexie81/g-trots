@@ -623,6 +623,7 @@ export default function ShopModuleScreen() {
   const openShopNotification = (item: ShopNotification) => {
     if (item.entity_type === 'order' && item.entity_id) openOrders('all', item.entity_id);
     else if (item.entity_type === 'invoice' && item.entity_id) openInvoiceFromOrder(item.entity_id);
+    else if (item.entity_type === 'spv') setView('spv');
   };
   const notificationButton = <ShopNotificationsButton onOpenEntity={openShopNotification} />;
 

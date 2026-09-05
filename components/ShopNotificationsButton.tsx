@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Bell, CheckCheck, ChevronRight, FileText, RotateCcw, ShoppingCart, Trash2, TriangleAlert, X } from 'lucide-react-native';
+import { Bell, CheckCheck, ChevronRight, FileText, KeyRound, RotateCcw, ShoppingCart, Trash2, TriangleAlert, X } from 'lucide-react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   cancelAnimation,
@@ -39,6 +39,7 @@ function NoticeIcon({ item }: { item: ShopNotification }) {
   const color = tone(item);
   if (item.notification_type === 'new_order') return <ShoppingCart size={19} color={color} />;
   if (item.notification_type === 'return_requested') return <RotateCcw size={19} color={color} />;
+  if (item.notification_type === 'spv_token_expiry') return <KeyRound size={19} color={color} />;
   if (item.entity_type === 'invoice') return <FileText size={19} color={color} />;
   return <TriangleAlert size={19} color={color} />;
 }

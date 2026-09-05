@@ -236,7 +236,7 @@
     if (['success', 'warning', 'error', 'info'].includes(explicit)) return explicit;
     const type = shopNotificationType(item);
     if (type === 'new_order') return 'success';
-    if (type === 'return_requested' || type === 'spv_deadline') return 'warning';
+    if (type === 'return_requested' || type === 'spv_deadline' || type === 'spv_token_expiry') return 'warning';
     if (type === 'order_cancelled' || type === 'spv_error' || type === 'spv_rejected') return 'error';
     return 'info';
   }
@@ -247,6 +247,7 @@
       return_requested: '<svg viewBox="0 0 24 24"><path d="M9 7H5v-4"/><path d="M5 7a8 8 0 1 1-1 8"/><path d="m5 7 4-4"/></svg>',
       order_cancelled: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m9 9 6 6m0-6-6 6"/></svg>',
       spv_deadline: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>',
+      spv_token_expiry: '<svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9m-4 4 3 3m-6 0 3 3"/></svg>',
       spv_error: '<svg viewBox="0 0 24 24"><path d="m12 3 9 17H3L12 3Z"/><path d="M12 9v5m0 3h.01"/></svg>',
       spv_rejected: '<svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="m9 9 6 6m0-6-6 6"/></svg>',
     };
@@ -312,6 +313,10 @@
         window.setTimeout(() => {
           button.remove();
           closeMenus();
+          if (item.entity_type === 'spv') {
+            window.switchTab?.('shop-spv');
+            return;
+          }
           const entityType = item.entity_type === 'invoice' ? 'invoice' : 'order';
           window.switchTab?.(entityType === 'invoice' ? 'shop-invoices' : 'shop-orders');
           window.setTimeout(() => window.dispatchEvent(new CustomEvent('shop-open-entity', { detail: { type: entityType, id: item.entity_id } })), 120);

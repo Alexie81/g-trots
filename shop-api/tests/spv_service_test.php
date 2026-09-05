@@ -93,6 +93,32 @@ $missedScheduleReminder = GtrotsSpvService::deadlineNotification([
 ], '2026-09-10');
 spvAssert(($missedScheduleReminder['bucket'] ?? '') === '1', 'O programare automată depășită fără trimitere trebuie tratată ca neacoperită.');
 
+$tokenConnection = ['status' => 'connected', 'refresh_token_cipher' => 'encrypted', 'refresh_expires_at' => '2026-09-08 14:00:00'];
+$tokenThreeDays = GtrotsSpvService::tokenExpiryNotification($tokenConnection, '2026-09-05 09:00:00');
+spvAssert(($tokenThreeDays['bucket'] ?? '') === '3' && ($tokenThreeDays['severity'] ?? '') === 'warning', 'Tokenul SPV trebuie avertizat cu 3 zile înainte.');
+$tokenTwoDays = GtrotsSpvService::tokenExpiryNotification($tokenConnection, '2026-09-06 09:00:00');
+spvAssert(($tokenTwoDays['bucket'] ?? '') === '2', 'Tokenul SPV trebuie avertizat cu 2 zile înainte.');
+$tokenOneDay = GtrotsSpvService::tokenExpiryNotification($tokenConnection, '2026-09-07 09:00:00');
+spvAssert(($tokenOneDay['bucket'] ?? '') === '1' && str_contains((string)($tokenOneDay['title'] ?? ''), 'o zi'), 'Tokenul SPV trebuie avertizat cu o zi înainte.');
+$tokenExpired = GtrotsSpvService::tokenExpiryNotification($tokenConnection, '2026-09-08 14:00:01');
+spvAssert(($tokenExpired['bucket'] ?? '') === 'expired' && ($tokenExpired['severity'] ?? '') === 'error', 'Expirarea tokenului SPV trebuie notificată ca eroare.');
+$tokenTooEarly = GtrotsSpvService::tokenExpiryNotification($tokenConnection, '2026-09-04 09:00:00');
+spvAssert($tokenTooEarly === null, 'Alerta tokenului SPV nu trebuie creată mai devreme de 3 zile.');
+$tokenDisconnected = GtrotsSpvService::tokenExpiryNotification(array_merge($tokenConnection, ['status' => 'disconnected']), '2026-09-07 09:00:00');
+spvAssert($tokenDisconnected === null, 'O conexiune SPV deconectată explicit nu trebuie să genereze alertă de token.');
+
+$liveTokenExpiry = (new DateTimeImmutable('now', new DateTimeZone('Europe/Bucharest')))->modify('+3 days')->setTime(23, 59, 59)->format('Y-m-d H:i:s');
+$db->prepare("UPDATE shop_spv_connections SET status='connected', refresh_token_cipher='encrypted-placeholder', refresh_expires_at=? WHERE id=1")->execute([$liveTokenExpiry]);
+GtrotsSpvService::notificationSummary($db);
+spvAssert((int)$db->query("SELECT COUNT(*) FROM shop_notifications WHERE notification_type='spv_token_expiry'")->fetchColumn() === 1, 'Sincronizarea trebuie să creeze o singură alertă pentru pragul curent al tokenului.');
+$tokenNotice = $db->query("SELECT * FROM shop_notifications WHERE notification_type='spv_token_expiry' LIMIT 1")->fetch();
+spvAssert(($tokenNotice['entity_type'] ?? '') === 'spv' && ($tokenNotice['entity_id'] ?? '') === 'connection', 'Alerta tokenului trebuie să deschidă direct configurarea SPV.');
+GtrotsSpvService::notificationSummary($db);
+spvAssert((int)$db->query("SELECT COUNT(*) FROM shop_notifications WHERE notification_type='spv_token_expiry'")->fetchColumn() === 1, 'Pragul tokenului trebuie deduplicat la verificări repetate.');
+$db->exec("UPDATE shop_spv_connections SET refresh_expires_at='2030-01-01 00:00:00' WHERE id=1");
+GtrotsSpvService::notificationSummary($db);
+spvAssert((int)$db->query("SELECT COUNT(*) FROM shop_notifications WHERE notification_type='spv_token_expiry'")->fetchColumn() === 0, 'Alerta veche trebuie eliminată după reînnoirea tokenului.');
+
 $db->exec("INSERT INTO shop_notifications (id,notification_type,title,body,entity_type,entity_id,severity,dedupe_key) VALUES ('notice-1','new_order','Comandă nouă','Test','order','order-1','success','test:1')");
 $marked = GtrotsSpvService::markNotification($db, 'notice-1');
 spvAssert(($marked['unread_count'] ?? -1) === 0, 'Notificarea citită trebuie eliminată din contor.');

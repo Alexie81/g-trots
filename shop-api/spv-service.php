@@ -692,6 +692,54 @@ final class GtrotsSpvService
         ];
     }
 
+    /**
+     * Avertizează expirarea refresh tokenului, adică tokenul care păstrează
+     * conexiunea SPV utilizabilă fără o nouă autentificare cu certificatul.
+     * Access tokenul nu produce alerte deoarece este reînnoit automat.
+     */
+    public static function tokenExpiryNotification(array $connection, ?string $now = null): ?array
+    {
+        $status = mb_strtolower(trim((string)($connection['status'] ?? '')), 'UTF-8');
+        $cipher = trim((string)($connection['refresh_token_cipher'] ?? ''));
+        $rawExpiry = trim((string)($connection['refresh_expires_at'] ?? ''));
+        if (!in_array($status, ['connected', 'error'], true) || $cipher === '' || $rawExpiry === '') return null;
+
+        $timezone = new DateTimeZone('Europe/Bucharest');
+        try {
+            $current = new DateTimeImmutable($now ?: 'now', $timezone);
+            $expiry = new DateTimeImmutable($rawExpiry, $timezone);
+        } catch (Throwable $ignored) {
+            return null;
+        }
+        $expiryLabel = $expiry->format('d.m.Y, H:i');
+        if ($expiry <= $current) {
+            return [
+                'title' => 'SPV · token ANAF expirat',
+                'body' => 'Tokenul de reînnoire ANAF a expirat la ' . $expiryLabel . '. Reconectează certificatul pentru a relua transmiterea în SPV.',
+                'severity' => 'error',
+                'bucket' => 'expired',
+                'expires_at' => $rawExpiry,
+            ];
+        }
+
+        $today = $current->setTime(0, 0);
+        $expiryDay = $expiry->setTime(0, 0);
+        $remaining = (int)$today->diff($expiryDay)->format('%r%a');
+        if ($remaining > 3) return null;
+        // În ziua expirării păstrăm avertizarea de o zi până la ora exactă;
+        // imediat după acea oră ea este înlocuită de alerta de expirare.
+        $days = max(1, $remaining);
+        $dayLabel = $days === 1 ? 'o zi' : $days . ' zile';
+        return [
+            'title' => 'SPV · tokenul expiră în ' . $dayLabel,
+            'body' => 'Tokenul de reînnoire ANAF expiră la ' . $expiryLabel . '. Reconectează certificatul din configurarea SPV pentru a evita întreruperea automatizărilor.',
+            'severity' => 'warning',
+            'bucket' => (string)$days,
+            'expires_at' => $rawExpiry,
+            'remaining_calendar_days' => $remaining,
+        ];
+    }
+
     private static function assertTestEnvironment(PDO $db, array $config): void
     {
         $status = self::status($db, $config);
@@ -927,6 +975,19 @@ final class GtrotsSpvService
                 if ($status === 'new') self::notify($db, 'new_order', 'Comandă nouă · ' . $number, $client . ' · ' . number_format((float)$order['total'], 2, ',', '.') . ' ' . (string)$order['currency'], 'order', (string)$order['id'], 'success', 'order-new:' . (string)$order['id']);
                 elseif ($status === 'return_requested') self::notify($db, 'return_requested', 'Retur solicitat · ' . $number, $client . ' a trimis o solicitare de retur.', 'order', (string)$order['id'], 'warning', 'order-return:' . (string)$order['id']);
                 elseif ($status === 'cancelled') self::notify($db, 'order_cancelled', 'Comandă anulată · ' . $number, 'Comanda a fost anulată și regulile fiscale au fost aplicate.', 'order', (string)$order['id'], 'error', 'order-cancelled:' . (string)$order['id']);
+            }
+        } catch (Throwable $ignored) { }
+
+        try {
+            $connection = self::connectionRow($db);
+            $notice = self::tokenExpiryNotification($connection);
+            if (!$notice) {
+                $db->exec("DELETE FROM shop_notifications WHERE notification_type='spv_token_expiry'");
+            } else {
+                $expiryKey = preg_replace('/[^0-9]/', '', (string)$notice['expires_at']) ?: 'unknown';
+                $dedupe = 'spv-token-expiry:' . $expiryKey . ':' . (string)$notice['bucket'];
+                $db->prepare("DELETE FROM shop_notifications WHERE notification_type='spv_token_expiry' AND dedupe_key<>?")->execute([$dedupe]);
+                self::notify($db, 'spv_token_expiry', (string)$notice['title'], (string)$notice['body'], 'spv', 'connection', (string)$notice['severity'], $dedupe);
             }
         } catch (Throwable $ignored) { }
 

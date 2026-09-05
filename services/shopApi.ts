@@ -803,7 +803,7 @@ export type ShopSpvDiagnostics = {
 };
 export type ShopNotification = {
   id: string;
-  notification_type: 'new_order' | 'return_requested' | 'order_cancelled' | 'spv_deadline' | 'spv_error' | 'spv_rejected' | string;
+  notification_type: 'new_order' | 'return_requested' | 'order_cancelled' | 'spv_deadline' | 'spv_token_expiry' | 'spv_error' | 'spv_rejected' | string;
   title: string;
   body: string;
   entity_type: 'order' | 'invoice' | string;

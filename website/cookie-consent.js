@@ -68,7 +68,7 @@
 
   function open(customize = false) {
     document.querySelector('.gt-cookie-layer')?.remove();
-    const state = choice || normalize({});
+    const state = choice || normalize({ preferences: true, analytics: true, marketing: true });
     const layer = document.createElement('div');
     layer.className = 'gt-cookie-layer';
     layer.innerHTML = `<section class="gt-cookie-card" role="dialog" aria-modal="true" aria-labelledby="gt-cookie-title">

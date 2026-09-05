@@ -31,7 +31,7 @@
   }
   loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260905-15' });
   if (!document.querySelector('script[src*="cookie-consent.js"]')) {
-    loadAsset('script', { src: '/cookie-consent.js?v=20260905-2', defer: true });
+    loadAsset('script', { src: '/cookie-consent.js?v=20260905-default-on-v1', defer: true });
   }
 
   function phoneHref(phone) {

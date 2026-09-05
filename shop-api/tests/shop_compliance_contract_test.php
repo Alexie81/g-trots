@@ -38,6 +38,8 @@ complianceCheck(str_contains($publicReturnHtml, 'Solicită chiar acum') && str_c
 complianceCheck(str_contains($storefront, 'hasMerchantReturnPolicy') && str_contains($storefront, 'shippingDetails'), 'Produsul trebuie să publice politica de retur și livrarea în datele structurate.');
 complianceCheck(str_contains($footer, "'@type': 'OnlineStore'") && str_contains($footer, 'hasMerchantReturnPolicy'), 'Magazinul trebuie să publice date structurate de organizație și retur.');
 complianceCheck(str_contains($cookies, 'g-trots:open-consent'), 'Preferințele cookie trebuie să poată fi redeschise din footer.');
+complianceCheck(str_contains($cookies, 'choice || normalize({ preferences: true, analytics: true, marketing: true })'), 'Categoriile opționale trebuie să pornească bifate vizual pentru o alegere nouă.');
+complianceCheck(str_contains($cookies, 'if (choice) apply(choice);'), 'Cookie-urile opționale nu trebuie aplicate înainte ca alegerea să fie salvată explicit.');
 
 $requiredPages = [
     'termeni-si-conditii.html', 'politica-de-retur.html', 'politica-de-confidentialitate.html',

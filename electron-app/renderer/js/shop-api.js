@@ -212,6 +212,8 @@
     getSpvConnection: () => call('getSpvConnection'),
     beginSpvOAuth: (environment = 'test') => call('beginSpvOAuth', json('POST', { environment })),
     testSpvConnection: () => call('testSpvConnection', json('POST', {})),
+    runSpvDiagnostics: () => call('runSpvDiagnostics', json('POST', {})),
+    pollSpvDiagnostics: (indexes) => call('pollSpvDiagnostics', json('POST', { indexes })),
     updateSpvSettings: (settings) => call('updateSpvSettings', json('PUT', settings)),
     disconnectSpv: () => call('disconnectSpv', json('POST', {})),
     sendInvoiceToSpv: (id) => call('sendInvoiceToSpv', json('POST', { invoice_id: id }), id),

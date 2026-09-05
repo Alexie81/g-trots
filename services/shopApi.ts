@@ -783,6 +783,24 @@ export type ShopSpvConnection = {
   legal_deadline_working_days: number;
   token_policy: { access_days: number; refresh_days: number; automatic_refresh: boolean };
 };
+export type ShopSpvDiagnosticDocument = {
+  kind: 'invoice_380' | 'credit_note_381';
+  document_id: string;
+  ubl_valid: boolean;
+  validator_state: string;
+  upload_index: string;
+  state: 'processing' | 'accepted' | 'rejected';
+  terminal: boolean;
+  download_id?: string | null;
+  message?: string;
+};
+export type ShopSpvDiagnostics = {
+  environment: 'test';
+  isolated: true;
+  fiscal_effect?: false;
+  connection?: { connected: boolean; certificate_hint: string; last_tested_at: string | null };
+  documents: ShopSpvDiagnosticDocument[];
+};
 export type ShopNotification = {
   id: string;
   notification_type: 'new_order' | 'return_requested' | 'order_cancelled' | 'spv_deadline' | 'spv_error' | 'spv_rejected' | string;
@@ -1429,6 +1447,8 @@ export const shopApi = {
   getSpvConnection: (token: string) => shopCall<ShopSpvConnection>('getSpvConnection', token),
   beginSpvOAuth: (token: string) => shopCall<{ authorization_url: string; expires_at: string; environment: 'test' | 'production' }>('beginSpvOAuth', token, { method: 'POST', body: '{}' }),
   testSpvConnection: (token: string) => shopCall<ShopSpvConnection>('testSpvConnection', token, { method: 'POST', body: '{}' }),
+  runSpvDiagnostics: (token: string) => shopCall<ShopSpvDiagnostics>('runSpvDiagnostics', token, { method: 'POST', body: '{}' }),
+  pollSpvDiagnostics: (token: string, indexes: string[]) => shopCall<ShopSpvDiagnostics>('pollSpvDiagnostics', token, { method: 'POST', body: JSON.stringify({ indexes }) }),
   updateSpvSettings: (token: string, payload: ShopSpvSettings) => shopCall<ShopSpvConnection>('updateSpvSettings', token, { method: 'PUT', body: JSON.stringify(payload) }),
   disconnectSpv: (token: string) => shopCall<ShopSpvConnection>('disconnectSpv', token, { method: 'POST', body: '{}' }),
   sendInvoiceToSpv: (token: string, id: string) => shopCall<{ invoice: ShopIssuedInvoice; job?: { status?: string; last_error?: string } }>('sendInvoiceToSpv', token, { method: 'POST', body: JSON.stringify({ invoice_id: id }) }, id),

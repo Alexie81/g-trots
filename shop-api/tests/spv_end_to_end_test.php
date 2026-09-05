@@ -45,8 +45,8 @@ $db->exec('CREATE TABLE shop_invoices (
     series TEXT, invoice_number TEXT
 )');
 $db->exec('CREATE TABLE shop_orders (id TEXT PRIMARY KEY, order_number TEXT, status TEXT, customer_name TEXT, company_name TEXT, total REAL, currency TEXT, created_at TEXT, return_requested_at TEXT, customer_cancelled_at TEXT)');
-$db->exec('CREATE TABLE shop_company_settings (id INTEGER PRIMARY KEY, cui TEXT, is_default INTEGER)');
-$db->exec("INSERT INTO shop_company_settings (id,cui,is_default) VALUES (1,'RO12345678',1)");
+$db->exec('CREATE TABLE shop_company_settings (id INTEGER PRIMARY KEY, legal_name TEXT, trade_name TEXT, cui TEXT, registration_number TEXT, address TEXT, city TEXT, county TEXT, postal_code TEXT, email TEXT, phone TEXT, bank_name TEXT, iban TEXT, share_capital TEXT, vat_payer INTEGER, vat_rate REAL, is_default INTEGER)');
+$db->exec("INSERT INTO shop_company_settings (id,legal_name,trade_name,cui,registration_number,address,city,county,postal_code,email,phone,bank_name,iban,share_capital,vat_payer,vat_rate,is_default) VALUES (1,'G-Trots Test SRL','G-Trots','RO12345678','J40/1/2026','Str. Test 1','Sector 1','Bucuresti','010101','test@example.test','0700000000','Banca Test','RO49AAAA1B31007593840000','200',1,19,1)");
 GtrotsSpvService::ensureSchema($db);
 
 $config = [
@@ -59,6 +59,8 @@ $config = [
     'anaf_oauth_test_url' => 'https://fake.anaf/test',
     'anaf_oauth_callback_url' => 'https://g-trots.ro/shop-api/anaf-oauth-callback.php',
     'anaf_efactura_test_url' => 'https://fake.anaf/test/FCTEL/rest',
+    'anaf_efactura_production_url' => 'https://fake.anaf/prod/FCTEL/rest',
+    'anaf_validation_enabled' => false,
 ];
 
 $scenario = 'accepted';
@@ -80,15 +82,16 @@ GtrotsSpvService::setHttpTransportForTests(static function (string $method, stri
     }
     if (str_contains($url, '/test') && !str_contains($url, '/FCTEL/')) return ['status' => 200, 'body' => 'Hello G-Trots'];
     if (str_contains($url, '/upload')) {
-        spvE2eAssert($method === 'POST' && str_contains($url, 'standard=UBL') && str_contains($url, 'cif=12345678'), 'Uploadul trebuie să folosească UBL și CIF-ul numeric.');
+        spvE2eAssert($method === 'POST' && (str_contains($url, 'standard=UBL') || str_contains($url, 'standard=CN')) && str_contains($url, 'cif=12345678'), 'Uploadul trebuie să folosească standardul documentului și CIF-ul numeric.');
+        if (str_contains((string)$body, '<CreditNote')) spvE2eAssert(str_contains($url, 'standard=CN'), 'Factura de corecție 381 trebuie încărcată cu standard=CN.');
         spvE2eAssert((bool)array_filter($headers, static fn(string $header): bool => str_starts_with($header, 'Authorization: Bearer ')), 'Uploadul trebuie autorizat Bearer.');
         if ($scenario === 'upload_error') return ['status' => 503, 'body' => 'temporarily unavailable'];
-        return ['status' => 200, 'body' => '<response><index_incarcare>UPLOAD-123</index_incarcare></response>'];
+        return ['status' => 200, 'body' => '<header ExecutionStatus="0" index_incarcare="UPLOAD-123"/>'];
     }
     if (str_contains($url, '/stareMesaj')) {
         return $scenario === 'rejected'
-            ? ['status' => 200, 'body' => '<response><stare>NOK</stare><mesaj>CIUS-RO invalid</mesaj></response>']
-            : ['status' => 200, 'body' => '<response><stare>OK</stare><id_descarcare>DOWNLOAD-456</id_descarcare></response>'];
+            ? ['status' => 200, 'body' => '<header stare="NOK"><Errors errorMessage="CIUS-RO invalid"/></header>']
+            : ['status' => 200, 'body' => '<header stare="OK" id_descarcare="DOWNLOAD-456"/>'];
     }
     if (str_contains($url, '/revoke')) return ['status' => 200, 'body' => '{}'];
     throw new RuntimeException('Apel ANAF neașteptat în test: ' . $url);
@@ -112,9 +115,25 @@ GtrotsSpvService::updateSettings($db, [
     'return_mode' => 'manual', 'return_delay_days' => 1, 'reminders_enabled' => true,
 ], 'Administrator', $config);
 
+$diagnostics = GtrotsSpvService::runTestDiagnostics($db, $config);
+spvE2eAssert(($diagnostics['environment'] ?? '') === 'test' && !empty($diagnostics['isolated']) && empty($diagnostics['fiscal_effect']), 'Diagnosticul trebuie limitat explicit la sandbox, fără efect fiscal.');
+spvE2eAssert(count((array)($diagnostics['documents'] ?? [])) === 2, 'Diagnosticul trebuie să încarce atât Invoice 380, cât și CreditNote 381.');
+spvE2eAssert(count(array_filter((array)$diagnostics['documents'], static fn(array $document): bool => ($document['state'] ?? '') === 'accepted')) === 2, 'Ambele documente sintetice trebuie să parcurgă uploadul și citirea statusului.');
+spvE2eAssert((int)$db->query('SELECT COUNT(*) FROM shop_invoices')->fetchColumn() === 0, 'Diagnosticul nu trebuie să creeze facturi fiscale locale.');
+$diagnosticUploads = array_values(array_filter($calls, static fn(array $call): bool => str_contains((string)$call['url'], '/upload')));
+spvE2eAssert(str_contains((string)$diagnosticUploads[0]['url'], 'standard=UBL') && str_contains((string)$diagnosticUploads[1]['url'], 'standard=CN'), 'Diagnosticul trebuie să trimită Invoice cu UBL și CreditNote cu CN.');
+
 $insert = $db->prepare('INSERT INTO shop_invoices (id,invoice_type,issue_date,issued_at,spv_status,series,invoice_number) VALUES (?,?,?,?,?,?,?)');
 $insert->execute(['invoice-accepted', 'invoice', '2026-09-04', '2026-09-04 12:00:00', 'not_sent', 'GT', '101']);
 GtrotsSpvService::enqueue($db, 'invoice-accepted', 'invoice');
+$sandboxBlocked = false;
+try { GtrotsSpvService::sendManual($db, $config, 'invoice-accepted'); }
+catch (InvalidArgumentException $expected) { $sandboxBlocked = str_contains($expected->getMessage(), 'facturile fiscale reale sunt protejate'); }
+spvE2eAssert($sandboxBlocked, 'Mediul Test nu trebuie să poată marca sau încărca o factură fiscală reală.');
+GtrotsSpvService::updateSettings($db, [
+    'environment' => 'production', 'invoice_mode' => 'on_issue', 'invoice_delay_days' => 1,
+    'return_mode' => 'manual', 'return_delay_days' => 1, 'reminders_enabled' => true,
+], 'Administrator', $config);
 $accepted = GtrotsSpvService::sendManual($db, $config, 'invoice-accepted');
 spvE2eAssert(($accepted['invoice']['spv_status'] ?? '') === 'sent', 'Acceptarea ANAF trebuie să marcheze factura drept trimisă.');
 spvE2eAssert(($accepted['job']['upload_index'] ?? '') === 'UPLOAD-123' && ($accepted['job']['download_id'] ?? '') === 'DOWNLOAD-456', 'Indicii ANAF trebuie păstrați pentru audit.');

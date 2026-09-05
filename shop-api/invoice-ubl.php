@@ -152,7 +152,9 @@ final class GtrotsInvoiceUbl
         $httpStatus = 0;
         if (function_exists('curl_init')) {
             $curl = curl_init($url);
-            curl_setopt_array($curl, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => $xml, CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_TIMEOUT => 25, CURLOPT_HTTPHEADER => ['Content-Type: text/plain; charset=UTF-8', 'Accept: application/json', 'User-Agent: G-Trots-RO-eFactura/1.0']]);
+            $curlOptions = [CURLOPT_POST => true, CURLOPT_POSTFIELDS => $xml, CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_TIMEOUT => 25, CURLOPT_HTTPHEADER => ['Content-Type: text/plain; charset=UTF-8', 'Accept: application/json', 'User-Agent: G-Trots-RO-eFactura/1.0']];
+            if (defined('CURLOPT_SSLVERSION')) $curlOptions[CURLOPT_SSLVERSION] = defined('CURL_SSLVERSION_TLSv1_2') ? CURL_SSLVERSION_TLSv1_2 : 6;
+            curl_setopt_array($curl, $curlOptions);
             $response = curl_exec($curl);
             $httpStatus = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
             $curlError = curl_error($curl);

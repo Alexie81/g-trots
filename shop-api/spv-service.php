@@ -274,6 +274,97 @@ final class GtrotsSpvService
         return self::status($db, $config);
     }
 
+    /**
+     * Runs a real, isolated round-trip against ANAF Test without touching a
+     * fiscal invoice, its number, stock, payment state or the production
+     * outbox. The generated TEST documents exist only in ANAF's sandbox.
+     */
+    public static function runTestDiagnostics(PDO $db, array $config): array
+    {
+        self::assertTestEnvironment($db, $config);
+        $connection = self::testConnection($db, $config);
+        $company = $db->query('SELECT * FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
+        $seller = self::diagnosticParty($company);
+        $cif = preg_replace('/\D+/', '', (string)($seller['cui'] ?? '')) ?: '';
+        if ($cif === '') throw new RuntimeException('Completează CUI-ul firmei înainte de testarea SPV.');
+
+        $stamp = date('YmdHis');
+        $vatRate = round(max(0.0, min(100.0, (float)($company['vat_rate'] ?? 19))), 2);
+        $gross = round(1 + $vatRate / 100, 2);
+        $base = [
+            'series' => 'TESTGT',
+            'issue_date' => date('Y-m-d'),
+            'due_date' => date('Y-m-d'),
+            'currency' => 'RON',
+            'total' => $gross,
+            'seller' => $seller,
+            'buyer' => $seller,
+            'payment' => ['method' => 'Transfer bancar', 'iban' => (string)($seller['iban'] ?? ''), 'bank_name' => (string)($seller['bank_name'] ?? '')],
+            'items' => [[
+                'name' => 'Document sintetic pentru testarea tehnică RO e-Factura',
+                'description' => 'Nu reprezintă o tranzacție fiscală reală. Generat exclusiv pentru mediul ANAF Test.',
+                'quantity' => 1,
+                'unit_price' => 1,
+                'discount_percent' => 0,
+                'vat_rate' => $vatRate,
+                'sku' => 'SPV-TEST',
+            ]],
+            'notes' => 'DOCUMENT SINTETIC — MEDIU ANAF TEST — FĂRĂ EFECT FISCAL',
+        ];
+        $invoice = $base + [
+            'number' => $stamp . '1',
+            'status' => 'unpaid',
+            'order_reference' => 'TEST-' . $stamp,
+        ];
+        $creditNote = $base + [
+            'number' => $stamp . '2',
+            'status' => 'return',
+            'order_reference' => 'TEST-RET-' . $stamp,
+            'related_invoice' => ['series' => $invoice['series'], 'number' => $invoice['number'], 'date' => $invoice['issue_date']],
+        ];
+
+        $documents = [];
+        foreach ([['invoice_380', $invoice], ['credit_note_381', $creditNote]] as [$kind, $payload]) {
+            $xml = GtrotsInvoiceUbl::render($payload);
+            try {
+                $validation = GtrotsInvoiceUbl::validateWithAnaf($xml, $config);
+            } catch (InvalidArgumentException $rejected) {
+                // A semantic rejection is authoritative and must stop upload.
+                throw $rejected;
+            } catch (RuntimeException $unavailable) {
+                // The public validator and the authenticated Test upload are
+                // separate ANAF services. A hosting TLS/network limitation on
+                // the former is reported, while the sandbox upload remains the
+                // definitive end-to-end test.
+                $validation = ['stare' => 'unavailable', 'messages' => [$unavailable->getMessage()]];
+            }
+            $documents[] = self::uploadDiagnosticXml($db, $config, $xml, $cif, (string)$kind, (string)$payload['series'] . ' ' . (string)$payload['number'], $validation);
+        }
+        return [
+            'environment' => 'test',
+            'isolated' => true,
+            'fiscal_effect' => false,
+            'connection' => [
+                'connected' => (bool)($connection['connected'] ?? false),
+                'certificate_hint' => (string)($connection['certificate_hint'] ?? ''),
+                'last_tested_at' => $connection['last_tested_at'] ?? null,
+            ],
+            'documents' => $documents,
+        ];
+    }
+
+    public static function pollTestDiagnostics(PDO $db, array $config, array $indexes): array
+    {
+        self::assertTestEnvironment($db, $config);
+        $unique = array_slice(array_values(array_unique(array_filter(array_map(static fn($value): string => trim((string)$value), $indexes)))), 0, 4);
+        if (!$unique) throw new InvalidArgumentException('Nu există indici de diagnostic pentru verificare.');
+        return [
+            'environment' => 'test',
+            'isolated' => true,
+            'documents' => array_map(static fn(string $index): array => self::diagnosticStatus($db, $config, $index), $unique),
+        ];
+    }
+
     public static function disconnect(PDO $db, array $config): array
     {
         $row = self::connectionRow($db);
@@ -348,6 +439,9 @@ final class GtrotsSpvService
         // InvalidArgumentException este transformată de API într-un răspuns 422
         // cu mesajul explicit, pe care îl afișează atât telefonul, cât și desktopul.
         if (!self::status($db, $config)['connected']) throw new InvalidArgumentException('Conectează firma la SPV înainte de transmitere.');
+        if (self::settings($db)['environment'] === 'test') {
+            throw new InvalidArgumentException('Mediul ANAF Test este activ. Rulează testul complet SPV; facturile fiscale reale sunt protejate și nu se încarcă în sandbox.');
+        }
         $invoiceId = trim($invoiceId);
         if ($invoiceId === '') throw new InvalidArgumentException('Factura nu a fost selectată.');
         $invoice = self::invoice($db, $invoiceId);
@@ -404,6 +498,10 @@ final class GtrotsSpvService
         $errors = [];
         try {
             if (!self::status($db, $config)['connected']) return ['processed' => 0, 'connected' => false];
+            if (self::settings($db)['environment'] === 'test') {
+                self::syncNotifications($db);
+                return ['processed' => 0, 'connected' => true, 'environment' => 'test', 'test_mode' => true];
+            }
             self::reconcileOutbox($db);
             $now = date('Y-m-d H:i:s');
             $today = date('Y-m-d');
@@ -594,6 +692,94 @@ final class GtrotsSpvService
         ];
     }
 
+    private static function assertTestEnvironment(PDO $db, array $config): void
+    {
+        $status = self::status($db, $config);
+        $connection = self::connectionRow($db);
+        if (empty($status['connected'])) throw new InvalidArgumentException('Conectează firma la SPV înainte de testare.');
+        if (self::environment((string)($status['environment'] ?? '')) !== 'test'
+            || self::environment((string)($connection['environment'] ?? '')) !== 'test') {
+            throw new InvalidArgumentException('Testul complet poate rula numai în mediul ANAF Test. Producția nu a fost accesată.');
+        }
+    }
+
+    private static function diagnosticParty(array $company): array
+    {
+        return [
+            'name' => trim((string)($company['legal_name'] ?? '')),
+            'trade_name' => trim((string)($company['trade_name'] ?? '')),
+            'cui' => trim((string)($company['cui'] ?? '')),
+            'registration_number' => trim((string)($company['registration_number'] ?? '')),
+            'address' => trim((string)($company['address'] ?? '')),
+            'city' => trim((string)($company['city'] ?? '')),
+            'county' => trim((string)($company['county'] ?? '')),
+            'postal_code' => trim((string)($company['postal_code'] ?? '')),
+            'email' => trim((string)($company['email'] ?? '')),
+            'phone' => trim((string)($company['phone'] ?? '')),
+            'bank_name' => trim((string)($company['bank_name'] ?? '')),
+            'iban' => trim((string)($company['iban'] ?? '')),
+            'share_capital' => trim((string)($company['share_capital'] ?? '')),
+            'vat_payer' => !empty($company['vat_payer']),
+        ];
+    }
+
+    private static function uploadDiagnosticXml(PDO $db, array $config, string $xml, string $cif, string $kind, string $documentId, array $validation): array
+    {
+        $standard = $kind === 'credit_note_381' ? 'CN' : 'UBL';
+        $url = self::apiBase($config, 'test') . '/upload?standard=' . $standard . '&cif=' . rawurlencode($cif);
+        $token = self::accessToken($db, $config);
+        $response = self::http('POST', $url, [
+            'Authorization: Bearer ' . $token,
+            'Content-Type: text/plain; charset=UTF-8',
+            'Accept: application/xml, application/json',
+        ], $xml, 55);
+        if ($response['status'] === 401 || $response['status'] === 403) {
+            $token = self::accessToken($db, $config, true);
+            $response = self::http('POST', $url, [
+                'Authorization: Bearer ' . $token,
+                'Content-Type: text/plain; charset=UTF-8',
+                'Accept: application/xml, application/json',
+            ], $xml, 55);
+        }
+        if ($response['status'] < 200 || $response['status'] >= 300) {
+            throw new RuntimeException('ANAF Test a refuzat documentul ' . $documentId . ' (HTTP ' . $response['status'] . '): ' . self::responseMessage($response['body']));
+        }
+        $index = self::responseValue($response['body'], ['index_incarcare', 'uploadindex', 'id_incarcare']);
+        if ($index === '') throw new RuntimeException('ANAF Test nu a returnat indexul pentru ' . $documentId . ': ' . self::responseMessage($response['body']));
+        $status = self::diagnosticStatus($db, $config, $index);
+        return [
+            'kind' => $kind,
+            'document_id' => $documentId,
+            'ubl_valid' => (string)($validation['stare'] ?? '') !== 'rejected',
+            'validator_state' => (string)($validation['stare'] ?? ''),
+            'validator_message' => trim(implode(' | ', array_slice((array)($validation['messages'] ?? []), 0, 3))) ?: null,
+            'upload_index' => $index,
+        ] + $status;
+    }
+
+    private static function diagnosticStatus(PDO $db, array $config, string $index): array
+    {
+        if (!preg_match('/^[A-Za-z0-9._:-]{1,180}$/', $index)) throw new InvalidArgumentException('Indexul ANAF de diagnostic este invalid.');
+        $url = self::apiBase($config, 'test') . '/stareMesaj?id_incarcare=' . rawurlencode($index);
+        $response = self::http('GET', $url, [
+            'Authorization: Bearer ' . self::accessToken($db, $config),
+            'Accept: application/xml, application/json',
+        ], null, 30);
+        if ($response['status'] < 200 || $response['status'] >= 300) {
+            return ['upload_index' => $index, 'state' => 'processing', 'terminal' => false, 'message' => 'Statusul va fi reverificat (HTTP ' . $response['status'] . ').'];
+        }
+        $state = mb_strtolower(self::responseValue($response['body'], ['stare', 'status']), 'UTF-8');
+        $accepted = in_array($state, ['ok', 'accepted', 'valid'], true);
+        $rejected = in_array($state, ['nok', 'error', 'rejected', 'invalid'], true);
+        return [
+            'upload_index' => $index,
+            'state' => $accepted ? 'accepted' : ($rejected ? 'rejected' : 'processing'),
+            'terminal' => $accepted || $rejected,
+            'download_id' => self::responseValue($response['body'], ['id_descarcare', 'downloadid', 'id']) ?: null,
+            'message' => $rejected ? self::responseMessage($response['body']) : ($accepted ? 'Document acceptat de ANAF Test.' : 'Documentul este încă procesat de ANAF Test.'),
+        ];
+    }
+
     private static function processInvoice(PDO $db, array $config, string $invoiceId): void
     {
         $job = self::job($db, $invoiceId);
@@ -613,7 +799,8 @@ final class GtrotsSpvService
         $token = self::accessToken($db, $config);
         $environment = self::environment((string)($job['environment'] ?? self::settings($db)['environment']));
         $base = self::apiBase($config, $environment);
-        $url = $base . '/upload?standard=UBL&cif=' . rawurlencode($cif);
+        $standard = (string)($job['document_kind'] ?? '') === 'credit_note' || (string)($invoice['invoice_type'] ?? '') === 'return' ? 'CN' : 'UBL';
+        $url = $base . '/upload?standard=' . $standard . '&cif=' . rawurlencode($cif);
         $db->prepare("UPDATE shop_spv_outbox SET status='uploading', attempts=attempts+1, last_error=NULL WHERE invoice_id=?")->execute([$invoiceId]);
         try {
             $response = self::http('POST', $url, ['Authorization: Bearer ' . $token, 'Content-Type: text/plain; charset=UTF-8', 'Accept: application/xml, application/json'], $xml, 55);
@@ -877,7 +1064,7 @@ final class GtrotsSpvService
     private static function apiBase(array $config, string $environment): string
     {
         $key = $environment === 'production' ? 'anaf_efactura_production_url' : 'anaf_efactura_test_url';
-        $fallback = 'https://webserviceapl.anaf.ro/' . ($environment === 'production' ? 'prod' : 'test') . '/FCTEL/rest';
+        $fallback = 'https://api.anaf.ro/' . ($environment === 'production' ? 'prod' : 'test') . '/FCTEL/rest';
         return rtrim(trim((string)($config[$key] ?? $fallback)) ?: $fallback, '/');
     }
 
@@ -904,6 +1091,10 @@ final class GtrotsSpvService
         if (function_exists('curl_init')) {
             $curl = curl_init($url);
             $options = [CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => $headers, CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_TIMEOUT => $timeout, CURLOPT_CUSTOMREQUEST => $method, CURLOPT_FOLLOWLOCATION => false, CURLOPT_USERAGENT => 'G-Trots-RO-eFactura/1.0'];
+            // ANAF requires a modern TLS connection. Some shared-hosting cURL
+            // builds still negotiate an obsolete default and receive an
+            // sslv3_alert_handshake_failure before the HTTP request exists.
+            if (defined('CURLOPT_SSLVERSION')) $options[CURLOPT_SSLVERSION] = defined('CURL_SSLVERSION_TLSv1_2') ? CURL_SSLVERSION_TLSv1_2 : 6;
             if ($body !== null) $options[CURLOPT_POSTFIELDS] = $body;
             curl_setopt_array($curl, $options);
             $response = curl_exec($curl);
@@ -935,6 +1126,27 @@ final class GtrotsSpvService
             };
             $walk($json);
             foreach ($names as $name) if (($flat[mb_strtolower($name, 'UTF-8')] ?? '') !== '') return $flat[mb_strtolower($name, 'UTF-8')];
+        }
+        if (class_exists('DOMDocument')) {
+            $previous = libxml_use_internal_errors(true);
+            try {
+                $document = new DOMDocument();
+                if ($document->loadXML($body, LIBXML_NONET | LIBXML_NOBLANKS)) {
+                    $wanted = array_fill_keys(array_map(static fn(string $name): string => mb_strtolower($name, 'UTF-8'), $names), true);
+                    foreach ($document->getElementsByTagName('*') as $element) {
+                        $elementName = mb_strtolower((string)($element->localName ?: $element->nodeName), 'UTF-8');
+                        if (isset($wanted[$elementName]) && trim((string)$element->textContent) !== '') return trim((string)$element->textContent);
+                        if (!$element->hasAttributes()) continue;
+                        foreach ($element->attributes as $attribute) {
+                            $attributeName = mb_strtolower((string)($attribute->localName ?: $attribute->nodeName), 'UTF-8');
+                            if (isset($wanted[$attributeName]) && trim((string)$attribute->nodeValue) !== '') return trim((string)$attribute->nodeValue);
+                        }
+                    }
+                }
+            } finally {
+                libxml_clear_errors();
+                libxml_use_internal_errors($previous);
+            }
         }
         foreach ($names as $name) {
             $quoted = preg_quote($name, '/');

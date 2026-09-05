@@ -77,8 +77,10 @@ function shopConfig(): array {
         'anaf_oauth_test_url' => 'https://api.anaf.ro/TestOauth/jaxrs/hello?name=G-Trots',
         'anaf_invoice_validation_url' => 'https://webservicesp.anaf.ro/prod/FCTEL/rest/validare/FACT1',
         'anaf_credit_note_validation_url' => 'https://webservicesp.anaf.ro/prod/FCTEL/rest/validare/FCN',
-        'anaf_efactura_test_url' => 'https://webserviceapl.anaf.ro/test/FCTEL/rest',
-        'anaf_efactura_production_url' => 'https://webserviceapl.anaf.ro/prod/FCTEL/rest',
+        // Gateway-ul OAuth/Bearer. webserviceapl.anaf.ro cere certificatul
+        // client la fiecare apel (mTLS) și nu este compatibil cu tokenul OAuth.
+        'anaf_efactura_test_url' => 'https://api.anaf.ro/test/FCTEL/rest',
+        'anaf_efactura_production_url' => 'https://api.anaf.ro/prod/FCTEL/rest',
     ];
 
     $config = $defaults;
@@ -5108,6 +5110,16 @@ try {
 
     if ($action === 'testSpvConnection' && $method === 'POST') {
         jsonResponse(GtrotsSpvService::testConnection($db, $config));
+    }
+
+    if ($action === 'runSpvDiagnostics' && $method === 'POST') {
+        try { jsonResponse(GtrotsSpvService::runTestDiagnostics($db, $config)); }
+        catch (RuntimeException $error) { jsonResponse(['error' => $error->getMessage()], 502); }
+    }
+
+    if ($action === 'pollSpvDiagnostics' && $method === 'POST') {
+        try { jsonResponse(GtrotsSpvService::pollTestDiagnostics($db, $config, (array)($body['indexes'] ?? []))); }
+        catch (RuntimeException $error) { jsonResponse(['error' => $error->getMessage()], 502); }
     }
 
     if ($action === 'updateSpvSettings' && in_array($method, ['PUT', 'PATCH'], true)) {

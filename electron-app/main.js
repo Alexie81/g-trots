@@ -409,6 +409,10 @@ function broadcastUpdateState(patch = {}) {
 function setupAutoUpdater() {
   autoUpdater.logger = log;
   log.transports.file.level = 'info';
+  // A packaged GUI can be launched without a live stdout pipe (for example
+  // through Explorer or a silent updater). Keep production logs in the file
+  // transport only, otherwise Windows may surface an uncaught EPIPE dialog.
+  log.transports.console.level = app.isPackaged ? false : 'info';
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.autoRunAppAfterInstall = true;

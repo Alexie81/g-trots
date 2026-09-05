@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from ftplib import FTP_TLS, error_perm
 from getpass import getpass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import argparse
 import os
 import ssl
@@ -75,6 +75,24 @@ def selected_files() -> tuple[str, ...]:
     return tuple(arguments.files) if arguments.files else FILES
 
 
+def ensure_remote_directory(ftp: FTP_TLS, directory: str) -> None:
+    directory = directory.strip("/")
+    if not directory or directory == ".":
+        return
+    root = ftp.pwd()
+    try:
+        for part in PurePosixPath(directory).parts:
+            try:
+                ftp.cwd(part)
+            except error_perm as error:
+                if not str(error).startswith("550"):
+                    raise
+                ftp.mkd(part)
+                ftp.cwd(part)
+    finally:
+        ftp.cwd(root)
+
+
 def main() -> None:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     files = selected_files()
@@ -88,6 +106,8 @@ def main() -> None:
     backups: dict[str, str] = {}
     activated: list[str] = []
     try:
+        for name in files:
+            ensure_remote_directory(ftp, str(PurePosixPath(name).parent))
         for name, path in local_files.items():
             temporary = f"{name}.codex-upload-{timestamp}.tmp"
             with path.open("rb") as handle:

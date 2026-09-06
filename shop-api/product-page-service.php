@@ -71,12 +71,15 @@ function shopProductSeoRender(array $product, array $config): string {
     $canonical = $websiteBaseUrl . '/magazin/produs/' . rawurlencode($slug) . '/';
     $name = shopProductSeoText($product['name'] ?? 'Produs G-Trots');
     $titleSource = shopProductSeoText($product['meta_title'] ?? '');
-    $title = shopProductSeoExcerpt($titleSource !== '' ? $titleSource : $name . ' | G-Trots', 65);
-    $descriptionSource = shopProductSeoText($product['meta_description'] ?? '');
+    $title = $titleSource !== ''
+        ? $titleSource
+        : shopProductSeoExcerpt($name, 55) . ' | G-Trots';
+    $customDescription = shopProductSeoText($product['meta_description'] ?? '');
+    $descriptionSource = $customDescription;
     if ($descriptionSource === '') $descriptionSource = shopProductSeoText($product['short_description'] ?? '');
     if ($descriptionSource === '') $descriptionSource = shopProductSeoText($product['description_html'] ?? '');
     if ($descriptionSource === '') $descriptionSource = $name . ' disponibil la G-Trots, cu informații clare despre preț, compatibilitate, livrare și service pentru trotinete electrice.';
-    $description = shopProductSeoExcerpt($descriptionSource, 160);
+    $description = $customDescription !== '' ? $customDescription : shopProductSeoExcerpt($descriptionSource, 160);
     $currency = trim((string)($product['currency'] ?? 'RON')) ?: 'RON';
     $price = (float)($product['promotion_price'] ?? $product['sale_price'] ?? $product['price'] ?? 0);
     $priceText = number_format(max(0, $price), 2, '.', '');
@@ -173,9 +176,13 @@ function shopProductSeoRender(array $product, array $config): string {
     $html = shopProductSeoReplaceMeta($html, 'property', 'og:description', $description);
     $html = shopProductSeoReplaceMeta($html, 'property', 'og:url', $canonical);
     $html = shopProductSeoReplaceMeta($html, 'property', 'og:image', $images[0]);
+    $html = shopProductSeoReplaceMeta($html, 'property', 'og:image:secure_url', $images[0]);
+    $html = shopProductSeoReplaceMeta($html, 'property', 'og:image:alt', $name);
+    $html = shopProductSeoReplaceMeta($html, 'property', 'og:site_name', 'G-Trots România');
     $html = shopProductSeoReplaceMeta($html, 'name', 'twitter:title', $title);
     $html = shopProductSeoReplaceMeta($html, 'name', 'twitter:description', $description);
     $html = shopProductSeoReplaceMeta($html, 'name', 'twitter:image', $images[0]);
+    $html = shopProductSeoReplaceMeta($html, 'name', 'twitter:image:alt', $name);
     $html = shopProductSeoReplaceMeta($html, 'property', 'product:price:amount', $priceText);
     $html = shopProductSeoReplaceMeta($html, 'property', 'product:price:currency', $currency);
     $html = shopProductSeoReplaceMeta($html, 'property', 'product:availability', $availabilityText);

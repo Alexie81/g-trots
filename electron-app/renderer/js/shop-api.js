@@ -157,6 +157,7 @@
         supplier_invoice_series: details.supplier_invoice_series ?? null,
         supplier_invoice_number: details.supplier_invoice_number,
         supplier_invoice_date: details.supplier_invoice_date,
+        customer_return_nir_id: details.customer_return_nir_id,
       } : {}),
     }), id),
     uploadNirAttachment: (id, payload) => call('uploadNirAttachment', json('POST', payload), id),

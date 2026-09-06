@@ -144,25 +144,31 @@ final class GtrotsOrderReturnRequest
             foreach ($items as $item) $byId[(string)$item['order_item_id']] = $item;
             if (!$items) throw new InvalidArgumentException('Solicitarea nu conține produse pentru evaluare.');
             $seen = [];
-            $update = $db->prepare('UPDATE shop_order_return_items SET decision_status = ?, accepted_quantity = ?, decision_reason = ?, decided_at = CURRENT_TIMESTAMP, decided_by = ? WHERE order_id = ? AND order_item_id = ?');
+            $update = $db->prepare('UPDATE shop_order_return_items SET decision_status = ?, accepted_quantity = ?, refused_quantity = ?, decision_reason = ?, decided_at = CURRENT_TIMESTAMP, decided_by = ? WHERE order_id = ? AND order_item_id = ?');
             foreach ($decisions as $decision) {
                 $itemId = trim((string)($decision['order_item_id'] ?? ''));
-                $status = trim((string)($decision['decision_status'] ?? ''));
-                if (!isset($byId[$itemId]) || isset($seen[$itemId]) || !in_array($status, ['accepted', 'refused'], true)) {
+                $requested = isset($byId[$itemId]) ? round((float)$byId[$itemId]['requested_quantity'], 4) : 0.0;
+                $submittedStatus = trim((string)($decision['decision_status'] ?? ''));
+                if (!isset($byId[$itemId]) || isset($seen[$itemId]) || !in_array($submittedStatus, ['accepted', 'partial', 'refused'], true)) {
                     throw new InvalidArgumentException('Decizia pentru unul dintre produse nu este validă.');
                 }
                 $seen[$itemId] = true;
-                $accepted = $status === 'accepted' ? round((float)($decision['accepted_quantity'] ?? $byId[$itemId]['requested_quantity']), 4) : 0.0;
-                if ($status === 'accepted' && ($accepted <= 0 || $accepted - (float)$byId[$itemId]['requested_quantity'] > 0.00005)) {
-                    throw new InvalidArgumentException('Cantitatea acceptată trebuie să fie între 1 și cantitatea solicitată.');
+                $accepted = $submittedStatus === 'refused'
+                    ? 0.0
+                    : round((float)($decision['accepted_quantity'] ?? ($submittedStatus === 'accepted' ? $requested : 0)), 4);
+                if ($accepted < 0 || $accepted - $requested > 0.00005) {
+                    throw new InvalidArgumentException('Cantitatea acceptată trebuie să fie între 0 și cantitatea solicitată.');
                 }
+                $refused = round(max(0.0, $requested - $accepted), 4);
+                $status = $accepted <= 0.00005 ? 'refused' : ($refused <= 0.00005 ? 'accepted' : 'partial');
                 $reason = mb_substr(trim((string)($decision['decision_reason'] ?? '')), 0, 500);
-                if ($status === 'refused' && mb_strlen($reason, 'UTF-8') < 3) throw new InvalidArgumentException('Scrie motivul refuzului pentru produsul respins.');
-                $update->execute([$status, $accepted, $reason ?: null, $changedBy, $orderId, $itemId]);
+                if ($refused > 0.00005 && mb_strlen($reason, 'UTF-8') < 3) throw new InvalidArgumentException('Scrie motivul refuzului pentru cantitatea respinsă din fiecare produs.');
+                if ($refused <= 0.00005) $reason = '';
+                $update->execute([$status, $accepted, $refused, $reason ?: null, $changedBy, $orderId, $itemId]);
             }
             if (count($seen) !== count($items)) throw new InvalidArgumentException('Evaluează toate produsele solicitate înainte de confirmare.');
 
-            $acceptedStmt = $db->prepare("SELECT * FROM shop_order_return_items WHERE order_id = ? AND decision_status = 'accepted' AND accepted_quantity > 0");
+            $acceptedStmt = $db->prepare("SELECT * FROM shop_order_return_items WHERE order_id = ? AND decision_status IN ('accepted', 'partial') AND accepted_quantity > 0");
             $acceptedStmt->execute([$orderId]);
             $acceptedItems = $acceptedStmt->fetchAll();
             $itemsGross = round(array_reduce($acceptedItems, static fn(float $sum, array $item): float => $sum + (float)$item['unit_refund_value'] * (float)$item['accepted_quantity'], 0.0), 2);

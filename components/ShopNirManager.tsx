@@ -67,6 +67,7 @@ import {
   ShopInventoryMovement,
   ShopNirLine,
   ShopNirPage,
+  ShopNirSupplierReturnOrigin,
   ShopProduct,
   ShopReceiptLocation,
   ShopSupplier,
@@ -290,6 +291,8 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [reverseDialog, setReverseDialog] = useState(false);
+  const [stornoDocument, setStornoDocument] = useState<ShopNirDocument | null>(null);
+  const [supplierReturnContext, setSupplierReturnContext] = useState<{ customerReturnNirId: string } | null>(null);
   const [reverseReason, setReverseReason] = useState('');
   const [reverseReasonTouched, setReverseReasonTouched] = useState(false);
   const [reverseSelection, setReverseSelection] = useState<Record<string, string>>({});
@@ -926,15 +929,17 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     );
   };
 
-  const openReverseDialog = () => {
-    if (!editor || editor.status !== 'confirmed' || editor.can_storno === false || isNirStornoActionLocked(editor) || !can('NIR_REVERSE') || reversing) return;
-    const lines = stornoCandidateLines(editor);
+  const prepareReverseDialog = (source: ShopNirDocument, customerReturnNirId?: string) => {
+    if (source.status !== 'confirmed' || source.can_storno === false || isNirStornoActionLocked(source) || !can('NIR_REVERSE') || reversing) return;
+    const lines = stornoCandidateLines(source);
+    setStornoDocument(source);
+    setSupplierReturnContext(customerReturnNirId ? { customerReturnNirId } : null);
     setReverseSelection(Object.fromEntries(lines.map((line) => [String(line.id), stornoLineQuantity(line).value])));
     setReverseReason('');
     setReverseReasonTouched(false);
     setStornoInvoice({
-      series: String(editor.supplier_invoice_series || ''),
-      number: suggestNextInvoiceNumber(editor.supplier_invoice_number),
+      series: String(source.supplier_invoice_series || ''),
+      number: suggestNextInvoiceNumber(source.supplier_invoice_number),
       date: localToday(),
     });
     setStornoInvoiceTouched(false);
@@ -943,14 +948,46 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     setReverseDialog(true);
   };
 
+  const openReverseDialog = () => {
+    if (editor) prepareReverseDialog(editor);
+  };
+
+  const openSupplierReturnFromCustomerReturn = async (origin: ShopNirSupplierReturnOrigin) => {
+    if (!token || !editor || !origin.can_start_supplier_return || saving || reversing) return;
+    setSaving(true);
+    try {
+      const original = await shopApi.getNir(token, origin.original_nir_id);
+      const availableByLine = new Map(origin.lines.map((line) => [String(line.original_nir_line_id), line.available_quantity]));
+      const constrained: ShopNirDocument = {
+        ...original,
+        can_storno: true,
+        lines: (original.lines || []).map((line) => ({ ...line, stornable_quantity: availableByLine.get(String(line.id || '')) || '0' })),
+      };
+      prepareReverseDialog(constrained, editor.id);
+    } catch (error) {
+      Alert.alert('Recepția originală nu s-a deschis', error instanceof Error ? error.message : 'Încearcă din nou.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const closeReverseDialog = () => {
+    if (reversing) return;
+    setReverseDialog(false);
+    setStornoDocument(null);
+    setSupplierReturnContext(null);
+    setStornoAttachments([]);
+  };
+
   const reverseDocument = async () => {
+    const source = stornoDocument || editor;
     const reason = reverseReason.trim();
     setReverseReasonTouched(true);
     setStornoInvoiceTouched(true);
-    if (!token || !editor || editor.status !== 'confirmed' || editor.can_storno === false || isNirStornoActionLocked(editor) || reversing) return;
+    if (!token || !source || source.status !== 'confirmed' || source.can_storno === false || isNirStornoActionLocked(source) || reversing) return;
     const supplierInvoiceNumber = stornoInvoice.number.trim();
     const supplierInvoiceDate = stornoInvoice.date.trim();
-    const selectedLines = stornoCandidateLines(editor).filter((line) => Object.prototype.hasOwnProperty.call(reverseSelection, String(line.id)));
+    const selectedLines = stornoCandidateLines(source).filter((line) => Object.prototype.hasOwnProperty.call(reverseSelection, String(line.id)));
     if (!reason || !supplierInvoiceNumber || !isValidIsoDate(supplierInvoiceDate)) return;
     if (!selectedLines.length) {
       setReverseSelectionError('Selectează cel puțin o poziție din NIR.');
@@ -974,20 +1011,22 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     setReverseSelectionError('');
     setReversing(true);
     try {
-      const result = await shopApi.reverseNir(token, editor.id, editor.row_version, reason, lines, {
+      const result = await shopApi.reverseNir(token, source.id, source.row_version, reason, lines, {
         supplier_invoice_series: stornoInvoice.series.trim(),
         supplier_invoice_number: supplierInvoiceNumber,
         supplier_invoice_date: supplierInvoiceDate,
-      });
+      }, supplierReturnContext ? { customer_return_nir_id: supplierReturnContext.customerReturnNirId } : undefined);
       let attachmentWarning = '';
       if (stornoAttachments.length) {
         try { await uploadStornoAttachments(result.reversal.id); }
         catch (uploadError) { attachmentWarning = `\n\nStornarea a fost creată, dar documentele nu s-au încărcat: ${uploadError instanceof Error ? uploadError.message : 'eroare necunoscută'}`; }
       }
-      setEditor(result.original);
+      setEditor(supplierReturnContext ? await shopApi.getNir(token, supplierReturnContext.customerReturnNirId) : result.original);
       setDetailsTab('lines');
       setDetailRows([]);
       setReverseDialog(false);
+      setStornoDocument(null);
+      setSupplierReturnContext(null);
       setReverseReason('');
       setReverseReasonTouched(false);
       setReverseSelection({});
@@ -1159,7 +1198,8 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     const delta = Number(row.accounting_quantity_delta ?? row.quantity_delta ?? 0);
     return { entries: summary.entries + (delta > 0 ? delta : 0), exits: summary.exits + (delta < 0 ? Math.abs(delta) : 0), net: summary.net + delta };
   }, { entries: 0, exits: 0, net: 0 });
-  const availableStornoLines = stornoCandidateLines(editor);
+  const reverseSource = stornoDocument || editor;
+  const availableStornoLines = stornoCandidateLines(reverseSource);
   const selectedStornoLines = availableStornoLines.flatMap((line) => {
     const lineId = String(line.id || '');
     const quantity = String(reverseSelection[lineId] || '').trim().replace(',', '.');
@@ -1215,6 +1255,14 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
           </View></Reveal>
 
           {!editable && <>
+            {isCustomerReturnDocument(editor) && !!editor.supplier_return_origins?.length && <View style={styles.supplierReturnBoard}>
+              <View style={styles.supplierReturnBoardHeader}><View style={styles.supplierReturnBoardIcon}><Link2 size={21} color="#FDBA74" /></View><View style={{ flex: 1 }}><Text style={styles.supplierReturnEyebrow}>TRASABILITATE FIFO PĂSTRATĂ</Text><Text style={styles.supplierReturnTitle}>Retur către furnizor</Text><Text style={styles.supplierReturnText}>Fiecare cantitate revenită de la client este legată de NIR-ul exact prin care a intrat. Alege recepția și creează stornarea numai pentru bucățile returnate.</Text></View></View>
+              <View style={styles.supplierReturnOriginList}>{editor.supplier_return_origins.map((origin) => <View key={origin.original_nir_id} style={styles.supplierReturnOriginCard}>
+                <View style={styles.supplierReturnOriginTop}><View style={{ flex: 1 }}><Text style={styles.supplierReturnOriginLabel}>NIR ORIGINAL · {origin.original_nir_number || '—'}</Text><Text style={styles.supplierReturnOriginSupplier}>{origin.supplier_display_name || 'Furnizor'}</Text><Text style={styles.supplierReturnOriginInvoice}>Factura {[origin.original_invoice?.series, origin.original_invoice?.number].filter(Boolean).join(' / ') || '—'} · {origin.original_invoice?.date || 'fără dată'}</Text></View><View style={styles.supplierReturnOriginTotal}><Text style={styles.supplierReturnOriginTotalValue}>{movementQuantity(origin.available_stock_quantity)}</Text><Text style={styles.supplierReturnOriginTotalLabel}>BUC. DISPONIBILE</Text></View></View>
+                <View style={styles.supplierReturnLineList}>{origin.lines.map((line) => <View key={line.original_nir_line_id} style={styles.supplierReturnLine}><NirLineProductVisual uri={line.product_image_url} matched={Boolean(line.product_id)} /><View style={{ flex: 1, minWidth: 0 }}><Text numberOfLines={2} style={styles.supplierReturnLineName}>{line.product_name}</Text><Text style={styles.supplierReturnLineMeta}>Returnate {movementQuantity(line.returned_stock_quantity)} · deja trimise {movementQuantity(line.supplier_returned_stock_quantity)}</Text></View><Text style={styles.supplierReturnLineQuantity}>{movementQuantity(line.available_quantity)} {line.purchase_unit || 'buc'}</Text></View>)}</View>
+                <TouchableOpacity accessibilityRole="button" disabled={!origin.can_start_supplier_return || saving || reversing || !can('NIR_REVERSE')} style={[styles.supplierReturnAction, (!origin.can_start_supplier_return || !can('NIR_REVERSE')) && styles.downloadDisabled]} onPress={() => void openSupplierReturnFromCustomerReturn(origin)}><ArrowUpFromLine size={18} color="#28160A" /><View style={{ flex: 1 }}><Text style={styles.supplierReturnActionTitle}>{origin.can_start_supplier_return ? 'Pregătește returul către furnizor' : 'Cantitățile au fost deja procesate'}</Text><Text style={styles.supplierReturnActionText}>Deschide stornarea NIR-ului original cu selecția exactă</Text></View><ChevronRight size={18} color="#28160A" /></TouchableOpacity>
+              </View>)}</View>
+            </View>}
             <View style={styles.detailTabs}><Tab label="Poziții" active={detailsTab === 'lines'} onPress={() => void loadDetailTab('lines')} /><Tab label="Mișcări de stoc" active={detailsTab === 'movements'} onPress={() => void loadDetailTab('movements')} /></View>
             {detailsTab === 'movements' && <View style={styles.movementBoard}><View style={styles.movementBoardHeader}><View style={styles.movementBoardIcon}><Boxes size={20} color="#5EEAD4" /></View><View style={{ flex: 1 }}><Text style={styles.movementBoardEyebrow}>JURNAL CONTABIL</Text><Text style={styles.movementBoardTitle}>Traseul stocului</Text><Text style={styles.movementBoardText}>{isNirReversalDocument(editor) ? 'Vezi pozițiile anulate prin acest document de stornare.' : 'Fiecare mișcare produsă de acest NIR, în ordine cronologică.'}</Text></View><View style={styles.movementCount}><Text style={styles.movementCountValue}>{detailRows.length}</Text><Text style={styles.movementCountLabel}>MIȘCĂRI</Text></View></View><View style={styles.movementSummary}><View><Text style={styles.movementSummaryLabel}>INTRĂRI</Text><Text style={[styles.movementSummaryValue, styles.movementPositive]}>+{movementQuantity(movementSummary.entries)}</Text></View><View><Text style={styles.movementSummaryLabel}>IEȘIRI</Text><Text style={[styles.movementSummaryValue, styles.movementNegative]}>−{movementQuantity(movementSummary.exits)}</Text></View><View><Text style={styles.movementSummaryLabel}>EFECT NET</Text><Text style={styles.movementSummaryValue}>{movementSummary.net > 0 ? '+' : ''}{movementQuantity(movementSummary.net)}</Text></View></View>{detailRows.length ? <View style={styles.movementList}>{detailRows.map((row, index) => { const delta = Number(row.accounting_quantity_delta ?? row.quantity_delta ?? 0); const incoming = delta >= 0; return <View style={[styles.movementCard, incoming ? styles.movementCardIn : styles.movementCardOut]} key={String(row.id || index)}><View style={[styles.movementDirection, incoming ? styles.movementDirectionIn : styles.movementDirectionOut]}>{incoming ? <ArrowDownToLine size={18} color="#5EEAA4" /> : <ArrowUpFromLine size={18} color="#FDA4AF" />}</View><View style={styles.movementMain}><View style={styles.movementCardTop}><Text style={[styles.movementType, incoming ? styles.movementPositive : styles.movementNegative]}>{movementLabel(row.movement_type)}</Text><Text style={styles.movementDate}>{movementDate(row.created_at)}</Text></View><Text numberOfLines={2} style={styles.movementProduct}>{row.product_name || `Mișcare ${index + 1}`}</Text><Text numberOfLines={2} style={styles.movementNote}>{row.movement_document_number || row.note || 'Document de stoc'}</Text><View style={styles.movementFacts}><View><Text style={styles.movementFactLabel}>CANTITATE</Text><Text style={[styles.movementFactValue, incoming ? styles.movementPositive : styles.movementNegative]}>{delta > 0 ? '+' : '−'}{movementQuantity(Math.abs(delta))} buc</Text></View><View><Text style={styles.movementFactLabel}>STOC DUPĂ</Text><Text style={styles.movementFactValue}>{movementQuantity(row.accounting_quantity_after ?? row.quantity_after)} buc</Text></View><View><Text style={styles.movementFactLabel}>OPERATOR</Text><Text numberOfLines={1} style={styles.movementFactValue}>{row.created_by || 'Sistem'}</Text></View></View></View></View>; })}</View> : <View style={styles.movementEmpty}><Boxes size={23} color={Colors.textMuted} /><Text style={styles.movementEmptyTitle}>Nu există mișcări de stoc</Text><Text style={styles.movementEmptyText}>Acest document nu a produs încă o intrare sau ieșire contabilă.</Text></View>}</View>}
             <TouchableOpacity accessibilityRole="button" accessibilityLabel="Descarcă toate documentele NIR" disabled={bundleDownloading} style={[styles.bundleDownloadButton, bundleDownloading && styles.downloadDisabled]} onPress={() => void downloadNirBundle()}>{bundleDownloading ? <ActivityIndicator color="#071513" /> : <View style={styles.bundleDownloadIcon}><FileDown size={20} color="#071513" /></View>}<View style={{ flex: 1 }}><Text style={styles.bundleDownloadTitle}>Descarcă toate documentele</Text><Text style={styles.bundleDownloadText}>NIR PDF, NIR Excel și folderul cu documentele furnizorului</Text></View><ChevronRight size={19} color="#0F766E" /></TouchableOpacity>
@@ -1240,15 +1288,15 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
 
         <Modal visible={deleteDialog} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !deleting && setDeleteDialog(false)}><Pressable style={styles.deleteBackdrop} onPress={() => !deleting && setDeleteDialog(false)}><Pressable style={styles.deleteDialog} onPress={(event) => event.stopPropagation()}><View style={styles.deleteDialogAccent} /><View style={styles.deleteDialogIcon}><Trash2 size={27} color="#FDA4AF" /></View><Text style={styles.deleteDialogEyebrow}>ȘTERGERE DEFINITIVĂ</Text><Text style={styles.deleteDialogTitle}>Ștergi această notă de intrare-recepție?</Text><Text style={styles.deleteDialogMessage}>Ești sigur că vrei să ștergi această notă de intrare-recepție marfă?</Text><View style={styles.deleteDialogDocument}><View style={{ flex: 1 }}><Text style={styles.deleteDialogMetaLabel}>DOCUMENT</Text><Text numberOfLines={1} style={styles.deleteDialogMetaValue}>{editor.nir_number || editor.temporary_number || 'NIR nesalvat'}</Text></View><View style={styles.deleteDialogDivider} /><View style={{ flex: 1 }}><Text style={styles.deleteDialogMetaLabel}>FURNIZOR</Text><Text numberOfLines={1} style={styles.deleteDialogMetaValue}>{shopSupplierDisplayName(editor, 'Necompletat')}</Text></View></View><View style={styles.deleteDialogWarning}><AlertTriangle size={18} color="#FBBF24" /><View style={{ flex: 1 }}><Text style={styles.deleteDialogWarningTitle}>Acțiunea nu poate fi anulată</Text><Text style={styles.deleteDialogWarningText}>Pozițiile, documentele atașate și toate datele acestei ciorne vor fi eliminate definitiv.</Text></View></View><TouchableOpacity disabled={deleting} style={styles.deleteDialogCancel} onPress={() => setDeleteDialog(false)}><Text style={styles.deleteDialogCancelText}>Nu, păstrează NIR-ul</Text></TouchableOpacity><TouchableOpacity disabled={deleting} style={styles.deleteDialogConfirm} onPress={() => void deleteNir()}>{deleting ? <ActivityIndicator color="#FFFFFF" /> : <><Trash2 size={17} color="#FFFFFF" /><Text style={styles.deleteDialogConfirmText}>Da, șterge definitiv</Text></>}</TouchableOpacity></Pressable></Pressable></Modal>
 
-        <Modal visible={reverseDialog} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !reversing && setReverseDialog(false)}>
-          <Pressable style={styles.deleteBackdrop} onPress={() => !reversing && setReverseDialog(false)}>
+        <Modal visible={reverseDialog} transparent animationType="fade" statusBarTranslucent onRequestClose={closeReverseDialog}>
+          <Pressable style={styles.deleteBackdrop} onPress={closeReverseDialog}>
             <Pressable style={[styles.deleteDialog, styles.reverseDialog, styles.stornoDialog, styles.stornoM3Dialog]} onPress={(event) => event.stopPropagation()}>
               <View style={[styles.deleteDialogAccent, styles.reverseDialogAccent]} />
               <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={[styles.stornoDialogContent, styles.stornoM3DialogContent]}>
-                <View style={[styles.stornoTitleRow, styles.stornoM3TitleRow]}><View style={[styles.deleteDialogIcon, styles.reverseDialogIcon, styles.stornoTitleIcon, styles.stornoM3TitleIcon]}><RotateCcw size={27} color="#FFB2BC" /></View><View style={{ flex: 1 }}><Text style={[styles.deleteDialogEyebrow, styles.stornoM3Eyebrow]}>STORNARE CONTABILĂ</Text><Text style={[styles.stornoDialogTitle, styles.stornoM3DialogTitle]}>Stornare factură</Text><Text style={[styles.deleteDialogMessage, styles.stornoM3Message]}>Alege exact produsele și cantitățile care trebuie scoase din această recepție.</Text></View></View>
-                <View style={[styles.deleteDialogDocument, styles.stornoM3Surface]}><View style={{ flex: 1 }}><Text style={[styles.deleteDialogMetaLabel, styles.stornoM3MetaLabel]}>DOCUMENT</Text><Text numberOfLines={1} style={[styles.deleteDialogMetaValue, styles.stornoM3MetaValue]}>{editor.nir_number || editor.temporary_number || 'NIR'}</Text></View><View style={styles.deleteDialogDivider} /><View style={{ flex: 1 }}><Text style={[styles.deleteDialogMetaLabel, styles.stornoM3MetaLabel]}>FURNIZOR</Text><Text numberOfLines={1} style={[styles.deleteDialogMetaValue, styles.stornoM3MetaValue]}>{shopSupplierDisplayName(editor, 'Necompletat')}</Text></View></View>
+                <View style={[styles.stornoTitleRow, styles.stornoM3TitleRow]}><View style={[styles.deleteDialogIcon, styles.reverseDialogIcon, styles.stornoTitleIcon, styles.stornoM3TitleIcon]}><RotateCcw size={27} color="#FFB2BC" /></View><View style={{ flex: 1 }}><Text style={[styles.deleteDialogEyebrow, styles.stornoM3Eyebrow]}>{supplierReturnContext ? 'RETUR FURNIZOR · TRASABILITATE FIFO' : 'STORNARE CONTABILĂ'}</Text><Text style={[styles.stornoDialogTitle, styles.stornoM3DialogTitle]}>Stornare factură</Text><Text style={[styles.deleteDialogMessage, styles.stornoM3Message]}>{supplierReturnContext ? 'Sunt disponibile exclusiv cantitățile revenite de la client, legate de recepția lor originală.' : 'Alege exact produsele și cantitățile care trebuie scoase din această recepție.'}</Text></View></View>
+                <View style={[styles.deleteDialogDocument, styles.stornoM3Surface]}><View style={{ flex: 1 }}><Text style={[styles.deleteDialogMetaLabel, styles.stornoM3MetaLabel]}>DOCUMENT</Text><Text numberOfLines={1} style={[styles.deleteDialogMetaValue, styles.stornoM3MetaValue]}>{reverseSource?.nir_number || reverseSource?.temporary_number || 'NIR'}</Text></View><View style={styles.deleteDialogDivider} /><View style={{ flex: 1 }}><Text style={[styles.deleteDialogMetaLabel, styles.stornoM3MetaLabel]}>FURNIZOR</Text><Text numberOfLines={1} style={[styles.deleteDialogMetaValue, styles.stornoM3MetaValue]}>{shopSupplierDisplayName(reverseSource, 'Necompletat')}</Text></View></View>
 
-                <View style={[styles.stornoOriginalInvoice, styles.stornoM3Surface]}><View style={styles.stornoOriginalInvoiceHead}><View style={[styles.stornoOriginalInvoiceIcon, styles.stornoM3TonalIcon]}><FileDown size={18} color="#FFB2BC" /></View><View><Text style={[styles.stornoOriginalInvoiceEyebrow, styles.stornoM3Eyebrow]}>DOCUMENT DE REFERINȚĂ</Text><Text style={[styles.stornoOriginalInvoiceTitle, styles.stornoM3SectionHeading]}>Factura originală</Text></View></View><View style={[styles.stornoOriginalInvoiceFacts, styles.stornoM3Facts]}><View style={[styles.stornoOriginalInvoiceFact, styles.stornoM3Fact]}><Text style={[styles.stornoOriginalInvoiceLabel, styles.stornoM3MetaLabel]}>SERIE / NUMĂR</Text><Text numberOfLines={1} style={[styles.stornoOriginalInvoiceValue, styles.stornoM3MetaValue]}>{[editor.supplier_invoice_series, editor.supplier_invoice_number].filter(Boolean).join(' / ') || '—'}</Text></View><View style={[styles.stornoOriginalInvoiceFact, styles.stornoM3Fact]}><Text style={[styles.stornoOriginalInvoiceLabel, styles.stornoM3MetaLabel]}>DATA</Text><Text style={[styles.stornoOriginalInvoiceValue, styles.stornoM3MetaValue]}>{editor.supplier_invoice_date || '—'}</Text></View><View style={[styles.stornoOriginalInvoiceFact, styles.stornoM3Fact]}><Text style={[styles.stornoOriginalInvoiceLabel, styles.stornoM3MetaLabel]}>VALOARE</Text><Text style={[styles.stornoOriginalInvoiceValue, styles.stornoOriginalInvoiceAmount, styles.stornoM3Amount]}>{editor.grand_total !== undefined ? money(editor.grand_total, editor.currency || 'RON') : money(editor.grand_total_ron, 'RON')}</Text></View></View></View>
+                <View style={[styles.stornoOriginalInvoice, styles.stornoM3Surface]}><View style={styles.stornoOriginalInvoiceHead}><View style={[styles.stornoOriginalInvoiceIcon, styles.stornoM3TonalIcon]}><FileDown size={18} color="#FFB2BC" /></View><View><Text style={[styles.stornoOriginalInvoiceEyebrow, styles.stornoM3Eyebrow]}>DOCUMENT DE REFERINȚĂ</Text><Text style={[styles.stornoOriginalInvoiceTitle, styles.stornoM3SectionHeading]}>Factura originală</Text></View></View><View style={[styles.stornoOriginalInvoiceFacts, styles.stornoM3Facts]}><View style={[styles.stornoOriginalInvoiceFact, styles.stornoM3Fact]}><Text style={[styles.stornoOriginalInvoiceLabel, styles.stornoM3MetaLabel]}>SERIE / NUMĂR</Text><Text numberOfLines={1} style={[styles.stornoOriginalInvoiceValue, styles.stornoM3MetaValue]}>{[reverseSource?.supplier_invoice_series, reverseSource?.supplier_invoice_number].filter(Boolean).join(' / ') || '—'}</Text></View><View style={[styles.stornoOriginalInvoiceFact, styles.stornoM3Fact]}><Text style={[styles.stornoOriginalInvoiceLabel, styles.stornoM3MetaLabel]}>DATA</Text><Text style={[styles.stornoOriginalInvoiceValue, styles.stornoM3MetaValue]}>{reverseSource?.supplier_invoice_date || '—'}</Text></View><View style={[styles.stornoOriginalInvoiceFact, styles.stornoM3Fact]}><Text style={[styles.stornoOriginalInvoiceLabel, styles.stornoM3MetaLabel]}>VALOARE</Text><Text style={[styles.stornoOriginalInvoiceValue, styles.stornoOriginalInvoiceAmount, styles.stornoM3Amount]}>{reverseSource?.grand_total !== undefined ? money(reverseSource.grand_total, reverseSource.currency || 'RON') : money(reverseSource?.grand_total_ron, 'RON')}</Text></View></View></View>
 
                 <View style={styles.stornoM3InvoiceSection}><View style={styles.stornoM3SectionHeader}><View style={styles.stornoM3TonalIcon}><FilePlus2 size={18} color="#FFB2BC" /></View><View style={{ flex: 1 }}><Text style={styles.stornoM3Eyebrow}>FACTURĂ NOUĂ DE STORNO</Text><Text style={styles.stornoM3SectionHeading}>Completează documentul primit de la furnizor</Text></View></View><View style={[styles.stornoInvoiceFields, styles.stornoM3InvoiceFields]}><View style={styles.stornoInvoiceField}><Text style={[styles.reverseReasonLabel, styles.stornoM3FieldLabel]}>SERIE FACTURĂ STORNO (OPȚIONAL)</Text><View style={[styles.stornoInvoiceInputWrap, styles.stornoM3InputWrap]}><TextInput accessibilityLabel="Serie factură storno, opțional" editable={!reversing} value={stornoInvoice.series} onChangeText={(series) => setStornoInvoice((current) => ({ ...current, series }))} placeholder="Poate rămâne goală" placeholderTextColor={Colors.textMuted} selectionColor="#FFB2BC" cursorColor="#FFB2BC" autoCorrect={false} style={[styles.stornoInvoiceInput, styles.stornoM3Input]} /></View><Text style={[styles.stornoInvoiceHint, styles.stornoM3Hint]}>Am completat seria facturii originale; o poți modifica sau șterge.</Text></View><View style={styles.stornoInvoiceField}><Text style={[styles.reverseReasonLabel, styles.stornoM3FieldLabel]}>NUMĂR FACTURĂ STORNO *</Text><View style={[styles.stornoInvoiceInputWrap, styles.stornoM3InputWrap, stornoInvoiceTouched && !stornoInvoice.number.trim() && styles.reverseReasonInputInvalid]}><TextInput accessibilityLabel="Număr factură storno" editable={!reversing} value={stornoInvoice.number} onChangeText={(number) => setStornoInvoice((current) => ({ ...current, number }))} placeholder="Completează numărul documentului" placeholderTextColor={Colors.textMuted} selectionColor="#FFB2BC" cursorColor="#FFB2BC" autoCorrect={false} style={[styles.stornoInvoiceInput, styles.stornoM3Input]} /></View>{stornoInvoiceTouched && !stornoInvoice.number.trim() && <Text style={styles.reverseReasonError}>Numărul facturii storno este obligatoriu.</Text>}</View><View style={styles.stornoInvoiceField}><Text style={[styles.reverseReasonLabel, styles.stornoM3FieldLabel]}>DATA FACTURII STORNO *</Text><View style={[styles.stornoInvoiceInputWrap, styles.stornoM3InputWrap, stornoInvoiceTouched && !isValidIsoDate(stornoInvoice.date.trim()) && styles.reverseReasonInputInvalid]}><CalendarDays size={18} color="#FFB2BC" /><TextInput accessibilityLabel="Data facturii storno" editable={!reversing} value={stornoInvoice.date} onChangeText={(date) => setStornoInvoice((current) => ({ ...current, date }))} placeholder="AAAA-LL-ZZ" placeholderTextColor={Colors.textMuted} selectionColor="#FFB2BC" cursorColor="#FFB2BC" autoCorrect={false} maxLength={10} style={[styles.stornoInvoiceInput, styles.stornoM3Input]} /></View>{stornoInvoiceTouched && !isValidIsoDate(stornoInvoice.date.trim()) && <Text style={styles.reverseReasonError}>Scrie o dată validă în formatul AAAA-LL-ZZ.</Text>}</View></View></View>
 
@@ -1263,7 +1311,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
 
                 <Text style={[styles.reverseReasonLabel, styles.stornoM3FieldLabel]}>MOTIVUL STORNĂRII *</Text><TextInput multiline value={reverseReason} onChangeText={(value) => { setReverseReason(value); setReverseReasonTouched(false); }} editable={!reversing} maxLength={500} placeholder="Ex: poziție facturată greșit sau marfă returnată furnizorului" placeholderTextColor={Colors.textMuted} selectionColor="#FFB2BC" cursorColor="#FFB2BC" style={[styles.reverseReasonInput, styles.stornoM3ReasonInput, reverseReasonTouched && !reverseReason.trim() && styles.reverseReasonInputInvalid]} />{reverseReasonTouched && !reverseReason.trim() && <Text style={styles.reverseReasonError}>Scrie motivul stornării.</Text>}
                 <View style={styles.deleteDialogWarning}><AlertTriangle size={18} color="#FBBF24" /><View style={{ flex: 1 }}><Text style={styles.deleteDialogWarningTitle}>Verifică selecția înainte de confirmare</Text><Text style={styles.deleteDialogWarningText}>Se stornează numai pozițiile și cantitățile selectate. Operațiunea este blocată dacă stocul aferent a fost deja consumat.</Text></View></View>
-                <TouchableOpacity disabled={reversing} style={[styles.deleteDialogCancel, styles.stornoM3Cancel]} onPress={() => { setStornoAttachments([]); setReverseDialog(false); }}><Text style={[styles.deleteDialogCancelText, styles.stornoM3CancelText]}>Renunță</Text></TouchableOpacity><TouchableOpacity accessibilityRole="button" accessibilityLabel="Confirmă stornarea facturii" disabled={reversing || !availableStornoLines.length} style={[styles.deleteDialogConfirm, styles.reverseDialogConfirm, styles.stornoM3Confirm, (!availableStornoLines.length || reversing) && styles.downloadDisabled]} onPress={() => void reverseDocument()}>{reversing ? <ActivityIndicator color="#5F1128" /> : <><RotateCcw size={18} color="#5F1128" /><Text style={[styles.deleteDialogConfirmText, styles.stornoM3ConfirmText]}>Confirmă stornarea</Text></>}</TouchableOpacity>
+                <TouchableOpacity disabled={reversing} style={[styles.deleteDialogCancel, styles.stornoM3Cancel]} onPress={closeReverseDialog}><Text style={[styles.deleteDialogCancelText, styles.stornoM3CancelText]}>Renunță</Text></TouchableOpacity><TouchableOpacity accessibilityRole="button" accessibilityLabel="Confirmă stornarea facturii" disabled={reversing || !availableStornoLines.length} style={[styles.deleteDialogConfirm, styles.reverseDialogConfirm, styles.stornoM3Confirm, (!availableStornoLines.length || reversing) && styles.downloadDisabled]} onPress={() => void reverseDocument()}>{reversing ? <ActivityIndicator color="#5F1128" /> : <><RotateCcw size={18} color="#5F1128" /><Text style={[styles.deleteDialogConfirmText, styles.stornoM3ConfirmText]}>Confirmă stornarea</Text></>}</TouchableOpacity>
               </ScrollView>
             </Pressable>
           </Pressable>
@@ -1695,6 +1743,11 @@ const styles = StyleSheet.create({
   stornoM3CancelText: { color: '#F1E8ED', fontSize: 12 },
   stornoM3Confirm: { minHeight: 56, borderRadius: 999, borderColor: '#FFB2BC', backgroundColor: '#FFB2BC' },
   stornoM3ConfirmText: { color: '#5F1128', fontSize: 12 },
+  supplierReturnBoard: { padding: 15, borderRadius: 25, borderWidth: 1, borderColor: '#F973164D', backgroundColor: '#21160F', overflow: 'hidden' },
+  supplierReturnBoardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, supplierReturnBoardIcon: { width: 46, height: 46, borderRadius: 16, borderWidth: 1, borderColor: '#FB923C55', backgroundColor: '#F9731617', alignItems: 'center', justifyContent: 'center' }, supplierReturnEyebrow: { color: '#FB923C', fontSize: 7.5, fontWeight: '900', letterSpacing: 1 }, supplierReturnTitle: { marginTop: 4, color: '#FFF7ED', fontSize: 17, lineHeight: 22, fontWeight: '900' }, supplierReturnText: { marginTop: 5, color: '#B9A79A', fontSize: 9.5, lineHeight: 15 },
+  supplierReturnOriginList: { marginTop: 14, gap: 10 }, supplierReturnOriginCard: { padding: 12, borderRadius: 19, borderWidth: 1, borderColor: '#6D4933', backgroundColor: '#171311' }, supplierReturnOriginTop: { flexDirection: 'row', alignItems: 'center', gap: 10 }, supplierReturnOriginLabel: { color: '#FDBA74', fontSize: 7, fontWeight: '900', letterSpacing: 0.7 }, supplierReturnOriginSupplier: { marginTop: 4, color: '#FFF7ED', fontSize: 13, fontWeight: '900' }, supplierReturnOriginInvoice: { marginTop: 3, color: '#8F7E73', fontSize: 8.5 }, supplierReturnOriginTotal: { minWidth: 78, padding: 9, borderRadius: 13, backgroundColor: '#F9731612', alignItems: 'center' }, supplierReturnOriginTotalValue: { color: '#FDBA74', fontSize: 15, fontWeight: '900' }, supplierReturnOriginTotalLabel: { marginTop: 2, color: '#9C735A', fontSize: 5.5, fontWeight: '900', letterSpacing: 0.5 },
+  supplierReturnLineList: { marginTop: 11, gap: 7 }, supplierReturnLine: { minHeight: 50, padding: 7, borderRadius: 14, backgroundColor: '#211C19', flexDirection: 'row', alignItems: 'center', gap: 8 }, supplierReturnLineName: { color: '#F5ECE6', fontSize: 9.5, lineHeight: 13, fontWeight: '800' }, supplierReturnLineMeta: { marginTop: 3, color: '#897971', fontSize: 7.5 }, supplierReturnLineQuantity: { color: '#FDBA74', fontSize: 9, fontWeight: '900' },
+  supplierReturnAction: { minHeight: 58, marginTop: 11, paddingHorizontal: 13, borderRadius: 17, backgroundColor: '#FDBA74', flexDirection: 'row', alignItems: 'center', gap: 10 }, supplierReturnActionTitle: { color: '#28160A', fontSize: 10.5, fontWeight: '900' }, supplierReturnActionText: { marginTop: 2, color: '#6B3515', fontSize: 7.5, lineHeight: 11, fontWeight: '700' },
   bundleDownloadButton: { minHeight: 76, padding: 12, borderRadius: 20, borderWidth: 1, borderColor: '#2DD4BF55', backgroundColor: '#5EEAD4', flexDirection: 'row', alignItems: 'center', gap: 11, shadowColor: '#2DD4BF', shadowOpacity: 0.22, shadowRadius: 14, shadowOffset: { width: 0, height: 7 }, elevation: 4 },
   bundleDownloadIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF55' },
   bundleDownloadTitle: { color: '#071513', fontSize: 13, fontWeight: '900' }, bundleDownloadText: { marginTop: 3, color: '#0F5952', fontSize: 9, lineHeight: 13, fontWeight: '700' },

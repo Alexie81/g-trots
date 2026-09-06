@@ -798,7 +798,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
   const supplierBasePriceValue = form.supplier_base_price.trim() === '' ? null : Number(form.supplier_base_price.replace(',', '.'));
   const commercialDifferenceValue = supplierBasePriceValue === null || !Number.isFinite(supplierBasePriceValue)
     ? null
-    : Math.round((priceValue - supplierBasePriceValue) * 100) / 100;
+    : (priceValue <= 0 ? 0 : Math.round((priceValue - supplierBasePriceValue) * 100) / 100);
   const discountType = form.discount_type || 'percent';
   const discountValue = Number((form.discount_value || '').replace(',', '.')) || 0;
   const reducedPrice = discountValue > 0
@@ -945,9 +945,11 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
               <Choice label="Procent (%)" selected={discountType === 'percent'} onPress={() => patchForm('discount_type', 'percent')} />
               <Choice label="Suma fixa (lei)" selected={discountType === 'fixed'} onPress={() => patchForm('discount_type', 'fixed')} />
             </View>
-            <Field label="PRET G-TROTS *" value={form.price} onChangeText={(value) => patchForm('price', value)} placeholder="0,00" keyboardType="decimal-pad" hint={isBoomagProduct ? 'Editezi pretul public dorit; diferenta comerciala se recalculeaza automat.' : undefined} />
+            <Field label="PRET G-TROTS *" value={form.price} onChangeText={(value) => patchForm('price', value)} placeholder="0,00" keyboardType="decimal-pad" hint={isBoomagProduct ? 'Editezi pretul public dorit. Daca lasi 0, se foloseste pretul valid al furnizorului si marja porneste de la 0.' : 'Acesta este pretul public folosit cand produsul nu are un pret de furnizor valid.'} />
             <Field label={discountType === 'percent' ? 'REDUCERE %' : 'REDUCERE LEI'} value={form.discount_value || ''} onChangeText={(value) => patchForm('discount_value', value)} placeholder="0" keyboardType="decimal-pad" />
-            <View style={styles.nirNote}><Text style={styles.nirNoteTitle}>Costul de achizitie nu se introduce manual.</Text><Text style={styles.nirNoteText}>Va fi calculat automat din NIR-uri si facturile de intrare, deoarece poate varia la fiecare receptie.</Text></View>
+            {form.is_accounting_stock_tracked
+              ? <View style={styles.nirNote}><Text style={styles.nirNoteTitle}>Costul real vine din documentele de intrare.</Text><Text style={styles.nirNoteText}>Loturile NIR/FIFO pastreaza costul fiecarei receptii, iar retururile refac exact costul real al lotului vandut.</Text></View>
+              : <View style={styles.nirNote}><Text style={styles.nirNoteTitle}>Cost fixat la momentul comenzii.</Text><Text style={styles.nirNoteText}>Pentru produsul exclus din Stocuri Conta, pretul furnizorului devine costul curent, iar comanda salveaza un instantaneu. Schimbarile viitoare nu modifica statisticile istorice.</Text></View>}
             {reducedPrice !== null ? <View style={styles.pricePreview}><Text style={styles.oldPrice}>{money(priceValue)}</Text><Text style={styles.newPrice}>{money(reducedPrice)}</Text><Text style={styles.discountBadge}>{discountType === 'percent' ? `-${discountValue}%` : `-${money(discountValue)}`}</Text></View> : null}
 
             <SectionTitle number="07" title="Catalog si compatibilitate" text="Leaga produsul de structura magazinului." />

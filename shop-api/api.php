@@ -24,6 +24,7 @@ require_once __DIR__ . '/stripe.php';
 require_once __DIR__ . '/order-cancellation.php';
 require_once __DIR__ . '/order-return.php';
 require_once __DIR__ . '/order-return-confirmation.php';
+require_once __DIR__ . '/product-pricing.php';
 require_once __DIR__ . '/product-page-service.php';
 require_once __DIR__ . '/gomag.php';
 require_once __DIR__ . '/nir-domain.php';
@@ -224,7 +225,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026090503;
+    $schemaVersion = 2026090601;
     // Ruta normala face doar SELECT-ul indexat. Un CREATE TABLE IF NOT EXISTS la
     // fiecare request tot cere verificari de metadata si poate astepta lock-uri.
     try {
@@ -1140,6 +1141,47 @@ function ensureShopSchema(PDO $db): void {
     if (!$db->query("SHOW INDEX FROM shop_inventory_layer_consumptions WHERE Key_name = 'idx_shop_fifo_consumption_source_document'")->fetch()) {
         $db->exec('ALTER TABLE shop_inventory_layer_consumptions ADD INDEX idx_shop_fifo_consumption_source_document (source_document_type, source_document_id, source_line_id)');
     }
+    // Permanent chain for accounting-tracked customer returns:
+    // customer-return NIR line -> restored FIFO layer -> original supplier NIR line.
+    // These records are append-only and remain available even after a later
+    // supplier return, so the accounting origin is never inferred from dates.
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_customer_return_fifo_origins (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            customer_return_nir_id CHAR(36) NOT NULL,
+            customer_return_nir_line_id CHAR(36) NOT NULL,
+            return_invoice_id CHAR(36) NOT NULL,
+            sales_invoice_id CHAR(36) NOT NULL,
+            sales_invoice_line_id CHAR(36) NOT NULL,
+            inventory_cost_layer_id CHAR(36) NOT NULL,
+            original_nir_document_id CHAR(36) NOT NULL,
+            original_nir_line_id CHAR(36) NOT NULL,
+            product_id CHAR(36) NOT NULL,
+            supplier_id CHAR(36) NULL,
+            restored_quantity DECIMAL(18,4) NOT NULL,
+            unit_cost_ron DECIMAL(18,6) NOT NULL,
+            created_by VARCHAR(180) NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE INDEX uq_shop_return_origin_layer (customer_return_nir_line_id, inventory_cost_layer_id),
+            INDEX idx_shop_return_origin_return_nir (customer_return_nir_id, original_nir_document_id),
+            INDEX idx_shop_return_origin_original_line (original_nir_line_id, created_at),
+            INDEX idx_shop_return_origin_invoice (return_invoice_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_customer_return_supplier_storno_allocations (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            customer_return_origin_id CHAR(36) NOT NULL,
+            supplier_return_nir_id CHAR(36) NOT NULL,
+            supplier_return_nir_line_id CHAR(36) NOT NULL,
+            quantity DECIMAL(18,4) NOT NULL,
+            created_by VARCHAR(180) NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE INDEX uq_shop_return_supplier_allocation (customer_return_origin_id, supplier_return_nir_line_id),
+            INDEX idx_shop_return_supplier_origin (customer_return_origin_id, created_at),
+            INDEX idx_shop_return_supplier_nir (supplier_return_nir_id, supplier_return_nir_line_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_domain_audit (
             id CHAR(36) NOT NULL PRIMARY KEY,
@@ -1598,6 +1640,7 @@ function ensureShopSchema(PDO $db): void {
             requested_quantity DECIMAL(18,4) NOT NULL,
             decision_status VARCHAR(20) NOT NULL DEFAULT 'pending',
             accepted_quantity DECIMAL(18,4) NULL,
+            refused_quantity DECIMAL(18,4) NOT NULL DEFAULT 0,
             decision_reason VARCHAR(500) NULL,
             decided_at DATETIME NULL,
             decided_by VARCHAR(180) NULL,
@@ -1608,6 +1651,10 @@ function ensureShopSchema(PDO $db): void {
             INDEX idx_shop_return_items_order (order_id, created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+    if (!$db->query("SHOW COLUMNS FROM shop_order_return_items LIKE 'refused_quantity'")->fetch()) {
+        $db->exec("ALTER TABLE shop_order_return_items ADD COLUMN refused_quantity DECIMAL(18,4) NOT NULL DEFAULT 0 AFTER accepted_quantity");
+        $db->exec("UPDATE shop_order_return_items SET refused_quantity = GREATEST(0, requested_quantity - COALESCE(accepted_quantity, 0)) WHERE decision_status IN ('accepted', 'partial', 'refused')");
+    }
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_stripe_events (
             id VARCHAR(255) NOT NULL PRIMARY KEY,
@@ -1641,11 +1688,34 @@ function ensureShopSchema(PDO $db): void {
         'discount_total' => 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER line_total',
         'discounted_unit_price' => 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER discount_total',
         'discounted_line_total' => 'DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER discounted_unit_price',
+        'acquisition_unit_cost_snapshot' => 'DECIMAL(18,6) NULL AFTER discounted_line_total',
+        'acquisition_total_cost_snapshot' => 'DECIMAL(18,2) NULL AFTER acquisition_unit_cost_snapshot',
     ];
+    $acquisitionSnapshotColumnsAdded = false;
     foreach ($promotionItemColumns as $column => $definition) {
         if (!$db->query("SHOW COLUMNS FROM shop_order_items LIKE " . $db->quote($column))->fetch()) {
             $db->exec("ALTER TABLE shop_order_items ADD COLUMN {$column} {$definition}");
+            if (str_contains($column, 'acquisition_')) $acquisitionSnapshotColumnsAdded = true;
         }
+    }
+    if ($acquisitionSnapshotColumnsAdded) {
+        // Comenzile vechi nu au avut un instantaneu de cost. Il fixam o singura
+        // data pentru produsele online-only, astfel incat schimbarile viitoare
+        // ale furnizorului sa nu le rescrie marja istorica.
+        $db->exec(
+            'UPDATE shop_order_items oi
+             INNER JOIN shop_products p ON p.id = oi.product_id
+             SET oi.acquisition_unit_cost_snapshot = CASE
+                     WHEN COALESCE(p.supplier_base_price, 0) > 0 THEN p.supplier_base_price
+                     ELSE COALESCE(p.cost_price, 0)
+                 END,
+                 oi.acquisition_total_cost_snapshot = ROUND(oi.quantity * CASE
+                     WHEN COALESCE(p.supplier_base_price, 0) > 0 THEN p.supplier_base_price
+                     ELSE COALESCE(p.cost_price, 0)
+                 END, 2)
+             WHERE p.is_accounting_stock_tracked = 0
+               AND oi.acquisition_unit_cost_snapshot IS NULL'
+        );
     }
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_order_status_history (
@@ -2650,6 +2720,9 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['cost_price'] = (float)($row['cost_price'] ?? 0);
     $row['supplier_base_price'] = $row['supplier_base_price'] === null ? null : (float)$row['supplier_base_price'];
     $row['supplier_price_difference'] = $row['supplier_price_difference'] === null ? null : (float)$row['supplier_price_difference'];
+    if ($row['price'] <= 0 && $row['supplier_base_price'] !== null && $row['supplier_base_price'] > 0) {
+        $row['price'] = $row['supplier_base_price'];
+    }
     $row['sale_price'] = $row['sale_price'] === null ? null : (float)$row['sale_price'];
     $row['discount_type'] = in_array((string)($row['discount_type'] ?? ''), ['percent', 'fixed'], true)
         ? (string)$row['discount_type']
@@ -2810,6 +2883,8 @@ function publicCatalogProductRow(array $row): array {
         'ean' => (string)($row['ean'] ?? ''),
         'name' => (string)($row['name'] ?? ''),
         'short_description' => (string)($row['short_description'] ?? ''),
+        'meta_title' => (string)($row['meta_title'] ?? ''),
+        'meta_description' => (string)($row['meta_description'] ?? ''),
         'category_id' => empty($row['category_id']) ? null : (string)$row['category_id'],
         'category_name' => (string)($row['category_name'] ?? ''),
         'category_slug' => (string)($row['category_slug'] ?? ''),
@@ -2881,6 +2956,8 @@ function compactPublicCatalogPayload(array $products): array {
                 $product['price_before_promotion'] === null ? null : (float)$product['price_before_promotion'],
                 (float)($product['promotion_discount_percent'] ?? 0),
                 $promotion,
+                (string)($product['meta_title'] ?? ''),
+                (string)($product['meta_description'] ?? ''),
             ];
         }, $products),
     ];
@@ -2889,7 +2966,7 @@ function compactPublicCatalogPayload(array $products): array {
 function publicCatalogProductSelectSql(): string {
     return 'SELECT p.id, p.category_id, p.manufacturer_id, p.source_id,
                    p.sku, p.supplier_external_id, p.supplier_product_code, p.ean,
-                   p.name, p.slug, p.short_description,
+                   p.name, p.slug, p.short_description, p.meta_title, p.meta_description,
                    p.price, p.sale_price, p.discount_type, p.discount_value, p.currency,
                    p.stock_mode, p.stock_quantity, p.low_stock_threshold,
                    p.is_featured, p.featured_rank,
@@ -4182,7 +4259,7 @@ function orderRow(PDO $db, array $row, ?array $config = null, bool $withHistory 
         $returnItems = $db->prepare('SELECT * FROM shop_order_return_items WHERE order_id = ? ORDER BY created_at ASC, id ASC');
         $returnItems->execute([(string)$row['id']]);
         $row['return_items'] = array_map(static function (array $item): array {
-            foreach (['requested_quantity', 'accepted_quantity', 'unit_refund_value', 'line_refund_value'] as $column) {
+            foreach (['requested_quantity', 'accepted_quantity', 'refused_quantity', 'unit_refund_value', 'line_refund_value'] as $column) {
                 $item[$column] = $item[$column] === null ? null : (float)$item[$column];
             }
             return $item;
@@ -4247,6 +4324,7 @@ function publicTrackingOrder(array $order): array {
             'requested_quantity' => (float)($item['requested_quantity'] ?? 0),
             'decision_status' => (string)($item['decision_status'] ?? 'pending'),
             'accepted_quantity' => ($item['accepted_quantity'] ?? null) === null ? null : (float)$item['accepted_quantity'],
+            'refused_quantity' => (float)($item['refused_quantity'] ?? max(0, (float)($item['requested_quantity'] ?? 0) - (float)($item['accepted_quantity'] ?? 0))),
             'decision_reason' => (string)($item['decision_reason'] ?? ''),
             'unit_refund_value' => (float)($item['unit_refund_value'] ?? 0),
             'line_refund_value' => (float)($item['line_refund_value'] ?? 0),
@@ -4336,10 +4414,24 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
             if ($product['stock_mode'] === 'tracked' && (int)$product['stock_quantity'] < $quantity) {
                 throw new InvalidArgumentException('Stoc insuficient pentru ' . (string)$product['name'] . '.');
             }
-            $unitPrice = $product['sale_price'] !== null ? (float)$product['sale_price'] : (float)$product['price'];
+            $basePublicPrice = productPublicBasePrice($product);
+            $unitPrice = $product['sale_price'] !== null && (float)$product['sale_price'] > 0
+                ? (float)$product['sale_price']
+                : $basePublicPrice;
+            if ($unitPrice <= 0) {
+                throw new InvalidArgumentException('Pretul produsului ' . (string)$product['name'] . ' nu este configurat.');
+            }
             $lineTotal = round($unitPrice * $quantity, 2);
             $subtotal += $lineTotal;
-            $resolvedItems[] = ['product' => $product, 'quantity' => $quantity, 'unit_price' => $unitPrice, 'line_total' => $lineTotal];
+            $acquisitionUnitCost = productOrderAcquisitionUnitCost($product);
+            $resolvedItems[] = [
+                'product' => $product,
+                'quantity' => $quantity,
+                'unit_price' => $unitPrice,
+                'line_total' => $lineTotal,
+                'acquisition_unit_cost_snapshot' => $acquisitionUnitCost,
+                'acquisition_total_cost_snapshot' => $acquisitionUnitCost === null ? null : round($acquisitionUnitCost * $quantity, 2),
+            ];
         }
         if (!$resolvedItems) throw new InvalidArgumentException('Comanda nu contine produse valide.');
         $requestedCouponCode = strtoupper(trim((string)($body['coupon_code'] ?? '')));
@@ -4380,7 +4472,7 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
             $shippingId, (string)$shipping['name'], $subtotal, $discountTotal, $promotion['id'], $promotion['code'], $promotion['scope'], $shippingCost, $total, $vatPayer ? 1 : 0, $vatRate, $vatTotal, $netTotal, 'RON', $trackingToken
         ]);
         reservePromotionUsage($db, $promotion, $customer, $deviceHash, $orderId);
-        $insertItem = $db->prepare('INSERT INTO shop_order_items (id, order_id, product_id, product_name, product_sku, quantity, unit_price, line_total, discount_total, discounted_unit_price, discounted_line_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $insertItem = $db->prepare('INSERT INTO shop_order_items (id, order_id, product_id, product_name, product_sku, quantity, unit_price, line_total, discount_total, discounted_unit_price, discounted_line_total, acquisition_unit_cost_snapshot, acquisition_total_cost_snapshot) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         foreach ($resolvedItems as $index => $item) {
             $product = $item['product'];
             $quotedItem = $quotedItems[$index] ?? [];
@@ -4389,6 +4481,8 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
                 (float)($quotedItem['discount_total'] ?? 0),
                 (float)($quotedItem['discounted_unit_price'] ?? $item['unit_price']),
                 (float)($quotedItem['discounted_line_total'] ?? $item['line_total']),
+                $item['acquisition_unit_cost_snapshot'],
+                $item['acquisition_total_cost_snapshot'],
             ]);
         }
         $historyId = recordOrderStatusHistory(
@@ -6004,14 +6098,15 @@ try {
         $summary = $db->prepare(
             'SELECT COUNT(DISTINCT o.id) AS orders_count,
                     COALESCE(SUM(oi.quantity), 0) AS units_sold,
-                    COALESCE(SUM(oi.line_total), 0) AS revenue
+                    COALESCE(SUM(oi.line_total), 0) AS revenue,
+                    COALESCE(SUM(COALESCE(oi.acquisition_total_cost_snapshot, oi.quantity * ?)), 0) AS acquisition_total
              FROM shop_order_items oi
              INNER JOIN shop_orders o ON o.id = oi.order_id
              WHERE oi.product_id = ?
-               AND o.status NOT IN ("cancelled", "refunded")
+               AND o.status NOT IN ("cancelled", "return_confirmed", "refunded")
                AND o.payment_status = "paid"'
         );
-        $summary->execute([$product['id']]);
+        $summary->execute([(float)$product['cost_price'], $product['id']]);
         $sales = $summary->fetch() ?: [];
         $orders = $db->prepare(
             'SELECT o.id, o.order_number, o.status, o.payment_status, o.customer_name, o.customer_type, o.company_name, o.created_at,
@@ -6033,7 +6128,7 @@ try {
         $reviews->execute([$product['id']]);
         $unitsSold = (int)($sales['units_sold'] ?? 0);
         $revenue = round((float)($sales['revenue'] ?? 0), 2);
-        $acquisitionTotal = round($unitsSold * (float)$product['cost_price'], 2);
+        $acquisitionTotal = round((float)($sales['acquisition_total'] ?? 0), 2);
         jsonResponse([
             'product' => $product,
             'orders_count' => (int)($sales['orders_count'] ?? 0),
@@ -6164,6 +6259,17 @@ try {
         );
         $costSummaryStatement->execute([$rangeStartSql, $rangeEndSql]);
         $costSummary = $costSummaryStatement->fetch() ?: [];
+        $onlineOnlyCostSummaryStatement = $db->prepare(
+            'SELECT COALESCE(SUM(oi.acquisition_total_cost_snapshot), 0) AS cost_of_goods_sold
+             FROM shop_order_items oi
+             INNER JOIN shop_orders o ON o.id = oi.order_id
+             WHERE oi.acquisition_total_cost_snapshot IS NOT NULL
+               AND o.payment_status = "paid"
+               AND o.status NOT IN ("cancelled", "return_confirmed", "refunded")
+               AND o.created_at >= ? AND o.created_at < ?'
+        );
+        $onlineOnlyCostSummaryStatement->execute([$rangeStartSql, $rangeEndSql]);
+        $onlineOnlyCostSummary = $onlineOnlyCostSummaryStatement->fetch() ?: [];
 
         $acquisitionSummaryStatement = $db->prepare(
             'SELECT COALESCE(SUM(CASE
@@ -6231,6 +6337,19 @@ try {
              ORDER BY day ASC'
         );
         $costsDailyStatement->execute([$rangeStartSql, $rangeEndSql]);
+        $onlineOnlyCostsDailyStatement = $db->prepare(
+            'SELECT ' . $orderBucketExpression . ' AS day,
+                    COALESCE(SUM(oi.acquisition_total_cost_snapshot), 0) AS cost_of_goods_sold
+             FROM shop_order_items oi
+             INNER JOIN shop_orders o ON o.id = oi.order_id
+             WHERE oi.acquisition_total_cost_snapshot IS NOT NULL
+               AND o.payment_status = "paid"
+               AND o.status NOT IN ("cancelled", "return_confirmed", "refunded")
+               AND o.created_at >= ? AND o.created_at < ?
+             GROUP BY ' . $orderBucketExpression . '
+             ORDER BY day ASC'
+        );
+        $onlineOnlyCostsDailyStatement->execute([$rangeStartSql, $rangeEndSql]);
         $acquisitionsDailyStatement = $db->prepare(
             'SELECT ' . $nirBucketExpression . ' AS day,
                     COALESCE(SUM(CASE
@@ -6258,6 +6377,13 @@ try {
         foreach ($costsDailyStatement->fetchAll() as $dailyRow) {
             $day = (string)$dailyRow['day'];
             $dailyByDate[$day] = array_merge($dailyByDate[$day] ?? [], $dailyRow);
+        }
+        foreach ($onlineOnlyCostsDailyStatement->fetchAll() as $dailyRow) {
+            $day = (string)$dailyRow['day'];
+            $dailyByDate[$day] = array_merge($dailyByDate[$day] ?? [], [
+                'cost_of_goods_sold' => (float)($dailyByDate[$day]['cost_of_goods_sold'] ?? 0)
+                    + (float)($dailyRow['cost_of_goods_sold'] ?? 0),
+            ]);
         }
         foreach ($acquisitionsDailyStatement->fetchAll() as $dailyRow) {
             $day = (string)$dailyRow['day'];
@@ -6319,7 +6445,11 @@ try {
         $returnsTotal = round((float)($invoiceSummary['returns_total'] ?? 0), 2);
         $revenue = round((float)($summary['collected_revenue'] ?? 0), 2);
         $acquisitions = round((float)($acquisitionSummary['acquisitions'] ?? 0), 2);
-        $costOfGoodsSold = round((float)($costSummary['cost_of_goods_sold'] ?? 0), 2);
+        $costOfGoodsSold = round(
+            (float)($costSummary['cost_of_goods_sold'] ?? 0)
+            + (float)($onlineOnlyCostSummary['cost_of_goods_sold'] ?? 0),
+            2
+        );
         jsonResponse([
             'revenue' => $revenue,
             'collected_revenue' => $revenue,
@@ -6669,6 +6799,13 @@ try {
             if ($db->inTransaction()) $db->rollBack();
             throw $error;
         }
+        if (mb_strtolower(trim((string)$payload['source_domain'])) === 'boomag.ro') {
+            try {
+                gomagSyncProductFromFeed($db, $config, $id);
+            } catch (Throwable $syncError) {
+                error_log('[G-Trots Boomag create pricing sync] ' . $syncError->getMessage());
+            }
+        }
         $stripeSync = stripeSyncProductSafe($db, $config, $id);
         $productResponse = findProduct($db, $id, $config);
         $productResponse['stripe_sync'] = $stripeSync;
@@ -6701,6 +6838,17 @@ try {
         if (mb_strtolower(trim((string)$payload['source_domain'])) === 'boomag.ro') {
             $payload['stock_mode'] = 'tracked';
             $payload['stock_quantity'] = (int)($current['supplier_stock_quantity'] ?? $current['stock_quantity'] ?? 0);
+            if ($payload['price'] <= 0 && (float)($current['supplier_base_price'] ?? 0) > 0) {
+                $payload['price'] = round((float)$current['supplier_base_price'], 2);
+                $payload['sale_price'] = boomagSalePriceForBase(
+                    $payload['price'],
+                    (string)$payload['discount_type'],
+                    $payload['discount_value']
+                );
+            }
+            if (!$payload['is_accounting_stock_tracked'] && (float)($current['supplier_base_price'] ?? 0) > 0) {
+                $payload['cost_price'] = round((float)$current['supplier_base_price'], 2);
+            }
         }
         $removedDescriptionImages = array_diff(
             richDescriptionImagePaths((string)($current['description_html'] ?? '')),
@@ -6728,16 +6876,10 @@ try {
                 $payload['stock_mode'], $payload['stock_quantity'], $payload['is_accounting_stock_tracked'] ? 1 : 0, $payload['low_stock_threshold'], $payload['is_active'] ? 1 : 0, $payload['is_featured'] ? 1 : 0, $nextContentStatus, $id
             ]);
             if (mb_strtolower(trim((string)$payload['source_domain'])) === 'boomag.ro') {
-                $difference = $db->prepare(
-                    'UPDATE shop_products
-                     SET supplier_price_difference = CASE
-                         WHEN supplier_base_price IS NULL THEN NULL
-                         ELSE ROUND(? - supplier_base_price, 2)
-                     END,
-                     updated_at = updated_at
-                     WHERE id = ?'
-                );
-                $difference->execute([$payload['price'], $id]);
+                $supplierBase = (float)($current['supplier_base_price'] ?? 0);
+                $differenceValue = $supplierBase > 0 ? round($payload['price'] - $supplierBase, 2) : null;
+                $difference = $db->prepare('UPDATE shop_products SET supplier_price_difference = ?, updated_at = updated_at WHERE id = ?');
+                $difference->execute([$differenceValue, $id]);
             }
             syncProductBrands($db, $id, $payload['brand_ids']);
             syncProductImages($db, $id, $payload['images'], $payload['name']);
@@ -6754,6 +6896,13 @@ try {
             throw $error;
         }
         foreach ($removedDescriptionImages as $path) removeShopImage((string)$path);
+        if (mb_strtolower(trim((string)$payload['source_domain'])) === 'boomag.ro') {
+            try {
+                gomagSyncProductFromFeed($db, $config, $id);
+            } catch (Throwable $syncError) {
+                error_log('[G-Trots Boomag update pricing sync] ' . $syncError->getMessage());
+            }
+        }
         $stripeSync = stripeSyncProductSafe($db, $config, $id);
         $productResponse = findProduct($db, $id, $config);
         $productResponse['stripe_sync'] = $stripeSync;
@@ -7142,7 +7291,7 @@ try {
         }
         if ($status === 'return_refused') {
             $refusedDecisions = (array)($body['return_items'] ?? []);
-            if (!$refusedDecisions || array_filter($refusedDecisions, static fn(array $item): bool => (string)($item['decision_status'] ?? '') !== 'refused')) {
+            if (!$refusedDecisions || array_filter($refusedDecisions, static fn(array $item): bool => round((float)($item['accepted_quantity'] ?? 0), 4) > 0)) {
                 throw new InvalidArgumentException('Pentru statusul Retur refuzat, toate produsele solicitate trebuie marcate Refuză și motivate individual. Dacă accepți cel puțin un produs, folosește Retur confirmat.');
             }
             $currentStatusStmt = $db->prepare('SELECT status FROM shop_orders WHERE id = ? LIMIT 1');

@@ -17,6 +17,7 @@ API_ROOT = PROJECT_ROOT / "shop-api"
 REMOTE_ROOT = "/g-trots.ro/shop-api"
 FILES = (
     "invoice-export.php",
+    "product-pricing.php",
     "product-export.php",
     "api.php",
     "api-v2.php",

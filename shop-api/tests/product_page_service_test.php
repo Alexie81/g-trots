@@ -28,6 +28,10 @@ $product = [
 $html = shopProductSeoRender($product, ['website_base_url' => 'https://g-trots.ro']);
 
 productPageAssert(str_contains($html, '<title>Trotinetă Xiaomi Pro 2 second hand | G-Trots</title>'), 'Titlul SEO trebuie să fie prezent în HTML-ul inițial.');
+productPageAssert(str_contains($html, 'property="og:title" content="Trotinetă Xiaomi Pro 2 second hand | G-Trots"'), 'WhatsApp trebuie să primească exact meta titlul salvat în aplicație.');
+productPageAssert(str_contains($html, 'property="og:description" content="Cumpără o trotinetă Xiaomi Pro 2 second hand verificată în service-ul G-Trots, cu informații clare despre stare și livrare."'), 'WhatsApp trebuie să primească exact meta descrierea salvată în aplicație.');
+productPageAssert(str_contains($html, 'property="og:image" content="https://g-trots.ro/shop-api/uploads/products/produs.webp"'), 'WhatsApp trebuie să primească imaginea principală a produsului.');
+productPageAssert(str_contains($html, 'property="og:image:secure_url" content="https://g-trots.ro/shop-api/uploads/products/produs.webp"'), 'Imaginea socială trebuie publicată și ca adresă HTTPS explicită.');
 productPageAssert(str_contains($html, 'href="https://g-trots.ro/magazin/produs/trotineta-second-hand-xiaomi-pro-2/"'), 'Canonical-ul trebuie să indice URL-ul unic al produsului.');
 productPageAssert(str_contains($html, 'index, follow, max-image-preview:large'), 'Pagina produsului trebuie să fie indexabilă.');
 productPageAssert(str_contains($html, 'https://schema.org/UsedCondition'), 'Produsele second hand trebuie marcate cu UsedCondition.');

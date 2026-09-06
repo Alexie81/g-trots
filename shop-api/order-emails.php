@@ -178,6 +178,34 @@ function gtEmailStatusTimeline(string $status, string $paymentMethod = 'card'): 
     return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' . $rows . '</table>';
 }
 
+function gtEmailQuantity($value): string {
+    $quantity = round((float)$value, 4);
+    return rtrim(rtrim(number_format($quantity, 4, ',', '.'), '0'), ',');
+}
+
+/** Afișează decizia exactă pe cantități în mesajele de confirmare/refuz ale returului. */
+function gtEmailReturnDecisionSummary(array $order): string {
+    $items = array_values(array_filter((array)($order['return_items'] ?? []), static fn($item): bool => is_array($item) && (string)($item['decision_status'] ?? 'pending') !== 'pending'));
+    if (!$items) return '';
+    $rows = '';
+    foreach ($items as $item) {
+        $requested = max(0.0, (float)($item['requested_quantity'] ?? 0));
+        $accepted = max(0.0, min($requested, (float)($item['accepted_quantity'] ?? 0)));
+        $refused = max(0.0, (float)($item['refused_quantity'] ?? ($requested - $accepted)));
+        $reason = trim((string)($item['decision_reason'] ?? ''));
+        $decisionColor = $refused > 0.00005 ? ($accepted > 0.00005 ? '#fbbf24' : '#fb7185') : '#5eead4';
+        $decisionLabel = $refused > 0.00005 ? ($accepted > 0.00005 ? 'APROBAT PARȚIAL' : 'REFUZAT') : 'APROBAT INTEGRAL';
+        $reasonHtml = $refused > 0.00005 && $reason !== ''
+            ? '<p style="margin:9px 0 0;padding:10px 12px;border-radius:12px;background:#25191e;color:#f5d7e0;font-size:11px;line-height:1.5"><strong style="color:#fb9aad">Motivul refuzului:</strong> ' . gtEmailEscape($reason) . '</p>'
+            : '';
+        $rows .= '<div style="margin-top:10px;padding:15px;border:1px solid #403b43;border-radius:18px;background:#171519">'
+            . '<table role="presentation" width="100%"><tr><td><strong style="display:block;color:#fff8f3;font-size:13px;line-height:1.4">' . gtEmailEscape($item['product_name'] ?? '') . '</strong><span style="display:block;margin-top:3px;color:#827b84;font-size:10px">' . gtEmailEscape($item['product_sku'] ?? 'Fără SKU') . '</span></td><td align="right"><span style="display:inline-block;color:' . $decisionColor . ';font-size:9px;font-weight:900;letter-spacing:.08em">' . $decisionLabel . '</span></td></tr></table>'
+            . '<table role="presentation" width="100%" style="margin-top:12px;font-size:11px"><tr><td style="color:#aaa2ac">Solicitată <strong style="color:#fff8f3">' . gtEmailQuantity($requested) . '</strong></td><td align="center" style="color:#6ee7b7">Acceptată <strong>' . gtEmailQuantity($accepted) . '</strong></td><td align="right" style="color:#fb9aad">Refuzată <strong>' . gtEmailQuantity($refused) . '</strong></td></tr></table>'
+            . $reasonHtml . '</div>';
+    }
+    return '<div style="margin-top:18px;padding:18px;border:1px solid #4c414a;border-radius:24px;background:#211f24"><span style="display:block;color:#a49ca6;font-size:9px;font-weight:900;letter-spacing:.12em">DECIZIA PE FIECARE PRODUS</span>' . $rows . '</div>';
+}
+
 function gtBuildOrderEmail(array $order, array $config, string $status): array {
     $meta = gtOrderStatusMeta($status);
     $currency = (string)($order['currency'] ?? 'RON');
@@ -253,6 +281,9 @@ function gtBuildOrderEmail(array $order, array $config, string $status): array {
     $deliveryAddress = trim((string)($order['address'] ?? '') . ', ' . (string)($order['city'] ?? '') . ', ' . (string)($order['county'] ?? ''), ', ');
     $customerDataRows .= '<tr><td style="padding:9px 0 5px;border-top:1px solid #39353d;color:#8f8790">Livrare</td><td align="right" style="padding:9px 0 5px;border-top:1px solid #39353d;color:#d8d1d9">' . gtEmailEscape($deliveryAddress) . '</td></tr>';
     $timeline = gtEmailStatusTimeline($status, (string)($order['payment_method'] ?? 'card'));
+    $returnDecisionSummary = in_array($status, ['return_refused', 'return_confirmed', 'refunded'], true)
+        ? gtEmailReturnDecisionSummary($order)
+        : '';
     $customerActionFooter = '';
     if (in_array($status, ['new', 'confirmed', 'processing'], true)) {
         $safeCancellationUrl = gtEmailEscape(gtEmailCancellationUrl($order, $config));
@@ -278,6 +309,7 @@ function gtBuildOrderEmail(array $order, array $config, string $status): array {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px">{$itemsHtml}</table>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:17px;color:#aaa2ac;font-size:12px"><tr><td style="padding:6px 0">{$subtotalLabel}</td><td align="right">{$subtotal}</td></tr>{$discountRow}<tr><td style="padding:6px 0">Livrare · {$shippingName}</td><td align="right">{$shippingCost}</td></tr><tr><td style="padding:6px 0">Plată</td><td align="right">{$paymentText}</td></tr><tr><td style="padding:19px 0 0;border-top:1px solid #403b43;color:#fff8f3;font-size:15px;font-weight:900">Total de plată{$vatTotalLabel}</td><td align="right" style="padding:19px 0 0;border-top:1px solid #403b43;color:#ffb77a;font-size:24px;font-weight:1000">{$total}</td></tr></table>
 </div>
+{$returnDecisionSummary}
 <div style="margin-top:20px;padding:20px;border:1px solid #403b43;border-radius:24px;background:#1a181d"><span style="display:block;margin-bottom:10px;color:#a49ca6;font-size:9px;font-weight:900;letter-spacing:.12em">DATE CLIENT ȘI FACTURARE</span><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:11px">{$customerDataRows}</table></div>
 <div class="gt-timeline" style="margin-top:20px;padding:20px;border:1px solid #403b43;border-radius:28px;background:#211f24"><span style="display:block;margin-bottom:13px;color:#a49ca6;font-size:9px;font-weight:900;letter-spacing:.12em">EVOLUȚIA COMENZII</span>{$timeline}</div>
 <div style="padding:22px 0 6px;text-align:center"><a class="gt-action" href="{$safeTrackingUrl}" style="display:inline-block;padding:17px 30px;border-radius:20px;background:#ff8a00;color:#ffffff;text-decoration:none;font-size:14px;font-weight:900;box-shadow:0 13px 32px rgba(255,138,0,.25)">Urmărește comanda&nbsp;&nbsp;→</a></div>
@@ -540,6 +572,7 @@ function gtSendOrderReturnConfirmedEmail(array $order, array $config): array {
     $fiscalMessage = !empty($order['return_invoice_id'])
         ? 'Factura de retur este emisă automat și îți este trimisă separat pe e-mail, în format PDF.'
         : 'Comanda nu avea o factură pozitivă emisă, așadar confirmarea returului nu generează acum niciun document fiscal.';
+    $returnDecisionSummary = gtEmailReturnDecisionSummary($order);
     $html = <<<HTML
 <!doctype html><html lang="ro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;background:transparent;color:#fff8f3;font-family:Roboto,'Segoe UI',Arial,sans-serif;-webkit-font-smoothing:antialiased">
@@ -549,6 +582,7 @@ function gtSendOrderReturnConfirmedEmail(array $order, array $config): array {
 <tr><td style="height:7px;background:#2dd4bf"></td></tr><tr><td style="padding:28px 30px 32px">
 <table role="presentation" width="100%"><tr><td style="width:58px"><img src="{$logoUrl}" width="52" height="52" alt="G-Trots România" style="display:block;border-radius:17px"></td><td><strong style="display:block;color:#fff8f3;font-size:17px">G-Trots România</strong><span style="display:block;margin-top:4px;color:#9f979f;font-size:9px;font-weight:800;letter-spacing:.1em">CONFIRMARE RETUR</span></td></tr></table>
 <div style="padding:30px 0 19px"><span style="color:#5eead4;font-size:10px;font-weight:900;letter-spacing:.13em">RETUR CONFIRMAT</span><h1 style="margin:9px 0 12px;font-size:38px;line-height:1.04;letter-spacing:-.045em">Returul tău a fost aprobat.</h1><p style="margin:0;color:#b5adb6;font-size:14px;line-height:1.65">{$greeting} Am confirmat returul pentru comanda <strong style="color:#ffb77a">{$orderNumber}</strong>. Echipa noastră continuă verificarea produselor și procesarea restituirii.</p></div>
+{$returnDecisionSummary}
 <div style="padding:18px;border:1px solid #315955;border-radius:20px;background:#172421"><span style="display:block;color:#5eead4;font-size:9px;font-weight:900;letter-spacing:.1em">SUMĂ ESTIMATĂ DE RESTITUIT</span><strong style="display:block;margin-top:8px;color:#a7f3d0;font-size:24px">{$refundAmount}</strong><p style="margin:7px 0 0;color:#aaa2ac;font-size:12px;line-height:1.6">Valoarea finală este procesată după verificarea returului. Acest mesaj confirmă aprobarea returului, nu finalizarea rambursării.</p></div>
 <div style="margin-top:13px;padding:17px;border:1px solid #403b43;border-radius:20px;background:#171519"><strong style="display:block;color:#fff8f3;font-size:13px">Documente fiscale</strong><p style="margin:7px 0 0;color:#aaa2ac;font-size:12px;line-height:1.6">{$fiscalMessage}</p></div>
 <div style="padding:23px 0 4px;text-align:center"><a href="{$trackingUrl}" style="display:inline-block;padding:15px 24px;border-radius:18px;background:#2dd4bf;color:#10201e;text-decoration:none;font-size:13px;font-weight:900">Vezi comanda&nbsp;&nbsp;→</a></div>

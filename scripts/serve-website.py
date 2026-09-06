@@ -30,6 +30,23 @@ class CleanUrlHandler(SimpleHTTPRequestHandler):
         request_path = unquote(parsed.path)
 
         if request_path.rstrip("/").startswith("/magazin/produs/"):
+            relative_product_path = request_path.removeprefix("/magazin/produs/").strip("/")
+            static_product_page = WEBSITE_ROOT / "magazin" / "produs" / relative_product_path / "index.html"
+            if (
+                relative_product_path
+                and "/" not in relative_product_path
+                and "\\" not in relative_product_path
+                and relative_product_path not in {".", ".."}
+                and static_product_page.is_file()
+            ):
+                self.path = urlunsplit((
+                    parsed.scheme,
+                    parsed.netloc,
+                    f"/magazin/produs/{relative_product_path}/index.html",
+                    parsed.query,
+                    parsed.fragment,
+                ))
+                return super().send_head()
             self.path = urlunsplit((parsed.scheme, parsed.netloc, "/produs.html", parsed.query, parsed.fragment))
             return super().send_head()
 

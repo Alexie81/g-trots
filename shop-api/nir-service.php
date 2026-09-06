@@ -499,11 +499,131 @@ function shopNirFetchDocument(PDO $db, string $id, array $user, bool $withDetail
         }
         unset($line);
     }
+    if (($result['document_kind'] ?? '') === 'customer_return') {
+        $result['supplier_return_origins'] = shopNirCustomerReturnSupplierOrigins($db, $id, $canViewCosts);
+        $result['has_supplier_return_origins'] = count($result['supplier_return_origins']) > 0;
+    }
     if ($canViewCosts && $withPriceComparisons && ($result['document_kind'] ?? 'nir') === 'nir') $result['lines'] = shopNirAttachPriceComparisons($db, $result['lines'], $document);
     $attachments = $db->prepare('SELECT id, original_name, mime_type, extension, file_size, sha256, extraction_status, extraction_message, created_at FROM shop_nir_attachments WHERE nir_document_id = ? ORDER BY created_at ASC');
     $attachments->execute([$id]);
     $result['attachments'] = $attachments->fetchAll();
     return $result;
+}
+
+/**
+ * Returns the permanent FIFO lineage of an accounting customer return, grouped
+ * by the original supplier receipt. One customer return may point to several
+ * supplier NIRs when the sale consumed more than one FIFO layer.
+ */
+function shopNirCustomerReturnSupplierOrigins(PDO $db, string $customerReturnNirId, bool $canViewCosts = true): array {
+    $stmt = $db->prepare(
+        'SELECT o.*, d.nir_number AS original_nir_number, d.temporary_number AS original_temporary_number,
+                d.status AS original_nir_status, d.supplier_invoice_series AS original_invoice_series,
+                d.supplier_invoice_number AS original_invoice_number, d.supplier_invoice_date AS original_invoice_date,
+                d.row_version AS original_nir_row_version,
+                s.name AS supplier_name, s.alias AS supplier_alias, s.cui AS supplier_cui,
+                ol.line_number AS original_line_number, ol.accepted_quantity AS original_accepted_quantity,
+                ol.stock_quantity AS original_stock_quantity, ol.conversion_factor, ol.purchase_unit, ol.stock_unit,
+                COALESCE(ol.product_snapshot_name, p.name, ol.supplier_product_name, "Produs") AS product_name,
+                COALESCE(ol.sku_snapshot, p.sku, ol.supplier_product_code, "") AS product_sku,
+                (SELECT pi.image_path FROM shop_product_images pi WHERE pi.product_id = o.product_id ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS product_image_url,
+                COALESCE((SELECT SUM(a.quantity) FROM shop_customer_return_supplier_storno_allocations a WHERE a.customer_return_origin_id = o.id), 0) AS allocated_quantity
+         FROM shop_customer_return_fifo_origins o
+         INNER JOIN shop_nir_documents d ON d.id = o.original_nir_document_id
+         INNER JOIN shop_nir_lines ol ON ol.id = o.original_nir_line_id
+         LEFT JOIN shop_suppliers s ON s.id = o.supplier_id
+         LEFT JOIN shop_products p ON p.id = o.product_id
+         WHERE o.customer_return_nir_id = ?
+         ORDER BY d.reception_date, d.created_at, ol.line_number, o.created_at, o.id'
+    );
+    $stmt->execute([$customerReturnNirId]);
+    $rows = $stmt->fetchAll();
+    if (!$rows) return [];
+
+    $originalDocuments = [];
+    foreach ($rows as $row) $originalDocuments[(string)$row['original_nir_document_id']] = ['id' => (string)$row['original_nir_document_id']];
+    $progress = shopNirStornoProgressMap($db, array_values($originalDocuments));
+    $groups = [];
+    foreach ($rows as $row) {
+        $documentId = (string)$row['original_nir_document_id'];
+        $lineId = (string)$row['original_nir_line_id'];
+        if (!isset($groups[$documentId])) {
+            $groups[$documentId] = [
+                'original_nir_id' => $documentId,
+                'original_nir_number' => $row['original_nir_number'] ?: $row['original_temporary_number'],
+                'original_nir_status' => (string)$row['original_nir_status'],
+                'original_nir_row_version' => (int)$row['original_nir_row_version'],
+                'supplier_id' => $row['supplier_id'] ?: null,
+                'supplier_name' => $row['supplier_name'] ?: null,
+                'supplier_alias' => $row['supplier_alias'] ?: null,
+                'supplier_display_name' => shopNirSupplierDisplayName($row, 'Furnizor'),
+                'supplier_cui' => $row['supplier_cui'] ?: null,
+                'original_invoice' => [
+                    'series' => $row['original_invoice_series'] ?: null,
+                    'number' => $row['original_invoice_number'] ?: null,
+                    'date' => $row['original_invoice_date'] ?: null,
+                ],
+                'returned_stock_quantity' => 0,
+                'supplier_returned_stock_quantity' => 0,
+                'available_stock_quantity' => 0,
+                'lines' => [],
+            ];
+        }
+        if (!isset($groups[$documentId]['lines'][$lineId])) {
+            $groups[$documentId]['lines'][$lineId] = [
+                'original_nir_line_id' => $lineId,
+                'original_line_number' => (int)$row['original_line_number'],
+                'product_id' => (string)$row['product_id'],
+                'product_name' => (string)$row['product_name'],
+                'product_sku' => (string)$row['product_sku'],
+                'product_image_url' => shopNirProductImageUrl($row['product_image_url'] ?? null),
+                'purchase_unit' => (string)($row['purchase_unit'] ?: 'buc'),
+                'stock_unit' => (string)($row['stock_unit'] ?: 'buc'),
+                'conversion_factor' => (string)($row['conversion_factor'] ?: '1'),
+                'customer_return_nir_line_ids' => [],
+                'returned_stock_quantity' => 0,
+                'supplier_returned_stock_quantity' => 0,
+                'unit_cost_ron' => (string)$row['unit_cost_ron'],
+            ];
+        }
+        $returned = max(0, shopNirDecimalToScaled($row['restored_quantity'] ?? 0, 4));
+        $allocated = min($returned, max(0, shopNirDecimalToScaled($row['allocated_quantity'] ?? 0, 4)));
+        $groups[$documentId]['lines'][$lineId]['returned_stock_quantity'] += $returned;
+        $groups[$documentId]['lines'][$lineId]['supplier_returned_stock_quantity'] += $allocated;
+        $groups[$documentId]['lines'][$lineId]['customer_return_nir_line_ids'][(string)$row['customer_return_nir_line_id']] = true;
+    }
+
+    foreach ($groups as $documentId => &$group) {
+        $documentAvailable = 0;
+        foreach ($group['lines'] as $lineId => &$line) {
+            $returned = (int)$line['returned_stock_quantity'];
+            $allocated = min($returned, (int)$line['supplier_returned_stock_quantity']);
+            $originAvailableStock = max(0, $returned - $allocated);
+            $lineProgress = $progress[$documentId]['by_line'][$lineId] ?? [];
+            $stornablePurchase = max(0, shopNirDecimalToScaled($lineProgress['stornable_quantity'] ?? 0, 4));
+            $conversion = max(1, shopNirDecimalToScaled($line['conversion_factor'] ?? 1, 6));
+            $stornableStock = shopNirMultiplyScaled($stornablePurchase, 4, $conversion, 6, 4);
+            $availableStock = min($originAvailableStock, $stornableStock);
+            $availablePurchase = $conversion > 0 ? shopNirDivideRounded($availableStock * 1000000, $conversion) : 0;
+            $line['customer_return_nir_line_ids'] = array_keys($line['customer_return_nir_line_ids']);
+            $line['returned_stock_quantity'] = shopNirScaledToDecimal($returned, 4);
+            $line['supplier_returned_stock_quantity'] = shopNirScaledToDecimal($allocated, 4);
+            $line['available_stock_quantity'] = shopNirScaledToDecimal($availableStock, 4);
+            $line['available_quantity'] = shopNirScaledToDecimal($availablePurchase, 4);
+            $line['original_nir_stornable_quantity'] = shopNirScaledToDecimal($stornablePurchase, 4);
+            $line['can_return_to_supplier'] = $availableStock > 0;
+            if (!$canViewCosts) unset($line['unit_cost_ron']);
+            $documentAvailable += $availableStock;
+        }
+        unset($line);
+        $group['lines'] = array_values($group['lines']);
+        $group['returned_stock_quantity'] = shopNirScaledToDecimal(array_sum(array_map(static fn(array $line): int => shopNirDecimalToScaled($line['returned_stock_quantity'], 4), $group['lines'])), 4);
+        $group['supplier_returned_stock_quantity'] = shopNirScaledToDecimal(array_sum(array_map(static fn(array $line): int => shopNirDecimalToScaled($line['supplier_returned_stock_quantity'], 4), $group['lines'])), 4);
+        $group['available_stock_quantity'] = shopNirScaledToDecimal($documentAvailable, 4);
+        $group['can_start_supplier_return'] = $group['original_nir_status'] === 'confirmed' && $documentAvailable > 0;
+    }
+    unset($group);
+    return array_values($groups);
 }
 
 function shopNirList(PDO $db, array $query, array $user): array {
@@ -1774,6 +1894,85 @@ function shopNirNormalizeStornoSelection(array $body, array $originalLines, arra
     return array_values($selected);
 }
 
+/**
+ * Locks and validates the customer-return lineage used as a shortcut to the
+ * original supplier receipt. Quantities in the lineage are stock-unit values;
+ * quantities selected by the storno dialog are purchase-unit values.
+ */
+function shopNirSupplierReturnContext(PDO $db, string $originalNirId, array $body, array $selection): ?array {
+    $customerReturnNirId = trim((string)($body['customer_return_nir_id'] ?? ''));
+    if ($customerReturnNirId === '') return null;
+
+    $returnStmt = $db->prepare('SELECT id, status, source_type, operation_type FROM shop_nir_documents WHERE id = ? FOR UPDATE');
+    $returnStmt->execute([$customerReturnNirId]);
+    $returnDocument = $returnStmt->fetch();
+    if (!$returnDocument
+        || (string)$returnDocument['status'] !== 'confirmed'
+        || (mb_strtolower((string)($returnDocument['source_type'] ?? '')) !== 'customer_return'
+            && mb_strtolower((string)($returnDocument['operation_type'] ?? '')) !== 'customer_return')) {
+        throw new ShopNirHttpException('NIR-ul de retur client folosit pentru trasabilitate nu este valid.', 409);
+    }
+
+    $originStmt = $db->prepare(
+        'SELECT o.*, ol.conversion_factor
+         FROM shop_customer_return_fifo_origins o
+         INNER JOIN shop_nir_lines ol ON ol.id = o.original_nir_line_id
+         WHERE o.customer_return_nir_id = ? AND o.original_nir_document_id = ?
+         ORDER BY o.created_at, o.id FOR UPDATE'
+    );
+    $originStmt->execute([$customerReturnNirId, $originalNirId]);
+    $origins = $originStmt->fetchAll();
+    if (!$origins) {
+        throw new ShopNirHttpException('NIR-ul de retur nu are produse provenite din recepția furnizorului selectată.', 409);
+    }
+
+    $originIds = array_map(static fn(array $row): string => (string)$row['id'], $origins);
+    $allocatedByOrigin = [];
+    if ($originIds) {
+        $placeholders = implode(',', array_fill(0, count($originIds), '?'));
+        $allocatedStmt = $db->prepare(
+            "SELECT customer_return_origin_id, SUM(quantity) AS allocated_quantity
+             FROM shop_customer_return_supplier_storno_allocations
+             WHERE customer_return_origin_id IN ({$placeholders})
+             GROUP BY customer_return_origin_id"
+        );
+        $allocatedStmt->execute($originIds);
+        foreach ($allocatedStmt->fetchAll() as $row) {
+            $allocatedByOrigin[(string)$row['customer_return_origin_id']] = max(0, shopNirDecimalToScaled($row['allocated_quantity'] ?? 0, 4));
+        }
+    }
+
+    $byLine = [];
+    foreach ($origins as $origin) {
+        $lineId = (string)$origin['original_nir_line_id'];
+        $restored = max(0, shopNirDecimalToScaled($origin['restored_quantity'] ?? 0, 4));
+        $allocated = min($restored, (int)($allocatedByOrigin[(string)$origin['id']] ?? 0));
+        $origin['remaining_stock_scaled'] = max(0, $restored - $allocated);
+        $byLine[$lineId]['origins'][] = $origin;
+        $byLine[$lineId]['available_stock_scaled'] = (int)($byLine[$lineId]['available_stock_scaled'] ?? 0) + (int)$origin['remaining_stock_scaled'];
+    }
+
+    foreach ($selection as $selected) {
+        $line = $selected['line'];
+        $lineId = (string)$line['id'];
+        if (!isset($byLine[$lineId])) {
+            throw new ShopNirHttpException('Produsul selectat nu provine din NIR-ul de retur client.', 409, ['line_id' => $lineId]);
+        }
+        $conversion = max(1, shopNirDecimalToScaled($line['conversion_factor'] ?? 1, 6));
+        $requestedStock = shopNirMultiplyScaled((int)$selected['quantity_scaled'], 4, $conversion, 6, 4);
+        if ($requestedStock > (int)$byLine[$lineId]['available_stock_scaled']) {
+            throw new ShopNirHttpException('Cantitatea selectată depășește cantitatea returnată de client care mai poate fi trimisă furnizorului.', 409, [
+                'line_id' => $lineId,
+                'requested_stock_quantity' => shopNirScaledToDecimal($requestedStock, 4),
+                'available_returned_stock_quantity' => shopNirScaledToDecimal((int)$byLine[$lineId]['available_stock_scaled'], 4),
+            ]);
+        }
+        $byLine[$lineId]['selected_stock_scaled'] = $requestedStock;
+    }
+
+    return ['customer_return_nir_id' => $customerReturnNirId, 'by_line' => $byLine];
+}
+
 /** Supplier-issued invoice/credit-note metadata for the negative document. */
 function shopNirStornoInvoicePayload(array $body, array $originalDocument): array {
     $isNewUiRequest = array_key_exists('lines', $body) || array_key_exists('line_id', $body) || array_key_exists('line_ids', $body);
@@ -1881,6 +2080,7 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
             }
         }
         $selection = shopNirNormalizeStornoSelection($body, $originalLines, $alreadyStorned);
+        $supplierReturnContext = shopNirSupplierReturnContext($db, $id, $body, $selection);
 
         $layerStmt = $db->prepare('SELECT * FROM shop_inventory_cost_layers WHERE nir_document_id = ? ORDER BY created_at FOR UPDATE');
         $layerStmt->execute([$id]);
@@ -1894,14 +2094,22 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
             $layer = $layerByLine[(string)$line['id']] ?? null;
             if (!$layer) throw new ShopNirHttpException('Produsul selectat nu mai are lotul contabil asociat.', 409, ['line_id' => $line['id']]);
             $consumptionStmt->execute([(string)$layer['id']]);
-            if ((int)$consumptionStmt->fetchColumn() > 0) {
+            $isCustomerReturnShortcut = $supplierReturnContext !== null && isset($supplierReturnContext['by_line'][(string)$line['id']]);
+            if (!$isCustomerReturnShortcut && (int)$consumptionStmt->fetchColumn() > 0) {
                 throw new ShopNirHttpException('Produsul selectat este folosit de un document de ieșire. Anulează mai întâi ieșirea, apoi stornează produsul.', 409, ['layer_id' => $layer['id']]);
             }
             $priorStock = (int)($alreadyStorned[(string)$line['id']]['stock_quantity'] ?? 0);
             $expectedRemaining = shopNirDecimalToScaled($layer['original_quantity'], 4) - $priorStock;
             $actualRemaining = shopNirDecimalToScaled($layer['remaining_quantity'], 4);
-            if ($actualRemaining !== $expectedRemaining) {
+            if (!$isCustomerReturnShortcut && $actualRemaining !== $expectedRemaining) {
                 throw new ShopNirHttpException('O parte din produsul selectat a fost deja consumată. Anulează mai întâi documentele de ieșire legate, apoi încearcă din nou.', 409, ['layer_id' => $layer['id']]);
+            }
+            $requestedStock = (int)($supplierReturnContext['by_line'][(string)$line['id']]['selected_stock_scaled'] ?? 0);
+            if ($isCustomerReturnShortcut && ($requestedStock <= 0 || $requestedStock > $actualRemaining)) {
+                throw new ShopNirHttpException('Cantitatea returnată de client nu mai este disponibilă integral în lotul contabil original.', 409, [
+                    'line_id' => $line['id'],
+                    'available_stock_quantity' => shopNirScaledToDecimal($actualRemaining, 4),
+                ]);
             }
         }
 
@@ -2001,12 +2209,37 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
         $originalMovement = $db->prepare('SELECT id FROM shop_inventory_movements WHERE inventory_cost_layer_id = ? AND movement_type = "NIR_IN" LIMIT 1');
         $affectedProducts = [];
         $stornedLineIds = [];
+        $insertCustomerReturnAllocation = $db->prepare(
+            'INSERT INTO shop_customer_return_supplier_storno_allocations
+             (id, customer_return_origin_id, supplier_return_nir_id, supplier_return_nir_line_id, quantity, created_by)
+             VALUES (?, ?, ?, ?, ?, ?)'
+        );
         foreach ($selection as $selected) {
             $line = $selected['line'];
             $data = $positiveLineData[(string)$line['id']];
             $reverseLineId = uuidV4();
             $insertReversalLine($line, $selected, $data, $reverseLineId);
             $stornedLineIds[(string)$line['id']] = true;
+            if ($supplierReturnContext !== null) {
+                $lineId = (string)$line['id'];
+                $toAllocate = (int)($supplierReturnContext['by_line'][$lineId]['selected_stock_scaled'] ?? 0);
+                foreach ($supplierReturnContext['by_line'][$lineId]['origins'] as &$origin) {
+                    if ($toAllocate <= 0) break;
+                    $available = max(0, (int)($origin['remaining_stock_scaled'] ?? 0));
+                    if ($available <= 0) continue;
+                    $allocated = min($toAllocate, $available);
+                    $insertCustomerReturnAllocation->execute([
+                        uuidV4(), (string)$origin['id'], $reversalId, $reverseLineId,
+                        shopNirScaledToDecimal($allocated, 4), $actor['name'],
+                    ]);
+                    $origin['remaining_stock_scaled'] = $available - $allocated;
+                    $toAllocate -= $allocated;
+                }
+                unset($origin);
+                if ($toAllocate > 0) {
+                    throw new ShopNirHttpException('Trasabilitatea returului a fost modificată simultan. Reîncarcă NIR-ul și încearcă din nou.', 409, ['conflict' => true, 'line_id' => $lineId]);
+                }
+            }
             if (empty($line['is_stock_item'])) continue;
             $layer = $layerByLine[(string)$line['id']];
             $productId = (string)$layer['product_id'];
@@ -2063,6 +2296,7 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
             'storno_document_id' => $reversalId, 'reversal_document_id' => $reversalId, 'reason' => $reason,
             'line_ids' => array_keys($stornedLineIds), 'storno_state' => $stornoState,
             'supplier_invoice' => $stornoInvoice,
+            'customer_return_nir_id' => $supplierReturnContext['customer_return_nir_id'] ?? null,
             'original_supplier_invoice' => [
                 'series' => $document['supplier_invoice_series'] ?? null,
                 'number' => $document['supplier_invoice_number'] ?? null,
@@ -2074,6 +2308,7 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
                 'nir_id' => $id, 'storno_id' => $reversalId, 'reversal_id' => $reversalId,
                 'fully_storned' => $fullyStorned, 'line_ids' => array_keys($stornedLineIds),
                 'supplier_invoice' => $stornoInvoice,
+                'customer_return_nir_id' => $supplierReturnContext['customer_return_nir_id'] ?? null,
                 'original_supplier_invoice' => [
                     'series' => $document['supplier_invoice_series'] ?? null,
                     'number' => $document['supplier_invoice_number'] ?? null,
@@ -2089,6 +2324,7 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
             'storno' => $storno,
             'fully_storned' => $fullyStorned,
             'storno_state' => $stornoState,
+            'customer_return_nir_id' => $supplierReturnContext['customer_return_nir_id'] ?? null,
         ];
     } catch (Throwable $error) {
         if ($db->inTransaction()) $db->rollBack();

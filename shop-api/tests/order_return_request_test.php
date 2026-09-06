@@ -45,7 +45,7 @@ $db->exec('CREATE TABLE shop_order_status_history (
     customer_notified INTEGER, email_status TEXT, email_error TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP
 )');
 $db->exec('CREATE TABLE shop_order_items (id TEXT PRIMARY KEY, order_id TEXT, product_id TEXT, product_name TEXT, product_sku TEXT, quantity REAL, unit_price REAL, line_total REAL, discounted_line_total REAL)');
-$db->exec('CREATE TABLE shop_order_return_items (id TEXT PRIMARY KEY, order_id TEXT, order_item_id TEXT, product_id TEXT, product_name TEXT, product_sku TEXT, requested_quantity REAL, decision_status TEXT DEFAULT "pending", accepted_quantity REAL, decision_reason TEXT, decided_at TEXT, decided_by TEXT, unit_refund_value REAL, line_refund_value REAL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)');
+$db->exec('CREATE TABLE shop_order_return_items (id TEXT PRIMARY KEY, order_id TEXT, order_item_id TEXT, product_id TEXT, product_name TEXT, product_sku TEXT, requested_quantity REAL, decision_status TEXT DEFAULT "pending", accepted_quantity REAL, refused_quantity REAL NOT NULL DEFAULT 0, decision_reason TEXT, decided_at TEXT, decided_by TEXT, unit_refund_value REAL, line_refund_value REAL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)');
 $db->exec("INSERT INTO shop_shipping_methods (id, return_cost) VALUES ('courier', 25.50)");
 $insert = $db->prepare('INSERT INTO shop_orders (id, order_number, status, customer_email, tracking_token, customer_name, customer_type, shipping_method_id, shipping_cost, total, currency, admin_notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)');
 $insert->execute(['customer-order', 'GT-RET-1', 'completed', 'client@example.com', str_repeat('a', 32), 'Ion Popescu', 'individual', 'courier', 20, 500, 'RON', '']);
@@ -59,7 +59,7 @@ $details = [
     'bank_iban' => 'RO49AAAA1B31007593840000',
     'bank_account_holder' => 'Ion Popescu',
     'refund_consent' => true,
-    'items' => [['order_item_id' => 'item-1', 'quantity' => 1], ['order_item_id' => 'item-1b', 'quantity' => 1]],
+    'items' => [['order_item_id' => 'item-1', 'quantity' => 2], ['order_item_id' => 'item-1b', 'quantity' => 1]],
 ];
 $eligibility = GtrotsOrderReturnRequest::eligibility($db, $db->query("SELECT * FROM shop_orders WHERE id='customer-order'")->fetch());
 check(!empty($eligibility['eligible']) && str_ends_with((string)$eligibility['deadline_at'], '23:59:59'), 'Termenul public trebuie să includă integral ultima zi calendaristică.');
@@ -75,21 +75,21 @@ check(count($sentEmails) === 1, 'E-mailul automat al clientului nu a fost trimis
 $saved = $db->query("SELECT * FROM shop_orders WHERE id = 'customer-order'")->fetch();
 check($saved['status'] === 'return_requested', 'Statusul clientului nu a fost actualizat.');
 check(abs((float)$saved['return_shipping_cost'] - 25.50) < 0.001, 'Costul returului nu a fost salvat ca instantaneu.');
-check(abs((float)$saved['return_refund_amount'] - 304.50) < 0.001, 'Estimarea rambursării parțiale nu este corectă.');
+check(abs((float)$saved['return_refund_amount'] - 474.50) < 0.001, 'Estimarea rambursării solicitate nu este corectă.');
 check($saved['return_request_source'] === 'customer', 'Sursa solicitării clientului lipsește.');
 check(str_contains((string)$saved['withdrawal_statement'], 'Mă retrag din contract') && !empty($saved['withdrawal_submitted_at']), 'Conținutul, data și ora retragerii PF trebuie păstrate durabil.');
 $history = $db->query("SELECT * FROM shop_order_status_history WHERE order_id = 'customer-order' AND to_status = 'return_requested'")->fetch();
 check((int)$history['customer_notified'] === 1 && $history['email_status'] === 'sent', 'Istoricul nu confirmă e-mailul clientului.');
 
 $review = GtrotsOrderReturnRequest::reviewByStaff($db, 'customer-order', [
-    ['order_item_id' => 'item-1', 'decision_status' => 'accepted', 'accepted_quantity' => 1],
+    ['order_item_id' => 'item-1', 'decision_status' => 'partial', 'accepted_quantity' => 1, 'decision_reason' => 'A doua bucată nu mai este în starea de la vânzare.'],
     ['order_item_id' => 'item-1b', 'decision_status' => 'refused', 'accepted_quantity' => 0, 'decision_reason' => 'Produsul prezintă urme de utilizare.'],
 ], ['display_name' => 'Operator retur']);
 check((int)$review['accepted_count'] === 1 && abs((float)$review['return_items_gross'] - 150.0) < 0.001, 'Evaluarea trebuie să accepte numai produsul și cantitatea aprobate.');
 check(abs((float)$review['return_refund_amount'] - 124.50) < 0.001, 'Rambursarea trebuie recalculată după decizia individuală și costul de retur.');
-$accepted = $db->query("SELECT decision_status, accepted_quantity, decided_by FROM shop_order_return_items WHERE order_id='customer-order' AND order_item_id='item-1'")->fetch();
+$accepted = $db->query("SELECT decision_status, accepted_quantity, refused_quantity, decision_reason, decided_by FROM shop_order_return_items WHERE order_id='customer-order' AND order_item_id='item-1'")->fetch();
 $refused = $db->query("SELECT decision_status, accepted_quantity, decision_reason FROM shop_order_return_items WHERE order_id='customer-order' AND order_item_id='item-1b'")->fetch();
-check($accepted['decision_status'] === 'accepted' && (float)$accepted['accepted_quantity'] === 1.0 && $accepted['decided_by'] === 'Operator retur', 'Produsul acceptat trebuie auditat complet.');
+check($accepted['decision_status'] === 'partial' && (float)$accepted['accepted_quantity'] === 1.0 && (float)$accepted['refused_quantity'] === 1.0 && str_contains($accepted['decision_reason'], 'starea') && $accepted['decided_by'] === 'Operator retur', 'Decizia mixtă 1 acceptată + 1 refuzată și motivul ei trebuie auditate complet.');
 check($refused['decision_status'] === 'refused' && (float)$refused['accepted_quantity'] === 0.0 && str_contains($refused['decision_reason'], 'urme'), 'Produsul refuzat și motivul său trebuie păstrate separat.');
 
 $staffDetails = $details; $staffDetails['items'] = [['order_item_id' => 'item-2', 'quantity' => 1]];

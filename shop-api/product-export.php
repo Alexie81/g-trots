@@ -77,6 +77,7 @@ final class GtrotsProductExport
             $where = '(' . implode(' OR ', $parts) . ')';
         }
         $stmt = $db->prepare("SELECT p.id,p.name,p.slug,p.sku,p.supplier_external_id,p.supplier_product_code,p.source_domain,
+            p.supplier_base_price,p.price,p.supplier_price_difference,
             p.stock_mode,p.stock_quantity,p.accounting_stock_quantity,p.supplier_stock_quantity,p.view_count,
             COALESCE(s.name,p.source_domain,'Fără sursă') AS source_name,
             (SELECT image_path FROM shop_product_images pi WHERE pi.product_id=p.id ORDER BY pi.sort_order,pi.created_at LIMIT 1) AS image_path
@@ -127,16 +128,17 @@ final class GtrotsProductExport
 
     public static function render(array $products): string
     {
-        $headers = ['Imagine', 'Nume produs', 'Cod mamă / cod site (SKU)', 'Cod extern sursă', 'Sursă produs',
+        $headers = ['Imagine', 'Nume produs', 'Preț furnizor (lei)', 'Preț G-Trots (lei)', 'Marjă fixă G-Trots (lei)',
+            'Cod mamă / cod site (SKU)', 'Cod extern sursă', 'Sursă produs',
             'Stoc online (buc.)', 'Stoc fizic (buc.)', 'Stoc furnizor (buc.)', 'Bucăți vândute', 'Vizualizări website', 'Cod furnizor', 'Nume furnizor', 'Rating mediu (din 5)', 'Număr de recenzii'];
         $rows = shopNirPremiumXlsxRow(1, [2 => shopNirPremiumXlsxCellSpec('G-Trots România · Catalog produse', 'string', 15)], 32);
         $rows .= shopNirPremiumXlsxRow(2, [2 => shopNirPremiumXlsxCellSpec(count($products) . ' produse · Exportat la ' . date('d.m.Y H:i'), 'string', 16)], 25);
-        $rows .= shopNirPremiumXlsxRow(3, [2 => shopNirPremiumXlsxCellSpec('Stoc fizic = stoc contabil. Vândute = comenzi plătite, fără anulări, retururi confirmate și rambursări.', 'string', 16)], 28);
+        $rows .= shopNirPremiumXlsxRow(3, [2 => shopNirPremiumXlsxCellSpec('Marja fixă = Preț G-Trots − Preț furnizor. Pentru produsele fără preț furnizor se aplică numai Prețul G-Trots.', 'string', 16)], 28);
         $rows .= shopNirPremiumXlsxRow(4, [2 => shopNirPremiumXlsxCellSpec('Toate produsele sunt exportate pe baza selecției electronice din cadrul aplicației G-Trots CRM.', 'string', 16)], 28);
         $cells = [];
         foreach ($headers as $i => $header) $cells[$i + 1] = shopNirPremiumXlsxCellSpec($header, 'string', in_array($i, [1, 2], true) ? 10 : 3);
         $rows .= shopNirPremiumXlsxRow(5, $cells, 36);
-        $merges = ['B1:N1', 'B2:N2', 'B3:N3', 'B4:N4'];
+        $merges = ['B1:Q1', 'B2:Q2', 'B3:Q3', 'B4:Q4'];
         $media = []; $mediaIndex = []; $anchors = [];
         $addImage = static function (?array $image, int $row, int $height, string $name) use (&$media, &$mediaIndex, &$anchors): bool {
             if (!$image) return false;
@@ -154,7 +156,15 @@ final class GtrotsProductExport
             $hasImage = $addImage(self::thumbnail((string)($product['image_path'] ?? '')), $row, 68, (string)$product['name']);
             if (!$hasImage) throw new InvalidArgumentException('Imaginea produsului „' . $product['name'] . '” nu a putut fi încărcată. Exportul nu a fost generat incomplet. Reîncearcă sau verifică imaginea produsului.');
             $style = $index % 2 === 0 ? 4 : 6;
-            $values = ['', $product['name'], $product['sku'], $product['supplier_external_id'] ?? '', $product['source_name'],
+            $supplierPriceValue = $product['supplier_base_price'] === null ? 0.0 : (float)$product['supplier_base_price'];
+            $hasSupplierPrice = $supplierPriceValue > 0;
+            $supplierPrice = $hasSupplierPrice ? $supplierPriceValue : 'Nu se aplică';
+            $gTrotsPrice = (float)$product['price'] > 0 ? (float)$product['price'] : ($hasSupplierPrice ? $supplierPriceValue : 0.0);
+            $fixedMargin = $hasSupplierPrice && $product['supplier_price_difference'] !== null
+                ? (float)$product['supplier_price_difference']
+                : 'Nu se aplică';
+            $values = ['', $product['name'], $supplierPrice, $gTrotsPrice, $fixedMargin,
+                $product['sku'], $product['supplier_external_id'] ?? '', $product['source_name'],
                 $product['stock_mode'] === 'unlimited' ? 'Nelimitat' : (int)$product['stock_quantity'], (int)$product['accounting_stock_quantity'],
                 (int)$product['supplier_stock_quantity'], (int)$product['units_sold'], (int)$product['view_count']];
             $start = $row;
@@ -165,23 +175,23 @@ final class GtrotsProductExport
                     $cellStyle = in_array($col, [1, 2], true) ? ($index % 2 === 0 ? 8 : 9) : ($numeric ? $style + 1 : $style);
                     $cells[$col + 1] = shopNirPremiumXlsxCellSpec($refIndex === 0 ? $value : null, $numeric ? 'number' : 'string', $cellStyle);
                 }
-                $cells[11] = shopNirPremiumXlsxCellSpec($ref['code'], 'string', $style);
+                $cells[14] = shopNirPremiumXlsxCellSpec($ref['code'], 'string', $style);
                 $supplier = (string)$ref['supplier_name'];
                 if (!empty($ref['supplier_alias']) && $ref['supplier_alias'] !== $supplier) $supplier .= ' (' . $ref['supplier_alias'] . ')';
-                $cells[12] = shopNirPremiumXlsxCellSpec($supplier, 'string', $style);
+                $cells[15] = shopNirPremiumXlsxCellSpec($supplier, 'string', $style);
                 $rating = $product['review_average'] === null ? 'Fără recenzii' : round((float)$product['review_average'], 2);
-                $cells[13] = shopNirPremiumXlsxCellSpec($refIndex === 0 ? $rating : null, is_float($rating) ? 'number' : 'string', is_float($rating) ? ($index % 2 === 0 ? 11 : 12) : $style);
-                $cells[14] = shopNirPremiumXlsxCellSpec($refIndex === 0 ? $product['review_count'] : null, 'number', $style + 1);
+                $cells[16] = shopNirPremiumXlsxCellSpec($refIndex === 0 ? $rating : null, is_float($rating) ? 'number' : 'string', is_float($rating) ? ($index % 2 === 0 ? 11 : 12) : $style);
+                $cells[17] = shopNirPremiumXlsxCellSpec($refIndex === 0 ? $product['review_count'] : null, 'number', $style + 1);
                 $rows .= shopNirPremiumXlsxRow($row++, $cells, $height);
             }
-            if ($row - $start > 1) foreach ([1,2,3,4,5,6,7,8,9,10,13,14] as $col) {
+            if ($row - $start > 1) foreach ([1,2,3,4,5,6,7,8,9,10,11,12,13,16,17] as $col) {
                 $letter = shopNirPremiumXlsxColumn($col);
                 $merges[] = $letter . $start . ':' . $letter . ($row - 1);
             }
         }
-        $merges[] = 'A' . $row . ':N' . $row;
+        $merges[] = 'A' . $row . ':Q' . $row;
         $rows .= shopNirPremiumXlsxRow($row++, [1 => shopNirPremiumXlsxCellSpec('Export realizat din cadrul aplicației G-Trots CRM.', 'string', 2)], 30);
-        return self::workbook('Produse', $rows, [13,32,22,20,23,14,14,14,14,17,24,32,19,18], $row - 1, $merges, $anchors, $media);
+        return self::workbook('Produse', $rows, [13,32,18,18,24,22,20,23,14,14,14,14,17,24,32,19,18], $row - 1, $merges, $anchors, $media);
     }
 
     private static function workbook(string $title, string $rows, array $widths, int $lastRow, array $merges, array $anchors, array $media): string

@@ -475,13 +475,45 @@ function boomagSalePriceForBase(float $price, ?string $discountType, $discountVa
     return $value < 100 ? round($price * (1 - $value / 100), 2) : null;
 }
 
+/**
+ * Pretul 0 este tratat ca nesetat. La prima sincronizare pastram pretul
+ * G-Trots daca exista; altfel folosim pretul valid al furnizorului cu marja 0.
+ * Sincronizarile urmatoare pastreaza diferenta comerciala fixa deja memorata.
+ *
+ * @return array{price: float, difference: ?float}
+ */
+function boomagResolvePublicPricing(?float $supplierBase, float $currentPrice, ?float $difference): array {
+    $currentPrice = max(0.0, round($currentPrice, 2));
+    $difference = $difference === null ? null : round($difference, 2);
+    if ($supplierBase === null || $supplierBase <= 0) {
+        return ['price' => $currentPrice, 'difference' => $difference];
+    }
+
+    $supplierBase = round($supplierBase, 2);
+    if ($currentPrice <= 0) {
+        return ['price' => $supplierBase, 'difference' => 0.0];
+    }
+    if ($difference === null) $difference = round($currentPrice - $supplierBase, 2);
+    return [
+        'price' => max(0.01, round($supplierBase + $difference, 2)),
+        'difference' => $difference,
+    ];
+}
+
+function boomagResolveAcquisitionPrice(?float $supplierBase, float $currentCostPrice, bool $isAccountingStockTracked): float {
+    if (!$isAccountingStockTracked && $supplierBase !== null && $supplierBase > 0) {
+        return round($supplierBase, 2);
+    }
+    return max(0.0, round($currentCostPrice, 2));
+}
+
 function gomagSyncProductFromFeed(PDO $db, array $config, string $idOrSlug): array {
     $stmt = $db->prepare(
         'SELECT p.id, p.slug, p.sku, p.supplier_product_code, p.supplier_external_id,
                 LOWER(COALESCE(s.domain, p.source_domain, "")) AS source_domain,
-                p.price, p.sale_price, p.discount_type, p.discount_value, p.stock_quantity,
+                p.cost_price, p.price, p.sale_price, p.discount_type, p.discount_value, p.stock_quantity,
                 p.supplier_stock_quantity, p.supplier_stock_status, p.supplier_base_price,
-                p.supplier_price_difference
+                p.supplier_price_difference, p.is_accounting_stock_tracked
          FROM shop_products p
          LEFT JOIN shop_product_sources s ON s.id = p.source_id
          WHERE p.id = ? OR p.slug = ?
@@ -522,11 +554,14 @@ function gomagSyncProductFromFeed(PDO $db, array $config, string $idOrSlug): arr
         ? null
         : round((float)$product['supplier_price_difference'], 2);
     $currentPrice = round((float)$product['price'], 2);
-    $nextPrice = $currentPrice;
-    if ($supplierBase !== null) {
-        if ($difference === null) $difference = round($currentPrice - $supplierBase, 2);
-        $nextPrice = max(0.01, round($supplierBase + $difference, 2));
-    }
+    $pricing = boomagResolvePublicPricing($supplierBase, $currentPrice, $difference);
+    $nextPrice = $pricing['price'];
+    $difference = $pricing['difference'];
+    $nextCostPrice = boomagResolveAcquisitionPrice(
+        $supplierBase,
+        (float)($product['cost_price'] ?? 0),
+        (bool)($product['is_accounting_stock_tracked'] ?? true)
+    );
     $nextSalePrice = boomagSalePriceForBase(
         $nextPrice,
         isset($product['discount_type']) ? (string)$product['discount_type'] : null,
@@ -544,7 +579,7 @@ function gomagSyncProductFromFeed(PDO $db, array $config, string $idOrSlug): arr
     $update = $db->prepare(
         'UPDATE shop_products
          SET sku = ?, supplier_product_code = ?, supplier_base_price = ?, supplier_price_difference = ?, supplier_price_updated_at = NOW(),
-             price = ?, sale_price = ?, stock_mode = "tracked", stock_quantity = ?,
+             cost_price = ?, price = ?, sale_price = ?, stock_mode = "tracked", stock_quantity = ?,
              supplier_stock_quantity = ?, supplier_stock_status = ?, supplier_stock_updated_at = NOW(),
              updated_at = updated_at
          WHERE id = ?'
@@ -554,6 +589,7 @@ function gomagSyncProductFromFeed(PDO $db, array $config, string $idOrSlug): arr
         $feedSku,
         $supplierBase,
         $difference,
+        $nextCostPrice,
         $nextPrice,
         $nextSalePrice,
         $stock,
@@ -1161,9 +1197,10 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
 
     $products = $db->prepare(
         'SELECT p.id, p.sku, p.supplier_product_code, p.supplier_external_id,
-                p.price, p.sale_price, p.discount_type, p.discount_value,
+                p.cost_price, p.price, p.sale_price, p.discount_type, p.discount_value,
                 p.supplier_base_price, p.supplier_price_difference,
-                p.stock_quantity, p.supplier_stock_quantity, p.supplier_stock_status
+                p.stock_quantity, p.supplier_stock_quantity, p.supplier_stock_status,
+                p.is_accounting_stock_tracked
          FROM shop_products p
          WHERE p.source_id = ? OR LOWER(p.source_domain) = "boomag.ro"'
     );
@@ -1200,7 +1237,7 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
             'UPDATE shop_products
              SET sku = ?, supplier_product_code = ?,
                  supplier_base_price = ?, supplier_price_difference = ?, supplier_price_updated_at = NOW(),
-                 price = ?, sale_price = ?, supplier_stock_quantity = ?, supplier_stock_status = ?,
+                 cost_price = ?, price = ?, sale_price = ?, supplier_stock_quantity = ?, supplier_stock_status = ?,
                  supplier_stock_updated_at = NOW(), stock_mode = "tracked", stock_quantity = ?,
                  updated_at = updated_at
              WHERE id = ?'
@@ -1225,12 +1262,17 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
                 ? null
                 : round((float)$product['supplier_price_difference'], 2);
             $currentPrice = round((float)$product['price'], 2);
-            $nextPrice = $currentPrice;
+            $pricing = boomagResolvePublicPricing($supplierBase, $currentPrice, $difference);
+            $nextPrice = $pricing['price'];
+            $difference = $pricing['difference'];
+            $nextCostPrice = boomagResolveAcquisitionPrice(
+                $supplierBase,
+                (float)($product['cost_price'] ?? 0),
+                (bool)($product['is_accounting_stock_tracked'] ?? true)
+            );
             if ($supplierBase !== null) {
                 // Prima sincronizare memoreaza adaosul deja stabilit in G-Trots.
                 // Sincronizarile urmatoare modifica doar baza furnizorului.
-                if ($difference === null) $difference = round($currentPrice - $supplierBase, 2);
-                $nextPrice = max(0.01, round($supplierBase + $difference, 2));
                 $pricesSynced[$productId] = true;
             }
             $nextSalePrice = boomagSalePriceForBase(
@@ -1253,6 +1295,7 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
                 $feedSku,
                 $supplierBase,
                 $difference,
+                $nextCostPrice,
                 $nextPrice,
                 $nextSalePrice,
                 $quantity,

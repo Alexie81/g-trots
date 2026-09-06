@@ -106,6 +106,7 @@ __pycache__/
 .agents/
 .bolt/
 .codex/
+.codex-tmp/
 
 # generated logs, temporary files and build reports
 *.log

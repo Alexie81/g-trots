@@ -207,6 +207,44 @@ export type ShopNirAttachment = {
   created_at: string;
 };
 
+export type ShopNirSupplierReturnOriginLine = {
+  original_nir_line_id: string;
+  original_line_number: number;
+  product_id: string;
+  product_name: string;
+  product_sku: string;
+  product_image_url?: string | null;
+  purchase_unit: string;
+  stock_unit: string;
+  conversion_factor: string;
+  customer_return_nir_line_ids: string[];
+  returned_stock_quantity: string;
+  supplier_returned_stock_quantity: string;
+  available_stock_quantity: string;
+  available_quantity: string;
+  original_nir_stornable_quantity: string;
+  can_return_to_supplier: boolean;
+  unit_cost_ron?: string;
+};
+
+export type ShopNirSupplierReturnOrigin = {
+  original_nir_id: string;
+  original_nir_number: string;
+  original_nir_status: string;
+  original_nir_row_version: number;
+  supplier_id: string | null;
+  supplier_name: string | null;
+  supplier_alias: string | null;
+  supplier_display_name: string;
+  supplier_cui: string | null;
+  original_invoice: { series: string | null; number: string | null; date: string | null };
+  returned_stock_quantity: string;
+  supplier_returned_stock_quantity: string;
+  available_stock_quantity: string;
+  can_start_supplier_return: boolean;
+  lines: ShopNirSupplierReturnOriginLine[];
+};
+
 export type ShopNirDocument = {
   id: string;
   temporary_number: string;
@@ -269,6 +307,8 @@ export type ShopNirDocument = {
   reversed_by: string | null;
   lines?: ShopNirLine[];
   attachments?: ShopNirAttachment[];
+  supplier_return_origins?: ShopNirSupplierReturnOrigin[];
+  has_supplier_return_origins?: boolean;
   permissions?: string[];
 };
 
@@ -625,8 +665,9 @@ export type ShopOrderReturnItem = {
   product_name: string;
   product_sku: string | null;
   requested_quantity: number;
-  decision_status: 'pending' | 'accepted' | 'refused';
+  decision_status: 'pending' | 'accepted' | 'partial' | 'refused';
   accepted_quantity: number | null;
+  refused_quantity: number;
   decision_reason: string | null;
   unit_refund_value: number;
   line_refund_value: number;
@@ -1467,7 +1508,7 @@ export const shopApi = {
   validateNir: (token: string, id: string) => shopCall<ShopNirValidation>('validateNir', token, { method: 'POST', body: '{}' }, id),
   confirmNir: (token: string, id: string, rowVersion: number, idempotencyKey: string) => shopCall<ShopNirDocument>('confirmNir', token, { method: 'POST', body: JSON.stringify({ row_version: rowVersion, idempotency_key: idempotencyKey }), headers: { 'Idempotency-Key': idempotencyKey } }, id),
   reopenNir: (token: string, id: string, rowVersion: number) => shopCall<ShopNirDocument>('reopenNir', token, { method: 'POST', body: JSON.stringify({ row_version: rowVersion }) }, id),
-  reverseNir: (token: string, id: string, rowVersion: number, reason: string, lines: ShopNirStornoLine[], invoice: ShopNirStornoInvoice) => shopCall<{ original: ShopNirDocument; reversal: ShopNirDocument }>('reverseNir', token, { method: 'POST', body: JSON.stringify({ row_version: rowVersion, reason, lines, ...invoice }) }, id),
+  reverseNir: (token: string, id: string, rowVersion: number, reason: string, lines: ShopNirStornoLine[], invoice: ShopNirStornoInvoice, context?: { customer_return_nir_id?: string }) => shopCall<{ original: ShopNirDocument; reversal: ShopNirDocument; customer_return_nir_id?: string | null }>('reverseNir', token, { method: 'POST', body: JSON.stringify({ row_version: rowVersion, reason, lines, ...invoice, ...(context || {}) }) }, id),
   uploadNirAttachment: (token: string, id: string, payload: { file_name: string; mime_type: string; content_base64: string }) => shopCall<ShopNirAttachment>('uploadNirAttachment', token, { method: 'POST', body: JSON.stringify(payload) }, id),
   extractNirAttachment: (token: string, id: string, attachmentId: string) => shopCall<{ status: string; message: string; lines: ShopNirLine[] }>('extractNirAttachment', token, { method: 'POST', body: JSON.stringify({ attachment_id: attachmentId }) }, id),
   downloadNirAttachment: (token: string, id: string, attachmentId: string) => shopCall<{ file_name: string; mime_type: string; content_base64: string }>('downloadNirAttachment', token, undefined, id, 0, { attachment_id: attachmentId }),
@@ -1517,7 +1558,7 @@ export const shopApi = {
     }
   },
   getOrder: (token: string, id: string) => shopCall<ShopOrder>('getOrder', token, undefined, id),
-  updateOrder: (token: string, id: string, payload: Pick<ShopOrder, 'status' | 'payment_status'> & { admin_notes: string; notify_customer: boolean; cancellation_reason?: string; return_reason?: string; return_bank_iban?: string; return_bank_account_holder?: string; return_items?: Array<{ order_item_id: string; quantity?: number; decision_status?: 'accepted' | 'refused'; accepted_quantity?: number; decision_reason?: string }>; address?: string; city?: string; county?: string; postal_code?: string }) => shopCall<ShopOrder>('updateOrder', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
+  updateOrder: (token: string, id: string, payload: Pick<ShopOrder, 'status' | 'payment_status'> & { admin_notes: string; notify_customer: boolean; cancellation_reason?: string; return_reason?: string; return_bank_iban?: string; return_bank_account_holder?: string; return_items?: Array<{ order_item_id: string; quantity?: number; decision_status?: 'accepted' | 'partial' | 'refused'; accepted_quantity?: number; refused_quantity?: number; decision_reason?: string }>; address?: string; city?: string; county?: string; postal_code?: string }) => shopCall<ShopOrder>('updateOrder', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
   issueInvoice: (token: string, orderId: string, sendEmail = false, sendReturnEmail = false) => shopCall<ShopIssuedInvoice>('issueInvoice', token, { method: 'POST', body: JSON.stringify({ order_id: orderId, send_email: sendEmail, send_return_email: sendReturnEmail }) }, orderId),
   listInvoices: (token: string) => shopCall<ShopIssuedInvoice[]>('listInvoices', token),
   getInvoice: (token: string, id: string) => shopCall<ShopIssuedInvoice>('getInvoice', token, undefined, id),

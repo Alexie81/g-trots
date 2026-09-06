@@ -9,7 +9,7 @@
     products: [], orders: [], invoices: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], promotions: [], companies: [], receiptLocations: [], nirs: [], nirPermissions: [], nirWarehouses: [], nirReceiptLocations: [], invoiceThemeSettings: null, invoiceAutomationSettings: null, invoiceAutomationSaving: false, selectedInvoiceTheme: 'orange', invoiceSettingsDraft: { invoice_series: 'GT', next_number: 1, due_days: 7, default_notes: '' }, invoiceThemeSaving: false, invoiceQuery: '', invoiceStatusFilter: 'all', invoiceBusy: '', spvConnection: null, spvDraft: null, spvBusy: '', spvWaitingForOAuth: false, spvDiagnostics: null,
     editingProduct: null, editingOrder: null, invoiceIssueOrder: null, invoiceDetail: null, editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, editingReceiptLocation: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
     productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, productTotal: 0, productSearchTimer: null, productLoadRequestId: 0, slugTouched: false, productQuery: '', orderQuery: '', orderSearchTimer: null, orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
-    customerQuery: '', inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false, nirBundleDownloading: '', nirRegistryDownloadPeriod: 'current_month', nirRegistryDownloadContent: 'complete', nirRegistryDownloading: false, nirExportProgressTimer: null,
+    customerQuery: '', inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirStornoDocument: null, nirSupplierReturnContext: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false, nirBundleDownloading: '', nirRegistryDownloadPeriod: 'current_month', nirRegistryDownloadContent: 'complete', nirRegistryDownloading: false, nirExportProgressTimer: null,
     pages: { products: 1, orders: 1, invoices: 1, inventory: 1, stockFlow: 1, stockMovements: 1, productSales: 1, productReviews: 1, productPurchases: 1, customers: 1, customerOrders: 1, nirs: 1 },
     pageSizes: { products: 10, orders: 10, invoices: 10, inventory: 10, stockFlow: 5, stockMovements: 5, productSales: 5, productReviews: 5, productPurchases: 5, customers: 10, customerOrders: 5, nirs: 15 },
     dashboardPeriod: dashboardPreferences.period, dashboardStartDate: dashboardPreferences.startDate, dashboardEndDate: dashboardPreferences.endDate, dashboardGranularity: dashboardPreferences.granularity, dashboardRequestId: 0, dashboardSeries: new Set(['revenue', 'returns', 'orders', 'acquisitions', 'profit']),
@@ -580,7 +580,7 @@
     $('shop-nir-delete').addEventListener('click', openNirDeleteDialog);
     $('shop-nir-delete-cancel').addEventListener('click', closeNirDeleteDialog);
     $('shop-nir-delete-confirm').addEventListener('click', () => void deleteNir());
-    $('shop-nir-reverse-trigger').addEventListener('click', openNirReverseDialog);
+    $('shop-nir-reverse-trigger').addEventListener('click', () => openNirReverseDialog());
     $('shop-nir-reverse-cancel').addEventListener('click', () => closeModal('shop-nir-reverse-dialog'));
     $('shop-nir-reverse-confirm').addEventListener('click', () => void reverseNir());
     $('shop-nir-storno-all').addEventListener('click', toggleAllNirStornoLines);
@@ -978,6 +978,8 @@
       if ($('shop-nir-storno-invoice-error')) $('shop-nir-storno-invoice-error').hidden = true;
       if ($('shop-nir-storno-lines')) $('shop-nir-storno-lines').innerHTML = '';
       state.nirStornoPendingFiles = [];
+      state.nirStornoDocument = null;
+      state.nirSupplierReturnContext = null;
       renderNirStornoFiles();
     }
     if (id === 'shop-nir-modal' && state.nirCorrectionOriginal) {
@@ -2400,14 +2402,25 @@
     const returnRefund = Number(order.return_refund_amount ?? Math.max(0, Number(order.total || 0) - returnCost));
     const returnLocked = ['return_confirmed', 'refunded'].includes(order.status);
     const returnDecisionItems = (Array.isArray(order.return_items) && order.return_items.length ? order.return_items : orderItems.map(item => ({ order_item_id: item.id, product_name: item.product_name, product_sku: item.product_sku, requested_quantity: item.quantity, decision_status: 'pending', accepted_quantity: item.quantity, decision_reason: '' })));
-    const returnDecisionHtml = returnDecisionItems.map(item => `<article class="shop-order-return-item" data-return-order-item="${esc(item.order_item_id)}" data-requested="${Number(item.requested_quantity || 0)}"><div><strong>${esc(item.product_name)}</strong><small>${esc(item.product_sku || 'Fără SKU')} · solicitat ${Number(item.requested_quantity || 0)}</small></div><div class="shop-order-return-decisions"><button type="button" data-return-decision="accepted" class="${item.decision_status === 'accepted' ? 'active accepted' : ''}" ${returnLocked ? 'disabled' : ''}>Acceptă</button><button type="button" data-return-decision="refused" class="${item.decision_status === 'refused' ? 'active refused' : ''}" ${returnLocked ? 'disabled' : ''}>Refuză</button></div><div class="shop-order-return-quantity" ${item.decision_status === 'accepted' ? '' : 'hidden'}><button type="button" data-return-qty="minus" ${returnLocked ? 'disabled' : ''}>−</button><b>${Number(item.accepted_quantity ?? item.requested_quantity)}</b><button type="button" data-return-qty="plus" ${returnLocked ? 'disabled' : ''}>+</button></div><input data-return-refusal-reason value="${esc(item.decision_reason || '')}" placeholder="Motivul refuzului pentru acest produs" ${item.decision_status === 'refused' ? '' : 'hidden'} ${returnLocked ? 'disabled' : ''}></article>`).join('');
+    const returnDecisionHtml = returnDecisionItems.map(item => {
+      const requested = Number(item.requested_quantity || 0);
+      const accepted = Math.max(0, Math.min(requested, Number(item.accepted_quantity ?? requested)));
+      const refused = Math.max(0, requested - accepted);
+      const decision = item.decision_status === 'pending' ? 'pending' : (accepted <= 0 ? 'refused' : refused <= 0 ? 'accepted' : 'partial');
+      return `<article class="shop-order-return-item ${decision === 'partial' ? 'partial' : ''}" data-return-order-item="${esc(item.order_item_id)}" data-requested="${requested}" data-return-status="${decision}">
+        <div><strong>${esc(item.product_name)}</strong><small>${esc(item.product_sku || 'Fără SKU')} · solicitat ${quantity(requested)}</small></div>
+        <div class="shop-order-return-decisions"><button type="button" data-return-decision="accepted" class="${decision === 'accepted' ? 'active accepted' : ''}" ${returnLocked ? 'disabled' : ''}>Acceptă tot</button><button type="button" data-return-decision="refused" class="${decision === 'refused' ? 'active refused' : ''}" ${returnLocked ? 'disabled' : ''}>Refuză tot</button></div>
+        <div class="shop-order-return-quantity" ${decision === 'pending' ? 'hidden' : ''}><span class="shop-order-return-split"><em>Acceptată <strong data-return-accepted-label>${quantity(accepted)}</strong></em><em>Refuzată <strong data-return-refused-label>${quantity(refused)}</strong></em></span><button type="button" data-return-qty="minus" ${returnLocked ? 'disabled' : ''}>−</button><b>${accepted}</b><button type="button" data-return-qty="plus" ${returnLocked ? 'disabled' : ''}>+</button></div>
+        <input data-return-refusal-reason value="${esc(item.decision_reason || '')}" placeholder="Motivul refuzului pentru cele ${quantity(refused)} bucăți" ${decision !== 'pending' && refused > 0 ? '' : 'hidden'} ${returnLocked ? 'disabled' : ''}>
+      </article>`;
+    }).join('');
     const returnSummary = order.return_reason
       ? `<section class="shop-order-return-summary"><small>DETALII RETUR</small><strong>${esc(order.return_reason)}</strong><p>Titular: ${esc(order.return_bank_account_holder || '—')} · IBAN: ${esc(order.return_bank_iban || order.return_bank_iban_masked || '—')}</p><p>Cost retur ${money(Number(order.return_shipping_cost || 0))} · estimare restituire <b>${money(Number(order.return_refund_amount || 0))}</b></p></section>`
       : '';
     const returnPolicyLine = order.return_deadline_at
       ? `<section class="shop-order-return-summary"><small>${order.return_policy_type === 'b2b_commercial' ? 'RETUR COMERCIAL PJ' : 'DREPT DE RETRAGERE PF'}</small><strong>Termenul cererii: ${esc(dateTime(order.return_deadline_at))}</strong></section>`
       : '';
-    const returnRequestCard = `<section id="shop-order-return-field" class="shop-order-return-field" ${['return_requested','return_refused','return_confirmed','refunded'].includes(order.status) ? '' : 'hidden'}><header><span>RETUR · VERIFICARE PE PRODUS</span><strong>${returnLocked ? 'Decizia returului' : 'Acceptă sau refuză fiecare produs'}</strong><small>Factura de retur și NIR-ul includ exclusiv produsele și cantitățile acceptate.</small></header><label>Motivul returului<textarea id="shop-order-return-reason" rows="4" maxlength="1000" ${order.return_reason ? 'disabled' : ''} placeholder="Scrie motivul returului...">${esc(order.return_reason || '')}</textarea></label><div class="shop-commerce-columns"><label>Titular cont<input id="shop-order-return-holder" maxlength="180" ${order.return_reason ? 'disabled' : ''} value="${esc(order.return_bank_account_holder || '')}" placeholder="Numele titularului"></label><label>IBAN rambursare<input id="shop-order-return-iban" maxlength="40" ${order.return_reason ? 'disabled' : ''} value="${esc(order.return_bank_iban || '')}" placeholder="RO..." autocomplete="off"></label></div><div class="shop-order-return-items">${returnDecisionHtml}</div><footer><span>Cost retur <b>−${money(returnCost)}</b></span><span>Estimare restituire <strong>${money(returnRefund)}</strong></span></footer></section>`;
+    const returnRequestCard = `<section id="shop-order-return-field" class="shop-order-return-field" ${['return_requested','return_refused','return_confirmed','refunded'].includes(order.status) ? '' : 'hidden'}><header><span>RETUR · VERIFICARE PE CANTITATE</span><strong>${returnLocked ? 'Decizia returului' : 'Acceptă și refuză exact cantitatea verificată'}</strong><small>Poți accepta o parte și refuza restul din același produs. Factura de retur și NIR-ul includ exclusiv cantitățile acceptate; motivul refuzului este comunicat clientului.</small></header><label>Motivul returului<textarea id="shop-order-return-reason" rows="4" maxlength="1000" ${order.return_reason ? 'disabled' : ''} placeholder="Scrie motivul returului...">${esc(order.return_reason || '')}</textarea></label><div class="shop-commerce-columns"><label>Titular cont<input id="shop-order-return-holder" maxlength="180" ${order.return_reason ? 'disabled' : ''} value="${esc(order.return_bank_account_holder || '')}" placeholder="Numele titularului"></label><label>IBAN rambursare<input id="shop-order-return-iban" maxlength="40" ${order.return_reason ? 'disabled' : ''} value="${esc(order.return_bank_iban || '')}" placeholder="RO..." autocomplete="off"></label></div><div class="shop-order-return-items">${returnDecisionHtml}</div><footer><span>Cost retur <b>−${money(returnCost)}</b></span><span>Estimare restituire <strong>${money(returnRefund)}</strong></span></footer></section>`;
     $('shop-order-details').innerHTML = `
       <div class="shop-order-grid">${clientCard}${deliveryCard}</div>
       <div class="shop-order-items">${orderItemsHtml}</div>
@@ -2442,15 +2455,32 @@
     document.querySelectorAll('input[name="shop-order-status"]').forEach(input => input.addEventListener('change', syncOrderNotify));
     $('shop-order-notify')?.addEventListener('change', syncOrderNotify);
     $('shop-order-details').querySelectorAll('.shop-order-return-item').forEach(row => {
+      const syncReturnRow = acceptedValue => {
+        const requested = Number(row.dataset.requested || 0);
+        const accepted = Math.max(0, Math.min(requested, Number(acceptedValue || 0)));
+        const refused = Math.max(0, requested - accepted);
+        const decision = accepted <= 0 ? 'refused' : refused <= 0 ? 'accepted' : 'partial';
+        row.dataset.returnStatus = decision;
+        row.classList.toggle('partial', decision === 'partial');
+        row.querySelectorAll('[data-return-decision]').forEach(item => item.classList.toggle('active', item.dataset.returnDecision === decision));
+        row.querySelector('[data-return-decision="accepted"]')?.classList.toggle('accepted', decision === 'accepted');
+        row.querySelector('[data-return-decision="refused"]')?.classList.toggle('refused', decision === 'refused');
+        const quantityBox = row.querySelector('.shop-order-return-quantity');
+        quantityBox.hidden = false;
+        quantityBox.querySelector('b').textContent = String(accepted);
+        row.querySelector('[data-return-accepted-label]').textContent = quantity(accepted);
+        row.querySelector('[data-return-refused-label]').textContent = quantity(refused);
+        const reason = row.querySelector('[data-return-refusal-reason]');
+        reason.hidden = refused <= 0;
+        reason.placeholder = `Motivul refuzului pentru cele ${quantity(refused)} bucăți`;
+        if (refused <= 0) reason.value = '';
+      };
       row.querySelectorAll('[data-return-decision]').forEach(button => button.addEventListener('click', () => {
-        row.querySelectorAll('[data-return-decision]').forEach(item => item.classList.remove('active', 'accepted', 'refused'));
-        button.classList.add('active', button.dataset.returnDecision);
-        row.querySelector('.shop-order-return-quantity').hidden = button.dataset.returnDecision !== 'accepted';
-        row.querySelector('[data-return-refusal-reason]').hidden = button.dataset.returnDecision !== 'refused';
+        syncReturnRow(button.dataset.returnDecision === 'accepted' ? Number(row.dataset.requested || 0) : 0);
       }));
       row.querySelectorAll('[data-return-qty]').forEach(button => button.addEventListener('click', () => {
-        const output = row.querySelector('.shop-order-return-quantity b'); const current = Number(output.textContent || 1); const max = Number(row.dataset.requested || 1);
-        output.textContent = String(button.dataset.returnQty === 'plus' ? Math.min(max, current + 1) : Math.max(1, current - 1));
+        const output = row.querySelector('.shop-order-return-quantity b'); const current = Number(output.textContent || 0); const max = Number(row.dataset.requested || 0);
+        syncReturnRow(button.dataset.returnQty === 'plus' ? Math.min(max, current + 1) : Math.max(0, current - 1));
       }));
     });
     syncOrderNotify();
@@ -2476,7 +2506,7 @@
       const returnReason = $('shop-order-return-reason')?.value.trim() || '';
       const returnHolder = $('shop-order-return-holder')?.value.trim() || '';
       const returnIban = ($('shop-order-return-iban')?.value || '').trim().toUpperCase().replace(/\s+/g, '');
-      const returnItems = Array.from(document.querySelectorAll('.shop-order-return-item')).map(row => { const decision = row.querySelector('[data-return-decision].active')?.dataset.returnDecision || 'pending'; return { order_item_id: row.dataset.returnOrderItem, quantity: Number(row.dataset.requested || 0), decision_status: decision === 'pending' ? undefined : decision, accepted_quantity: decision === 'accepted' ? Number(row.querySelector('.shop-order-return-quantity b')?.textContent || 0) : 0, decision_reason: row.querySelector('[data-return-refusal-reason]')?.value.trim() || '' }; });
+      const returnItems = Array.from(document.querySelectorAll('.shop-order-return-item')).map(row => { const decision = row.dataset.returnStatus || 'pending'; const requested = Number(row.dataset.requested || 0); const accepted = decision === 'pending' ? 0 : Number(row.querySelector('.shop-order-return-quantity b')?.textContent || 0); return { order_item_id: row.dataset.returnOrderItem, quantity: requested, decision_status: decision === 'pending' ? undefined : decision, accepted_quantity: accepted, refused_quantity: decision === 'pending' ? 0 : Math.max(0, requested - accepted), decision_reason: row.querySelector('[data-return-refusal-reason]')?.value.trim() || '' }; });
       const paymentStatus = $('shop-order-payment-status').value;
       const adminNotes = $('shop-order-admin-notes').value.trim();
       const address = $('shop-order-address')?.value.trim() || '';
@@ -2503,8 +2533,9 @@
       if (status === 'cancelled' && state.editingOrder.status !== 'cancelled' && !confirm('Anulezi comanda? Anularea se salvează imediat, clientul este notificat automat, iar factura și stocul sunt corectate după regulile fiscale.')) return;
       const returnTarget = ['return_requested', 'return_refused', 'return_confirmed', 'refunded'].includes(status);
       if (returnTarget && !state.editingOrder.return_reason && (returnReason.length < 3 || returnHolder.length < 3 || !returnIban)) throw new Error('Completează motivul, titularul contului și IBAN-ul pentru retur.');
-      if (status === 'return_refused' && (returnItems.some(item => item.decision_status !== 'refused') || returnItems.some(item => item.decision_reason.length < 3))) throw new Error('Pentru Retur refuzat, marchează Refuză și motivează fiecare produs. Dacă accepți un produs, folosește Retur confirmat.');
-      if (['return_confirmed','refunded'].includes(status) && (returnItems.some(item => !item.decision_status) || !returnItems.some(item => item.decision_status === 'accepted'))) throw new Error('Evaluează toate produsele și acceptă cel puțin unul înainte de confirmarea returului.');
+      if (status === 'return_refused' && (returnItems.some(item => item.accepted_quantity > 0) || returnItems.some(item => item.decision_reason.length < 3))) throw new Error('Pentru Retur refuzat, cantitatea acceptată trebuie să fie zero și fiecare produs trebuie motivat. Dacă accepți cel puțin o bucată, folosește Retur confirmat.');
+      if (['return_confirmed','refunded'].includes(status) && (returnItems.some(item => !item.decision_status) || !returnItems.some(item => item.accepted_quantity > 0))) throw new Error('Evaluează toate produsele și acceptă cel puțin o bucată înainte de confirmarea returului.');
+      if (['return_confirmed','refunded'].includes(status) && returnItems.some(item => item.refused_quantity > 0 && item.decision_reason.length < 3)) throw new Error('Scrie motivul pentru fiecare cantitate refuzată integral sau parțial. Motivul va apărea în e-mailul clientului.');
       const updated = await window.SHOP_API.updateOrder(state.editingOrder.id, { status, payment_status: paymentStatus, admin_notes: adminNotes, notify_customer: status !== state.editingOrder.status && (status === 'cancelled' ? true : Boolean($('shop-order-notify')?.checked)), cancellation_reason: status === 'cancelled' ? cancellationReason : undefined, return_reason: returnTarget ? returnReason : undefined, return_bank_iban: returnTarget ? returnIban : undefined, return_bank_account_holder: returnTarget ? returnHolder : undefined, return_items: returnTarget ? returnItems : undefined, address, city, county, postal_code: postalCode });
       closeModal('shop-order-modal');
       const email = updated.email_notification;
@@ -3954,6 +3985,31 @@
       element.textContent = money(totalValues[index] || 0);
     });
   }
+  function renderCustomerReturnSupplierOrigins(document) {
+    const origins = Array.isArray(document?.supplier_return_origins) ? document.supplier_return_origins : [];
+    if (document?.document_kind !== 'customer_return' || !origins.length) return '';
+    const cards = origins.map((origin, originIndex) => {
+      const lines = (origin.lines || []).map(line => `<article class="shop-nir-return-origin-line"><span>${nirUiIcon('product')}</span><div><strong>${esc(line.product_name || 'Produs')}</strong><small>${esc(line.product_sku || 'Fără SKU')} · revenite ${esc(quantity(line.returned_stock_quantity))} · deja trimise ${esc(quantity(line.supplier_returned_stock_quantity))}</small></div><b>${esc(quantity(line.available_quantity))} ${esc(line.purchase_unit || 'buc')}</b></article>`).join('');
+      const invoice = [origin.original_invoice?.series, origin.original_invoice?.number].filter(Boolean).join(' / ') || '—';
+      return `<section class="shop-nir-return-origin-card"><header><div><small>NIR ORIGINAL · ${esc(origin.original_nir_number || '—')}</small><strong>${esc(origin.supplier_display_name || 'Furnizor')}</strong><span>Factura ${esc(invoice)} · ${esc(origin.original_invoice?.date || 'fără dată')}</span></div><b>${esc(quantity(origin.available_stock_quantity))}<small>BUC. DISPONIBILE</small></b></header><div>${lines}</div><button type="button" data-nir-supplier-return="${originIndex}" ${!origin.can_start_supplier_return || !nirCan('NIR_REVERSE') ? 'disabled' : ''}>${nirUiIcon('reverse')}<span><strong>${origin.can_start_supplier_return ? 'Pregătește returul către furnizor' : 'Cantitățile au fost deja procesate'}</strong><small>Stornează NIR-ul original numai pentru produsele revenite</small></span><i>→</i></button></section>`;
+    }).join('');
+    return `<section class="shop-nir-return-lineage"><header><span>${nirUiIcon('reverse')}</span><div><small>TRASABILITATE FIFO PĂSTRATĂ</small><strong>Retur către furnizor</strong><p>Fiecare cantitate revenită de la client este legată permanent de recepția și costul ei original.</p></div></header><div class="shop-nir-return-origin-list">${cards}</div></section>`;
+  }
+
+  async function openSupplierReturnFromCustomerReturn(originIndex) {
+    const customerReturn = state.nirEditor;
+    const origin = customerReturn?.supplier_return_origins?.[originIndex];
+    if (!customerReturn || !origin?.can_start_supplier_return || state.nirReversing) return;
+    try {
+      const original = await window.SHOP_API.getNir(origin.original_nir_id);
+      const availableByLine = new Map((origin.lines || []).map(line => [String(line.original_nir_line_id), String(line.available_quantity || '0')]));
+      const constrained = { ...original, can_storno: true, lines: (original.lines || []).map(line => ({ ...line, stornable_quantity: availableByLine.get(String(line.id || '')) || '0' })) };
+      openNirReverseDialog(constrained, { customerReturnNirId: customerReturn.id });
+    } catch (error) {
+      toast(error.message || 'Recepția originală nu a putut fi deschisă.', 'error');
+    }
+  }
+
   function renderNirEditor() {
     const activeInput = window.document.activeElement;
     const focusSnapshot = activeInput?.matches?.('[data-nir-line-field], [data-nir-field], [data-nir-datetime]') ? {
@@ -3993,6 +4049,11 @@
       <section class="shop-nir-editor-section documents ${editable ? '' : 'is-confirmed'}"><header><b class="shop-nir-step-badge optional">${nirUiIcon('document')}<i>+</i></b><span><strong>Documente furnizor</strong><small>${editable ? 'Le poti alege acum; sunt incarcate numai cand apesi Salveaza' : `${(document.attachments || []).length} documente salvate impreuna cu acest NIR`}</small></span>${editable ? '<button type="button" id="shop-nir-import">Alege documente</button>' : (document.attachments || []).length ? `<button type="button" id="shop-nir-download-all">${nirUiIcon('download')} Descarca toate</button>` : ''}</header><div class="shop-nir-attachments shop-nir-dropzone ${editable ? '' : 'is-confirmed'}" role="${editable ? 'button' : 'group'}" tabindex="${editable ? '0' : '-1'}" aria-label="${editable ? 'Adauga documentele furnizorului' : 'Documentele furnizorului'}">${editable ? `<div class="shop-nir-drop-hint"><span><i></i>${nirUiIcon('document')}</span><div><strong>Trage factura aici</strong><small>Documentele raman local pana apesi Salveaza ciorna</small><em>PDF · JPG · PNG · WEBP · XLSX · XML</em></div></div>` : ''}${attachments || pendingAttachments ? `<div class="shop-nir-attachment-list">${attachments}${pendingAttachments}</div>` : '<p>Nu exista documente atasate acestui NIR.</p>'}</div></section>
       <section class="shop-nir-editor-section lines"><header>${nirStepBadge('04', 'product')}<span><strong>Produsele din factura</strong><small>Fiecare rand reprezinta un produs primit de la furnizor.</small></span>${editable ? '<button type="button" id="shop-nir-add-line">+ Produs</button>' : ''}</header><div class="shop-nir-lines-intro"><strong>${nirUiIcon('product')}<span><small>ORDINEA COMPLETARII</small>Urmeaza traseul de la stanga la dreapta</span></strong><ol><li><i>1</i><span><b>Alege produsul</b><small>cauta sau asociaza articolul</small></span></li><em>→</em><li><i>2</i><span><b>Scrie cantitatea</b><small>cat ai primit efectiv</small></span></li><em>→</em><li><i>3</i><span><b>Completeaza pretul</b><small>costul din factura</small></span></li></ol></div><div id="shop-nir-lines" class="shop-nir-line-list">${lines || '<p class="shop-nir-no-lines">Adauga cel putin un produs.</p>'}</div></section>
       <section class="shop-nir-editor-section review"><header>${nirStepBadge('05', 'check')}<span><strong>Verifica documentul</strong><small>Ultimul control inainte ca marfa sa intre in gestiune</small></span><em class="shop-nir-review-ready">${nirUiIcon('check')} GATA DE VERIFICARE</em></header><p class="shop-nir-review-guide"><b>05</b><span><strong>Compara cantitatile, apoi verifica valoarea finala.</strong><small>Daca exista diferente, corecteaza pozitia produsului inainte de confirmare.</small></span></p><section class="shop-nir-quantity-summary"><span><i>${nirUiIcon('document')}</i><b><small>FACTURAT</small><strong>${quantities.invoiced.toLocaleString('ro-RO')}</strong><em>unitati pe factura</em></b></span><span><i>${nirUiIcon('calendar')}</i><b><small>RECEPTIONAT</small><strong>${quantities.received.toLocaleString('ro-RO')}</strong><em>unitati numarate</em></b></span><span class="accepted"><i>${nirUiIcon('check')}</i><b><small>ACCEPTAT</small><strong>${quantities.accepted.toLocaleString('ro-RO')}</strong><em>unitati conforme</em></b></span><span class="stock"><i>${nirUiIcon('product')}</i><b><small>INTRA EFECTIV IN STOC</small><strong>${quantities.stock.toLocaleString('ro-RO')}</strong><em>cantitatea finala</em></b></span></section>${nirCan('NIR_VIEW_COSTS') ? `<section class="shop-nir-totals"><span><i>${nirUiIcon('currency')}</i><b><small>VALOARE FARA TVA</small><strong>${money(displayedTotals.netRon)}</strong><em>Baza de calcul</em></b></span><span><i>${nirUiIcon('document')}</i><b><small>TVA</small><strong>${money(displayedTotals.vatRon)}</strong><em>Valoarea taxei</em></b></span><span class="grand"><i>${nirUiIcon('check')}</i><b><small>TOTAL CONTABIL RON</small><strong>${money(displayedTotals.totalRon)}</strong><em>Valoarea care va fi confirmata</em></b></span></section>` : ''}<label class="shop-nir-review-notes"><span><b>Observatii interne</b><small>Optional · noteaza diferente, explicatii sau detalii utile pentru contabilitate</small></span><textarea data-nir-field="notes" rows="3" placeholder="Exemplu: ambalaj deteriorat, diferenta explicata de furnizor..." ${editable ? '' : 'disabled'}>${esc(document.notes || '')}</textarea></label></section><section id="shop-nir-accounting-details" class="shop-nir-accounting-details" ${editable ? 'hidden' : ''}><div class="shop-commerce-loading">Se incarca miscarile de stoc...</div></section>`;
+    if (!editable) {
+      const accounting = $('shop-nir-accounting-details');
+      accounting?.insertAdjacentHTML('beforebegin', renderCustomerReturnSupplierOrigins(document));
+      $('shop-nir-editor').querySelectorAll('[data-nir-supplier-return]').forEach(button => button.addEventListener('click', () => void openSupplierReturnFromCustomerReturn(Number(button.dataset.nirSupplierReturn))));
+    }
     $('shop-nir-save').hidden = !editable || correctionEditing; $('shop-nir-confirm').hidden = !editable || correctionEditing; $('shop-nir-confirm').disabled = !nirCan('NIR_CONFIRM');
     $('shop-nir-delete').hidden = !editable || correctionEditing || !nirCan('NIR_EDIT_DRAFT');
     $('shop-nir-reverse-trigger').hidden = !canNirStorno(document) || document.status !== 'confirmed' || correctionEditing || !nirCan('NIR_REVERSE');
@@ -4682,7 +4743,7 @@
       }).join('');
       const emptyState = '<div class="shop-nir-movement-empty"><span>' + nirUiIcon('product') + '</span><strong>Nu exista miscari de stoc</strong><p>Acest document nu a produs inca o intrare sau iesire contabila.</p></div>';
       $('shop-nir-accounting-details').innerHTML = `<section class="shop-nir-movement-board"><header class="shop-nir-movement-head"><span>${nirUiIcon('product')}</span><div><small>JURNAL CONTABIL</small><strong>Traseul stocului</strong><p>${isNirReversalDocument(state.nirEditor) ? 'Pozițiile anulate prin acest document de stornare, în ordine cronologică.' : 'Fiecare miscare produsa de acest NIR, explicata clar.'}</p></div><b>${movements.length}<small>MISCARI</small></b>${state.nirEditor.status === 'confirmed' && canNirStorno(state.nirEditor) && nirCan('NIR_REVERSE') ? '<button type="button" class="danger" id="shop-nir-reverse">' + nirUiIcon('reverse') + '<span>Stornare factură</span></button>' : ''}</header><div class="shop-nir-movement-summary"><span><small>INTRARI</small><strong class="positive">+${movementQuantity(summary.entries)}</strong></span><span><small>IESIRI</small><strong class="negative">−${movementQuantity(summary.exits)}</strong></span><span><small>EFECT NET</small><strong>${summary.net > 0 ? '+' : ''}${movementQuantity(summary.net)}</strong></span></div><div class="shop-nir-movement-list">${movementCards || emptyState}</div></section>`;
-      $('shop-nir-reverse')?.addEventListener('click', openNirReverseDialog);
+      $('shop-nir-reverse')?.addEventListener('click', () => openNirReverseDialog());
     } catch (error) { $('shop-nir-accounting-details').innerHTML = `<p>${esc(error.message)}</p>`; }
   }
 
@@ -4694,9 +4755,14 @@
     return `${match[1]}${next}`;
   }
 
-  function openNirReverseDialog() {
-    const document = state.nirEditor;
+  function openNirReverseDialog(documentOverride = null, context = null) {
+    const document = documentOverride || state.nirEditor;
     if (!document || document.status !== 'confirmed' || !canNirStorno(document) || !nirCan('NIR_REVERSE') || state.nirReversing) return;
+    state.nirStornoDocument = document;
+    state.nirSupplierReturnContext = context;
+    const dialogEyebrow = window.document.querySelector('#shop-nir-reverse-dialog > section > small');
+    if (dialogEyebrow) dialogEyebrow.textContent = context ? 'RETUR FURNIZOR · TRASABILITATE FIFO' : 'STORNARE CONTABILĂ';
+    $('shop-nir-reverse-message').textContent = context ? 'Sunt disponibile exclusiv cantitățile revenite de la client și legate de această recepție originală.' : 'Alege produsele și completează separat cantitatea stornată pentru fiecare poziție.';
     $('shop-nir-reverse-number').textContent = document.nir_number || document.temporary_number || 'NIR';
     $('shop-nir-reverse-supplier').textContent = supplierDisplayName(document, 'Furnizor necompletat');
     const originalSeries = String(document.supplier_invoice_series || '').trim();
@@ -4809,7 +4875,8 @@
   }
 
   async function reverseNir() {
-    const document = state.nirEditor;
+    const document = state.nirStornoDocument || state.nirEditor;
+    const supplierReturnContext = state.nirSupplierReturnContext;
     const reasonField = $('shop-nir-reverse-reason');
     const reason = String(reasonField?.value || '').trim();
     if (!document || document.status !== 'confirmed' || !canNirStorno(document) || !nirCan('NIR_REVERSE') || state.nirReversing) return;
@@ -4820,6 +4887,7 @@
       supplier_invoice_series: String(seriesField?.value || '').trim() || null,
       supplier_invoice_number: String(numberField?.value || '').trim(),
       supplier_invoice_date: String(dateField?.value || '').trim(),
+      customer_return_nir_id: supplierReturnContext?.customerReturnNirId,
     };
     const selectedInputs = [...($('shop-nir-storno-lines')?.querySelectorAll('[data-nir-storno-line]:checked') || [])];
     const selectedLines = selectedInputs.map(input => ({ line_id: input.dataset.nirStornoLine, quantity: input.closest('label')?.querySelector('[data-nir-storno-quantity-input]')?.value || '' }));
@@ -4869,13 +4937,16 @@
         catch (uploadError) { attachmentWarning = ` Stornarea a fost creată, dar documentele nu s-au putut încărca: ${uploadError.message || 'eroare necunoscută'}`; }
       }
       const updatedOriginal = result?.original || result?.document || result?.storno?.original || await window.SHOP_API.getNir(document.id);
-      state.nirEditor = { ...updatedOriginal, ...(result?.fully_storned ? { fully_storned: true, can_storno: false } : {}) };
+      const fullyStorned = Boolean(result?.fully_storned || updatedOriginal?.fully_storned || updatedOriginal?.status === 'reversed');
+      state.nirEditor = supplierReturnContext
+        ? await window.SHOP_API.getNir(supplierReturnContext.customerReturnNirId)
+        : { ...updatedOriginal, ...(fullyStorned ? { fully_storned: true, can_storno: false } : {}) };
       state.nirReversing = false;
       closeModal('shop-nir-reverse-dialog');
       renderNirEditor();
       void loadNirAccountingDetails();
       await loadNirs(state.pages.nirs);
-      toast(`${result?.fully_storned || state.nirEditor.status === 'reversed' ? 'Factura a fost stornată integral.' : `${selectedLines.length} ${selectedLines.length === 1 ? 'poziție a fost stornată' : 'poziții au fost stornate'}.`} Document creat: ${stornoDocument?.nir_number || 'document de stornare'}.${attachmentWarning}`, attachmentWarning ? 'error' : 'success');
+      toast(`${fullyStorned ? 'Factura a fost stornată integral.' : `${selectedLines.length} ${selectedLines.length === 1 ? 'poziție a fost stornată' : 'poziții au fost stornate'}.`} Document creat: ${stornoDocument?.nir_number || 'document de stornare'}.${attachmentWarning}`, attachmentWarning ? 'error' : 'success');
     } catch (error) {
       toast(error.message || 'Factura nu poate fi stornată.', 'error');
     } finally {

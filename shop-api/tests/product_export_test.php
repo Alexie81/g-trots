@@ -4,7 +4,7 @@ require_once dirname(__DIR__) . '/product-export.php';
 
 function exportAssert(bool $ok, string $message): void { if (!$ok) throw new RuntimeException($message); }
 $db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
-$db->exec('CREATE TABLE shop_products (id TEXT,source_id TEXT,name TEXT,sku TEXT,supplier_external_id TEXT,supplier_product_code TEXT,source_domain TEXT,stock_mode TEXT,stock_quantity INTEGER,accounting_stock_quantity INTEGER,supplier_stock_quantity INTEGER,view_count INTEGER)');
+$db->exec('CREATE TABLE shop_products (id TEXT,source_id TEXT,name TEXT,sku TEXT,supplier_external_id TEXT,supplier_product_code TEXT,source_domain TEXT,supplier_base_price REAL,price REAL,supplier_price_difference REAL,stock_mode TEXT,stock_quantity INTEGER,accounting_stock_quantity INTEGER,supplier_stock_quantity INTEGER,view_count INTEGER)');
 $db->exec('CREATE TABLE shop_product_sources (id TEXT,name TEXT)');
 $db->exec('CREATE TABLE shop_product_images (product_id TEXT,image_path TEXT,sort_order INTEGER,created_at TEXT)');
 $db->exec('CREATE TABLE shop_suppliers (id TEXT,name TEXT,alias TEXT)');
@@ -18,7 +18,7 @@ if (!is_dir(dirname($imagePath))) mkdir(dirname($imagePath), 0775, true);
 file_put_contents($imagePath, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAC0lEQVR42u3BAQ0AAADCoPdPbQ43oAAAAAAAAAAAAAAAfg0wQAABzFhnAAAAAElFTkSuQmCC'));
 register_shutdown_function(static function () use ($imagePath): void { if (is_file($imagePath)) unlink($imagePath); });
 $db->exec("INSERT INTO shop_product_sources VALUES ('local','G-Trots'),('import','Boomag');
-INSERT INTO shop_products VALUES ('p1','local','Disc de frână trotinetă electrică 140 mm, 6 găuri','00123','0099','cod 1','g-trots.ro','tracked',17,8,12,214),('p2','import','Încărcător universal 48V','GT-CH48','0007','EXT-12','boomag.ro','unlimited',0,0,43,75),('p3',NULL,'Cablu de frână','GT-CAB','','','g-trots.ro','tracked',0,3,0,8);
+INSERT INTO shop_products VALUES ('p1','local','Disc de frână trotinetă electrică 140 mm, 6 găuri','00123','0099','cod 1','g-trots.ro',NULL,199,NULL,'tracked',17,8,12,214),('p2','import','Încărcător universal 48V','GT-CH48','0007','EXT-12','boomag.ro',100,149,49,'unlimited',0,0,43,75),('p3',NULL,'Cablu de frână','GT-CAB','','','g-trots.ro',NULL,39,NULL,'tracked',0,3,0,8);
 INSERT INTO shop_suppliers VALUES ('s1','Furnizor 1 SRL','Partener 1'),('s2','Furnizor 2 SRL','');
 INSERT INTO shop_supplier_product_references VALUES ('p1','s1','cod 1'),('p1','s2','cod 2');
 INSERT INTO shop_orders VALUES ('o1','paid','completed'),('o2','pending','new'),('o3','paid','cancelled'),('o4','paid','return_confirmed');
@@ -37,12 +37,15 @@ $sheet = new DOMDocument(); exportAssert($sheet->loadXML($zip->getFromName('xl/w
 $xp = new DOMXPath($sheet); $xp->registerNamespace('s', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main');
 $cell = static fn(string $ref): string => $xp->evaluate('string(//s:c[@r="' . $ref . '"])');
 // Source name sorting puts Boomag first, followed by G-Trots and unassigned g-trots.ro.
-exportAssert(trim($cell('C7')) === '00123', 'SKU must preserve leading zeros.');
-exportAssert(abs((float)$cell('M7') - 4.67) < 0.0001 && (int)$cell('N7') === 3, 'Review mean and count must not be multiplied by supplier references.');
-exportAssert(trim($cell('M6')) === 'Fără recenzii' && (int)$cell('N6') === 0, 'Unreviewed products must be explicit.');
-exportAssert($xp->evaluate('count(//s:mergeCell[@ref="M7:M8"])') === 1.0, 'Ratings must span supplier rows.');
-exportAssert(trim($cell('I7')) === '3.000000000000', 'Sales must not double count supplier joins or include excluded orders.');
-exportAssert(trim($cell('K7')) === 'cod 1' && trim($cell('K8')) === 'cod 2', 'Supplier codes must occupy aligned rows.');
+exportAssert(trim($cell('C5')) === 'Preț furnizor (lei)' && trim($cell('D5')) === 'Preț G-Trots (lei)' && trim($cell('E5')) === 'Marjă fixă G-Trots (lei)', 'Supplier price, G-Trots price and fixed margin must be the first columns after product name.');
+exportAssert(abs((float)$cell('C6') - 100) < 0.0001 && abs((float)$cell('D6') - 149) < 0.0001 && abs((float)$cell('E6') - 49) < 0.0001, 'Boomag pricing must include supplier price, G-Trots price and the stable fixed margin.');
+exportAssert(trim($cell('C7')) === 'Nu se aplică' && abs((float)$cell('D7') - 199) < 0.0001 && trim($cell('E7')) === 'Nu se aplică', 'Manual products must keep the G-Trots price without requiring supplier pricing.');
+exportAssert(trim($cell('F7')) === '00123', 'SKU must preserve leading zeros.');
+exportAssert(abs((float)$cell('P7') - 4.67) < 0.0001 && (int)$cell('Q7') === 3, 'Review mean and count must not be multiplied by supplier references.');
+exportAssert(trim($cell('P6')) === 'Fără recenzii' && (int)$cell('Q6') === 0, 'Unreviewed products must be explicit.');
+exportAssert($xp->evaluate('count(//s:mergeCell[@ref="P7:P8"])') === 1.0, 'Ratings must span supplier rows.');
+exportAssert(trim($cell('L7')) === '3.000000000000', 'Sales must not double count supplier joins or include excluded orders.');
+exportAssert(trim($cell('N7')) === 'cod 1' && trim($cell('N8')) === 'cod 2', 'Supplier codes must occupy aligned rows.');
 exportAssert($xp->evaluate('count(//s:mergeCell[@ref="B7:B8"])') === 1.0, 'Product name must span its supplier rows.');
 exportAssert($xp->evaluate('count(//s:c/s:f)') === 0.0, 'Identifiers must never execute as formulas.');
 exportAssert(str_contains($zip->getFromName('xl/drawings/drawing1.xml'), 'Disc de frână'), 'Product image must be embedded.');

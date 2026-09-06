@@ -1129,6 +1129,68 @@ final class GtrotsInvoiceService
         $saleMovements = $movements->fetchAll();
         if (!$saleMovements) return;
 
+        $selectionByLine = [];
+        foreach ($returnSelection as $item) $selectionByLine[(string)$item['order_item_id']] = $item;
+        $saleMovements = array_values(array_filter($saleMovements, static fn(array $movement): bool => isset($selectionByLine[(string)($movement['sales_invoice_line_id'] ?? '')])));
+        if (!$saleMovements) throw new RuntimeException('Produsele acceptate nu mai pot fi asociate ieșirilor de stoc ale facturii inițiale.');
+
+        // Produsele excluse din Stocuri Conta revin numai in stocul online.
+        // Pastram o miscare idempotenta pentru trasabilitate, dar nu cream NIR,
+        // linie NIR, strat FIFO sau valoare de stoc contabila.
+        $onlineOnlyMovements = array_values(array_filter($saleMovements, static function (array $movement): bool {
+            $accountingDelta = array_key_exists('accounting_quantity_delta', $movement) && $movement['accounting_quantity_delta'] !== null
+                ? (float)$movement['accounting_quantity_delta']
+                : (float)($movement['quantity_delta'] ?? 0);
+            return abs($accountingDelta) <= 0.00005;
+        }));
+        if ($onlineOnlyMovements) {
+            $onlineProduct = $db->prepare('SELECT stock_quantity, accounting_stock_quantity FROM shop_products WHERE id = ?' . $lock);
+            $updateOnlineProduct = $db->prepare('UPDATE shop_products SET stock_quantity = ? WHERE id = ?');
+            $existingOnlineReturn = $db->prepare("SELECT id FROM shop_inventory_movements WHERE sales_invoice_id = ? AND movement_type IN ('return', 'RETURN_IN') AND reversal_of_movement_id = ? LIMIT 1");
+            $insertOnlineReturn = $db->prepare(
+                'INSERT INTO shop_inventory_movements
+                 (id, product_id, warehouse_id, order_id, nir_document_id, nir_line_id, sales_invoice_id, sales_invoice_line_id, movement_type,
+                  quantity_delta, quantity_after, accounting_quantity_delta, accounting_quantity_after, inventory_unit_cost_ron,
+                  inventory_cost_total_ron, sale_unit_price_ron, sale_total_ron, fifo_status, fifo_quantity_allocated,
+                  fifo_quantity_pending, reversal_of_movement_id, note, created_by)
+                 VALUES (?, ?, NULL, ?, NULL, NULL, ?, ?, "RETURN_IN", ?, ?, 0, ?, NULL, NULL, ?, ?, "not_tracked", 0, 0, ?, ?, ?)'
+            );
+            $actorName = mb_substr(trim((string)($actor['display_name'] ?? $actor['username'] ?? 'Sistem retururi')), 0, 180);
+            $returnLabel = trim($series . ' ' . $number);
+            foreach ($onlineOnlyMovements as $movement) {
+                $movementId = (string)($movement['id'] ?? '');
+                $productId = trim((string)($movement['product_id'] ?? ''));
+                if ($movementId === '' || $productId === '') continue;
+                $existingOnlineReturn->execute([$returnInvoiceId, $movementId]);
+                if ($existingOnlineReturn->fetchColumn()) continue;
+                $onlineProduct->execute([$productId]);
+                $current = $onlineProduct->fetch();
+                if (!$current) continue;
+                $selectionItem = $selectionByLine[(string)($movement['sales_invoice_line_id'] ?? '')];
+                $quantity = (float)$selectionItem['accepted_quantity'];
+                $onlineQuantity = abs((float)($movement['quantity_delta'] ?? 0)) > 0.00005 ? $quantity : 0.0;
+                $stockAfter = round((float)($current['stock_quantity'] ?? 0) + $onlineQuantity, 4);
+                $updateOnlineProduct->execute([$stockAfter, $productId]);
+                $insertOnlineReturn->execute([
+                    self::uuid(), $productId, $original['order_id'] ?? null, $returnInvoiceId,
+                    $movement['sales_invoice_line_id'] ?? null, $onlineQuantity, $stockAfter,
+                    (float)($current['accounting_stock_quantity'] ?? 0), $movement['sale_unit_price_ron'] ?? null,
+                    isset($movement['sale_total_ron']) ? -abs((float)$movement['sale_total_ron']) : null,
+                    $movementId,
+                    'Retur client ' . $returnLabel . ' · produs exclus din Stocuri Conta · refacere exclusivă stoc online',
+                    $actorName,
+                ]);
+            }
+        }
+
+        $saleMovements = array_values(array_filter($saleMovements, static function (array $movement): bool {
+            $accountingDelta = array_key_exists('accounting_quantity_delta', $movement) && $movement['accounting_quantity_delta'] !== null
+                ? (float)$movement['accounting_quantity_delta']
+                : (float)($movement['quantity_delta'] ?? 0);
+            return abs($accountingDelta) > 0.00005;
+        }));
+        if (!$saleMovements) return;
+
         $settings = $db->query('SELECT * FROM shop_nir_settings WHERE id = 1' . $lock)->fetch() ?: [];
         $warehouseId = trim((string)($saleMovements[0]['warehouse_id'] ?? $settings['default_warehouse_id'] ?? ''));
         if ($warehouseId === '') throw new RuntimeException('Gestiunea implicită nu este configurată pentru recepția returului.');
@@ -1156,10 +1218,6 @@ final class GtrotsInvoiceService
         $returnLabel = trim($series . ' ' . $number);
         $originalLabel = trim((string)$original['series'] . ' ' . (string)$original['invoice_number']);
         $orderNumber = trim((string)($original['order_number'] ?? ''));
-        $selectionByLine = [];
-        foreach ($returnSelection as $item) $selectionByLine[(string)$item['order_item_id']] = $item;
-        $saleMovements = array_values(array_filter($saleMovements, static fn(array $movement): bool => isset($selectionByLine[(string)($movement['sales_invoice_line_id'] ?? '')])));
-        if (!$saleMovements) throw new RuntimeException('Produsele acceptate nu mai pot fi asociate ieșirilor de stoc ale facturii inițiale.');
         $inventoryTotal = 0.0;
         $notes = 'Intrare în stoc – Retur client. Factura de retur ' . $returnLabel . ' corectează factura fiscală ' . $originalLabel . ($orderNumber !== '' ? ' pentru comanda ' . $orderNumber : '') . '.';
         if (trim($reason) !== '') $notes .= ' Motiv: ' . trim($reason);
@@ -1214,6 +1272,7 @@ final class GtrotsInvoiceService
         );
         $lineConsumptions = $db->prepare("SELECT quantity, unit_cost_ron FROM shop_inventory_layer_consumptions WHERE source_document_type = 'SALES_INVOICE' AND source_document_id = ? AND source_line_id = ? AND reversed_at IS NULL ORDER BY created_at, id" . $lock);
 
+        $returnNirLineBySalesLineId = [];
         foreach ($saleMovements as $index => $movement) {
             $movementId = (string)($movement['id'] ?? '');
             $productId = trim((string)($movement['product_id'] ?? ''));
@@ -1256,6 +1315,7 @@ final class GtrotsInvoiceService
                 $unitCost, $costTotal, $costTotal, $costTotal, $costTotal, $unitCost, $costTotal,
                 $accountingWasTracked ? 1 : 0,
             ]);
+            $returnNirLineBySalesLineId[(string)($movement['sales_invoice_line_id'] ?? '')] = $lineId;
             $stockAfter = round((float)($current['stock_quantity'] ?? 0) + $onlineQuantity, 4);
             $accountingAfter = round((float)($current['accounting_stock_quantity'] ?? 0) + $accountingQuantity, 4);
             $updateProduct->execute([$stockAfter, $accountingAfter, $productId]);
@@ -1277,16 +1337,38 @@ final class GtrotsInvoiceService
             ->execute([$inventoryTotal, $inventoryTotal, $inventoryTotal, $inventoryTotal, $inventoryTotal, $receiptId]);
 
         $consumptions = $db->prepare(
-            "SELECT c.* FROM shop_inventory_layer_consumptions c
-             WHERE c.source_document_type = 'SALES_INVOICE' AND c.source_document_id = ? AND c.reversed_at IS NULL ORDER BY c.source_line_id, c.created_at, c.id" . $lock
+            "SELECT c.*,
+                    l.nir_document_id AS original_nir_document_id,
+                    l.nir_line_id AS original_nir_line_id,
+                    l.supplier_id AS original_supplier_id,
+                    l.unit_cost_ron AS original_unit_cost_ron
+             FROM shop_inventory_layer_consumptions c
+             INNER JOIN shop_inventory_cost_layers l ON l.id = c.inventory_cost_layer_id
+             WHERE c.source_document_type = 'SALES_INVOICE' AND c.source_document_id = ? AND c.reversed_at IS NULL
+             ORDER BY c.source_line_id, c.created_at, c.id" . $lock
         );
         $consumptions->execute([(string)$original['id']]);
-        $layer = $db->prepare('SELECT original_quantity, remaining_quantity, is_reversed FROM shop_inventory_cost_layers WHERE id = ?' . $lock);
+        $layer = $db->prepare(
+            'SELECT l.original_quantity, l.remaining_quantity, l.is_reversed, l.product_id, l.supplier_id,
+                    l.nir_document_id, l.nir_line_id, l.unit_cost_ron,
+                    COALESCE((SELECT SUM(ABS(sl.stock_quantity))
+                              FROM shop_nir_lines sl
+                              INNER JOIN shop_nir_documents sd ON sd.id = sl.nir_document_id
+                              WHERE sd.reversal_of_id = l.nir_document_id AND sl.storno_of_line_id = l.nir_line_id), 0) AS supplier_storned_quantity
+             FROM shop_inventory_cost_layers l WHERE l.id = ?' . $lock
+        );
         $updateLayer = $db->prepare('UPDATE shop_inventory_cost_layers SET remaining_quantity = ?, status = ?, row_version = row_version + 1 WHERE id = ?');
         $reverseConsumption = $db->prepare('UPDATE shop_inventory_layer_consumptions SET reversed_at = CURRENT_TIMESTAMP, reversal_consumption_id = ?, row_version = row_version + 1 WHERE id = ? AND reversed_at IS NULL');
         $remainingByLine = [];
         foreach ($returnSelection as $item) $remainingByLine[(string)$item['order_item_id']] = (float)$item['accepted_quantity'];
         $partialConsumption = $db->prepare('UPDATE shop_inventory_layer_consumptions SET original_quantity = COALESCE(original_quantity, quantity), quantity = ?, total_cost_ron = ?, reversed_quantity = reversed_quantity + ?, reversal_consumption_id = ?, row_version = row_version + 1 WHERE id = ? AND reversed_at IS NULL');
+        $insertReturnOrigin = $db->prepare(
+            'INSERT INTO shop_customer_return_fifo_origins
+             (id, customer_return_nir_id, customer_return_nir_line_id, return_invoice_id, sales_invoice_id, sales_invoice_line_id,
+              inventory_cost_layer_id, original_nir_document_id, original_nir_line_id, product_id, supplier_id,
+              restored_quantity, unit_cost_ron, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        );
         foreach ($consumptions->fetchAll() as $consumption) {
             $lineKey = (string)($consumption['source_line_id'] ?? '');
             $toRestore = min((float)($remainingByLine[$lineKey] ?? 0), (float)$consumption['quantity']);
@@ -1294,8 +1376,12 @@ final class GtrotsInvoiceService
             $layer->execute([(string)$consumption['inventory_cost_layer_id']]);
             $current = $layer->fetch();
             if (!$current || !empty($current['is_reversed'])) continue;
-            $remaining = min((float)$current['original_quantity'], (float)$current['remaining_quantity'] + $toRestore);
-            $status = abs($remaining - (float)$current['original_quantity']) <= 0.00005 ? 'open' : 'partially_consumed';
+            // A later customer return may restore a sold unit after other units
+            // from the same supplier lot were returned to the supplier. Never
+            // restore above the net quantity that can still exist in our stock.
+            $maximumRemaining = max(0.0, (float)$current['original_quantity'] - (float)($current['supplier_storned_quantity'] ?? 0));
+            $remaining = min($maximumRemaining, (float)$current['remaining_quantity'] + $toRestore);
+            $status = abs($remaining - $maximumRemaining) <= 0.00005 ? 'open' : 'partially_consumed';
             $updateLayer->execute([round($remaining, 4), $status, (string)$consumption['inventory_cost_layer_id']]);
             if (abs($toRestore - (float)$consumption['quantity']) <= 0.00005) {
                 $reverseConsumption->execute([$receiptId, (string)$consumption['id']]);
@@ -1303,6 +1389,18 @@ final class GtrotsInvoiceService
                 $remainingConsumption = round((float)$consumption['quantity'] - $toRestore, 4);
                 $remainingCost = round($remainingConsumption * (float)$consumption['unit_cost_ron'], 2);
                 $partialConsumption->execute([$remainingConsumption, $remainingCost, $toRestore, $receiptId, (string)$consumption['id']]);
+            }
+            $returnNirLineId = (string)($returnNirLineBySalesLineId[$lineKey] ?? '');
+            $originalNirId = trim((string)($current['nir_document_id'] ?? $consumption['original_nir_document_id'] ?? ''));
+            $originalNirLineId = trim((string)($current['nir_line_id'] ?? $consumption['original_nir_line_id'] ?? ''));
+            if ($returnNirLineId !== '' && $originalNirId !== '' && $originalNirLineId !== '') {
+                $insertReturnOrigin->execute([
+                    self::uuid(), $receiptId, $returnNirLineId, $returnInvoiceId, (string)$original['id'], $lineKey,
+                    (string)$consumption['inventory_cost_layer_id'], $originalNirId, $originalNirLineId,
+                    (string)($current['product_id'] ?? $consumption['product_id'] ?? ''),
+                    trim((string)($current['supplier_id'] ?? $consumption['original_supplier_id'] ?? '')) ?: null,
+                    round($toRestore, 4), (string)($current['unit_cost_ron'] ?? $consumption['unit_cost_ron'] ?? 0), $actorName,
+                ]);
             }
             $remainingByLine[$lineKey] = round((float)$remainingByLine[$lineKey] - $toRestore, 4);
         }
@@ -1316,7 +1414,7 @@ final class GtrotsInvoiceService
             $stmt = $db->prepare("SELECT ri.*, oi.quantity AS ordered_quantity
                 FROM shop_order_return_items ri
                 INNER JOIN shop_order_items oi ON oi.id = ri.order_item_id
-                WHERE ri.order_id = ? AND ri.decision_status = 'accepted' AND ri.accepted_quantity > 0
+                WHERE ri.order_id = ? AND ri.decision_status IN ('accepted', 'partial') AND ri.accepted_quantity > 0
                 ORDER BY ri.created_at, ri.id");
             $stmt->execute([$orderId]);
             $items = $stmt->fetchAll();

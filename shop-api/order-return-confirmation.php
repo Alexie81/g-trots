@@ -89,6 +89,7 @@ final class GtrotsOrderReturnConfirmation
         $statusEmail = ['sent' => false];
         if ($notifyCustomer) {
             $saved = self::findOrder($db, $orderId);
+            if ($saved) $saved['return_items'] = self::returnItems($db, $orderId);
             $statusEmail = $saved ? gtSendOrderReturnConfirmedEmail($saved, $config) : ['sent' => false, 'error' => 'Comanda nu a putut fi recitită pentru e-mail.'];
             self::recordStatusEmail($db, $orderId, $historyId, $statusEmail);
         }
@@ -109,6 +110,19 @@ final class GtrotsOrderReturnConfirmation
         $stmt->execute([$orderId]);
         $row = $stmt->fetch();
         return $row ?: null;
+    }
+
+    private static function returnItems(PDO $db, string $orderId): array
+    {
+        try {
+            $stmt = $db->prepare('SELECT product_name, product_sku, requested_quantity, decision_status, accepted_quantity, refused_quantity, decision_reason FROM shop_order_return_items WHERE order_id = ? ORDER BY created_at, id');
+            $stmt->execute([$orderId]);
+            return $stmt->fetchAll();
+        } catch (PDOException $error) {
+            // Compatibilitate cu instalări aflate încă înaintea migrării; API-ul
+            // aplică schema la bootstrap, iar confirmarea rămâne disponibilă.
+            return [];
+        }
     }
 
     private static function existingReturnInvoice(PDO $db, string $orderId): ?array

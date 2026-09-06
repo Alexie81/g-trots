@@ -57,6 +57,8 @@
     const bar = document.createElement("section");
     bar.className = "gt-promotion-bar";
     bar.setAttribute("aria-label", "Oferte active G-Trots");
+    bar.dataset.promotionId = String(items[0]?.id || items[0]?.code || "active-promotions");
+    bar.dataset.promotionName = String(items[0]?.title || items[0]?.banner_text || "Oferte active G-Trots");
     bar.innerHTML = `
       <div class="gt-promotion-shell">
         <span class="gt-promotion-label" aria-hidden="true"><i>%</i><b>Ofertă activă</b></span>
@@ -68,6 +70,7 @@
     if (header?.parentNode) header.parentNode.insertBefore(bar, header);
     else document.body.prepend(bar);
     document.body.classList.add("gt-has-promotion-bar");
+    document.dispatchEvent(new CustomEvent("g-trots:promotions-viewed", { detail: items }));
 
     const syncTrack = () => {
       const viewport = bar.querySelector(".gt-promotion-viewport");

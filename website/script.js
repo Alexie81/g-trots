@@ -3,7 +3,7 @@ function ensureGlobalPromotionBar() {
     const link = document.createElement("link"); link.rel = "stylesheet"; link.href = "/promotions.css?v=20260828-marquee-v5"; document.head.append(link);
   }
   if (!document.querySelector('script[src*="promotions.js"]')) {
-    const script = document.createElement("script"); script.src = "/promotions.js?v=20260828-global-v1"; document.head.append(script);
+    const script = document.createElement("script"); script.src = "/promotions.js?v=20260906-ga4-v2"; document.head.append(script);
   }
 }
 ensureGlobalPromotionBar();
@@ -834,5 +834,11 @@ document.querySelector(".contact-form").addEventListener("submit", event => {
   ].join("\n");
   const whatsappUrl = `https://wa.me/40762093915?text=${encodeURIComponent(message)}`;
   event.currentTarget.querySelector(".form-status").textContent = "Se deschide conversația WhatsApp cu solicitarea pregătită.";
+  window.GTrotsGoogle?.track?.("generate_lead", {
+    currency: "RON",
+    value: 0,
+    lead_source: "formular_programare_whatsapp",
+    service: String(form.get("service") || "nespecificat").slice(0, 100)
+  });
   window.open(whatsappUrl, "_blank", "noopener");
 });

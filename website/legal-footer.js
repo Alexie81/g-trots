@@ -37,6 +37,9 @@
     loadAsset('link', { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap' });
   }
   loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260906-company-v2' });
+  if (!document.querySelector('script[src*="google-measurement.js"]')) {
+    loadAsset('script', { src: '/google-measurement.js?v=20260907-ga4-v3', defer: true });
+  }
   if (!document.querySelector('script[src*="cookie-consent.js"]')) {
     loadAsset('script', { src: '/cookie-consent.js?v=20260906-compact-v4', defer: true });
   }

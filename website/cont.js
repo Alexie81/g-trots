@@ -126,6 +126,14 @@
     location.href = safe;
   }
 
+  function queueAuthMeasurement(event, method) {
+    try {
+      localStorage.setItem("g-trots-ga4-auth-pending-v1", JSON.stringify({ event, method }));
+    } catch {
+      window.GTrotsGoogle?.track?.(event, { method });
+    }
+  }
+
   function bindPasswordToggles() {
     document.querySelectorAll("[data-password-toggle]").forEach(button => button.addEventListener("click", () => {
       const input = button.parentElement?.querySelector("input");
@@ -185,7 +193,7 @@
       }
       host.innerHTML = `<div class="google-auth-ready">${googleSurface(label)}<div data-google-official aria-label="${label}"></div></div>`;
       window.google.accounts.id.initialize({ client_id: config.google_client_id, callback: async response => {
-        try { const session = await api("customerGoogleLogin", { method: "POST", body: { credential: response.credential }, auth: false }); saveSession(session); redirectAfterAuth(); }
+        try { const session = await api("customerGoogleLogin", { method: "POST", body: { credential: response.credential }, auth: false }); saveSession(session); queueAuthMeasurement(session.is_new_customer ? "sign_up" : "login", "google"); redirectAfterAuth(); }
         catch (error) { setMessage(document, error.message); }
       }});
       window.google.accounts.id.renderButton(host.querySelector("[data-google-official]"), { theme: "outline", size: "large", shape: "pill", width: Math.max(240, host.clientWidth || 420), text: page === "register" ? "signup_with" : "signin_with", locale: "ro", logo_alignment: "left" });
@@ -203,7 +211,7 @@
     form?.addEventListener("submit", async event => {
       event.preventDefault(); setMessage(form, "");
       const data = new FormData(form); setBusy(form, true);
-      try { const session = await api("customerLogin", { method: "POST", body: { email: data.get("email"), password: data.get("password") }, auth: false }); saveSession(session); redirectAfterAuth(); }
+      try { const session = await api("customerLogin", { method: "POST", body: { email: data.get("email"), password: data.get("password") }, auth: false }); saveSession(session); queueAuthMeasurement("login", "email"); redirectAfterAuth(); }
       catch (error) {
         setMessage(form, error.message);
         form.querySelector("[data-auth-message]")?.classList.toggle("account-disabled", error.code === "customer_disabled");
@@ -341,7 +349,7 @@
       if (data.get("password") !== data.get("password_confirm")) return setMessage(form, "Parolele introduse nu coincid.");
       if (!data.get("terms")) return setMessage(form, "Acceptă administrarea datelor contului pentru a continua.");
       setBusy(form, true);
-      try { const session = await api("customerRegister", { method: "POST", body: { full_name: data.get("full_name"), phone: data.get("phone"), email: data.get("email"), password: data.get("password") }, auth: false }); saveSession(session); redirectAfterAuth(); }
+      try { const session = await api("customerRegister", { method: "POST", body: { full_name: data.get("full_name"), phone: data.get("phone"), email: data.get("email"), password: data.get("password") }, auth: false }); saveSession(session); queueAuthMeasurement("sign_up", "email"); redirectAfterAuth(); }
       catch (error) { setMessage(form, error.message); }
       finally { setBusy(form, false); }
     });
@@ -508,6 +516,7 @@
       const [ordersResult, addressesResult, couponsResult] = await Promise.allSettled([api("customerOrders"), api("customerAddresses"), api("customerCoupons")]);
       const valueOrEmpty = result => result.status === "fulfilled" && Array.isArray(result.value) ? result.value : [];
       state.customer = me.customer; state.orders = valueOrEmpty(ordersResult); state.addresses = valueOrEmpty(addressesResult); state.coupons = valueOrEmpty(couponsResult);
+      window.GTrotsGoogle?.trackRefundedOrders?.(state.orders);
       localStorage.setItem(PROFILE_KEY, JSON.stringify(state.customer)); document.dispatchEvent(new CustomEvent("g-trots:customer-changed", { detail: state.customer }));
       document.querySelector("[data-customer-first-name]").textContent = firstName(state.customer.full_name); document.querySelector("[data-customer-email]").textContent = state.customer.email;
       document.querySelectorAll("[data-settings-email]").forEach(node => { node.textContent = state.customer.email; });

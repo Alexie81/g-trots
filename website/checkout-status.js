@@ -471,6 +471,14 @@
     state = await enrichStateImages(state);
     saveState(state);
     renderReceipt(state, method);
+    if (status === "paid" || status === "cod") {
+      window.GTrotsPendingPurchase = state;
+      document.dispatchEvent(new CustomEvent("g-trots:purchase-ready", { detail: state }));
+      if (window.GTrotsGoogle) {
+        window.GTrotsGoogle.trackPurchase?.(state);
+        delete window.GTrotsPendingPurchase;
+      }
+    }
     bindInteractions(orderNumber);
     revealReceipt();
   }
@@ -479,4 +487,4 @@
   else initialize();
 })();
 if (!document.querySelector('link[href*="promotions.css"]')) { const link = document.createElement("link"); link.rel = "stylesheet"; link.href = "/promotions.css?v=20260828-marquee-v5"; document.head.append(link); }
-if (!document.querySelector('script[src*="promotions.js"]')) { const script = document.createElement("script"); script.src = "/promotions.js?v=20260828-global-v1"; document.head.append(script); }
+if (!document.querySelector('script[src*="promotions.js"]')) { const script = document.createElement("script"); script.src = "/promotions.js?v=20260906-ga4-v2"; document.head.append(script); }

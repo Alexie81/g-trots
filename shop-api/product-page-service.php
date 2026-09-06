@@ -83,7 +83,10 @@ function shopProductSeoRender(array $product, array $config): string {
     $currency = trim((string)($product['currency'] ?? 'RON')) ?: 'RON';
     $price = (float)($product['promotion_price'] ?? $product['sale_price'] ?? $product['price'] ?? 0);
     $priceText = number_format(max(0, $price), 2, '.', '');
-    $inStock = (string)($product['stock_mode'] ?? 'tracked') === 'unlimited' || (int)($product['stock_quantity'] ?? 0) > 0;
+    $purchasable = array_key_exists('is_purchasable', $product)
+        ? (bool)$product['is_purchasable']
+        : (bool)($product['is_active'] ?? true) && (bool)($product['source_is_active'] ?? true);
+    $inStock = $purchasable && ((string)($product['stock_mode'] ?? 'tracked') === 'unlimited' || (int)($product['stock_quantity'] ?? 0) > 0);
     $availabilityText = $inStock ? 'in stock' : 'out of stock';
     $availabilitySchema = $inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock';
     $conditionSearch = mb_strtolower($name . ' ' . $description, 'UTF-8');
@@ -204,10 +207,10 @@ function shopProductSeoRender(array $product, array $config): string {
     foreach (array_slice($properties, 0, 8) as $property) {
         $staticSpecs .= '<li><strong>' . htmlspecialchars((string)$property['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</strong><span>' . htmlspecialchars((string)$property['value'], ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</span></li>';
     }
-    $staticArticle = '<article class="product-static-seo shell" data-gt-static-product aria-labelledby="gt-static-product-title">'
-        . '<div><p class="product-static-seo__eyebrow">Produs G-Trots</p><h1 id="gt-static-product-title">' . htmlspecialchars($name, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</h1>'
+    $staticArticle = '<article class="product-static-seo shell' . ($purchasable ? '' : ' is-unavailable') . '" data-gt-static-product aria-labelledby="gt-static-product-title">'
+        . '<div><p class="product-static-seo__eyebrow">' . ($purchasable ? 'Produs G-Trots' : 'Temporar indisponibil') . '</p><h1 id="gt-static-product-title">' . htmlspecialchars($name, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</h1>'
         . '<p>' . htmlspecialchars($description, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</p><strong class="product-static-seo__price">' . htmlspecialchars($priceText . ' ' . $currency, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</strong>'
-        . '<span class="product-static-seo__stock">' . ($inStock ? 'În stoc' : 'Stoc epuizat') . '</span>' . ($staticSpecs !== '' ? '<ul>' . $staticSpecs . '</ul>' : '') . '</div>'
+        . '<span class="product-static-seo__stock">' . ($purchasable ? ($inStock ? 'În stoc' : 'Stoc epuizat') : 'Produs indisponibil momentan') . '</span>' . ($staticSpecs !== '' ? '<ul>' . $staticSpecs . '</ul>' : '') . '</div>'
         . '<img src="' . htmlspecialchars($images[0], ENT_QUOTES | ENT_HTML5, 'UTF-8') . '" alt="' . htmlspecialchars($name, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '" width="720" height="720" fetchpriority="high">'
         . '</article>' . PHP_EOL;
     $html = (string)preg_replace('#(<main\b[^>]*id="product-detail"[^>]*>)#i', '$1' . PHP_EOL . $staticArticle, $html, 1);
@@ -225,9 +228,56 @@ function shopProductSeoRemovePage(string $slug): void {
     $directory = $productRoot . DIRECTORY_SEPARATOR . $slug;
     $page = $directory . DIRECTORY_SEPARATOR . 'index.html';
     if (is_file($page)) @unlink($page);
+    $dynamicPage = $directory . DIRECTORY_SEPARATOR . 'index.php';
+    if (is_file($dynamicPage)) @unlink($dynamicPage);
     $legacyPage = $productRoot . DIRECTORY_SEPARATOR . $slug . '.html';
     if (is_file($legacyPage)) @unlink($legacyPage);
     if (is_dir($directory)) @rmdir($directory);
+}
+
+function shopProductSeoEnsureDirectory(string $slug): string {
+    $directory = shopProductSeoWebsiteRoot() . DIRECTORY_SEPARATOR . 'magazin' . DIRECTORY_SEPARATOR . 'produs' . DIRECTORY_SEPARATOR . shopProductSeoSafeSlug($slug);
+    if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+        throw new RuntimeException('Directorul paginii produsului nu poate fi creat.');
+    }
+    return $directory;
+}
+
+function shopProductSeoWriteRedirect(string $oldSlug, string $newSlug, array $config): string {
+    $oldSlug = shopProductSeoSafeSlug($oldSlug);
+    $newSlug = shopProductSeoSafeSlug($newSlug);
+    $directory = shopProductSeoEnsureDirectory($oldSlug);
+    $htmlPage = $directory . DIRECTORY_SEPARATOR . 'index.html';
+    if (is_file($htmlPage)) @unlink($htmlPage);
+    $target = rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/') . '/magazin/produs/' . rawurlencode($newSlug) . '/';
+    $source = "<?php\ndeclare(strict_types=1);\nhttp_response_code(301);\nheader('Location: ' . " . var_export($target, true) . ", true, 301);\nheader('Cache-Control: public, max-age=3600');\nexit;\n";
+    $path = $directory . DIRECTORY_SEPARATOR . 'index.php';
+    if (file_put_contents($path, $source, LOCK_EX) === false) throw new RuntimeException('Redirecționarea produsului nu poate fi scrisă.');
+    return $path;
+}
+
+function shopProductSeoWriteGonePage(string $slug, string $name, array $config): string {
+    $slug = shopProductSeoSafeSlug($slug);
+    $directory = shopProductSeoEnsureDirectory($slug);
+    $htmlPage = $directory . DIRECTORY_SEPARATOR . 'index.html';
+    if (is_file($htmlPage)) @unlink($htmlPage);
+    $name = shopProductSeoText($name) ?: 'Produsul căutat';
+    $websiteBaseUrl = rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/');
+    $escapedName = htmlspecialchars($name, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8');
+    $source = <<<'PHP'
+<?php
+declare(strict_types=1);
+http_response_code(410);
+header('Content-Type: text/html; charset=utf-8');
+header('Cache-Control: public, max-age=300');
+?>
+PHP;
+    $source .= '<!doctype html><html lang="ro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        . '<title>Produs retras | G-Trots</title><meta name="robots" content="noindex, follow"><meta name="description" content="Acest produs nu mai face parte din catalogul G-Trots.">'
+        . '<style>html{color-scheme:dark}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#09090b;color:#fff7f1;font:16px/1.6 system-ui,sans-serif}.gone{width:min(720px,100%);padding:clamp(28px,7vw,72px);border:1px solid #34343b;border-radius:34px;background:radial-gradient(circle at 100% 0,#4a240d 0,transparent 42%),#17171b;box-shadow:0 30px 90px #0008}.gone small{color:#ff7a18;font-weight:900;letter-spacing:.14em}.gone h1{font-size:clamp(36px,8vw,72px);line-height:1;margin:.25em 0}.gone p{color:#c7c0ba}.gone a{display:inline-flex;margin-top:18px;padding:14px 22px;border-radius:999px;background:#ff7a18;color:#160b04;text-decoration:none;font-weight:900}</style></head><body><main class="gone"><small>PRODUS RETRAS DIN CATALOG</small><h1>' . $escapedName . '</h1><p>Produsul nu mai este disponibil. Pagina răspunde cu statusul 410 pentru ca motoarele de căutare să o elimine corect, iar tu poți continua spre selecția actuală G-Trots.</p><a href="' . htmlspecialchars($websiteBaseUrl . '/magazin', ENT_QUOTES | ENT_HTML5, 'UTF-8') . '">Vezi produsele disponibile →</a></main></body></html>';
+    $path = $directory . DIRECTORY_SEPARATOR . 'index.php';
+    if (file_put_contents($path, $source, LOCK_EX) === false) throw new RuntimeException('Pagina 410 a produsului nu poate fi scrisă.');
+    return $path;
 }
 
 function shopProductSeoRebuildSitemap(PDO $db, array $config): array {
@@ -276,37 +326,35 @@ function shopProductSeoRebuildSitemap(PDO $db, array $config): array {
 
 function shopProductSeoSync(PDO $db, array $config, string $productId, ?string $oldSlug = null, bool $rebuildSitemap = true): array {
     try {
-        $stateStmt = $db->prepare('SELECT id, slug, is_active FROM shop_products WHERE id = ? LIMIT 1');
+        $stateStmt = $db->prepare('SELECT p.id, p.slug, p.is_active, COALESCE(s.is_active, 1) AS source_is_active FROM shop_products p LEFT JOIN shop_product_sources s ON s.id = p.source_id WHERE p.id = ? LIMIT 1');
         $stateStmt->execute([$productId]);
         $state = $stateStmt->fetch();
-        if ($oldSlug !== null && (!$state || (string)$state['slug'] !== $oldSlug)) shopProductSeoRemovePage($oldSlug);
         if (!$state) {
+            if ($oldSlug !== null && trim($oldSlug) !== '') shopProductSeoWriteGonePage($oldSlug, 'Produs retras', $config);
             if ($rebuildSitemap) shopProductSeoRebuildSitemap($db, $config);
             return ['success' => true, 'generated' => false, 'reason' => 'deleted'];
         }
         $slug = (string)$state['slug'];
-        if (!(bool)$state['is_active']) {
-            shopProductSeoRemovePage($slug);
-            if ($rebuildSitemap) shopProductSeoRebuildSitemap($db, $config);
-            return ['success' => true, 'generated' => false, 'reason' => 'inactive'];
-        }
-        try {
-            $product = findProduct($db, $productId, $config, true);
-        } catch (InvalidArgumentException) {
-            shopProductSeoRemovePage($slug);
-            if ($rebuildSitemap) shopProductSeoRebuildSitemap($db, $config);
-            return ['success' => true, 'generated' => false, 'reason' => 'inactive_source'];
-        }
-        $directory = shopProductSeoWebsiteRoot() . DIRECTORY_SEPARATOR . 'magazin' . DIRECTORY_SEPARATOR . 'produs' . DIRECTORY_SEPARATOR . shopProductSeoSafeSlug($slug);
-        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) throw new RuntimeException('Directorul paginii produsului nu poate fi creat.');
+        $product = findProduct($db, $productId, $config, false, false);
+        $product['is_purchasable'] = !empty($product['is_purchasable']) && (bool)$state['is_active'] && (bool)$state['source_is_active'];
+        $directory = shopProductSeoEnsureDirectory($slug);
+        $dynamicPage = $directory . DIRECTORY_SEPARATOR . 'index.php';
+        if (is_file($dynamicPage)) @unlink($dynamicPage);
         $path = $directory . DIRECTORY_SEPARATOR . 'index.html';
         if (file_put_contents($path, shopProductSeoRender($product, $config), LOCK_EX) === false) throw new RuntimeException('Pagina SEO a produsului nu poate fi scrisă.');
+        $redirectPath = null;
+        if ($oldSlug !== null && trim($oldSlug) !== '' && $oldSlug !== $slug) {
+            $redirectPath = shopProductSeoWriteRedirect($oldSlug, $slug, $config);
+        }
         $sitemap = $rebuildSitemap ? shopProductSeoRebuildSitemap($db, $config) : null;
         return [
             'success' => true,
             'generated' => true,
+            'purchasable' => (bool)$product['is_purchasable'],
+            'reason' => (bool)$product['is_purchasable'] ? 'active' : 'inactive',
             'url' => rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/') . '/magazin/produs/' . rawurlencode($slug) . '/',
             'path' => $path,
+            'redirect_path' => $redirectPath,
             'sitemap' => $sitemap,
         ];
     } catch (Throwable $error) {

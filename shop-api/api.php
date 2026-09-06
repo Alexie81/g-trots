@@ -1478,6 +1478,7 @@ function ensureShopSchema(PDO $db): void {
             return_confirmation_email_error VARCHAR(500) NULL,
             shipping_method_id CHAR(36) NULL,
             shipping_method_name VARCHAR(120) NOT NULL,
+            return_shipping_cost_snapshot DECIMAL(12,2) NULL,
             subtotal DECIMAL(12,2) NOT NULL,
             discount_total DECIMAL(12,2) NOT NULL DEFAULT 0,
             promotion_id CHAR(36) NULL,
@@ -1556,7 +1557,7 @@ function ensureShopSchema(PDO $db): void {
     }
     if ($addedNetTotalColumn) {
         // Migrare unică pentru comenzile istorice: păstrăm în DB brutul, TVA-ul și netul defalcate.
-        $db->exec('UPDATE shop_orders SET vat_total = CASE WHEN vat_payer = 1 AND vat_rate > 0 THEN ROUND(total * vat_rate / 100, 2) ELSE 0 END, net_total = CASE WHEN vat_payer = 1 AND vat_rate > 0 THEN ROUND(total - (total * vat_rate / 100), 2) ELSE total END');
+        $db->exec('UPDATE shop_orders SET vat_total = CASE WHEN vat_payer = 1 AND vat_rate > 0 THEN ROUND(total * vat_rate / (100 + vat_rate), 2) ELSE 0 END, net_total = CASE WHEN vat_payer = 1 AND vat_rate > 0 THEN ROUND(total - (total * vat_rate / (100 + vat_rate)), 2) ELSE total END');
     }
     if (!$db->query("SHOW INDEX FROM shop_orders WHERE Key_name = 'idx_shop_orders_customer_id'")->fetch()) {
         $db->exec('ALTER TABLE shop_orders ADD INDEX idx_shop_orders_customer_id (customer_id, created_at)');
@@ -1612,6 +1613,9 @@ function ensureShopSchema(PDO $db): void {
         'withdrawal_submitted_at' => 'DATETIME NULL AFTER withdrawal_statement',
         'withdrawal_confirmation_email_sent_at' => 'DATETIME NULL AFTER withdrawal_submitted_at',
     ];
+    if (!$db->query("SHOW COLUMNS FROM shop_orders LIKE 'return_shipping_cost_snapshot'")->fetch()) {
+        $db->exec('ALTER TABLE shop_orders ADD COLUMN return_shipping_cost_snapshot DECIMAL(12,2) NULL AFTER shipping_method_name');
+    }
     foreach ($orderReturnColumns as $column => $definition) {
         if (!$db->query("SHOW COLUMNS FROM shop_orders LIKE " . $db->quote($column))->fetch()) {
             $db->exec("ALTER TABLE shop_orders ADD COLUMN {$column} {$definition}");
@@ -2693,7 +2697,7 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     }
     $preloadedBrands = $row['_preloaded_brands'] ?? null;
     if (!is_array($preloadedBrands)) {
-        $brands = $db->prepare('SELECT b.id, b.name, b.slug FROM shop_brands b INNER JOIN shop_product_brands pb ON pb.brand_id = b.id WHERE pb.product_id = ? ORDER BY b.name ASC');
+    $brands = $db->prepare('SELECT b.id, b.name, b.slug, b.is_active FROM shop_brands b INNER JOIN shop_product_brands pb ON pb.brand_id = b.id WHERE pb.product_id = ? ORDER BY b.name ASC');
         $brands->execute([$productId]);
         $preloadedBrands = $brands->fetchAll();
     }
@@ -2742,6 +2746,18 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['is_accounting_stock_tracked'] = !array_key_exists('is_accounting_stock_tracked', $row) || (bool)$row['is_accounting_stock_tracked'];
     $row['low_stock_threshold'] = (int)$row['low_stock_threshold'];
     $row['is_active'] = (bool)$row['is_active'];
+    $row['category_is_active'] = !isset($row['category_id']) || $row['category_id'] === null || (bool)($row['category_is_active'] ?? true);
+    $row['manufacturer_is_active'] = !isset($row['manufacturer_id']) || $row['manufacturer_id'] === null || (bool)($row['manufacturer_is_active'] ?? true);
+    $row['brands_are_active'] = array_reduce(
+        $row['brands'],
+        static fn(bool $active, array $brand): bool => $active && (!array_key_exists('is_active', $brand) || (bool)$brand['is_active']),
+        true
+    );
+    $row['is_purchasable'] = $row['is_active']
+        && (bool)($row['source_is_active'] ?? true)
+        && $row['category_is_active']
+        && $row['manufacturer_is_active']
+        && $row['brands_are_active'];
     $row['is_featured'] = (bool)$row['is_featured'];
     $row['featured_rank'] = $row['featured_rank'] === null ? null : (int)$row['featured_rank'];
     $row['view_count'] = (int)($row['view_count'] ?? 0);
@@ -2759,10 +2775,10 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['stripe_sync_status'] = $row['stripe_sync_error'] !== null ? 'error' : ($row['stripe_product_id'] !== null ? 'synced' : 'pending');
     $row['seo_ready'] = (string)($row['content_status'] ?? '') === 'seo';
     $row['gtin'] = preg_match('/^[0-9]{8,14}$/', (string)($row['ean'] ?? '')) ? (string)$row['ean'] : null;
-    $row['stock_available'] = $row['stock_mode'] === 'unlimited' || $row['stock_quantity'] > 0;
+    $row['stock_available'] = $row['is_purchasable'] && ($row['stock_mode'] === 'unlimited' || $row['stock_quantity'] > 0);
     if (!$withDescription) unset($row['description_html']);
     if (!$includeInternal) {
-        unset($row['source_id'], $row['source_domain'], $row['source_url'], $row['source_name'], $row['source_is_active'], $row['supplier_external_id'], $row['supplier_product_code'], $row['ean'], $row['supplier_base_price'], $row['supplier_price_difference'], $row['supplier_price_updated_at'], $row['accounting_stock_quantity'], $row['is_accounting_stock_tracked'], $row['content_status'], $row['seo_researched_at'], $row['seo_word_count'], $row['seo_sources']);
+        unset($row['source_id'], $row['source_domain'], $row['source_url'], $row['source_name'], $row['source_is_active'], $row['category_is_active'], $row['manufacturer_is_active'], $row['brands_are_active'], $row['supplier_external_id'], $row['supplier_product_code'], $row['ean'], $row['supplier_base_price'], $row['supplier_price_difference'], $row['supplier_price_updated_at'], $row['accounting_stock_quantity'], $row['is_accounting_stock_tracked'], $row['content_status'], $row['seo_researched_at'], $row['seo_word_count'], $row['seo_sources']);
     }
     return $row;
 }
@@ -2783,7 +2799,7 @@ function productRows(PDO $db, array $rows, array $config, bool $withDescription 
 
     $brandsByProduct = [];
     $brandStmt = $db->prepare(
-        "SELECT pb.product_id, b.id, b.name, b.slug
+        "SELECT pb.product_id, b.id, b.name, b.slug, b.is_active
          FROM shop_product_brands pb
          INNER JOIN shop_brands b ON b.id = pb.brand_id
          WHERE pb.product_id IN ({$placeholders})
@@ -3053,7 +3069,8 @@ function publicCatalogRows(PDO $db, array $rows, array $config): array {
 
 function productSelectSql(): string {
     return 'SELECT p.*, c.name AS category_name, c.slug AS category_slug,
-                   m.name AS manufacturer_name, m.slug AS manufacturer_slug,
+                   c.is_active AS category_is_active,
+                   m.name AS manufacturer_name, m.slug AS manufacturer_slug, m.is_active AS manufacturer_is_active,
                    s.name AS source_name, s.is_active AS source_is_active,
                    (SELECT COUNT(*) FROM shop_product_reviews r WHERE r.product_id = p.id) AS review_count,
                    (SELECT AVG(r.rating) FROM shop_product_reviews r WHERE r.product_id = p.id) AS review_average
@@ -3137,13 +3154,18 @@ function reviewRow(array $row): array {
     ];
 }
 
-function findProduct(PDO $db, string $idOrSlug, array $config, bool $publicOnly = false): array {
-    $sql = productSelectSql() . ' WHERE (p.id = ? OR p.slug = ?)' . ($publicOnly ? ' AND p.is_active = 1 AND (p.source_id IS NULL OR COALESCE(s.is_active, 1) = 1)' : '') . ' LIMIT 1';
+function findProduct(PDO $db, string $idOrSlug, array $config, bool $publicOnly = false, ?bool $includeInternal = null): array {
+    $publicConditions = ' AND p.is_active = 1'
+        . ' AND (p.source_id IS NULL OR COALESCE(s.is_active, 1) = 1)'
+        . ' AND (p.category_id IS NULL OR COALESCE(c.is_active, 0) = 1)'
+        . ' AND (p.manufacturer_id IS NULL OR COALESCE(m.is_active, 0) = 1)'
+        . ' AND NOT EXISTS (SELECT 1 FROM shop_product_brands pbx INNER JOIN shop_brands bx ON bx.id = pbx.brand_id WHERE pbx.product_id = p.id AND bx.is_active = 0)';
+    $sql = productSelectSql() . ' WHERE (p.id = ? OR p.slug = ?)' . ($publicOnly ? $publicConditions : '') . ' LIMIT 1';
     $stmt = $db->prepare($sql);
     $stmt->execute([$idOrSlug, $idOrSlug]);
     $row = $stmt->fetch();
     if (!$row) throw new InvalidArgumentException('Produsul nu exista.');
-    return productRow($db, $row, $config, true, !$publicOnly);
+    return productRow($db, $row, $config, true, $includeInternal ?? !$publicOnly);
 }
 
 function productPayload(PDO $db, array $body, bool $allowInactiveSource = false): array {
@@ -4236,16 +4258,18 @@ function orderRow(PDO $db, array $row, ?array $config = null, bool $withHistory 
     $row['shipping_cost'] = (float)$row['shipping_cost'];
     $row['total'] = (float)$row['total'];
     $row['configured_return_shipping_cost'] = (float)($row['configured_return_shipping_cost'] ?? 0);
+    $row['return_shipping_cost_snapshot'] = ($row['return_shipping_cost_snapshot'] ?? null) === null
+        ? null
+        : (float)$row['return_shipping_cost_snapshot'];
     $returnShippingCost = $row['return_shipping_cost'] ?? null;
     $returnRefundAmount = $row['return_refund_amount'] ?? null;
     $row['return_shipping_cost'] = $returnShippingCost === null ? null : (float)$returnShippingCost;
     $row['return_refund_amount'] = $returnRefundAmount === null ? null : (float)$returnRefundAmount;
     $row['vat_payer'] = (bool)($row['vat_payer'] ?? false);
     $row['vat_rate'] = (float)($row['vat_rate'] ?? 0);
-    // Păstrăm aceeași regulă și pentru comenzile deja existente: cota salvată pe comandă
-    // se aplică direct totalului, fără formula de extragere TVA dintr-un preț brut.
+    // Prețurile publice includ TVA. Extragem taxa din brut; nu aplicăm cota încă o dată.
     $row['vat_total'] = $row['vat_payer'] && $row['vat_rate'] > 0
-        ? round($row['total'] * $row['vat_rate'] / 100, 2)
+        ? round($row['total'] * $row['vat_rate'] / (100 + $row['vat_rate']), 2)
         : 0.0;
     $row['net_total'] = (float)($row['net_total'] ?? max(0, $row['total'] - $row['vat_total']));
     $row['customer_type'] = (string)(($row['customer_type'] ?? 'individual') === 'company' ? 'company' : 'individual');
@@ -4448,16 +4472,16 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
         $companyTax = $db->query('SELECT vat_payer, vat_rate FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
         $vatPayer = boolValue($companyTax['vat_payer'] ?? false);
         $vatRate = $vatPayer ? max(0, min(100, (float)($companyTax['vat_rate'] ?? 19))) : 0.0;
-        // Prețurile rămân finale, iar defalcarea TVA este stocată doar intern pentru modulele viitoare.
-        // Exemplu: 824 lei × 21% = 173,04 lei. TVA-ul nu se adaugă încă o dată la total.
-        $vatTotal = $vatPayer && $vatRate > 0 ? round($total * $vatRate / 100, 2) : 0.0;
+        // Prețurile sunt brute. TVA-ul inclus se extrage prin cota/(100+cota),
+        // apoi generatorul fiscal repartizează exact diferențele de un ban.
+        $vatTotal = $vatPayer && $vatRate > 0 ? round($total * $vatRate / (100 + $vatRate), 2) : 0.0;
         $netTotal = round(max(0, $total - $vatTotal), 2);
         $orderId = uuidV4();
         $orderNumber = 'GT-' . date('Ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(4)), 0, 8));
         // Orice comandă abia primită este nouă; Stripe o confirmă automat numai după plata reușită.
         $initialStatus = 'new';
         $trackingToken = bin2hex(random_bytes(24));
-        $insertOrder = $db->prepare('INSERT INTO shop_orders (id, order_number, status, payment_status, payment_method, customer_id, customer_name, customer_email, customer_phone, customer_type, company_name, company_cui, company_registration_number, company_address, address, city, county, postal_code, customer_notes, terms_accepted_at, terms_version, return_policy_version, newsletter_opt_in, newsletter_opt_in_at, shipping_method_id, shipping_method_name, subtotal, discount_total, promotion_id, promotion_code, promotion_scope, shipping_cost, total, vat_payer, vat_rate, vat_total, net_total, currency, tracking_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $insertOrder = $db->prepare('INSERT INTO shop_orders (id, order_number, status, payment_status, payment_method, customer_id, customer_name, customer_email, customer_phone, customer_type, company_name, company_cui, company_registration_number, company_address, address, city, county, postal_code, customer_notes, terms_accepted_at, terms_version, return_policy_version, newsletter_opt_in, newsletter_opt_in_at, shipping_method_id, shipping_method_name, return_shipping_cost_snapshot, subtotal, discount_total, promotion_id, promotion_code, promotion_scope, shipping_cost, total, vat_payer, vat_rate, vat_total, net_total, currency, tracking_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $insertOrder->execute([
             $orderId, $orderNumber, $initialStatus, 'pending', $paymentMethod, $customer['id'] ?? null, $name,
             $customerEmail ?: null, $phone, $customerType, $customerType === 'company' ? $companyName : null,
@@ -4469,7 +4493,8 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
             mb_substr(trim((string)($body['postal_code'] ?? '')), 0, 30) ?: null,
             mb_substr(trim((string)($body['customer_notes'] ?? '')), 0, 3000) ?: null,
             '2026-09-05', '2026-09-05', $newsletterOptIn ? 1 : 0, $newsletterOptIn ? date('Y-m-d H:i:s') : null,
-            $shippingId, (string)$shipping['name'], $subtotal, $discountTotal, $promotion['id'], $promotion['code'], $promotion['scope'], $shippingCost, $total, $vatPayer ? 1 : 0, $vatRate, $vatTotal, $netTotal, 'RON', $trackingToken
+            $shippingId, (string)$shipping['name'], max(0.0, round((float)($shipping['return_cost'] ?? 0), 2)),
+            $subtotal, $discountTotal, $promotion['id'], $promotion['code'], $promotion['scope'], $shippingCost, $total, $vatPayer ? 1 : 0, $vatRate, $vatTotal, $netTotal, 'RON', $trackingToken
         ]);
         reservePromotionUsage($db, $promotion, $customer, $deviceHash, $orderId);
         $insertItem = $db->prepare('INSERT INTO shop_order_items (id, order_id, product_id, product_name, product_sku, quantity, unit_price, line_total, discount_total, discounted_unit_price, discounted_line_total, acquisition_unit_cost_snapshot, acquisition_total_cost_snapshot) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
@@ -4960,7 +4985,13 @@ try {
     $isPublicCatalogRequest = in_array($action, ['publicProducts', 'publicProductsCompact', 'publicProductsPage'], true) && $method === 'GET';
     if ($isPublicCatalogRequest || $isCheckoutCatalogRequest) {
         $catalogStartedAt = microtime(true);
-        $where = ['p.is_active = 1', '(p.source_id IS NULL OR COALESCE(s.is_active, 1) = 1)'];
+        $where = [
+            'p.is_active = 1',
+            '(p.source_id IS NULL OR COALESCE(s.is_active, 1) = 1)',
+            '(p.category_id IS NULL OR COALESCE(c.is_active, 0) = 1)',
+            '(p.manufacturer_id IS NULL OR COALESCE(m.is_active, 0) = 1)',
+            'NOT EXISTS (SELECT 1 FROM shop_product_brands pbx INNER JOIN shop_brands bx ON bx.id = pbx.brand_id WHERE pbx.product_id = p.id AND bx.is_active = 0)',
+        ];
         $params = [];
         $checkoutProductIds = [];
         if ($isCheckoutCatalogRequest) {
@@ -5051,7 +5082,14 @@ try {
             } catch (Throwable $syncError) {
                 error_log('[G-Trots Boomag product sync] ' . $syncError->getMessage());
             }
-            $product = findProduct($db, $idOrSlug, $config, true);
+            try {
+                $product = findProduct($db, $idOrSlug, $config, true);
+            } catch (InvalidArgumentException) {
+                // O pagină deja indexată rămâne utilă când produsul, categoria,
+                // producătorul, marca ori sursa este dezactivată. Nu revine în
+                // catalog și nu poate fi cumpărată.
+                $product = findProduct($db, $idOrSlug, $config, false, false);
+            }
             $db->prepare('UPDATE shop_products SET view_count = view_count + 1 WHERE id = ?')->execute([$product['id']]);
             $product['view_count'] = (int)$product['view_count'] + 1;
             jsonResponse(applyCatalogPromotionPrices($db, [$product], optionalCustomer($db), promotionDeviceHash($body))[0]);
@@ -5122,7 +5160,7 @@ try {
 
     if ($action === 'publicShopConfig' && $method === 'GET') {
         $shipping = $db->query('SELECT * FROM shop_shipping_methods WHERE is_active = 1 ORDER BY sort_order ASC, name ASC')->fetchAll();
-        $companyTax = $db->query('SELECT legal_name, trade_name, cui, registration_number, address, city, county, postal_code, country, email, phone, website, share_capital, vat_payer, vat_rate FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
+        $companyTax = $db->query('SELECT legal_name, trade_name, cui, registration_number, address, city, county, postal_code, country, email, phone, website, bank_name, iban, share_capital, vat_payer, vat_rate FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
         $publicPayments = paymentSettings($db, $config);
         $publicPayments['card_enabled'] = $publicPayments['card_enabled'] && $publicPayments['stripe_configured'];
         unset($publicPayments['stripe_synced_products'], $publicPayments['stripe_sync_errors']);
@@ -5146,6 +5184,8 @@ try {
                 'email' => (string)($companyTax['email'] ?? ''),
                 'phone' => (string)($companyTax['phone'] ?? ''),
                 'website' => (string)($companyTax['website'] ?? ''),
+                'bank_name' => (string)($companyTax['bank_name'] ?? ''),
+                'iban' => (string)($companyTax['iban'] ?? ''),
                 'share_capital' => (string)($companyTax['share_capital'] ?? ''),
             ],
         ]);
@@ -5164,13 +5204,13 @@ try {
         $email = strtolower(trim((string)($_GET['email'] ?? '')));
         if ($token !== '') {
             if (!preg_match('/^[a-f0-9]{32,64}$/', $token)) throw new InvalidArgumentException('Linkul de urmărire nu este valid.');
-            $stmt = $db->prepare('SELECT o.*, COALESCE(sm.return_cost, 0) AS configured_return_shipping_cost FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id WHERE o.tracking_token = ? LIMIT 1');
+            $stmt = $db->prepare('SELECT o.*, COALESCE(o.return_shipping_cost_snapshot, sm.return_cost, 0) AS configured_return_shipping_cost FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id WHERE o.tracking_token = ? LIMIT 1');
             $stmt->execute([$token]);
         } else {
             if ($orderNumber === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 throw new InvalidArgumentException('Completează codul comenzii și adresa de e-mail folosită la comandă.');
             }
-            $stmt = $db->prepare('SELECT o.*, COALESCE(sm.return_cost, 0) AS configured_return_shipping_cost FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id WHERE UPPER(o.order_number) = ? AND LOWER(o.customer_email) = ? LIMIT 1');
+            $stmt = $db->prepare('SELECT o.*, COALESCE(o.return_shipping_cost_snapshot, sm.return_cost, 0) AS configured_return_shipping_cost FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id WHERE UPPER(o.order_number) = ? AND LOWER(o.customer_email) = ? LIMIT 1');
             $stmt->execute([$orderNumber, $email]);
         }
         $order = $stmt->fetch();
@@ -5206,7 +5246,7 @@ try {
             'refund_consent' => !empty($body['refund_consent']),
         ], $config);
         $savedId = (string)($request['order']['id'] ?? '');
-        $stmt = $db->prepare('SELECT o.*, COALESCE(sm.return_cost, 0) AS configured_return_shipping_cost' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? LIMIT 1');
+        $stmt = $db->prepare('SELECT o.*, COALESCE(o.return_shipping_cost_snapshot, sm.return_cost, 0) AS configured_return_shipping_cost' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? LIMIT 1');
         $stmt->execute([$savedId]);
         $saved = $stmt->fetch();
         if (!$saved) throw new RuntimeException('Solicitarea de retur nu a putut fi recitită.');
@@ -6913,7 +6953,7 @@ try {
     if ($action === 'deleteProduct' && $method === 'DELETE') {
         $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
         stripeArchiveProduct($db, $config, $id);
-        $descriptionStmt = $db->prepare('SELECT description_html, slug FROM shop_products WHERE id = ?');
+        $descriptionStmt = $db->prepare('SELECT description_html, slug, name FROM shop_products WHERE id = ?');
         $descriptionStmt->execute([$id]);
         $deletedProduct = $descriptionStmt->fetch() ?: [];
         $descriptionPaths = richDescriptionImagePaths((string)($deletedProduct['description_html'] ?? ''));
@@ -6945,7 +6985,14 @@ try {
         if ((int)$verifyStmt->fetchColumn() !== 0) {
             throw new RuntimeException('Produsul nu a fost eliminat complet din catalog.');
         }
-        shopProductSeoRemovePage($deletedSlug);
+        $seoGonePage = null;
+        if ($deletedSlug !== '') {
+            try {
+                $seoGonePage = shopProductSeoWriteGonePage($deletedSlug, (string)($deletedProduct['name'] ?? 'Produs retras'), $config);
+            } catch (Throwable $seoError) {
+                $seoGonePage = ['error' => mb_substr($seoError->getMessage(), 0, 500)];
+            }
+        }
         try {
             $seoSitemap = shopProductSeoRebuildSitemap($db, $config);
         } catch (Throwable $seoError) {
@@ -6956,6 +7003,7 @@ try {
             'deleted_id' => $id,
             'deleted_files' => $deletedFiles,
             'remaining_products' => (int)$db->query('SELECT COUNT(*) FROM shop_products')->fetchColumn(),
+            'seo_gone_page' => $seoGonePage,
             'seo_sitemap' => $seoSitemap,
         ]);
     }
@@ -7183,7 +7231,7 @@ try {
 
     if ($action === 'getOrder' && $method === 'GET') {
         $id = trim((string)($_GET['id'] ?? ''));
-        $stmt = $db->prepare('SELECT o.*, COALESCE(sm.return_cost, 0) AS configured_return_shipping_cost' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? OR o.order_number = ? LIMIT 1');
+        $stmt = $db->prepare('SELECT o.*, COALESCE(o.return_shipping_cost_snapshot, sm.return_cost, 0) AS configured_return_shipping_cost' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? OR o.order_number = ? LIMIT 1');
         $stmt->execute([$id, $id]);
         $row = $stmt->fetch();
         if (!$row) jsonResponse(['error' => 'Comanda nu exista.'], 404);
@@ -7253,7 +7301,7 @@ try {
                     'bank_account_holder' => $returnDetails['bank_account_holder'],
                     'items' => $returnDetails['items'],
                 ], $config, (array)$currentUser, $notifyCustomer);
-                $stmt = $db->prepare('SELECT o.*, COALESCE(sm.return_cost, 0) AS configured_return_shipping_cost' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? LIMIT 1');
+                $stmt = $db->prepare('SELECT o.*, COALESCE(o.return_shipping_cost_snapshot, sm.return_cost, 0) AS configured_return_shipping_cost' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? LIMIT 1');
                 $stmt->execute([$id]);
                 $saved = $stmt->fetch();
                 if (!$saved) throw new RuntimeException('Solicitarea de retur nu a putut fi recitită.');
@@ -7275,7 +7323,7 @@ try {
             if ((string)$currentStatus !== 'return_confirmed') {
                 GtrotsOrderReturnRequest::reviewByStaff($db, $id, (array)($body['return_items'] ?? []), (array)$currentUser);
                 $confirmation = GtrotsOrderReturnConfirmation::confirm($db, $id, $config, (array)$currentUser, $notifyCustomer);
-                $stmt = $db->prepare('SELECT o.*, COALESCE(sm.return_cost, 0) AS configured_return_shipping_cost' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? LIMIT 1');
+                $stmt = $db->prepare('SELECT o.*, COALESCE(o.return_shipping_cost_snapshot, sm.return_cost, 0) AS configured_return_shipping_cost' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? LIMIT 1');
                 $stmt->execute([$id]);
                 $saved = $stmt->fetch();
                 if (!$saved) throw new RuntimeException('Confirmarea returului nu a putut fi recitită.');

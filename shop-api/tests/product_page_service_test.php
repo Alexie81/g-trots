@@ -45,4 +45,23 @@ $unsafe['name'] = '</script><script>alert("x")</script>';
 $unsafeHtml = shopProductSeoRender($unsafe, ['website_base_url' => 'https://g-trots.ro']);
 productPageAssert(!str_contains($unsafeHtml, '<script>alert("x")</script>'), 'Conținutul produsului nu trebuie să poată injecta script în pagina generată.');
 
+$inactive = $product;
+$inactive['is_active'] = false;
+$inactive['is_purchasable'] = false;
+$inactiveHtml = shopProductSeoRender($inactive, ['website_base_url' => 'https://g-trots.ro']);
+productPageAssert(str_contains($inactiveHtml, 'Produs indisponibil momentan'), 'Produsul dezactivat trebuie să păstreze o pagină informativă clară.');
+productPageAssert(str_contains($inactiveHtml, 'https://schema.org/OutOfStock'), 'Produsul dezactivat trebuie marcat OutOfStock în schema Product.');
+productPageAssert(str_contains($inactiveHtml, 'index, follow, max-image-preview:large'), 'O pagină dezactivată deja indexată trebuie să rămână indexabilă și informativă.');
+
+$statusSlug = 'test-status-' . bin2hex(random_bytes(5));
+$redirectSlug = $statusSlug . '-nou';
+$redirectPath = shopProductSeoWriteRedirect($statusSlug, $redirectSlug, ['website_base_url' => 'https://g-trots.ro']);
+$redirectSource = file_get_contents($redirectPath);
+productPageAssert(is_string($redirectSource) && str_contains($redirectSource, 'http_response_code(301)') && str_contains($redirectSource, $redirectSlug), 'Slugul vechi trebuie să emită redirect permanent către canonicalul nou.');
+shopProductSeoRemovePage($statusSlug);
+$gonePath = shopProductSeoWriteGonePage($statusSlug, $product['name'], ['website_base_url' => 'https://g-trots.ro']);
+$goneSource = file_get_contents($gonePath);
+productPageAssert(is_string($goneSource) && str_contains($goneSource, 'http_response_code(410)') && str_contains($goneSource, 'noindex, follow'), 'Un produs șters trebuie să emită 410 și noindex, fără un fals 200.');
+shopProductSeoRemovePage($statusSlug);
+
 echo "product_page_service_test: OK\n";

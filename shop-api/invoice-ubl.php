@@ -36,6 +36,8 @@ final class GtrotsInvoiceUbl
         self::validateSource($invoice);
         $isReturn = strtolower(trim((string)($invoice['status'] ?? ''))) === 'return';
         $currency = strtoupper(trim((string)($invoice['currency'] ?? 'RON'))) ?: 'RON';
+        $sellerVatPayer = !empty($invoice['seller']['vat_payer'])
+            || str_starts_with(strtoupper(trim((string)($invoice['seller']['cui'] ?? ''))), 'RO');
         $items = array_values((array)$invoice['items']);
         $lines = [];
         $taxGroups = [];
@@ -45,9 +47,10 @@ final class GtrotsInvoiceUbl
             $discount = max(0.0, min(100.0, (float)($item['discount_percent'] ?? 0)));
             $net = round($quantity * $price * (1 - $discount / 100), 2);
             $rate = round(max(0.0, min(100.0, (float)($item['vat_rate'] ?? 0))), 2);
-            $category = $rate > 0 ? 'S' : 'Z';
-            $key = $category . ':' . self::decimal($rate, 2);
-            if (!isset($taxGroups[$key])) $taxGroups[$key] = ['category' => $category, 'rate' => $rate, 'net' => 0.0, 'tax' => 0.0];
+            $taxIdentity = self::taxIdentity($item, $sellerVatPayer, $rate);
+            $category = $taxIdentity['category'];
+            $key = $category . ':' . self::decimal($rate, 2) . ':' . $taxIdentity['exemption_code'] . ':' . $taxIdentity['exemption_reason'];
+            if (!isset($taxGroups[$key])) $taxGroups[$key] = ['category' => $category, 'rate' => $rate, 'net' => 0.0, 'tax' => 0.0] + $taxIdentity;
             $taxGroups[$key]['net'] = round($taxGroups[$key]['net'] + $net, 2);
             $base = round($quantity * $price, 2);
             $lines[] = ['index' => $index + 1, 'item' => $item, 'quantity' => $quantity, 'price' => $price, 'discount' => $discount, 'discount_amount' => round($base - $net, 2), 'base' => $base, 'net' => $net, 'rate' => $rate, 'category' => $category];
@@ -63,8 +66,9 @@ final class GtrotsInvoiceUbl
             $returnCostGross = round($returnCostNet * (1 + $returnCostRate / 100), 2);
         }
         if ($returnCostNet > 0) {
-            $returnKey = ($returnCostRate > 0 ? 'S' : 'Z') . ':' . self::decimal($returnCostRate, 2);
-            if (!isset($taxGroups[$returnKey])) $taxGroups[$returnKey] = ['category' => $returnCostRate > 0 ? 'S' : 'Z', 'rate' => $returnCostRate, 'net' => 0.0, 'tax' => 0.0];
+            $returnTaxIdentity = self::taxIdentity(['vat_category' => $lines[0]['category'] ?? null], $sellerVatPayer, $returnCostRate);
+            $returnKey = $returnTaxIdentity['category'] . ':' . self::decimal($returnCostRate, 2) . ':' . $returnTaxIdentity['exemption_code'] . ':' . $returnTaxIdentity['exemption_reason'];
+            if (!isset($taxGroups[$returnKey])) $taxGroups[$returnKey] = ['category' => $returnTaxIdentity['category'], 'rate' => $returnCostRate, 'net' => 0.0, 'tax' => 0.0] + $returnTaxIdentity;
             $taxGroups[$returnKey]['net'] = round(max(0.0, $taxGroups[$returnKey]['net'] - $returnCostNet), 2);
             $taxGroups[$returnKey]['tax'] = round($taxGroups[$returnKey]['net'] * $returnCostRate / 100, 2);
         }
@@ -130,8 +134,8 @@ final class GtrotsInvoiceUbl
             self::amount($document, $allowance, 'Amount', $returnCostNet, $currency);
             self::amount($document, $allowance, 'BaseAmount', $lineExtension, $currency);
             $category = self::cac($document, $allowance, 'TaxCategory');
-            self::cbc($document, $category, 'ID', $returnCostRate > 0 ? 'S' : 'Z');
-            self::cbc($document, $category, 'Percent', self::decimal($returnCostRate, 2));
+            self::cbc($document, $category, 'ID', (string)$returnTaxIdentity['category']);
+            if ($returnTaxIdentity['category'] !== 'O') self::cbc($document, $category, 'Percent', self::decimal($returnCostRate, 2));
             $scheme = self::cac($document, $category, 'TaxScheme');
             self::cbc($document, $scheme, 'ID', 'VAT');
         }
@@ -144,7 +148,9 @@ final class GtrotsInvoiceUbl
             self::amount($document, $subtotal, 'TaxAmount', $group['tax'], $currency);
             $category = self::cac($document, $subtotal, 'TaxCategory');
             self::cbc($document, $category, 'ID', $group['category']);
-            self::cbc($document, $category, 'Percent', self::decimal($group['rate'], 2));
+            if ($group['category'] !== 'O') self::cbc($document, $category, 'Percent', self::decimal($group['rate'], 2));
+            if (($group['exemption_code'] ?? '') !== '') self::cbc($document, $category, 'TaxExemptionReasonCode', (string)$group['exemption_code']);
+            elseif (($group['exemption_reason'] ?? '') !== '') self::cbc($document, $category, 'TaxExemptionReason', (string)$group['exemption_reason']);
             $scheme = self::cac($document, $category, 'TaxScheme');
             self::cbc($document, $scheme, 'ID', 'VAT');
         }
@@ -227,6 +233,24 @@ final class GtrotsInvoiceUbl
         self::validateParty((array)($invoice['buyer'] ?? []), 'cumpărătorului');
     }
 
+    private static function taxIdentity(array $item, bool $sellerVatPayer, float $rate): array
+    {
+        $category = strtoupper(trim((string)($item['vat_category'] ?? '')));
+        if ($category === '') $category = $rate > 0 ? 'S' : ($sellerVatPayer ? 'Z' : 'O');
+        if (!in_array($category, ['S', 'Z', 'E', 'AE', 'O'], true)) {
+            throw new InvalidArgumentException('Categoria TVA „' . $category . '” nu este acceptată de fluxul CIUS-RO configurat.');
+        }
+        if ($category === 'S' && $rate <= 0) throw new InvalidArgumentException('Categoria TVA S necesită o cotă mai mare decât zero.');
+        if ($category !== 'S' && $rate > 0) throw new InvalidArgumentException('Categoria TVA ' . $category . ' necesită cotă zero.');
+        $code = trim((string)($item['vat_exemption_code'] ?? ''));
+        $reason = trim((string)($item['vat_exemption_reason'] ?? ''));
+        if ($category === 'O') $code = $code !== '' ? $code : 'VATEX-EU-O';
+        if (in_array($category, ['E', 'AE'], true) && $code === '' && $reason === '') {
+            throw new InvalidArgumentException('Categoria TVA ' . $category . ' necesită codul sau motivul legal al scutirii.');
+        }
+        return ['category' => $category, 'exemption_code' => $code, 'exemption_reason' => $reason];
+    }
+
     private static function validateParty(array $party, string $label): void
     {
         foreach (['name' => 'Numele ', 'address' => 'Adresa ', 'city' => 'Localitatea '] as $field => $prefix) {
@@ -256,11 +280,11 @@ final class GtrotsInvoiceUbl
 
         $cui = self::taxId((string)($party['cui'] ?? ''));
         $vatPayer = !empty($party['vat_payer']) || str_starts_with(strtoupper(trim((string)($party['cui'] ?? ''))), 'RO');
-        if ($seller || $cui !== '') {
+        if ($vatPayer) {
             $tax = self::cac($document, $partyNode, 'PartyTaxScheme');
-            self::cbc($document, $tax, 'CompanyID', $vatPayer ? 'RO' . $cui : ($cui ?: '0000000000000'));
+            self::cbc($document, $tax, 'CompanyID', 'RO' . $cui);
             $scheme = self::cac($document, $tax, 'TaxScheme');
-            self::cbc($document, $scheme, 'ID', $vatPayer ? 'VAT' : 'FC');
+            self::cbc($document, $scheme, 'ID', 'VAT');
         }
         $legal = self::cac($document, $partyNode, 'PartyLegalEntity');
         self::cbc($document, $legal, 'RegistrationName', self::text((string)$party['name'], 200));
@@ -304,7 +328,7 @@ final class GtrotsInvoiceUbl
         }
         $tax = self::cac($document, $itemNode, 'ClassifiedTaxCategory');
         self::cbc($document, $tax, 'ID', (string)$line['category']);
-        self::cbc($document, $tax, 'Percent', self::decimal($line['rate'], 2));
+        if ($line['category'] !== 'O') self::cbc($document, $tax, 'Percent', self::decimal($line['rate'], 2));
         $scheme = self::cac($document, $tax, 'TaxScheme');
         self::cbc($document, $scheme, 'ID', 'VAT');
         $price = self::cac($document, $node, 'Price');

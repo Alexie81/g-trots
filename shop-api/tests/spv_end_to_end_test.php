@@ -81,6 +81,15 @@ GtrotsSpvService::setHttpTransportForTests(static function (string $method, stri
         ], JSON_THROW_ON_ERROR)];
     }
     if (str_contains($url, '/test') && !str_contains($url, '/FCTEL/')) return ['status' => 200, 'body' => 'Hello G-Trots'];
+    if (str_contains($url, '/listaMesajeFactura')) {
+        spvE2eAssert($method === 'GET' && str_contains($url, 'cif=12345678'), 'Lista e-Factura trebuie citită read-only pentru CUI-ul firmei.');
+        if (str_contains($url, 'zile=60')) {
+            spvE2eAssert($scenario === 'accepted_without_download', 'Lista extinsă trebuie interogată numai când stareMesaj nu oferă id_descarcare.');
+            return ['status' => 200, 'body' => '{"mesaje":[{"id_solicitare":"UPLOAD-123","id":"DOWNLOAD-FROM-LIST"}],"titlu":"Lista Mesaje"}'];
+        }
+        spvE2eAssert(str_contains($url, 'zile=1'), 'Verificarea conexiunii trebuie să confirme read-only accesul FCTEL.');
+        return ['status' => 200, 'body' => '{"mesaje":[],"titlu":"Lista Mesaje"}'];
+    }
     if (str_contains($url, '/upload')) {
         spvE2eAssert($method === 'POST' && (str_contains($url, 'standard=UBL') || str_contains($url, 'standard=CN')) && str_contains($url, 'cif=12345678'), 'Uploadul trebuie să folosească standardul documentului și CIF-ul numeric.');
         if (str_contains((string)$body, '<CreditNote')) spvE2eAssert(str_contains($url, 'standard=CN'), 'Factura de corecție 381 trebuie încărcată cu standard=CN.');
@@ -89,9 +98,10 @@ GtrotsSpvService::setHttpTransportForTests(static function (string $method, stri
         return ['status' => 200, 'body' => '<header ExecutionStatus="0" index_incarcare="UPLOAD-123"/>'];
     }
     if (str_contains($url, '/stareMesaj')) {
-        return $scenario === 'rejected'
-            ? ['status' => 200, 'body' => '<header stare="NOK"><Errors errorMessage="CIUS-RO invalid"/></header>']
-            : ['status' => 200, 'body' => '<header stare="OK" id_descarcare="DOWNLOAD-456"/>'];
+        if ($scenario === 'rejected') return ['status' => 200, 'body' => '<header stare="NOK"><Errors errorMessage="CIUS-RO invalid"/></header>'];
+        if ($scenario === 'rejected_phrase') return ['status' => 200, 'body' => '<header stare="XML cu erori nepreluat de sistem"><Errors errorMessage="Document nepreluat"/></header>'];
+        if ($scenario === 'accepted_without_download') return ['status' => 200, 'body' => '<header stare="OK"/>'];
+        return ['status' => 200, 'body' => '<header stare="OK" id_descarcare="DOWNLOAD-456"/>'];
     }
     if (str_contains($url, '/revoke')) return ['status' => 200, 'body' => '{}'];
     throw new RuntimeException('Apel ANAF neașteptat în test: ' . $url);
@@ -138,11 +148,23 @@ $accepted = GtrotsSpvService::sendManual($db, $config, 'invoice-accepted');
 spvE2eAssert(($accepted['invoice']['spv_status'] ?? '') === 'sent', 'Acceptarea ANAF trebuie să marcheze factura drept trimisă.');
 spvE2eAssert(($accepted['job']['upload_index'] ?? '') === 'UPLOAD-123' && ($accepted['job']['download_id'] ?? '') === 'DOWNLOAD-456', 'Indicii ANAF trebuie păstrați pentru audit.');
 
+$scenario = 'accepted_without_download';
+$insert->execute(['invoice-list-fallback', 'invoice', '2026-09-04', '2026-09-04 12:05:00', 'not_sent', 'GT', '101B']);
+GtrotsSpvService::enqueue($db, 'invoice-list-fallback', 'invoice');
+$acceptedFromList = GtrotsSpvService::sendManual($db, $config, 'invoice-list-fallback');
+spvE2eAssert(($acceptedFromList['invoice']['spv_status'] ?? '') === 'sent' && ($acceptedFromList['job']['download_id'] ?? '') === 'DOWNLOAD-FROM-LIST', 'Dacă stareMesaj nu oferă id_descarcare, acesta trebuie recuperat din lista oficială după id_solicitare.');
+
 $scenario = 'rejected';
 $insert->execute(['invoice-rejected', 'return', '2026-09-04', '2026-09-04 12:10:00', 'not_sent', 'GT', '102']);
 GtrotsSpvService::enqueue($db, 'invoice-rejected', 'credit_note');
 $rejected = GtrotsSpvService::sendManual($db, $config, 'invoice-rejected');
 spvE2eAssert(($rejected['invoice']['spv_status'] ?? '') === 'rejected', 'Un NOK ANAF trebuie afișat drept respins, nu trimis.');
+
+$scenario = 'rejected_phrase';
+$insert->execute(['invoice-rejected-phrase', 'return', '2026-09-04', '2026-09-04 12:15:00', 'not_sent', 'GT', '102B']);
+GtrotsSpvService::enqueue($db, 'invoice-rejected-phrase', 'credit_note');
+$rejectedPhrase = GtrotsSpvService::sendManual($db, $config, 'invoice-rejected-phrase');
+spvE2eAssert(($rejectedPhrase['invoice']['spv_status'] ?? '') === 'rejected', 'Mesajul ANAF „nepreluat/cu erori” trebuie tratat drept respins, nu lăsat în procesare.');
 
 $scenario = 'accepted';
 $db->exec("UPDATE shop_spv_connections SET access_expires_at='2020-01-01 00:00:00'");

@@ -39,6 +39,28 @@ function gtrotsCanChangeOrderStatus(string $currentStatus, string $targetStatus)
  */
 final class GtrotsOrderReturnRequest
 {
+    /**
+     * Return shipping is tied to the courier selected at checkout. New orders
+     * keep an immutable snapshot; historical orders fall back to the courier's
+     * current setting so the legacy flow remains usable.
+     */
+    private static function shippingQuote(PDO $db, array $order): array
+    {
+        $name = trim((string)($order['shipping_method_name'] ?? '')) ?: 'Curierul selectat';
+        $snapshot = $order['return_shipping_cost_snapshot'] ?? null;
+        if ($snapshot !== null && is_numeric($snapshot)) {
+            return ['name' => $name, 'return_cost' => max(0.0, round((float)$snapshot, 2))];
+        }
+
+        $stmt = $db->prepare('SELECT name, return_cost FROM shop_shipping_methods WHERE id = ? LIMIT 1');
+        $stmt->execute([(string)($order['shipping_method_id'] ?? '')]);
+        $method = $stmt->fetch() ?: [];
+        return [
+            'name' => $name !== 'Curierul selectat' ? $name : (trim((string)($method['name'] ?? '')) ?: $name),
+            'return_cost' => max(0.0, round((float)($method['return_cost'] ?? 0), 2)),
+        ];
+    }
+
     public static function canRequestStatus(string $status): bool
     {
         return trim($status) === 'completed';
@@ -89,8 +111,7 @@ final class GtrotsOrderReturnRequest
         if (!$order) throw new InvalidArgumentException('Datele introduse nu identifică o comandă eligibilă. Verifică numărul comenzii și adresa de e-mail folosită la comandă.');
         $eligibility = self::eligibility($db, $order);
         $items = self::orderItems($db, (string)$order['id']);
-        $costStmt = $db->prepare('SELECT return_cost FROM shop_shipping_methods WHERE id = ? LIMIT 1');
-        $costStmt->execute([(string)($order['shipping_method_id'] ?? '')]);
+        $shippingQuote = self::shippingQuote($db, $order);
         return [
             'verified' => true,
             'order' => [
@@ -98,7 +119,8 @@ final class GtrotsOrderReturnRequest
                 'customer_type' => (($order['customer_type'] ?? 'individual') === 'company') ? 'company' : 'individual',
                 'customer_display_name' => self::displayName($order),
                 'currency' => (string)($order['currency'] ?? 'RON'),
-                'return_cost' => max(0.0, round((float)($costStmt->fetchColumn() ?: 0), 2)),
+                'shipping_method_name' => (string)$shippingQuote['name'],
+                'return_cost' => (float)$shippingQuote['return_cost'],
                 'initial_shipping_cost' => max(0.0, round((float)($order['shipping_cost'] ?? 0), 2)),
                 'initial_shipping_refundable' => !empty($eligibility['initial_shipping_refundable']),
                 'items' => array_map(static fn(array $item): array => [
@@ -255,9 +277,8 @@ final class GtrotsOrderReturnRequest
 
             $selection = self::normalizeSelection($db, $order, (array)($details['items'] ?? []));
 
-            $costStmt = $db->prepare('SELECT return_cost FROM shop_shipping_methods WHERE id = ? LIMIT 1');
-            $costStmt->execute([(string)($order['shipping_method_id'] ?? '')]);
-            $returnCost = max(0.0, round((float)($costStmt->fetchColumn() ?: 0), 2));
+            $shippingQuote = self::shippingQuote($db, $order);
+            $returnCost = (float)$shippingQuote['return_cost'];
             $itemsGross = (float)$selection['items_gross'];
             $deliveryRefund = !empty($selection['is_full']) && !empty($eligibility['initial_shipping_refundable'])
                 ? max(0.0, round((float)($order['shipping_cost'] ?? 0), 2))

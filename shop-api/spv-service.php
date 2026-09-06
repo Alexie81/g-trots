@@ -270,6 +270,36 @@ final class GtrotsSpvService
             self::connectionError($db, 'ANAF a respins verificarea OAuth (HTTP ' . $response['status'] . ').');
             throw new RuntimeException('Conexiunea OAuth există, dar ANAF a respins verificarea de acces.');
         }
+
+        // Serviciul Hello confirmă doar că tokenul este valid. O interogare
+        // read-only pe lista e-Factura confirmă suplimentar că aplicația și
+        // certificatul au drept efectiv pentru FCTEL în mediul selectat.
+        $cif = '';
+        try {
+            $company = $db->query('SELECT cui FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
+            $cif = preg_replace('/\D+/', '', (string)($company['cui'] ?? '')) ?: '';
+        } catch (Throwable) {
+            // Unele teste izolate nu definesc încă tabela firmei.
+        }
+        if ($cif !== '') {
+            $environment = self::environment((string)(self::settings($db)['environment'] ?? 'test'));
+            $listUrl = self::apiBase($config, $environment) . '/listaMesajeFactura?zile=1&cif=' . rawurlencode($cif);
+            $listResponse = self::http('GET', $listUrl, [
+                'Authorization: Bearer ' . $token,
+                'Accept: application/json, application/xml',
+            ], null, 30);
+            if ($listResponse['status'] === 401 || $listResponse['status'] === 403) {
+                $token = self::accessToken($db, $config, true);
+                $listResponse = self::http('GET', $listUrl, [
+                    'Authorization: Bearer ' . $token,
+                    'Accept: application/json, application/xml',
+                ], null, 30);
+            }
+            if ($listResponse['status'] < 200 || $listResponse['status'] >= 300) {
+                self::connectionError($db, 'Tokenul OAuth este valid, dar accesul RO e-Factura a fost respins în mediul ' . $environment . ' (HTTP ' . $listResponse['status'] . ').');
+                throw new RuntimeException('Conexiunea OAuth există, dar certificatul sau aplicația nu are acces RO e-Factura în mediul ' . ($environment === 'production' ? 'Producție' : 'Test') . '.');
+            }
+        }
         $db->prepare("UPDATE shop_spv_connections SET status = 'connected', last_tested_at = CURRENT_TIMESTAMP, last_error = NULL WHERE id = 1")->execute();
         return self::status($db, $config);
     }
@@ -886,12 +916,17 @@ final class GtrotsSpvService
         $state = mb_strtolower(self::responseValue($response['body'], ['stare', 'status']), 'UTF-8');
         if (in_array($state, ['ok', 'accepted', 'valid'], true)) {
             $downloadId = self::responseValue($response['body'], ['id_descarcare', 'downloadid', 'id']);
+            if ($downloadId === '') {
+                $downloadId = self::downloadIdFromMessageList($db, $config, $environment, $uploadIndex);
+            }
             GtrotsInvoiceService::markSpvSent($db, $invoiceId, $uploadIndex);
             $db->prepare("UPDATE shop_spv_outbox SET status='accepted', download_id=?, sent_at=CURRENT_TIMESTAMP, accepted_at=CURRENT_TIMESTAMP, next_attempt_at=NULL, last_error=NULL WHERE invoice_id=?")
                 ->execute([$downloadId ?: null, $invoiceId]);
             return;
         }
-        if (in_array($state, ['nok', 'error', 'rejected', 'invalid'], true)) {
+        if (in_array($state, ['nok', 'error', 'rejected', 'invalid'], true)
+            || str_contains($state, 'nepreluat')
+            || str_contains($state, 'cu erori')) {
             $message = self::responseMessage($response['body']);
             $db->prepare("UPDATE shop_spv_outbox SET status='rejected', next_attempt_at=NULL, last_error=? WHERE invoice_id=?")->execute([mb_substr($message, 0, 500), $invoiceId]);
             $db->prepare("UPDATE shop_invoices SET spv_status='rejected' WHERE id=? AND spv_status <> 'sent'")->execute([$invoiceId]);
@@ -900,6 +935,72 @@ final class GtrotsSpvService
         }
         $db->prepare("UPDATE shop_spv_outbox SET status='processing', next_attempt_at=?, last_error=NULL WHERE invoice_id=?")
             ->execute([date('Y-m-d H:i:s', time() + 90), $invoiceId]);
+    }
+
+    /**
+     * ANAF may confirm the upload with stare=OK without returning the archive
+     * identifier in the same response. The official message list links the
+     * upload request (id_solicitare) to the downloadable response (id).
+     */
+    private static function downloadIdFromMessageList(PDO $db, array $config, string $environment, string $uploadIndex): string
+    {
+        $company = $db->query('SELECT cui FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
+        $cif = preg_replace('/\D+/', '', (string)($company['cui'] ?? '')) ?: '';
+        if ($cif === '') return '';
+
+        $url = self::apiBase($config, $environment) . '/listaMesajeFactura?zile=60&cif=' . rawurlencode($cif);
+        $token = self::accessToken($db, $config);
+        $response = self::http('GET', $url, [
+            'Authorization: Bearer ' . $token,
+            'Accept: application/json, application/xml',
+        ], null, 30);
+        if ($response['status'] === 401 || $response['status'] === 403) {
+            $token = self::accessToken($db, $config, true);
+            $response = self::http('GET', $url, [
+                'Authorization: Bearer ' . $token,
+                'Accept: application/json, application/xml',
+            ], null, 30);
+        }
+        if ($response['status'] < 200 || $response['status'] >= 300) return '';
+
+        $json = json_decode($response['body'], true);
+        if (is_array($json)) {
+            $messages = $json['mesaje'] ?? $json['messages'] ?? [];
+            if (is_array($messages)) {
+                foreach ($messages as $message) {
+                    if (!is_array($message)) continue;
+                    $requestId = trim((string)($message['id_solicitare'] ?? $message['idSolicitare'] ?? $message['upload_index'] ?? ''));
+                    if (!hash_equals($uploadIndex, $requestId)) continue;
+                    $downloadId = trim((string)($message['id'] ?? $message['id_descarcare'] ?? $message['download_id'] ?? ''));
+                    if ($downloadId !== '') return $downloadId;
+                }
+            }
+        }
+
+        if (class_exists('DOMDocument')) {
+            $previous = libxml_use_internal_errors(true);
+            try {
+                $document = new DOMDocument();
+                if ($document->loadXML($response['body'], LIBXML_NONET | LIBXML_NOBLANKS)) {
+                    foreach ($document->getElementsByTagName('*') as $element) {
+                        if (!$element->hasAttributes()) continue;
+                        $requestId = '';
+                        $downloadId = '';
+                        foreach ($element->attributes as $attribute) {
+                            $name = mb_strtolower((string)($attribute->localName ?: $attribute->nodeName), 'UTF-8');
+                            $value = trim((string)$attribute->nodeValue);
+                            if (in_array($name, ['id_solicitare', 'idsolicitare', 'upload_index'], true)) $requestId = $value;
+                            if (in_array($name, ['id', 'id_descarcare', 'download_id'], true)) $downloadId = $value;
+                        }
+                        if ($requestId !== '' && hash_equals($uploadIndex, $requestId) && $downloadId !== '') return $downloadId;
+                    }
+                }
+            } finally {
+                libxml_clear_errors();
+                libxml_use_internal_errors($previous);
+            }
+        }
+        return '';
     }
 
     private static function accessToken(PDO $db, array $config, bool $forceRefresh = false): string

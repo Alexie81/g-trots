@@ -762,7 +762,7 @@ function renderRelatedProducts() {
   section.className = "related-products-section shell";
   section.dataset.relatedProducts = "";
   section.setAttribute("aria-labelledby", "related-products-title");
-  section.innerHTML = `<div class="related-products-heading"><div><span>Recomandări G-Trots</span><h2 id="related-products-title">S-ar putea să îți placă și…</h2></div><a href="/magazin.html#catalog">Vezi toate produsele <b aria-hidden="true">›</b></a></div><div class="related-products-grid" data-related-track>${recommendations.map(relatedProductCard).join("")}</div><nav class="related-carousel-controls" aria-label="Navigare produse recomandate"><button type="button" data-related-previous aria-label="Produsul recomandat anterior">‹</button><div class="related-carousel-dots" data-related-dots></div><button type="button" data-related-next aria-label="Următorul produs recomandat">›</button></nav>`;
+  section.innerHTML = `<div class="related-products-heading"><div><span>Recomandări G-Trots</span><h2 id="related-products-title">S-ar putea să îți placă și…</h2></div><a href="/magazin#catalog">Vezi toate produsele <b aria-hidden="true">›</b></a></div><div class="related-products-grid" data-related-track>${recommendations.map(relatedProductCard).join("")}</div><nav class="related-carousel-controls" aria-label="Navigare produse recomandate"><button type="button" data-related-previous aria-label="Produsul recomandat anterior">‹</button><div class="related-carousel-dots" data-related-dots></div><button type="button" data-related-next aria-label="Următorul produs recomandat">›</button></nav>`;
 
   const questions = document.querySelector("#intrebari");
   if (questions) questions.insertAdjacentElement("afterend", section);

@@ -1,5 +1,5 @@
 (() => {
-  if (!document.querySelector('script[src*="legal-footer.js"]')) { const legal = document.createElement('script'); legal.src = '/legal-footer.js?v=20260905-17'; legal.defer = true; document.head.append(legal); }
+  if (!document.querySelector('script[src*="legal-footer.js"]')) { const legal = document.createElement('script'); legal.src = '/legal-footer.js?v=20260906-company-v2'; legal.defer = true; document.head.append(legal); }
   if (window.GTrotsFavorites) return;
 
   const COMMERCE_PREVIEW = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)
@@ -244,19 +244,19 @@
     const cartActive = ["/cos", "/checkout", "/plata-finalizata", "/plata-esuata"].some(path => cleanPath.endsWith(path));
     const accountActive = ["/cont", "/login", "/cont-nou", "/resetare-parola"].some(path => cleanPath.endsWith(path));
     const shopActive = !favoritesActive && !cartActive && /\/(magazin|produs)(?:\/|$)|anvelopa-g10|display-smart|incarcator-fastcharge|motor-dualhub|baterie-powercore|kit-frana/.test(cleanPath);
-    const guidesActive = !shopActive && !favoritesActive && !cartActive && !accountActive && currentPath !== "/" && !currentPath.endsWith("/index.html");
+    const guidesActive = !shopActive && !favoritesActive && !cartActive && !accountActive && currentPath !== "/" && !currentPath.endsWith("/");
 
     document.querySelectorAll(".main-nav").forEach(nav => {
       nav.setAttribute("aria-label", "Navigație principală");
       nav.innerHTML = `
         <div class="mobile-nav-heading" aria-hidden="true"><span>Meniu</span><small>G-Trots service</small></div>
         <a href="/#servicii">Servicii</a>
-        <a class="nav-shop-link${shopActive ? " active" : ""}" href="/magazin.html"${shopActive ? ' aria-current="page"' : ""}><span class="nav-shop-icon" aria-hidden="true"></span><span>Shop</span></a>
-        <a href="/ghiduri-service-trotinete-electrice.html"${guidesActive ? ' aria-current="page"' : ""}>Ghiduri</a>
+        <a class="nav-shop-link${shopActive ? " active" : ""}" href="/magazin"${shopActive ? ' aria-current="page"' : ""}><span class="nav-shop-icon" aria-hidden="true"></span><span>Shop</span></a>
+        <a href="/ghiduri-service-trotinete-electrice"${guidesActive ? ' aria-current="page"' : ""}>Ghiduri</a>
         <a href="/#proces">Cum lucrăm</a>
         <a href="/#intrebari">Întrebări</a>
         <a href="/#contact">Contact</a>
-        <a class="mobile-nav-account" href="/login.html" aria-label="Intră în cont sau creează un cont"><span class="mobile-nav-account-avatar" aria-hidden="true"><i></i></span><span class="mobile-nav-account-copy"><small>CONT CLIENT</small><strong>Login</strong></span><b aria-hidden="true">›</b></a>
+        <a class="mobile-nav-account" href="/login" aria-label="Intră în cont sau creează un cont"><span class="mobile-nav-account-avatar" aria-hidden="true"><i></i></span><span class="mobile-nav-account-copy"><small>CONT CLIENT</small><strong>Login</strong></span><b aria-hidden="true">›</b></a>
         <a class="mobile-nav-call" href="tel:+40762093915"><span>${phoneIcon}</span><strong>Sună chiar acum</strong><small>+40 0762 093 915</small></a>`;
     });
   }
@@ -283,7 +283,7 @@
       if (!header.querySelector(".global-favorites-nav")) {
         const favoritesLink = document.createElement("a");
         favoritesLink.className = "global-favorites-nav";
-        favoritesLink.href = "/favorite.html";
+        favoritesLink.href = "/favorite";
         favoritesLink.setAttribute("aria-label", "Produse favorite, 0 produse salvate");
         if (window.location.pathname.toLowerCase().replace(/\/+$/, "").replace(/\.html$/, "").endsWith("/favorite")) favoritesLink.setAttribute("aria-current", "page");
         favoritesLink.innerHTML = '<span class="global-favorites-heart" aria-hidden="true">♡</span><b data-global-favorites-count>0</b><span class="global-favorites-tooltip" role="tooltip">Produse favorite</span>';
@@ -302,7 +302,7 @@
       if (!header.querySelector(".global-cart-nav")) {
         const cartLink = document.createElement("a");
         cartLink.className = "global-cart-nav";
-        cartLink.href = "/cos.html";
+        cartLink.href = "/cos";
         cartLink.setAttribute("aria-label", "Coș de cumpărături, 0 produse");
         const activePath = window.location.pathname.toLowerCase().replace(/\/+$/, "").replace(/\.html$/, "");
         if (["/cos", "/checkout", "/plata-finalizata", "/plata-esuata"].some(path => activePath.endsWith(path))) cartLink.setAttribute("aria-current", "page");
@@ -326,13 +326,13 @@
     const loggedIn = Boolean(customer && localStorage.getItem(CUSTOMER_TOKEN_KEY));
     const name = loggedIn ? String(customer.full_name || "Contul meu").trim().split(/\s+/)[0] : "Login";
     document.querySelectorAll(".global-account-nav").forEach(link => {
-      link.href = loggedIn ? "/cont.html" : "/login.html";
+      link.href = loggedIn ? "/cont" : "/login";
       link.setAttribute("aria-label", loggedIn ? `Contul lui ${name}` : "Intră în cont sau creează un cont");
       link.innerHTML = `<span class="global-account-avatar" aria-hidden="true"><i></i></span><span class="global-account-copy"><small>${loggedIn ? "Bun venit" : "Cont G-Trots"}</small><strong>${escapeHtml(name)}</strong></span>`;
       link.classList.toggle("is-authenticated", loggedIn);
     });
     document.querySelectorAll(".mobile-nav-account").forEach(link => {
-      link.href = loggedIn ? "/cont.html" : "/login.html";
+      link.href = loggedIn ? "/cont" : "/login";
       link.setAttribute("aria-label", loggedIn ? `Deschide contul lui ${name}` : "Intră în cont sau creează un cont");
       link.querySelector("small").textContent = loggedIn ? "CONTUL TĂU" : "CONT G-TROTS";
       link.querySelector("strong").textContent = name;
@@ -570,7 +570,7 @@
     document.querySelectorAll("[data-cart-tax-note]").forEach(element => { element.textContent = "Fără costul livrării"; });
 
     const checkout = document.querySelector("[data-cart-checkout]");
-    if (checkout) checkout.href = "/checkout.html";
+    if (checkout) checkout.href = "/checkout";
   }
 
   async function refreshCartPromotionQuote(cart, force = false) {
@@ -666,16 +666,16 @@
         ".product-add-cart",
         ".favorite-button",
         ".cart-button",
-        'a[href="magazin.html"]',
-        'a[href="/magazin.html"]',
-        'a[href="favorite.html"]',
-        'a[href="/favorite.html"]',
-        'a[href="cos.html"]',
-        'a[href="/cos.html"]',
-        'a[href="cont.html"]',
-        'a[href="/cont.html"]',
-        'a[href="login.html"]',
-        'a[href="/login.html"]'
+        'a[href="/magazin"]',
+        'a[href="/magazin"]',
+        'a[href="/favorite"]',
+        'a[href="/favorite"]',
+        'a[href="/cos"]',
+        'a[href="/cos"]',
+        'a[href="/cont"]',
+        'a[href="/cont"]',
+        'a[href="/login"]',
+        'a[href="/login"]'
       ].join(",")).forEach(element => element.remove());
       return;
     }

@@ -122,7 +122,7 @@
 
   function redirectAfterAuth() {
     const requested = new URLSearchParams(location.search).get("redirect");
-    const safe = requested && requested.startsWith("/") && !requested.startsWith("//") ? requested : "/cont.html";
+    const safe = requested && requested.startsWith("/") && !requested.startsWith("//") ? requested : "/cont";
     location.href = safe;
   }
 
@@ -198,7 +198,7 @@
   }
 
   function initializeLogin() {
-    if (token()) { location.replace("/cont.html"); return; }
+    if (token()) { location.replace("/cont"); return; }
     const form = document.querySelector("[data-login-form]");
     form?.addEventListener("submit", async event => {
       event.preventDefault(); setMessage(form, "");
@@ -274,7 +274,7 @@
     const resetToken = String(params.get("token") || "").trim();
     const emailField = formField(form, "email");
     if (emailField) emailField.value = String(params.get("email") || "").trim();
-    if (resetToken) history.replaceState({}, "", "/resetare-parola.html");
+    if (resetToken) history.replaceState({}, "", "/resetare-parola");
     const password = formField(form, "password");
     password?.addEventListener("input", () => {
       const value = password.value;
@@ -318,7 +318,7 @@
         completed = true;
         setMessage(form, result.message || "Parola a fost resetată. Acum te poți autentifica.", true);
         form.querySelectorAll("input,button").forEach(control => { control.disabled = true; });
-        history.replaceState({}, "", "/resetare-parola.html?resetata=1");
+        history.replaceState({}, "", "/resetare-parola?resetata=1");
       } catch (error) {
         if (error.status === 410 || error.code === "reset_link_expired" || /expirat|nu este valid/i.test(error.message || "")) showExpiredResetLink();
         else setMessage(form, error.message);
@@ -329,7 +329,7 @@
   }
 
   function initializeRegister() {
-    if (token()) { location.replace("/cont.html"); return; }
+    if (token()) { location.replace("/cont"); return; }
     const form = document.querySelector("[data-register-form]");
     const password = form?.elements.password;
     password?.addEventListener("input", () => {
@@ -415,7 +415,7 @@
     const host = document.querySelector("[data-customer-coupons]"); if (!host) return;
     document.querySelectorAll("[data-coupon-count]").forEach(node => node.textContent = state.coupons.length);
     if (!state.coupons.length) {
-      host.innerHTML = `<div class="coupon-empty-state"><span class="coupon-percent-mark" aria-hidden="true"><b>%</b><i></i></span><div><strong>Nu ai reduceri active acum</strong><p>Când apare o ofertă pentru contul tău, o vei găsi aici cu toate condițiile explicate.</p></div><a href="/magazin.html#catalog">Vezi magazinul <b aria-hidden="true">›</b></a></div>`;
+      host.innerHTML = `<div class="coupon-empty-state"><span class="coupon-percent-mark" aria-hidden="true"><b>%</b><i></i></span><div><strong>Nu ai reduceri active acum</strong><p>Când apare o ofertă pentru contul tău, o vei găsi aici cu toate condițiile explicate.</p></div><a href="/magazin#catalog">Vezi magazinul <b aria-hidden="true">›</b></a></div>`;
       return;
     }
 
@@ -446,7 +446,7 @@
             <span><small>Condiție</small><b>${escapeHtml(threshold)}</b></span>
             <span><small>Perioadă</small><b>${escapeHtml(period)}</b></span>
           </div>
-          <footer><span class="coupon-code"><small>COD PROMOȚIONAL</small><code>${escapeHtml(coupon.code)}</code></span><button type="button" data-copy-coupon="${escapeHtml(coupon.code)}"><span>Copiază codul</span><b class="coupon-copy-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg></b></button><a href="/magazin.html#catalog">Vezi produsele <b aria-hidden="true">›</b></a></footer>
+          <footer><span class="coupon-code"><small>COD PROMOȚIONAL</small><code>${escapeHtml(coupon.code)}</code></span><button type="button" data-copy-coupon="${escapeHtml(coupon.code)}"><span>Copiază codul</span><b class="coupon-copy-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg></b></button><a href="/magazin#catalog">Vezi produsele <b aria-hidden="true">›</b></a></footer>
         </div>
       </article>`;
     }).join("");
@@ -502,7 +502,7 @@
   }
 
   async function loadAccount() {
-    if (!token()) { location.replace(`/login.html?redirect=${encodeURIComponent(location.pathname)}`); return; }
+    if (!token()) { location.replace(`/login?redirect=${encodeURIComponent(location.pathname)}`); return; }
     try {
       const me = await api("customerMe");
       const [ordersResult, addressesResult, couponsResult] = await Promise.allSettled([api("customerOrders"), api("customerAddresses"), api("customerCoupons")]);
@@ -512,7 +512,7 @@
       document.querySelector("[data-customer-first-name]").textContent = firstName(state.customer.full_name); document.querySelector("[data-customer-email]").textContent = state.customer.email;
       document.querySelectorAll("[data-settings-email]").forEach(node => { node.textContent = state.customer.email; });
       renderOrders(); renderAddresses(); renderCoupons(); renderCustomerProfile(); document.querySelector("[data-account-loading]").hidden = true; document.querySelector("[data-account-app]").hidden = false;
-    } catch (error) { if (error.status === 401 || error.status === 403) { clearSession(); location.replace(`/login.html?redirect=${encodeURIComponent(location.pathname)}&reason=${encodeURIComponent(error.code || "expired")}`); } else document.querySelector("[data-account-loading]").innerHTML = emptyState("!", "Contul nu s-a putut încărca", error.message); }
+    } catch (error) { if (error.status === 401 || error.status === 403) { clearSession(); location.replace(`/login?redirect=${encodeURIComponent(location.pathname)}&reason=${encodeURIComponent(error.code || "expired")}`); } else document.querySelector("[data-account-loading]").innerHTML = emptyState("!", "Contul nu s-a putut încărca", error.message); }
   }
 
   function bindAccountEvents() {
@@ -526,8 +526,8 @@
       if (event.target.closest("[data-add-address]")) return openAddress();
       const edit = event.target.closest("[data-edit-address]"); if (edit) return openAddress(state.addresses.find(item => item.id === edit.dataset.editAddress));
       const remove = event.target.closest("[data-delete-address]"); if (remove) { if (!confirm("Ștergi această adresă salvată?")) return; try { await api("customerAddress", { method: "DELETE", query: `&id=${encodeURIComponent(remove.dataset.deleteAddress)}` }); state.addresses = await api("customerAddresses"); renderAddresses(); } catch (error) { alert(error.message); } return; }
-      if (event.target.closest("[data-customer-logout]")) { try { await api("customerLogout", { method: "POST" }); } catch {} clearSession(); location.href = "/login.html"; return; }
-      if (event.target.closest("[data-delete-account]")) { const confirmation = prompt('Pentru confirmare, scrie STERGE. Comenzile comerciale rămân păstrate în evidența G-Trots.'); if (confirmation !== "STERGE") return; try { await api("customerDeleteAccount", { method: "DELETE", body: { confirmation } }); clearSession(); location.href = "/magazin.html?cont=sters"; } catch (error) { alert(error.message); } }
+      if (event.target.closest("[data-customer-logout]")) { try { await api("customerLogout", { method: "POST" }); } catch {} clearSession(); location.href = "/login"; return; }
+      if (event.target.closest("[data-delete-account]")) { const confirmation = prompt('Pentru confirmare, scrie STERGE. Comenzile comerciale rămân păstrate în evidența G-Trots.'); if (confirmation !== "STERGE") return; try { await api("customerDeleteAccount", { method: "DELETE", body: { confirmation } }); clearSession(); location.href = "/magazin?cont=sters"; } catch (error) { alert(error.message); } }
     });
     const form = document.querySelector("[data-address-form]"); form?.addEventListener("submit", async event => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); data.is_default = Boolean(formField(form, "is_default")?.checked); const id = data.id; delete data.id; setBusy(form, true); setMessage(form, ""); try { await api(id ? "customerAddress" : "customerAddresses", { method: id ? "PATCH" : "POST", query: id ? `&id=${encodeURIComponent(id)}` : "", body: data }); state.addresses = await api("customerAddresses"); renderAddresses(); closeAccountDialog(form.closest("dialog")); } catch (error) { setMessage(form, error.message); } finally { setBusy(form, false); } });
     const profileForm = document.querySelector("[data-customer-profile-form]"); profileForm?.addEventListener("submit", async event => {

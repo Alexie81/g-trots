@@ -1,7 +1,7 @@
 (() => {
-  const CACHE_KEY = 'g-trots-public-shop-config-v1';
+  const CACHE_KEY = 'g-trots-public-shop-config-v2';
   const CACHE_TTL = 5 * 60 * 1000;
-  const fallback = { legal_name: 'G-Trots România', trade_name: 'G-Trots România', cui: '', registration_number: '', address: '', city: '', county: '', postal_code: '', country: '', email: '', phone: '' };
+  const fallback = { legal_name: 'CAB IT EXPERT S.R.L.', trade_name: 'G-Trots România', cui: '49972605', registration_number: 'J40/8303/2024', address: 'Str. Humulești nr. 131-135, lot 4', city: 'București, Sector 5', county: 'București', postal_code: '052262', country: 'România', email: 'contact@g-trots.ro', phone: '0762093915', website: 'https://g-trots.ro', bank_name: '', iban: '', share_capital: '' };
 
   function cachedConfig() {
     try {

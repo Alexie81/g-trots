@@ -190,7 +190,7 @@
         lineTotal: unitPrice * quantity,
         image: Number(product.image || 0),
         imageUrl: safeUrl(product.imageUrl),
-        url: String(product.url || "/magazin.html")
+        url: String(product.url || "/magazin")
       };
     });
   }
@@ -213,7 +213,7 @@
         discountedLineTotal: discountTotal > 0 ? Number(item.discountedLineTotal ?? item.discounted_line_total ?? lineTotal) : lineTotal,
         image: Number(item.image || item.sprite_index || 0),
         imageUrl: safeUrl(item.imageUrl || item.image_url),
-        url: String(item.url || "/magazin.html")
+        url: String(item.url || "/magazin")
       };
     });
   }
@@ -243,7 +243,7 @@
           ...item,
           imageUrl: item.imageUrl || product.imageUrl || "",
           image: item.image || product.image || 0,
-          url: item.url || product.url || "/magazin.html"
+          url: item.url || product.url || "/magazin"
         };
       });
       return { ...state, items: hydrated };

@@ -20,7 +20,7 @@
       <img src="assets/logo.png" alt="G-Trots România">
       <span><strong>G-Trots România</strong><small>SERVICE &amp; MAGAZIN</small></span>
     </a>
-    <a class="tracking-shop-link" href="/magazin.html"><span>Înapoi la magazin</span><b aria-hidden="true">→</b></a>
+    <a class="tracking-shop-link" href="/magazin"><span>Înapoi la magazin</span><b aria-hidden="true">→</b></a>
   </header>
 
   <main>
@@ -46,7 +46,7 @@
     <section id="tracking-result" class="tracking-result" hidden></section>
   </main>
 
-  <footer class="tracking-footer"><img src="assets/logo.png" alt=""><p><strong>G-Trots România</strong><span>Ai o întrebare? Scrie-ne la contact@g-trots.ro</span></p><div class="tracking-footer-actions"><a href="/magazin.html">Continuă cumpărăturile →</a><button id="tracking-footer-cancel" class="tracking-footer-cancel" type="button" hidden>Anulează comanda</button><button id="tracking-footer-return" class="tracking-footer-return" type="button" hidden>Solicită returul</button></div></footer>
+  <footer class="tracking-footer"><img src="assets/logo.png" alt=""><p><strong>G-Trots România</strong><span>Ai o întrebare? Scrie-ne la contact@g-trots.ro</span></p><div class="tracking-footer-actions"><a href="/magazin">Continuă cumpărăturile →</a><button id="tracking-footer-cancel" class="tracking-footer-cancel" type="button" hidden>Anulează comanda</button><button id="tracking-footer-return" class="tracking-footer-return" type="button" hidden>Solicită returul</button></div></footer>
   <div id="cancellation-modal" class="cancellation-modal" hidden>
     <button class="cancellation-backdrop" type="button" data-cancel-close aria-label="Închide"></button>
     <section class="cancellation-sheet" role="dialog" aria-modal="true" aria-labelledby="cancellation-title">
@@ -69,13 +69,13 @@
       <textarea id="return-reason" maxlength="1000" rows="4" placeholder="De exemplu: produsul nu corespunde nevoilor mele..."></textarea>
       <small id="return-reason-help" class="return-field-feedback"></small>
       <div class="return-fields"><label for="return-holder">Titularul contului <b>*</b><input id="return-holder" maxlength="180" autocomplete="name" placeholder="Nume și prenume"></label><label for="return-iban">IBAN pentru rambursare <b>*</b><input id="return-iban" maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="return-iban-feedback" placeholder="RO49 AAAA 1B31 0075 9384 0000"><small id="return-iban-feedback" class="return-field-feedback">IBAN-ul este verificat înainte de trimitere.</small></label></div>
-      <div class="return-estimate"><span>Cost retur curier <b id="return-cost">0,00 RON</b></span><span>Estimare restituire <strong id="return-refund">0,00 RON</strong></span></div>
+      <div class="return-estimate"><span><i id="return-courier-label">Cost retur curier</i> <b id="return-cost">0,00 RON</b></span><span>Estimare restituire <strong id="return-refund">0,00 RON</strong></span></div>
       <label class="return-consent"><input id="return-refund-consent" type="checkbox"> <span>Sunt de acord ca rambursarea să fie făcută în IBAN-ul indicat, în maximum 14 zile calendaristice.</span></label>
       <span id="return-error" class="return-error" role="alert"></span>
       <div class="return-actions"><button type="button" data-return-close>Renunță</button><button id="return-confirm" type="button">Trimite solicitarea</button></div>
     </section>
   </div>
 <script src="urmarire-comanda.js?v=20260905-return-v4" defer></script>
-<script src="/legal-footer.js?v=20260905-17" defer></script>
+<script src="/legal-footer.js?v=20260906-company-v2" defer></script>
 </body>
 </html>

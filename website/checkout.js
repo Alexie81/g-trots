@@ -371,7 +371,7 @@
         ? `<del>${formatMoney(pricing.baseLineTotal)}</del><span>${formatMoney(pricing.currentLineTotal)}</span>`
         : formatMoney(pricing.currentLineTotal);
       return `<article class="checkout-summary-item">
-        <a class="checkout-summary-item-image" href="${escapeHtml(product?.url || "/magazin.html")}"${imageStyle(product)} aria-label="Deschide ${escapeHtml(product?.name || "produsul")}"></a>
+        <a class="checkout-summary-item-image" href="${escapeHtml(product?.url || "/magazin")}"${imageStyle(product)} aria-label="Deschide ${escapeHtml(product?.name || "produsul")}"></a>
         <span class="checkout-summary-item-copy"><strong>${escapeHtml(product?.name || "Produs G-Trots")}</strong><small class="${pricing.hasDiscount ? "is-discounted" : ""}">${quantity} × ${unitPrice}</small></span>
         <b class="${pricing.hasDiscount ? "is-discounted" : ""}">${lineTotal}</b>
       </article>`;
@@ -684,7 +684,7 @@
               discountedLineTotal: Number(apiItem.discounted_line_total ?? apiItem.line_total ?? unitPrice * quantity),
               image: Number(product.image || 0),
               imageUrl: safeUrl(apiItem.image_url || product.imageUrl),
-              url: String(product.url || "/magazin.html")
+              url: String(product.url || "/magazin")
             };
           });
           try {
@@ -736,7 +736,7 @@
             metoda: String(fields.payment_method || ""),
             status: "cod"
           });
-          window.location.assign(`plata-finalizata.html?${params.toString()}`);
+          window.location.assign(`/plata-finalizata?${params.toString()}`);
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : "Comanda nu a putut fi trimisă.";
           message.classList.add("is-error");

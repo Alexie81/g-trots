@@ -2,20 +2,23 @@
   if (window.__gtLegalFooter) return;
   window.__gtLegalFooter = true;
 
-  const CACHE_KEY = 'g-trots-public-shop-config-v1';
+  const CACHE_KEY = 'g-trots-public-shop-config-v2';
   const CACHE_TTL = 5 * 60 * 1000;
   const companyFallback = {
-    legal_name: 'G-Trots România',
+    legal_name: 'CAB IT EXPERT S.R.L.',
     trade_name: 'G-Trots',
-    email: '',
-    phone: '+40 0762 093 915',
-    cui: '',
-    registration_number: '',
-    address: '',
-    city: '',
-    county: '',
-    postal_code: '',
-    country: '',
+    email: 'contact@g-trots.ro',
+    phone: '0762093915',
+    cui: '49972605',
+    registration_number: 'J40/8303/2024',
+    address: 'Str. Humulești nr. 131-135, lot 4',
+    city: 'București, Sector 5',
+    county: 'București',
+    postal_code: '052262',
+    country: 'România',
+    bank_name: '',
+    iban: '',
+    share_capital: '',
   };
 
   const loadAsset = (tag, attributes) => {
@@ -29,14 +32,53 @@
   if (!document.querySelector('link[href*="fonts.googleapis.com/css2?family=Manrope"]')) {
     loadAsset('link', { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap' });
   }
-  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260905-15' });
+  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260906-company-v1' });
   if (!document.querySelector('script[src*="cookie-consent.js"]')) {
-    loadAsset('script', { src: '/cookie-consent.js?v=20260905-default-on-v1', defer: true });
+    loadAsset('script', { src: '/cookie-consent.js?v=20260906-compact-v4', defer: true });
   }
 
   function phoneHref(phone) {
     const normalized = String(phone || '').replace(/[^+\d]/g, '');
     return normalized ? `tel:${normalized}` : '#';
+  }
+
+  function companyAddress(company) {
+    return [company.address, company.postal_code, company.city, company.county, company.country].filter(Boolean).join(', ');
+  }
+
+  function renderCompanyProfiles(company) {
+    const address = companyAddress(company);
+    const bank = [company.bank_name, company.iban].filter(Boolean).join(' · ');
+    const profileHtml = `
+      <div class="gt-company-profile__heading"><span>DATE OFICIALE</span><h2>Comerciantul din spatele G-Trots</h2><p>Informațiile sunt administrate central din aplicațiile G-Trots și se actualizează în toate paginile publice.</p></div>
+      <dl class="gt-company-profile__grid">
+        <div><dt>Denumire juridică</dt><dd>${esc(company.legal_name || 'Necompletat')}</dd></div>
+        <div><dt>CUI / CIF</dt><dd>${esc(company.cui || 'Necompletat')}</dd></div>
+        <div><dt>Registrul Comerțului</dt><dd>${esc(company.registration_number || 'Necompletat')}</dd></div>
+        <div><dt>Sediu social</dt><dd>${esc(address || 'Necompletat')}</dd></div>
+        <div><dt>Telefon</dt><dd>${company.phone ? `<a href="${phoneHref(company.phone)}">${esc(company.phone)}</a>` : 'Necompletat'}</dd></div>
+        <div><dt>E-mail</dt><dd>${company.email ? `<a href="mailto:${esc(company.email)}">${esc(company.email)}</a>` : 'Necompletat'}</dd></div>
+        <div><dt>Website</dt><dd>${company.website ? `<a href="${esc(company.website)}">${esc(company.website)}</a>` : 'Necompletat'}</dd></div>
+        <div><dt>Date bancare</dt><dd>${esc(bank || 'Se completează din aplicațiile G-Trots')}</dd></div>
+      </dl>`;
+
+    const legalContent = document.querySelector('.legal-content');
+    if (legalContent && !legalContent.querySelector('[data-gt-company-profile]')) {
+      const card = document.createElement('article');
+      card.className = 'legal-card gt-company-profile';
+      card.dataset.gtCompanyProfile = '';
+      card.innerHTML = profileHtml;
+      legalContent.prepend(card);
+    }
+
+    const aboutAnswer = document.querySelector('.about-answer');
+    if (aboutAnswer && !document.querySelector('.about-company')) {
+      const section = document.createElement('section');
+      section.className = 'about-company';
+      section.setAttribute('aria-label', 'Datele oficiale ale comerciantului');
+      section.innerHTML = `<div class="about-shell gt-company-profile" data-gt-company-profile>${profileHtml}</div>`;
+      aboutAnswer.after(section);
+    }
   }
 
   function ensureOriginalHeader() {
@@ -54,12 +96,12 @@
         <nav class="main-nav" aria-label="Navigație principală">
           <div class="mobile-nav-heading" aria-hidden="true"><span>Meniu</span><small>G-Trots service</small></div>
           <a href="/#servicii">Servicii</a>
-          <a class="nav-shop-link" href="/magazin.html"><span class="nav-shop-icon" aria-hidden="true"></span><span>Shop</span></a>
-          <a href="/ghiduri-service-trotinete-electrice.html">Ghiduri</a>
+          <a class="nav-shop-link" href="/magazin"><span class="nav-shop-icon" aria-hidden="true"></span><span>Shop</span></a>
+          <a href="/ghiduri-service-trotinete-electrice">Ghiduri</a>
           <a href="/#proces">Cum lucrăm</a>
           <a href="/#intrebari">Întrebări</a>
           <a href="/#contact">Contact</a>
-          <a class="mobile-nav-account" href="/login.html" aria-label="Intră în cont sau creează un cont"><span class="mobile-nav-account-avatar" aria-hidden="true"><i></i></span><span class="mobile-nav-account-copy"><small>CONT G-TROTS</small><strong>Login</strong></span><b aria-hidden="true">›</b></a>
+          <a class="mobile-nav-account" href="/login" aria-label="Intră în cont sau creează un cont"><span class="mobile-nav-account-avatar" aria-hidden="true"><i></i></span><span class="mobile-nav-account-copy"><small>CONT G-TROTS</small><strong>Login</strong></span><b aria-hidden="true">›</b></a>
           <a class="mobile-nav-call" href="tel:+40762093915"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.6 10.8c1.7 3.3 3.3 4.9 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.4.6 3.6.6.6 0 .9.4.9.9V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.6c.5 0 .9.3.9.8.1 1.3.3 2.5.6 3.6.1.4 0 .8-.3 1.1l-2.2 2.3Z"/></svg></span><strong>Sună chiar acum</strong><small>+40 0762 093 915</small></a>
         </nav>
         <a class="button button-small header-cta call-button" href="tel:+40762093915">
@@ -82,7 +124,7 @@
         customer = loggedIn ? JSON.parse(localStorage.getItem('g-trots-customer-profile-v1') || 'null') : null;
       } catch { /* localStorage poate fi indisponibil */ }
       const name = customer ? String(customer.full_name || 'Contul meu').trim().split(/\s+/)[0] : 'Login';
-      account.href = loggedIn && customer ? '/cont.html' : '/login.html';
+      account.href = loggedIn && customer ? '/cont' : '/login';
       account.setAttribute('aria-label', loggedIn && customer ? `Deschide contul lui ${name}` : 'Intră în cont sau creează un cont');
       account.querySelector('small').textContent = loggedIn && customer ? 'CONTUL TĂU' : 'CONT G-TROTS';
       account.querySelector('strong').textContent = name;
@@ -144,6 +186,7 @@
       '@context': 'https://schema.org',
       '@type': 'OnlineStore',
       name: company.trade_name || company.legal_name || 'G-Trots România',
+      alternateName: 'G-Trots',
       url: `${location.origin}/`,
       logo: `${location.origin}/assets/logo.png`,
       hasMerchantReturnPolicy: {
@@ -161,7 +204,7 @@
     if (company.email || company.phone) schema.contactPoint = { '@type': 'ContactPoint', contactType: 'customer service', email: company.email || undefined, telephone: company.phone || undefined };
     if (company.email) schema.email = company.email;
     if (company.phone) schema.telephone = company.phone;
-    if (company.cui) { schema.taxID = company.cui; schema.vatID = company.cui; }
+    if (company.cui) schema.taxID = company.cui;
     if (hasAddress) schema.address = { '@type': 'PostalAddress', streetAddress: company.address || undefined, postalCode: company.postal_code || undefined, addressLocality: company.city || undefined, addressRegion: company.county || undefined, addressCountry: 'RO' };
     const script = document.createElement('script');
     script.type = 'application/ld+json';
@@ -204,7 +247,7 @@
     host.dataset.gtLegalFooter = '';
     host.setAttribute('aria-label', 'Informații despre G-Trots, plăți și politici');
 
-    const address = [company.address, company.postal_code, company.city, company.county, company.country].filter(Boolean).join(', ');
+    const address = companyAddress(company);
     const tradeName = company.trade_name || company.legal_name || 'G-Trots';
     const inner = document.createElement('div');
     inner.className = 'gt-site-footer__inner';
@@ -215,11 +258,15 @@
           <span><strong>${esc(tradeName)}</strong><small>Service & shop pentru mobilitate electrică</small></span>
         </a>
         <p>Cumpărături clare, piese alese atent și asistență reală înainte și după comandă.</p>
-        <div class="gt-site-footer__trust"><span>Plăți securizate</span><span>Retur transparent</span><span>Suport G-Trots</span></div>
+        <dl class="gt-site-footer__identity">
+          <div><dt>Operator</dt><dd>${esc(company.legal_name || 'Necompletat')}</dd></div>
+          <div><dt>CUI</dt><dd>${esc(company.cui || 'Necompletat')}</dd></div>
+          <div><dt>Sediu social</dt><dd>${esc(address || 'Necompletat')}</dd></div>
+        </dl>
         <div class="gt-site-footer__contact">${company.phone ? `<a href="${phoneHref(company.phone)}">${esc(company.phone)}</a>` : ''}${company.email ? `<a href="mailto:${esc(company.email)}">${esc(company.email)}</a>` : ''}</div>
       </section>
       <div class="gt-site-footer__nav-grid">
-        <nav aria-label="Magazin și servicii"><b>Magazin și servicii</b><div><a href="/">Service G-Trots</a><a href="/magazin.html">Catalog produse</a><a href="/livrare-si-plata">Livrare și plată</a><a href="/plata-si-facturare">Plată și facturare</a><a href="/despre-g-trots">Despre G-Trots</a></div></nav>
+        <nav aria-label="Magazin și servicii"><b>Magazin și servicii</b><div><a href="/">Service G-Trots</a><a href="/magazin">Catalog produse</a><a href="/livrare-si-plata">Livrare și plată</a><a href="/plata-si-facturare">Plată și facturare</a><a href="/despre-g-trots">Despre G-Trots</a></div></nav>
         <nav aria-label="Comenzi și retururi"><b>Comenzi și retururi</b><div><a href="/urmarire-comanda">Urmărește comanda</a><a href="/politica-de-retur">Politica de retur</a><a class="gt-withdrawal-link" href="/solicita-retur">Solicită un retur</a><a href="/garantii-si-reclamatii">Garanții și reclamații</a><a href="/contact">Contact</a></div></nav>
         <nav aria-label="Legal și confidențialitate"><b>Legal și confidențialitate</b><div><a href="/termeni-si-conditii">Termeni și condiții</a><a href="/politica-de-confidentialitate">Confidențialitate</a><a href="/politica-cookies">Politica de cookie-uri</a><button type="button" data-cookie-preferences>Preferințe cookie</button><a href="/siguranta-produselor">Siguranța produselor</a><a href="/conditii-b2b">Condiții B2B</a><a href="/accesibilitate">Accesibilitate</a></div></nav>
       </div>
@@ -241,6 +288,7 @@
     });
     if (!existingFooter) document.body.append(host);
     appendOrganizationSchema(company);
+    renderCompanyProfiles(company);
   }
 
   ensureOriginalHeader();

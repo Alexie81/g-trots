@@ -86,7 +86,7 @@
       basePriceValue: basePrice,
       regularPriceValue: priceBeforePromotion,
       hasPromotion: product.promotion_price != null,
-      stock: stockLabel(product),
+      stock: product.is_purchasable === false ? "Indisponibil" : stockLabel(product),
       image: Number(product.images?.[0]?.sprite_index || legacyImages[slug] || 0),
       imageUrl: product.images?.[0]?.sprite_index ? "" : safeUrl(product.images?.[0]?.url),
       url: `/magazin/produs/${encodeURIComponent(slug)}/`,
@@ -442,15 +442,17 @@
   function ensureProductCommerce(product, normalized) {
     const copy = document.querySelector(".product-detail-copy");
     if (!copy) return;
+    const purchasable = product.is_purchasable !== false;
     const existingInput = copy.querySelector("[data-product-quantity]");
     const existingButton = copy.querySelector("[data-product-add-cart]");
     if (existingInput && existingButton) {
-      const available = product.stock_mode === "unlimited" ? 99 : Number(product.stock_quantity || 0);
+      const available = purchasable ? (product.stock_mode === "unlimited" ? 99 : Number(product.stock_quantity || 0)) : 0;
       existingInput.max = String(Math.max(1, available));
       existingInput.value = String(Math.max(1, Math.min(Number(existingInput.value || 1), Math.max(1, available))));
       existingButton.disabled = available <= 0;
       const buttonText = existingButton.querySelector("strong");
-      if (buttonText && available <= 0) buttonText.textContent = "Stoc epuizat";
+      if (buttonText && available <= 0) buttonText.textContent = purchasable ? "Stoc epuizat" : "Indisponibil momentan";
+      existingInput.closest(".product-quantity")?.toggleAttribute("hidden", !purchasable);
       return;
     }
     let commerce = copy.querySelector(".live-product-commerce");
@@ -467,10 +469,11 @@
     const input = commerce.querySelector("[data-live-product-quantity]");
     const button = commerce.querySelector("[data-live-add-cart]");
     const feedback = commerce.querySelector("[data-live-cart-feedback]");
-    const available = product.stock_mode === "unlimited" ? 99 : Number(product.stock_quantity || 0);
+    const available = purchasable ? (product.stock_mode === "unlimited" ? 99 : Number(product.stock_quantity || 0)) : 0;
     input.max = String(Math.max(1, Math.min(99, available || 1)));
     button.disabled = available <= 0;
-    button.querySelector("strong").textContent = available <= 0 ? "Stoc epuizat" : "Adaugă în coș";
+    button.querySelector("strong").textContent = available <= 0 ? (purchasable ? "Stoc epuizat" : "Indisponibil momentan") : "Adaugă în coș";
+    input.closest("label")?.toggleAttribute("hidden", !purchasable);
     button.onclick = () => {
       if (button.disabled || !window.GTrotsCart) return;
       const quantity = Math.max(1, Math.min(Number(input.max), Number.parseInt(input.value, 10) || 1));
@@ -712,10 +715,15 @@
 
   function applyLiveProduct(product) {
     const normalized = normalizeProduct(product);
+    const purchasable = product.is_purchasable !== false;
     document.body.dataset.productId = normalized.id;
+    document.body.classList.toggle("product-is-unavailable", !purchasable);
     const favoriteButton = document.querySelector(".product-detail-favorite");
-    if (favoriteButton) favoriteButton.dataset.favoriteId = normalized.id;
-    window.GTrotsFavorites?.registerProducts?.([normalized]);
+    if (favoriteButton) {
+      favoriteButton.dataset.favoriteId = normalized.id;
+      favoriteButton.hidden = !purchasable;
+    }
+    if (purchasable) window.GTrotsFavorites?.registerProducts?.([normalized]);
     setText("[data-product-breadcrumb]", normalized.name);
     const featuredBadge = document.querySelector("[data-product-badge]");
     if (featuredBadge) {
@@ -737,7 +745,15 @@
     }
     const stock = document.querySelector(".product-detail-stock");
     stock?.classList.toggle("is-low", normalized.stock === "Stoc limitat");
-    stock?.classList.toggle("is-out", normalized.stock === "Stoc epuizat");
+    stock?.classList.toggle("is-out", normalized.stock === "Stoc epuizat" || !purchasable);
+    document.querySelector("[data-product-unavailable]")?.remove();
+    if (!purchasable) {
+      const notice = document.createElement("aside");
+      notice.className = "product-unavailable-notice";
+      notice.dataset.productUnavailable = "";
+      notice.innerHTML = '<small>PRODUS INDISPONIBIL MOMENTAN</small><strong>Pagina rămâne disponibilă pentru informații.</strong><p>Produsul nu apare în catalog și nu poate fi adăugat în coș. Poți vedea selecția activă sau ne poți întreba despre o alternativă compatibilă.</p><div><a href="/magazin">Vezi catalogul activ</a><a href="https://wa.me/40762093915" target="_blank" rel="noopener nofollow">Întreabă G-Trots</a></div>';
+      document.querySelector(".product-detail-copy")?.prepend(notice);
+    }
 
     const fit = document.querySelector(".product-detail-fit");
     const fitLabel = fit?.querySelector(":scope > span");
@@ -809,7 +825,7 @@
     if (normalized.imageUrl) setMeta('meta[name="twitter:image"]', normalized.imageUrl);
     setMeta('meta[property="product:price:amount"]', String(product.promotion_price ?? product.sale_price ?? product.price ?? 0));
     setMeta('meta[property="product:price:currency"]', product.currency || "RON");
-    setMeta('meta[property="product:availability"]', normalized.stock === "Stoc epuizat" ? "out of stock" : "in stock");
+    setMeta('meta[property="product:availability"]', normalized.stock === "Stoc epuizat" || !purchasable ? "out of stock" : "in stock");
     document.querySelectorAll('script[type="application/ld+json"]:not([data-gt-organization-schema]):not([data-gt-breadcrumb-schema])').forEach(script => script.remove());
     const productSchema = document.createElement("script");
     productSchema.type = "application/ld+json";
@@ -855,7 +871,7 @@
         priceCurrency: product.currency || "RON",
         price: activePrice.toFixed(2),
         itemCondition,
-        availability: normalized.stock === "Stoc epuizat" ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
+        availability: normalized.stock === "Stoc epuizat" || !purchasable ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
         url: canonicalUrl,
         seller: { "@type": "Organization", name: liveShopConfig?.company?.trade_name || liveShopConfig?.company?.legal_name || "G-Trots" },
         hasMerchantReturnPolicy: { "@type": "MerchantReturnPolicy", applicableCountry: "RO", returnPolicyCountry: "RO", returnPolicyCategory: "https://schema.org/MerchantReturnFiniteReturnWindow", merchantReturnDays: 14, returnMethod: "https://schema.org/ReturnByMail", returnFees: "https://schema.org/ReturnFeesCustomerResponsibility", merchantReturnLink: "https://g-trots.ro/politica-de-retur" },
@@ -1023,7 +1039,7 @@
         form.hidden = true;
         const success = document.createElement("div");
         success.className = "live-checkout-success";
-        success.innerHTML = `<span>✓</span><h3>Comanda a fost înregistrată</h3><p>Numărul comenzii este <strong>${escapeHtml(order.order_number || "")}</strong>. Te vom contacta pentru confirmare.</p><a href="/magazin.html">Înapoi la magazin</a>`;
+        success.innerHTML = `<span>✓</span><h3>Comanda a fost înregistrată</h3><p>Numărul comenzii este <strong>${escapeHtml(order.order_number || "")}</strong>. Te vom contacta pentru confirmare.</p><a href="/magazin">Înapoi la magazin</a>`;
         panel.append(success);
       } catch (error) {
         message.classList.add("is-error");
@@ -1101,7 +1117,7 @@
     }
 
     // Checkout-ul are acum o pagină dedicată. Coșul rămâne o etapă separată,
-    // iar pagina checkout.html citește aceleași produse și setări publice.
+    // iar pagina /checkout citește aceleași produse și setări publice.
   }
 
   async function refreshPersonalizedPrices() {

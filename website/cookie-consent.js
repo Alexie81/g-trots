@@ -8,7 +8,7 @@
 
   const css = document.createElement('link');
   css.rel = 'stylesheet';
-  css.href = '/cookie-consent.css?v=20260905';
+  css.href = '/cookie-consent.css?v=20260906-compact-v4';
   document.head.append(css);
 
   function readChoice() {
@@ -68,12 +68,12 @@
 
   function open(customize = false) {
     document.querySelector('.gt-cookie-layer')?.remove();
-    const state = choice || normalize({ preferences: true, analytics: true, marketing: true });
+    const state = choice || normalize({ preferences: false, analytics: false, marketing: false });
     const layer = document.createElement('div');
-    layer.className = 'gt-cookie-layer';
+    layer.className = `gt-cookie-layer${customize ? ' is-customizing' : ''}`;
     layer.innerHTML = `<section class="gt-cookie-card" role="dialog" aria-modal="true" aria-labelledby="gt-cookie-title">
       <div class="gt-cookie-brand"><img src="/assets/logo.png" alt=""><div><small>CONTROLUL TĂU</small><h2 id="gt-cookie-title">Preferințe de confidențialitate</h2></div></div>
-      <p>Folosim tehnologii necesare pentru coș, securitate și checkout. Analiza, preferințele opționale și marketingul se activează numai dacă le accepți.</p>
+      <p>Cookie-urile necesare țin în siguranță coșul și checkout-ul. Tu alegi dacă accepți și analiza, preferințele sau marketingul.</p>
       <div class="gt-cookie-details"${customize ? '' : ' hidden'}>
         ${category('necessary', 'Strict necesare', 'Sesiune, securitate, coș și funcțiile de cumpărare.', true, true)}
         ${category('preferences', 'Preferințe', 'Memorează alegeri neesențiale pentru o experiență personalizată.', state.preferences)}

@@ -214,7 +214,9 @@
     });
     const initialDelivery = fullReturn && verified.order.initial_shipping_refundable ? Number(verified.order.initial_shipping_cost || 0) : 0;
     const cost = Number(verified.order.return_cost || 0);
+    const courier = String(verified.order.shipping_method_name || '').trim();
     document.querySelector('#selected-total').textContent = money(total + initialDelivery);
+    document.querySelector('#return-shipping-label').textContent = courier ? `Retur prin ${courier}` : 'Cost direct retur';
     document.querySelector('#return-shipping-cost').textContent = money(cost);
     document.querySelector('#refund-estimate').textContent = money(Math.max(0, total + initialDelivery - cost));
   }

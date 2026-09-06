@@ -43,6 +43,7 @@
   const returnError = document.getElementById("return-error");
   const returnConfirm = document.getElementById("return-confirm");
   const returnCost = document.getElementById("return-cost");
+  const returnCourierLabel = document.getElementById("return-courier-label");
   const returnRefund = document.getElementById("return-refund");
   const returnProductList = document.getElementById("return-product-list");
   const returnRefundConsent = document.getElementById("return-refund-consent");
@@ -211,6 +212,7 @@
     returnProductList.querySelectorAll('input,select').forEach(control => control.addEventListener('change', updateReturnEstimate));
     validateReturnIban(false);
     const cost = Number(activeOrder.configured_return_shipping_cost || 0);
+    if (returnCourierLabel) returnCourierLabel.textContent = activeOrder.shipping_method_name ? `Retur prin ${activeOrder.shipping_method_name}` : "Cost retur curier";
     returnCost.textContent = money(cost, activeOrder.currency);
     updateReturnEstimate();
     returnModal.hidden = false;

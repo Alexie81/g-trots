@@ -84,7 +84,7 @@
           <label id="reason-detail" hidden>Detalii<textarea name="reason_detail" rows="3" maxlength="1000" placeholder="Descrie pe scurt situația"></textarea></label>
           <div class="return-grid"><label>Titular cont <b>*</b><input name="bank_account_holder" required maxlength="180" autocomplete="name"></label><label>IBAN valid <b>*</b><input name="bank_iban" required maxlength="34" autocomplete="off" placeholder="RO49AAAA1B31007593840000" spellcheck="false"></label></div>
           <label class="return-check"><input name="refund_consent" type="checkbox" required><span><b>Sunt de acord cu rambursarea în IBAN-ul indicat</b><small>Suma aprobată va fi plătită în maximum 14 zile calendaristice, conform politicii aplicabile.</small></span></label>
-          <aside class="return-summary"><div><small>Produse + livrare eligibilă</small><strong id="selected-total">0,00 RON</strong></div><span>−</span><div><small>Cost direct retur</small><strong id="return-shipping-cost">0,00 RON</strong></div><span>=</span><div><small>Estimare restituire</small><strong id="refund-estimate">0,00 RON</strong></div></aside>
+          <aside class="return-summary"><div><small>Produse + livrare eligibilă</small><strong id="selected-total">0,00 RON</strong></div><span>−</span><div><small id="return-shipping-label">Cost direct retur</small><strong id="return-shipping-cost">0,00 RON</strong></div><span>=</span><div><small>Estimare restituire</small><strong id="refund-estimate">0,00 RON</strong></div></aside>
           <p class="return-note">Echipa G-Trots acceptă sau refuză separat fiecare produs. Valoarea finală include numai cantitățile acceptate; livrarea inițială se restituie doar când condițiile aplicabile returului integral sunt îndeplinite.</p>
           <p class="return-error" id="configure-error" role="alert" tabindex="-1"></p>
           <div class="return-actions"><button type="button" id="return-back">← Înapoi</button><button class="return-primary" type="submit"><span>Trimite solicitarea</span><b>→</b></button></div>
@@ -98,6 +98,6 @@
   </main>
 
   <script src="/solicita-retur.js?v=20260905-3" defer></script>
-  <script src="/legal-footer.js?v=20260905-17" defer></script>
+  <script src="/legal-footer.js?v=20260906-company-v2" defer></script>
 </body>
 </html>

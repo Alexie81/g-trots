@@ -14,21 +14,27 @@ $config = include $configFile;
 if (!is_array($config) || !stripeIsConfigured($config)) throw new RuntimeException('Stripe nu este configurat.');
 if (stripeIsTestMode($config)) throw new RuntimeException('Domeniul de plata trebuie inregistrat folosind cheia Stripe live.');
 
-$domainName = 'g-trots.ro';
+$domainNames = ['g-trots.ro', 'www.g-trots.ro'];
 $existing = stripeRequest($config, 'GET', 'payment_method_domains', ['limit' => 100]);
+$existingByName = [];
 foreach (is_array($existing['data'] ?? null) ? $existing['data'] : [] as $domain) {
-    if (strcasecmp((string)($domain['domain_name'] ?? ''), $domainName) !== 0) continue;
-    if (!($domain['enabled'] ?? false)) {
-        $domain = stripeRequest($config, 'POST', 'payment_method_domains/' . rawurlencode((string)$domain['id']), [
-            'enabled' => 'true',
-        ]);
-    }
-    echo 'Domeniu Stripe live activ: ' . (string)($domain['domain_name'] ?? $domainName) . PHP_EOL;
-    exit(0);
+    $existingByName[strtolower((string)($domain['domain_name'] ?? ''))] = $domain;
 }
 
-$domain = stripeRequest($config, 'POST', 'payment_method_domains', [
-    'domain_name' => $domainName,
-], 'gtrots-payment-domain-production-v1');
+foreach ($domainNames as $domainName) {
+    $domain = $existingByName[strtolower($domainName)] ?? null;
+    if (is_array($domain)) {
+        if (!($domain['enabled'] ?? false)) {
+            $domain = stripeRequest($config, 'POST', 'payment_method_domains/' . rawurlencode((string)$domain['id']), [
+                'enabled' => 'true',
+            ]);
+        }
+        echo 'Domeniu Stripe live activ: ' . (string)($domain['domain_name'] ?? $domainName) . PHP_EOL;
+        continue;
+    }
 
-echo 'Domeniu Stripe live inregistrat: ' . (string)($domain['domain_name'] ?? $domainName) . PHP_EOL;
+    $domain = stripeRequest($config, 'POST', 'payment_method_domains', [
+        'domain_name' => $domainName,
+    ], 'gtrots-payment-domain-production-' . hash('sha256', $domainName));
+    echo 'Domeniu Stripe live inregistrat: ' . (string)($domain['domain_name'] ?? $domainName) . PHP_EOL;
+}

@@ -64,7 +64,13 @@ function stripeMinorAmount(float $amount, string $currency): int {
 }
 
 function stripeEffectiveProductPrice(array $product): float {
-    return $product['sale_price'] === null ? (float)$product['price'] : (float)$product['sale_price'];
+    $basePrice = function_exists('productPublicBasePrice')
+        ? productPublicBasePrice($product)
+        : max(0.0, (float)($product['price'] ?? 0), (float)($product['supplier_base_price'] ?? 0));
+    $salePrice = round((float)($product['sale_price'] ?? 0), 2);
+    $effectivePrice = $salePrice > 0 ? $salePrice : $basePrice;
+    $promotionPrice = round((float)($product['promotion_price'] ?? 0), 2);
+    return $promotionPrice > 0 ? $promotionPrice : $effectivePrice;
 }
 
 function stripeProductIsVisible(array $product): bool {

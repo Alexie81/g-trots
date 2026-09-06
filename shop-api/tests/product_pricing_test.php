@@ -22,6 +22,11 @@ pricingAssert($missingSupplier['price'] === 149.0 && $missingSupplier['differenc
 pricingAssert(productPublicBasePrice(['price' => 0, 'supplier_base_price' => 100]) === 100.0, 'Pretul public trebuie sa cada pe furnizor cand G-Trots este 0.');
 pricingAssert(productPublicBasePrice(['price' => 149, 'supplier_base_price' => 100]) === 149.0, 'Pretul G-Trots valid trebuie sa aiba prioritate.');
 
+require_once dirname(__DIR__) . '/stripe.php';
+pricingAssert(stripeEffectiveProductPrice(['price' => 0, 'supplier_base_price' => 100, 'sale_price' => 0]) === 100.0, 'Stripe trebuie sa foloseasca acelasi fallback public cand preturile G-Trots sunt 0.');
+pricingAssert(stripeEffectiveProductPrice(['price' => 149, 'supplier_base_price' => 100, 'sale_price' => 129]) === 129.0, 'Pretul promotional manual trebuie sa aiba prioritate in Stripe.');
+pricingAssert(stripeEffectiveProductPrice(['price' => 149, 'supplier_base_price' => 100, 'sale_price' => 129, 'promotion_price' => 119]) === 119.0, 'Promotia activa trebuie sa fie pretul efectiv sincronizat.');
+
 pricingAssert(productOrderAcquisitionUnitCost([
     'is_accounting_stock_tracked' => false,
     'supplier_base_price' => 100,

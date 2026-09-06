@@ -2727,7 +2727,9 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     if ($row['price'] <= 0 && $row['supplier_base_price'] !== null && $row['supplier_base_price'] > 0) {
         $row['price'] = $row['supplier_base_price'];
     }
-    $row['sale_price'] = $row['sale_price'] === null ? null : (float)$row['sale_price'];
+    $row['sale_price'] = $row['sale_price'] === null || (float)$row['sale_price'] <= 0
+        ? null
+        : (float)$row['sale_price'];
     $row['discount_type'] = in_array((string)($row['discount_type'] ?? ''), ['percent', 'fixed'], true)
         ? (string)$row['discount_type']
         : 'percent';
@@ -4534,6 +4536,10 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
         throw $error;
     }
 }
+
+// Permite utilitarelor CLI/operationale sa refoloseasca exact aceleasi functii
+// de catalog, fara sa simuleze o cerere HTTP si fara sa ocoleasca regulile API.
+if (defined('GTROTS_SHOP_LIBRARY_ONLY') && GTROTS_SHOP_LIBRARY_ONLY) return;
 
 try {
     $config = shopConfig();

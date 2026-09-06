@@ -72,6 +72,11 @@ def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Publica fisiere SHOP API prin FTPS.")
     parser.add_argument("--files", nargs="+", choices=FILES, help="Publica doar fisierele indicate.")
     parser.add_argument("--configure-spv", action="store_true", help="Configureaza OAuth ANAF exclusiv in config.local.php de pe server.")
+    parser.add_argument(
+        "--configure-stripe-from-local",
+        action="store_true",
+        help="Copiaza numai cheile Stripe din config.local.php local in configuratia protejata de pe server.",
+    )
     return parser.parse_args()
 
 
@@ -124,6 +129,45 @@ def configure_spv(ftp: FTP_TLS, timestamp: str) -> None:
     print("Configuratia OAuth ANAF a fost salvata numai in fisierul protejat de pe server.", flush=True)
 
 
+def configure_stripe_from_local(ftp: FTP_TLS, timestamp: str) -> None:
+    local_source = (API_ROOT / "config.local.php").read_text(encoding="utf-8-sig")
+    values: dict[str, str] = {}
+    for key in ("stripe_secret_key", "stripe_publishable_key", "stripe_webhook_secret"):
+        match = re.search(rf"['\"]{re.escape(key)}['\"]\s*=>\s*['\"]([^'\"\r\n]+)['\"]", local_source)
+        if not match:
+            raise RuntimeError(f"Lipseste {key} din config.local.php local.")
+        values[key] = match.group(1)
+    if not values["stripe_secret_key"].startswith("sk_live_"):
+        raise RuntimeError("Cheia secreta Stripe locala nu este LIVE.")
+    if not values["stripe_publishable_key"].startswith("pk_live_"):
+        raise RuntimeError("Cheia publica Stripe locala nu este LIVE.")
+    if not values["stripe_webhook_secret"].startswith("whsec_"):
+        raise RuntimeError("Secretul webhook Stripe live lipseste.")
+
+    buffer = BytesIO()
+    ftp.retrbinary("RETR config.local.php", buffer.write)
+    original = buffer.getvalue().decode("utf-8-sig")
+    updated = original
+    for key, value in values.items():
+        updated = set_php_config_value(updated, key, value)
+
+    temporary = f"config.local.php.codex-upload-{timestamp}.tmp"
+    backup = f"config.local.php.bak-codex-stripe-{timestamp}"
+    ftp.storbinary(f"STOR {temporary}", BytesIO(updated.encode("utf-8")), blocksize=262144)
+    try:
+        ftp.rename("config.local.php", backup)
+        ftp.rename(temporary, "config.local.php")
+    except Exception:
+        try:
+            ftp.delete(temporary)
+        except Exception:
+            pass
+        if "config.local.php" not in set(ftp.nlst()) and backup in set(ftp.nlst()):
+            ftp.rename(backup, "config.local.php")
+        raise
+    print("Cheile Stripe LIVE au fost salvate numai in configuratia protejata de pe server.", flush=True)
+
+
 def main() -> None:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     options = arguments()
@@ -168,6 +212,8 @@ def main() -> None:
                 raise
         if options.configure_spv:
             configure_spv(ftp, timestamp)
+        if options.configure_stripe_from_local:
+            configure_stripe_from_local(ftp, timestamp)
     except Exception:
         for name in reversed(activated):
             try:

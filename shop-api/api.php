@@ -5029,7 +5029,12 @@ try {
         $offset = ($catalogPage - 1) * $pageSize;
         $totalProducts = null;
         if ($action === 'publicProductsPage') {
-            $countSql = 'SELECT COUNT(*) FROM shop_products p LEFT JOIN shop_product_sources s ON s.id = p.source_id WHERE ' . implode(' AND ', $where);
+            $countSql = 'SELECT COUNT(*)
+                FROM shop_products p
+                LEFT JOIN shop_product_sources s ON s.id = p.source_id
+                LEFT JOIN shop_categories c ON c.id = p.category_id
+                LEFT JOIN shop_manufacturers m ON m.id = p.manufacturer_id
+                WHERE ' . implode(' AND ', $where);
             $countStmt = $db->prepare($countSql);
             $countStmt->execute($params);
             $totalProducts = (int)$countStmt->fetchColumn();

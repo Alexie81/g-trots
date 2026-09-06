@@ -461,7 +461,7 @@
   grid-column: 1 / -1;
   padding-top: 1.25rem;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 1.25rem;
   border-top: 1px solid rgba(255, 255, 255, 0.065);
@@ -469,11 +469,9 @@
   font-size: 0.59rem;
 }
 
-.gt-site-footer__company { overflow-wrap: anywhere; }
-
 .gt-site-footer .cab-it-credit {
   grid-column: auto !important;
-  justify-self: auto !important;
+  justify-self: start !important;
   min-height: 2.55rem;
   margin: 0;
   padding: 0.25rem 0.7rem 0.25rem 0.42rem;
@@ -781,7 +779,6 @@
   .gt-site-footer__payments > div { flex-wrap: wrap; justify-content: center; }
   .gt-site-footer__bottom { width: 100%; grid-template-columns: 1fr; justify-items: center; text-align: center; }
   .gt-site-footer__bottom .cab-it-credit { justify-self: center !important; }
-  .gt-site-footer__company { max-width: 42rem; }
   .gt-site-footer__copyright { grid-row: 1; }
 }
 

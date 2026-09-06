@@ -1,6 +1,9 @@
 (() => {
-  const CACHE_KEY = 'g-trots-public-shop-config-v2';
+  const CACHE_KEY = 'g-trots-public-shop-config-v3';
   const CACHE_TTL = 5 * 60 * 1000;
+  const API_URL = /^(localhost|127\.0\.0\.1)$/i.test(location.hostname)
+    ? 'https://g-trots.ro/shop-api/api-v2.php'
+    : '/shop-api/api-v2.php';
   const fallback = { legal_name: 'CAB IT EXPERT S.R.L.', trade_name: 'G-Trots România', cui: '49972605', registration_number: 'J40/8303/2024', address: 'Str. Humulești nr. 131-135, lot 4', city: 'București, Sector 5', county: 'București', postal_code: '052262', country: 'România', email: 'contact@g-trots.ro', phone: '0762093915', website: 'https://g-trots.ro', bank_name: '', iban: '', share_capital: '' };
 
   function cachedConfig() {
@@ -15,7 +18,7 @@
     const cached = cachedConfig();
     window.GTrotsPublicConfigPromise = cached
       ? Promise.resolve(cached)
-      : fetch('/shop-api/api-v2.php?action=publicShopConfig', { headers: { Accept: 'application/json' } })
+      : fetch(`${API_URL}?action=publicShopConfig`, { headers: { Accept: 'application/json' } })
         .then(response => response.ok ? response.json() : null)
         .then(data => {
           if (data) try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ saved_at: Date.now(), data })); } catch { /* storage can be disabled */ }

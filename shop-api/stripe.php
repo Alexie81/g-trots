@@ -423,8 +423,8 @@ function stripeCreateCheckoutSession(PDO $db, array $config, array $order, array
     $base = stripeCheckoutReturnBase($config, $requestBody);
     $orderNumber = (string)$order['order_number'];
     $paymentToken = bin2hex(random_bytes(24));
-    $successUrl = $base . '/plata-finalizata.html?session_id={CHECKOUT_SESSION_ID}&comanda=' . rawurlencode($orderNumber) . '&metoda=card';
-    $cancelUrl = $base . '/plata-esuata.html?comanda=' . rawurlencode($orderNumber) . '&metoda=card&status=cancelled&token=' . rawurlencode($paymentToken);
+    $successUrl = $base . '/plata-finalizata?session_id={CHECKOUT_SESSION_ID}&comanda=' . rawurlencode($orderNumber) . '&metoda=card';
+    $cancelUrl = $base . '/plata-esuata?comanda=' . rawurlencode($orderNumber) . '&metoda=card&status=cancelled&token=' . rawurlencode($paymentToken);
     $params = [
         'mode' => 'payment',
         'payment_method_types' => ['card'],

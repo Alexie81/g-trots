@@ -5225,6 +5225,13 @@ body.smart-search-closing .smart-search-overlay {
     box-shadow: 0 0.15rem 0.5rem rgba(18, 13, 9, 0.08);
   }
 
+  .product-grid.list-view .cart-button.is-added {
+    border-color: rgba(255, 127, 0, 0.42);
+    background: #312317;
+    color: #fff;
+    box-shadow: 0 0.2rem 0.75rem rgba(18, 13, 9, 0.22);
+  }
+
   .product-stage {
     aspect-ratio: 1.2;
   }

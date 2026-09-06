@@ -33,6 +33,21 @@
   background-color: #f8f5f1;
 }
 
+/* Preserve the selected cart state after the lightweight surface override. */
+.shop-page .cart-button.is-added,
+.shop-page .cart-button.is-added:hover,
+.shop-page .cart-button.is-added:focus-visible {
+  border-color: rgba(255, 127, 0, 0.48);
+  background-color: #312317;
+  color: #fff;
+  box-shadow: 0 0.28rem 0.9rem rgba(49, 35, 23, 0.26);
+}
+
+.shop-page .cart-button.is-added > b {
+  background-color: #527b68;
+  color: #fff;
+}
+
 @media (max-width: 900px) {
   .site-header::before {
     -webkit-backdrop-filter: none !important;

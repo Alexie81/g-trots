@@ -14,6 +14,10 @@ $expect = static function (bool $condition, string $message) use (&$failures): v
 };
 
 $expect(str_contains($api, "\$action === 'publicCheckoutProducts' && \$method === 'POST'"), 'API-ul nu expune catalogul restrâns pentru checkout.');
+$expect(
+    str_contains($api, "LEFT JOIN shop_categories c ON c.id = p.category_id\n                LEFT JOIN shop_manufacturers m ON m.id = p.manufacturer_id\n                WHERE ' . implode(' AND ', \$where)"),
+    'Numărarea catalogului paginat nu include relațiile folosite de filtrele publice.'
+);
 $expect(str_contains($api, "p.slug IN ({\$checkoutPlaceholders}) OR p.id IN ({\$checkoutPlaceholders})"), 'Produsele checkout nu sunt filtrate după identificatorii din coș.');
 $expect(str_contains($checkout, 'api("publicCheckoutProducts"'), 'Checkout-ul nu cere endpoint-ul restrâns.');
 $expect(!str_contains($checkout, 'api("publicProducts")'), 'Checkout-ul încă descarcă întregul catalog.');

@@ -2,13 +2,17 @@
   if (window.__gtLegalFooter) return;
   window.__gtLegalFooter = true;
 
-  const CACHE_KEY = 'g-trots-public-shop-config-v2';
+  const CACHE_KEY = 'g-trots-public-shop-config-v3';
   const CACHE_TTL = 5 * 60 * 1000;
+  const API_URL = /^(localhost|127\.0\.0\.1)$/i.test(location.hostname)
+    ? 'https://g-trots.ro/shop-api/api-v2.php'
+    : '/shop-api/api-v2.php';
   const companyFallback = {
     legal_name: 'CAB IT EXPERT S.R.L.',
     trade_name: 'G-Trots',
     email: 'contact@g-trots.ro',
     phone: '0762093915',
+    website: 'https://g-trots.ro',
     cui: '49972605',
     registration_number: 'J40/8303/2024',
     address: 'Str. Humulești nr. 131-135, lot 4',
@@ -32,7 +36,7 @@
   if (!document.querySelector('link[href*="fonts.googleapis.com/css2?family=Manrope"]')) {
     loadAsset('link', { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap' });
   }
-  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260906-company-v1' });
+  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260906-company-v2' });
   if (!document.querySelector('script[src*="cookie-consent.js"]')) {
     loadAsset('script', { src: '/cookie-consent.js?v=20260906-compact-v4', defer: true });
   }
@@ -168,7 +172,7 @@
     const cached = cachedConfig();
     window.GTrotsPublicConfigPromise = cached
       ? Promise.resolve(cached)
-      : fetch('/shop-api/api-v2.php?action=publicShopConfig', { headers: { Accept: 'application/json' } })
+      : fetch(`${API_URL}?action=publicShopConfig`, { headers: { Accept: 'application/json' } })
         .then(response => response.ok ? response.json() : null)
         .then(data => {
           if (data) {
@@ -275,7 +279,6 @@
         <a class="gt-sal-link" href="https://reclamatiisal.anpc.ro" target="_blank" rel="noopener noreferrer"><img src="/assets/anpc-sal.png" width="201" height="50" alt="ANPC - Soluționarea Alternativă a Litigiilor"></a>
       </section>
       <div class="gt-site-footer__bottom">
-        <span class="gt-site-footer__company">${esc(company.legal_name || 'G-Trots România')}${company.cui ? ` · CUI ${esc(company.cui)}` : ''}${company.registration_number ? ` · ${esc(company.registration_number)}` : ''}${address ? ` · ${esc(address)}` : ''}</span>
         <a class="cab-it-credit" href="https://cab-it.ro/" target="_blank" rel="noopener noreferrer"><span>Designed by</span><img src="https://cab-it.ro/assets/img/brand/cab-it-header-symbol-clean.webp" width="44" height="44" alt="Sigla CAB-IT Expert"><strong>cab-it.ro</strong></a>
         <span class="gt-site-footer__copyright">© ${new Date().getFullYear()} ${esc(tradeName)}</span>
       </div>`;

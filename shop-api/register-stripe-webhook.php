@@ -26,14 +26,14 @@ foreach (is_array($existing['data'] ?? null) ? $existing['data'] : [] as $endpoi
 
 $endpoint = stripeRequest($config, 'POST', 'webhook_endpoints', [
     'url' => $webhookUrl,
-    'description' => 'G-Trots SHOP checkout test',
+    'description' => 'G-Trots SHOP checkout production',
     'enabled_events' => [
         'checkout.session.completed',
         'checkout.session.async_payment_succeeded',
         'checkout.session.async_payment_failed',
         'checkout.session.expired',
     ],
-], 'gtrots-shop-webhook-test-v1');
+], 'gtrots-shop-webhook-production-v1');
 
 $secret = trim((string)($endpoint['secret'] ?? ''));
 if ($secret === '') throw new RuntimeException('Stripe nu a returnat secretul webhook.');

@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const websiteRoot = path.resolve(__dirname, '..', 'website');
-const footerVersion = '20260905-17';
+const footerVersion = '20260906-company-v3';
 const legalCssVersion = '20260905-3';
 const concurrency = 4;
 

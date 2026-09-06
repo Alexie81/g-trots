@@ -37,6 +37,7 @@ complianceCheck(str_contains($publicReturnHtml, 'Solicită chiar acum') && str_c
 
 complianceCheck(str_contains($storefront, 'hasMerchantReturnPolicy') && str_contains($storefront, 'shippingDetails'), 'Produsul trebuie să publice politica de retur și livrarea în datele structurate.');
 complianceCheck(str_contains($footer, "'@type': 'OnlineStore'") && str_contains($footer, 'hasMerchantReturnPolicy'), 'Magazinul trebuie să publice date structurate de organizație și retur.');
+complianceCheck(str_contains($footer, "website: 'https://g-trots.ro'"), 'Paginile juridice trebuie să afișeze website-ul firmei inclusiv când API-ul nu este disponibil local.');
 complianceCheck(str_contains($cookies, 'g-trots:open-consent'), 'Preferințele cookie trebuie să poată fi redeschise din footer.');
 complianceCheck(str_contains($cookies, 'choice || normalize({ preferences: false, analytics: false, marketing: false })'), 'Categoriile opționale trebuie să pornească oprite până la consimțământul explicit.');
 complianceCheck(str_contains($cookies, 'class="gt-cookie-details"${customize ? \'\' : \' hidden\'}'), 'Comutatoarele detaliate trebuie ascunse până când utilizatorul apasă Personalizează.');

@@ -81,7 +81,9 @@ function shopProductSeoRender(array $product, array $config): string {
     if ($descriptionSource === '') $descriptionSource = $name . ' disponibil la G-Trots, cu informații clare despre preț, compatibilitate, livrare și service pentru trotinete electrice.';
     $description = $customDescription !== '' ? $customDescription : shopProductSeoExcerpt($descriptionSource, 160);
     $currency = trim((string)($product['currency'] ?? 'RON')) ?: 'RON';
-    $price = (float)($product['promotion_price'] ?? $product['sale_price'] ?? $product['price'] ?? 0);
+    $price = function_exists('stripeEffectiveProductPrice')
+        ? stripeEffectiveProductPrice($product)
+        : max(0.0, (float)($product['promotion_price'] ?? 0), (float)($product['sale_price'] ?? 0), (float)($product['price'] ?? 0), (float)($product['supplier_base_price'] ?? 0));
     $priceText = number_format(max(0, $price), 2, '.', '');
     $purchasable = array_key_exists('is_purchasable', $product)
         ? (bool)$product['is_purchasable']
@@ -336,6 +338,10 @@ function shopProductSeoSync(PDO $db, array $config, string $productId, ?string $
         }
         $slug = (string)$state['slug'];
         $product = findProduct($db, $productId, $config, false, false);
+        if (function_exists('applyCatalogPromotionPrices')) {
+            $priced = applyCatalogPromotionPrices($db, [$product], null, '');
+            if (isset($priced[0]) && is_array($priced[0])) $product = $priced[0];
+        }
         $product['is_purchasable'] = !empty($product['is_purchasable']) && (bool)$state['is_active'] && (bool)$state['source_is_active'];
         $directory = shopProductSeoEnsureDirectory($slug);
         $dynamicPage = $directory . DIRECTORY_SEPARATOR . 'index.php';

@@ -972,7 +972,21 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
     foreach ($db->query('SELECT id, name FROM shop_categories')->fetchAll() as $category) {
         $categoryNames[(string)$category['id']] = (string)$category['name'];
     }
-    $stats = ['created' => 0, 'updated' => 0, 'duplicates_skipped' => 0, 'images_saved' => 0, 'images_missing' => 0, 'without_compatibility' => 0, 'seo_pages_generated' => 0, 'seo_errors' => [], 'errors' => []];
+    $stats = [
+        'created' => 0,
+        'updated' => 0,
+        'duplicates_skipped' => 0,
+        'images_saved' => 0,
+        'images_missing' => 0,
+        'without_compatibility' => 0,
+        'stripe_synced' => 0,
+        'stripe_errors' => [],
+        'merchant_synced' => 0,
+        'merchant_errors' => [],
+        'seo_pages_generated' => 0,
+        'seo_errors' => [],
+        'errors' => [],
+    ];
 
     foreach ($batch as $batchIndex => $row) {
         $externalId = trim((string)($row['id'] ?? ''));
@@ -1018,6 +1032,27 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
             $productId = $existing ? (string)$existing['id'] : gomagStableUuid('product', $externalId);
             $contentStatus = $existing ? (string)($existing['content_status'] ?? 'manual') : 'baseline';
             $refreshEditorialContent = !$existing || $contentStatus === 'baseline';
+            $currentPrice = $existing ? round((float)($existing['price'] ?? 0), 2) : 0.0;
+            $storedDifference = $existing && $existing['supplier_price_difference'] !== null
+                ? round((float)$existing['supplier_price_difference'], 2)
+                : null;
+            $previousSupplierPrice = $existing ? round((float)($existing['supplier_base_price'] ?? 0), 2) : 0.0;
+            if ($existing && $storedDifference === null) {
+                if ($previousSupplierPrice > 0 && $currentPrice > 0) {
+                    $storedDifference = round($currentPrice - $previousSupplierPrice, 2);
+                } elseif ($contentStatus === 'baseline') {
+                    $storedDifference = 0.0;
+                }
+            }
+            $pricing = boomagResolvePublicPricing($price, $currentPrice, $storedDifference);
+            $publicPrice = $pricing['price'];
+            $priceDifference = $pricing['difference'];
+            $salePrice = $existing
+                ? boomagSalePriceForBase($publicPrice, (string)($existing['discount_type'] ?? 'percent'), $existing['discount_value'] === null ? null : (float)$existing['discount_value'])
+                : null;
+            $costPrice = $existing
+                ? boomagResolveAcquisitionPrice($price, (float)($existing['cost_price'] ?? 0), (bool)($existing['is_accounting_stock_tracked'] ?? true))
+                : 0.0;
             $slug = uniqueSlug($db, 'shop_products', $content['name'], $existing ? $productId : null);
             $specificationsJson = json_encode($content['specifications'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             $questionsJson = json_encode($content['questions'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -1028,15 +1063,15 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
                     'INSERT INTO shop_products
                      (id, category_id, manufacturer_id, source_id, supplier_external_id, sku, supplier_product_code, ean, source_domain, source_url,
                       name, slug, short_description, description_title, description_html, specifications_json, questions_json, meta_title, meta_description,
-                      cost_price, price, sale_price, discount_type, discount_value, currency, stock_mode, stock_quantity,
+                      cost_price, price, supplier_base_price, supplier_price_difference, supplier_price_updated_at, sale_price, discount_type, discount_value, currency, stock_mode, stock_quantity,
                       supplier_stock_quantity, supplier_stock_status, supplier_stock_updated_at, accounting_stock_quantity,
                       low_stock_threshold, is_active, is_featured, content_status)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, "boomag.ro", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, "percent", NULL, "RON", "tracked", ?, ?, ?, NOW(), 0, 3, 1, 0, "baseline")'
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, "boomag.ro", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, NOW(), NULL, "percent", NULL, "RON", "tracked", ?, ?, ?, NOW(), 0, 3, 1, 0, "baseline")'
                 );
                 $insert->execute([
                     $productId, $categoryId, $manufacturerId, (string)$source['id'], $externalId, $supplierSku, $supplierSku, $ean !== '' ? $ean : null, $sourceUrl !== '' ? $sourceUrl : null,
                     $content['name'], $slug, $content['short_description'], $content['description_title'], $content['description_html'],
-                    $specificationsJson, $questionsJson, $content['meta_title'], $content['meta_description'], $price, $stock, $stock, $available ? 1 : 0,
+                    $specificationsJson, $questionsJson, $content['meta_title'], $content['meta_description'], $publicPrice, $price, $priceDifference, $stock, $stock, $available ? 1 : 0,
                 ]);
                 $stats['created']++;
             } else {
@@ -1045,7 +1080,8 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
                      source_id = IF(content_status = "baseline", ?, source_id), supplier_external_id = ?, sku = ?,
                      supplier_product_code = ?, ean = IF(content_status = "baseline", ?, ean),
                      source_domain = IF(content_status = "baseline", "boomag.ro", source_domain), source_url = IF(content_status = "baseline", ?, source_url),
-                     price = IF(content_status = "baseline", ?, price), currency = IF(content_status = "baseline", "RON", currency),
+                     supplier_base_price = ?, supplier_price_difference = ?, supplier_price_updated_at = NOW(),
+                     cost_price = ?, price = ?, sale_price = ?, currency = IF(content_status = "baseline", "RON", currency),
                      stock_mode = IF(LOWER(source_domain) = "boomag.ro", "tracked", stock_mode),
                      stock_quantity = IF(LOWER(source_domain) = "boomag.ro", ?, stock_quantity),
                      supplier_stock_quantity = IF(LOWER(source_domain) = "boomag.ro", ?, supplier_stock_quantity),
@@ -1060,7 +1096,7 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
                 );
                 $update->execute([
                     $categoryId, $manufacturerId, (string)$source['id'], $externalId, $supplierSku, $supplierSku, $ean !== '' ? $ean : null, $sourceUrl !== '' ? $sourceUrl : null,
-                    $price, $stock, $stock, $available ? 1 : 0,
+                    $price, $priceDifference, $costPrice, $publicPrice, $salePrice, $stock, $stock, $available ? 1 : 0,
                     $content['name'], $slug, $content['short_description'], $content['description_title'], $content['description_html'],
                     $specificationsJson, $questionsJson, $content['meta_title'], $content['meta_description'], $productId,
                 ]);
@@ -1079,6 +1115,22 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
                 : ['saved' => 0, 'requested' => 0];
             $stats['images_saved'] += (int)$imageResult['saved'];
             if ((int)$imageResult['saved'] === 0) $stats['images_missing']++;
+            if (function_exists('stripeSyncProductSafe')) {
+                $stripeResult = stripeSyncProductSafe($db, $config, $productId);
+                if (($stripeResult['status'] ?? '') === 'error') {
+                    $stats['stripe_errors'][] = ['id' => $externalId, 'sku' => $supplierSku, 'message' => (string)($stripeResult['error'] ?? 'Sincronizarea Stripe a eșuat.')];
+                } else {
+                    $stats['stripe_synced']++;
+                }
+            }
+            if (function_exists('merchantSyncProductSafe')) {
+                $merchantResult = merchantSyncProductSafe($db, $config, $productId);
+                if (($merchantResult['status'] ?? '') === 'error') {
+                    $stats['merchant_errors'][] = ['id' => $externalId, 'sku' => $supplierSku, 'message' => (string)($merchantResult['error'] ?? 'Sincronizarea Merchant a eșuat.')];
+                } else {
+                    $stats['merchant_synced']++;
+                }
+            }
             $seoResult = shopProductSeoSync($db, $config, $productId, $existing ? (string)($existing['slug'] ?? '') : null, false);
             if (!empty($seoResult['generated'])) {
                 $stats['seo_pages_generated']++;
@@ -1319,6 +1371,25 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
 
     shopNirEnsureBoomagKidotoysReferences($db);
 
+    // O schimbare Boomag nu se oprește în baza locală: prețul și stocul sunt
+    // propagate imediat atât în Stripe, cât și în Merchant. Funcțiile
+    // Safe păstrează sincronizarea furnizorului reușită chiar dacă un canal
+    // extern are temporar o eroare și memorează eroarea pe produs pentru retry.
+    $stripeSyncResults = [];
+    if (function_exists('stripeSyncProductSafe')) {
+        $stripeChangedIds = array_values(array_unique(array_merge(array_keys($pricesChanged), array_keys($stocksChanged))));
+        foreach ($stripeChangedIds as $productId) {
+            $stripeSyncResults[(string)$productId] = stripeSyncProductSafe($db, $config, (string)$productId);
+        }
+    }
+    $merchantSyncResults = [];
+    if (function_exists('merchantSyncProductSafe')) {
+        $merchantChangedIds = array_values(array_unique(array_merge(array_keys($pricesChanged), array_keys($stocksChanged))));
+        foreach ($merchantChangedIds as $productId) {
+            $merchantSyncResults[(string)$productId] = merchantSyncProductSafe($db, $config, (string)$productId);
+        }
+    }
+
     return [
         'success' => true,
         'source' => 'boomag.ro',
@@ -1327,6 +1398,10 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
         'prices_synced' => count($pricesSynced),
         'prices_changed' => count($pricesChanged),
         'stocks_changed' => count($stocksChanged),
+        'stripe_synced' => count(array_filter($stripeSyncResults, static fn(array $result): bool => ($result['status'] ?? '') !== 'error')),
+        'stripe_errors' => count(array_filter($stripeSyncResults, static fn(array $result): bool => ($result['status'] ?? '') === 'error')),
+        'merchant_synced' => count(array_filter($merchantSyncResults, static fn(array $result): bool => ($result['status'] ?? '') !== 'error')),
+        'merchant_errors' => count(array_filter($merchantSyncResults, static fn(array $result): bool => ($result['status'] ?? '') === 'error')),
         'synced_at' => date(DATE_ATOM),
     ];
 }

@@ -19,6 +19,8 @@ pricingAssert($stableMargin['price'] === 169.0 && $stableMargin['difference'] ==
 
 $missingSupplier = boomagResolvePublicPricing(null, 149.0, 49.0);
 pricingAssert($missingSupplier['price'] === 149.0 && $missingSupplier['difference'] === 49.0, 'Un furnizor fara pret valid nu trebuie sa suprascrie pretul G-Trots.');
+$zeroSupplier = boomagResolvePublicPricing(0.0, 149.0, 49.0);
+pricingAssert($zeroSupplier['price'] === 149.0 && $zeroSupplier['difference'] === 49.0, 'Pretul furnizorului 0 trebuie tratat la fel ca un pret nesetat.');
 pricingAssert(productPublicBasePrice(['price' => 0, 'supplier_base_price' => 100]) === 100.0, 'Pretul public trebuie sa cada pe furnizor cand G-Trots este 0.');
 pricingAssert(productPublicBasePrice(['price' => 149, 'supplier_base_price' => 100]) === 149.0, 'Pretul G-Trots valid trebuie sa aiba prioritate.');
 

@@ -74,7 +74,9 @@ function stripeEffectiveProductPrice(array $product): float {
 }
 
 function stripeProductIsVisible(array $product): bool {
-    return (bool)($product['is_active'] ?? false) && (bool)($product['source_is_active'] ?? true);
+    return (bool)($product['is_active'] ?? false)
+        && (bool)($product['source_is_active'] ?? true)
+        && stripeEffectiveProductPrice($product) > 0;
 }
 
 function stripeProductParams(array $product, array $config, string $stripeProductId = ''): array {
@@ -95,6 +97,9 @@ function stripeProductParams(array $product, array $config, string $stripeProduc
             'supplier_product_code' => mb_substr((string)($product['supplier_product_code'] ?? ''), 0, 120),
             'ean' => mb_substr((string)($product['ean'] ?? ''), 0, 120),
             'source' => mb_substr((string)($product['source_domain'] ?? 'g-trots.ro'), 0, 80),
+            'stock_mode' => mb_substr((string)($product['stock_mode'] ?? 'tracked'), 0, 20),
+            'stock_quantity' => (string)max(0, (int)($product['stock_quantity'] ?? 0)),
+            'availability' => (string)($product['stock_mode'] ?? 'tracked') === 'unlimited' || (int)($product['stock_quantity'] ?? 0) > 0 ? 'in_stock' : 'out_of_stock',
         ],
     ];
     $images = [];
@@ -126,6 +131,12 @@ function stripeSyncProduct(PDO $db, array $config, string $productId): array {
     }
 
     $product = findProduct($db, $productId, $config, false);
+    // Păstrăm catalogul Stripe pe aceeași regulă de preț ca site-ul și
+    // Merchant, inclusiv promoția automată publică aplicată produsului.
+    if (function_exists('applyCatalogPromotionPrices')) {
+        $priced = applyCatalogPromotionPrices($db, [$product], null, '');
+        if (isset($priced[0]) && is_array($priced[0])) $product = $priced[0];
+    }
     $stripeProductId = trim((string)($product['stripe_product_id'] ?? ''));
     $stripePriceId = trim((string)($product['stripe_price_id'] ?? ''));
     $visible = stripeProductIsVisible($product);
@@ -615,6 +626,8 @@ function stripePublicOrderReceipt(PDO $db, array $config, array $order): array {
         'shippingCost' => (float)$order['shipping_cost'],
         'total' => (float)$order['total'],
         'vatPayer' => (bool)($order['vat_payer'] ?? false),
+        'vatTotal' => (float)($order['vat_total'] ?? 0),
+        'netTotal' => (float)($order['net_total'] ?? $order['total']),
         'items' => $receiptItems,
         'createdAt' => str_replace(' ', 'T', (string)$order['created_at']),
     ];

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ftplib import FTP_TLS
+from getpass import getpass
 from io import BytesIO
 import json
 import os
@@ -19,7 +20,8 @@ def connect() -> FTP_TLS:
     context.verify_mode = ssl.CERT_NONE
     ftp = FTP_TLS(context=context, timeout=60)
     ftp.connect(os.environ.get("GT_FTP_HOST", "ftp.cab-it.ro"), int(os.environ.get("GT_FTP_PORT", "21")))
-    ftp.login(os.environ["GT_FTP_USER"], os.environ["GT_FTP_PASS"])
+    password = os.environ.get("GT_FTP_PASS", "") or getpass("Parola FTPS: ")
+    ftp.login(os.environ["GT_FTP_USER"], password)
     ftp.prot_p()
     ftp.set_pasv(True)
     ftp.cwd(REMOTE_ROOT)

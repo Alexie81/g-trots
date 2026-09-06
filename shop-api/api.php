@@ -21,6 +21,7 @@ require_once __DIR__ . '/invoice-service.php';
 require_once __DIR__ . '/invoice-automation.php';
 require_once __DIR__ . '/spv-service.php';
 require_once __DIR__ . '/stripe.php';
+require_once __DIR__ . '/merchant.php';
 require_once __DIR__ . '/order-cancellation.php';
 require_once __DIR__ . '/order-return.php';
 require_once __DIR__ . '/order-return-confirmation.php';
@@ -54,6 +55,10 @@ function shopConfig(): array {
         'stripe_secret_key' => '',
         'stripe_publishable_key' => '',
         'stripe_webhook_secret' => '',
+        'merchant_account_id' => '',
+        'merchant_data_source_id' => '',
+        'merchant_developer_email' => 'servicegtrots@gmail.com',
+        'merchant_service_account_json_base64' => '',
         'order_email_from' => 'contact@g-trots.ro',
         'order_email_from_name' => 'G-Trots România',
         'order_email_reply_to' => 'contact@g-trots.ro',
@@ -575,6 +580,15 @@ function ensureShopSchema(PDO $db): void {
         'stripe_sync_error' => 'VARCHAR(500) NULL AFTER stripe_synced_at',
     ];
     foreach ($stripeProductColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_products LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_products ADD COLUMN {$column} {$definition}");
+        }
+    }
+    $merchantProductColumns = [
+        'merchant_synced_at' => 'DATETIME NULL AFTER stripe_sync_error',
+        'merchant_sync_error' => 'VARCHAR(500) NULL AFTER merchant_synced_at',
+    ];
+    foreach ($merchantProductColumns as $column => $definition) {
         if (!$db->query("SHOW COLUMNS FROM shop_products LIKE " . $db->quote($column))->fetch()) {
             $db->exec("ALTER TABLE shop_products ADD COLUMN {$column} {$definition}");
         }
@@ -2775,6 +2789,8 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['stripe_price_id'] = empty($row['stripe_price_id']) ? null : (string)$row['stripe_price_id'];
     $row['stripe_sync_error'] = empty($row['stripe_sync_error']) ? null : (string)$row['stripe_sync_error'];
     $row['stripe_sync_status'] = $row['stripe_sync_error'] !== null ? 'error' : ($row['stripe_product_id'] !== null ? 'synced' : 'pending');
+    $row['merchant_sync_error'] = empty($row['merchant_sync_error']) ? null : (string)$row['merchant_sync_error'];
+    $row['merchant_sync_status'] = $row['merchant_sync_error'] !== null ? 'error' : (!empty($row['merchant_synced_at']) ? 'synced' : 'pending');
     $row['seo_ready'] = (string)($row['content_status'] ?? '') === 'seo';
     $row['gtin'] = preg_match('/^[0-9]{8,14}$/', (string)($row['ean'] ?? '')) ? (string)$row['ean'] : null;
     $row['stock_available'] = $row['is_purchasable'] && ($row['stock_mode'] === 'unlimited' || $row['stock_quantity'] > 0);
@@ -3887,6 +3903,30 @@ function syncPromotionProducts(PDO $db, string $couponId, array $productIds): vo
     foreach ($productIds as $productId) $insert->execute([$couponId, $productId]);
 }
 
+function syncCommerceCatalogProducts(PDO $db, array $config, array $productIds): array {
+    $productIds = array_values(array_unique(array_filter(array_map(static fn($id): string => trim((string)$id), $productIds))));
+    $result = [
+        'products' => count($productIds),
+        'stripe' => [],
+        'merchant' => [],
+        'seo' => [],
+        'sitemap' => null,
+    ];
+    foreach ($productIds as $productId) {
+        $result['stripe'][$productId] = stripeSyncProductSafe($db, $config, $productId);
+        $result['merchant'][$productId] = merchantSyncProductSafe($db, $config, $productId);
+        $result['seo'][$productId] = shopProductSeoSync($db, $config, $productId, null, false);
+    }
+    if ($productIds) {
+        try {
+            $result['sitemap'] = shopProductSeoRebuildSitemap($db, $config);
+        } catch (Throwable $error) {
+            $result['sitemap'] = ['success' => false, 'error' => mb_substr($error->getMessage(), 0, 500)];
+        }
+    }
+    return $result;
+}
+
 function promotionCustomerIds(PDO $db, string $couponId): array {
     $stmt = $db->prepare('SELECT customer_id FROM shop_customer_coupons WHERE coupon_id = ? ORDER BY customer_id ASC');
     $stmt->execute([$couponId]);
@@ -4059,7 +4099,9 @@ function applyCatalogPromotionPrices(PDO $db, array $products, ?array $customer,
     }
 
     foreach ($products as &$product) {
-        $basePrice = $product['sale_price'] !== null ? (float)$product['sale_price'] : (float)$product['price'];
+        $basePrice = function_exists('stripeEffectiveProductPrice')
+            ? stripeEffectiveProductPrice([...$product, 'promotion_price' => null])
+            : max(0.0, (float)($product['sale_price'] ?? 0), (float)($product['price'] ?? 0), (float)($product['supplier_base_price'] ?? 0));
         $bestDiscount = 0.0;
         $bestPromotion = null;
         foreach ($promotions as $promotion) {
@@ -4779,6 +4821,7 @@ try {
         $stmt = $db->prepare('SELECT * FROM shop_customers WHERE google_sub = ? OR email = ? LIMIT 1');
         $stmt->execute([$googleSub, $email]);
         $customer = $stmt->fetch();
+        $isNewCustomer = !$customer;
         if ($customer) {
             if (!(bool)$customer['is_active']) jsonResponse(['error' => 'Acest cont a fost dezactivat. Contactează G-Trots pentru mai multe detalii.', 'code' => 'customer_disabled'], 403);
             $db->prepare('UPDATE shop_customers SET google_sub = ?, avatar_url = ?, full_name = CASE WHEN full_name = "" THEN ? ELSE full_name END, last_login_at = NOW() WHERE id = ?')->execute([$googleSub, $avatar, $fullName, $customer['id']]);
@@ -4792,7 +4835,7 @@ try {
             $stmt->execute([$customerId]);
             $customer = $stmt->fetch();
         }
-        jsonResponse(['token' => issueCustomerSession($db, (string)$customer['id']), 'customer' => customerPublicRow($customer)]);
+        jsonResponse(['token' => issueCustomerSession($db, (string)$customer['id']), 'customer' => customerPublicRow($customer), 'is_new_customer' => $isNewCustomer]);
     }
 
     if ($action === 'customerMe' && $method === 'GET') {
@@ -5087,8 +5130,13 @@ try {
         try {
             try {
                 $feedSync = gomagSyncProductFromFeed($db, $config, $idOrSlug);
-                if (!empty($feedSync['price_changed']) && !empty($feedSync['product_id'])) {
-                    stripeSyncProductSafe($db, $config, (string)$feedSync['product_id']);
+                if (!empty($feedSync['product_id'])) {
+                    if (!empty($feedSync['price_changed']) || !empty($feedSync['stock_changed'])) {
+                        stripeSyncProductSafe($db, $config, (string)$feedSync['product_id']);
+                    }
+                    if (!empty($feedSync['price_changed']) || !empty($feedSync['stock_changed'])) {
+                        merchantSyncProductSafe($db, $config, (string)$feedSync['product_id']);
+                    }
                 }
             } catch (Throwable $syncError) {
                 error_log('[G-Trots Boomag product sync] ' . $syncError->getMessage());
@@ -5282,7 +5330,9 @@ try {
             // Factura și e-mailul ei pornesc abia după finalizarea acelui pas.
             $order['invoice_automation'] = GtrotsInvoiceAutomation::processOrder($db, (string)$order['id'], $config);
         }
-        unset($order['vat_rate'], $order['vat_total'], $order['net_total']);
+        // Totalul TVA este necesar în evenimentul GA4 purchase; cota și netul
+        // intern rămân în continuare în afara răspunsului public.
+        unset($order['vat_rate'], $order['net_total']);
         jsonResponse($order, 201);
     }
 
@@ -5566,8 +5616,10 @@ try {
             throw $error;
         }
         $stripeSync = stripeSyncProductSafe($db, $config, (string)$current['id']);
+        $merchantSync = merchantSyncProductSafe($db, $config, (string)$current['id']);
         $product = findProduct($db, (string)$current['id'], $config, false);
         $product['stripe_sync'] = $stripeSync;
+        $product['merchant_sync'] = $merchantSync;
         jsonResponse($product);
     }
 
@@ -6057,11 +6109,20 @@ try {
         syncPromotionCustomers($db, $id, $payload['customer_ids']);
         $stmt = $db->prepare('SELECT c.*, p.name AS product_name, p.slug AS product_slug FROM shop_coupons c LEFT JOIN shop_products p ON p.id = c.product_id WHERE c.id = ?');
         $stmt->execute([$id]);
-        jsonResponse(promotionRow($db, $stmt->fetch()), 201);
+        $response = promotionRow($db, $stmt->fetch());
+        if ($payload['scope'] === 'product') $response['catalog_sync'] = syncCommerceCatalogProducts($db, $config, $payload['product_ids']);
+        jsonResponse($response, 201);
     }
 
     if ($action === 'updatePromotion' && $method === 'PATCH') {
         $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
+        $previousStmt = $db->prepare('SELECT scope, product_id FROM shop_coupons WHERE id = ? LIMIT 1');
+        $previousStmt->execute([$id]);
+        $previousPromotion = $previousStmt->fetch();
+        if (!$previousPromotion) jsonResponse(['error' => 'Reducerea nu există.'], 404);
+        $previousProductIds = (string)$previousPromotion['scope'] === 'product'
+            ? promotionProductIds($db, $id, $previousPromotion['product_id'] !== null ? (string)$previousPromotion['product_id'] : null)
+            : [];
         $payload = promotionPayload($db, $body);
         $duplicate = $db->prepare('SELECT id FROM shop_coupons WHERE code = ? AND id <> ? LIMIT 1');
         $duplicate->execute([$payload['code'], $id]);
@@ -6085,18 +6146,28 @@ try {
             $backfillUsage->execute([$id]);
         }
         $stmt = $db->prepare('SELECT c.*, p.name AS product_name, p.slug AS product_slug FROM shop_coupons c LEFT JOIN shop_products p ON p.id = c.product_id WHERE c.id = ?'); $stmt->execute([$id]);
-        jsonResponse(promotionRow($db, $stmt->fetch()));
+        $response = promotionRow($db, $stmt->fetch());
+        $currentProductIds = $payload['scope'] === 'product' ? $payload['product_ids'] : [];
+        $response['catalog_sync'] = syncCommerceCatalogProducts($db, $config, [...$previousProductIds, ...$currentProductIds]);
+        jsonResponse($response);
     }
 
     if ($action === 'deletePromotion' && $method === 'DELETE') {
         $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
+        $promotionStmt = $db->prepare('SELECT scope, product_id FROM shop_coupons WHERE id = ? LIMIT 1');
+        $promotionStmt->execute([$id]);
+        $promotion = $promotionStmt->fetch();
+        if (!$promotion) jsonResponse(['error' => 'Reducerea nu există.'], 404);
+        $affectedProductIds = (string)$promotion['scope'] === 'product'
+            ? promotionProductIds($db, $id, $promotion['product_id'] !== null ? (string)$promotion['product_id'] : null)
+            : [];
         $db->prepare('DELETE FROM shop_customer_coupons WHERE coupon_id = ?')->execute([$id]);
         $db->prepare('DELETE FROM shop_coupon_customer_usage WHERE coupon_id = ?')->execute([$id]);
         $db->prepare('DELETE FROM shop_coupon_device_usage WHERE coupon_id = ?')->execute([$id]);
         $db->prepare('DELETE FROM shop_coupon_products WHERE coupon_id = ?')->execute([$id]);
         $stmt = $db->prepare('DELETE FROM shop_coupons WHERE id = ?'); $stmt->execute([$id]);
         if ($stmt->rowCount() === 0) jsonResponse(['error' => 'Reducerea nu există.'], 404);
-        jsonResponse(['success' => true]);
+        jsonResponse(['success' => true, 'catalog_sync' => syncCommerceCatalogProducts($db, $config, $affectedProductIds)]);
     }
 
     if ($action === 'uploadRichDescriptionImage' && $method === 'POST') {
@@ -6858,8 +6929,10 @@ try {
             }
         }
         $stripeSync = stripeSyncProductSafe($db, $config, $id);
+        $merchantSync = merchantSyncProductSafe($db, $config, $id);
         $productResponse = findProduct($db, $id, $config);
         $productResponse['stripe_sync'] = $stripeSync;
+        $productResponse['merchant_sync'] = $merchantSync;
         $productResponse['seo_page'] = shopProductSeoSync($db, $config, $id);
         jsonResponse($productResponse, 201);
     }
@@ -6955,15 +7028,18 @@ try {
             }
         }
         $stripeSync = stripeSyncProductSafe($db, $config, $id);
+        $merchantSync = merchantSyncProductSafe($db, $config, $id);
         $productResponse = findProduct($db, $id, $config);
         $productResponse['stripe_sync'] = $stripeSync;
+        $productResponse['merchant_sync'] = $merchantSync;
         $productResponse['seo_page'] = shopProductSeoSync($db, $config, $id, $oldSlug);
         jsonResponse($productResponse);
     }
 
     if ($action === 'deleteProduct' && $method === 'DELETE') {
         $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
-        stripeArchiveProduct($db, $config, $id);
+        $stripeArchive = stripeArchiveProduct($db, $config, $id);
+        $merchantDelete = merchantDeleteProduct($config, $id);
         $descriptionStmt = $db->prepare('SELECT description_html, slug, name FROM shop_products WHERE id = ?');
         $descriptionStmt->execute([$id]);
         $deletedProduct = $descriptionStmt->fetch() ?: [];
@@ -7016,6 +7092,8 @@ try {
             'remaining_products' => (int)$db->query('SELECT COUNT(*) FROM shop_products')->fetchColumn(),
             'seo_gone_page' => $seoGonePage,
             'seo_sitemap' => $seoSitemap,
+            'stripe_sync' => $stripeArchive,
+            'merchant_sync' => $merchantDelete,
         ]);
     }
 
@@ -7118,7 +7196,12 @@ try {
             if ($db->inTransaction()) $db->rollBack();
             throw $error;
         }
-        jsonResponse(findProduct($db, $id, $config));
+        $stripeSync = stripeSyncProductSafe($db, $config, $id);
+        $merchantSync = merchantSyncProductSafe($db, $config, $id);
+        $productResponse = findProduct($db, $id, $config);
+        $productResponse['stripe_sync'] = $stripeSync;
+        $productResponse['merchant_sync'] = $merchantSync;
+        jsonResponse($productResponse);
     }
 
     if ($action === 'listOrdersPage' && $method === 'GET') {
@@ -7625,6 +7708,24 @@ try {
         $cursor = trim((string)($body['cursor'] ?? ''));
         $batchSize = max(1, min(5, (int)($body['batch_size'] ?? 1)));
         jsonResponse(stripeSyncCatalogBatch($db, $config, $cursor, $batchSize));
+    }
+
+    if ($action === 'syncMerchantCatalog' && $method === 'POST') {
+        @set_time_limit(90);
+        ignore_user_abort(true);
+        if (boolValue($body['register_gcp'] ?? false)) {
+            jsonResponse(['success' => true, 'registration' => merchantRegisterGcp($config)]);
+        }
+        if (is_array($body['product_ids'] ?? null)) {
+            $results = [];
+            foreach (array_slice(array_values(array_unique(array_map('strval', $body['product_ids']))), 0, 20) as $productId) {
+                $results[] = ['product_id' => $productId, ...merchantSyncProductSafe($db, $config, $productId)];
+            }
+            jsonResponse(['configured' => merchantIsConfigured($config), 'processed' => count($results), 'results' => $results]);
+        }
+        $cursor = trim((string)($body['cursor'] ?? ''));
+        $batchSize = max(1, min(20, (int)($body['batch_size'] ?? 5)));
+        jsonResponse(merchantSyncCatalogBatch($db, $config, $cursor, $batchSize));
     }
 
     if ($action === 'updatePaymentSettings' && in_array($method, ['PUT', 'PATCH'], true)) {

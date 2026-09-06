@@ -6,6 +6,8 @@ from getpass import getpass
 from io import BytesIO
 from pathlib import Path
 import argparse
+import base64
+import json
 import os
 import re
 import secrets
@@ -28,6 +30,7 @@ FILES = (
     "order-return.php",
     "order-return-confirmation.php",
     "stripe.php",
+    "merchant.php",
     "invoice-theme.php",
     "invoice-service.php",
     "invoice-automation.php",
@@ -76,6 +79,11 @@ def arguments() -> argparse.Namespace:
         "--configure-stripe-from-local",
         action="store_true",
         help="Copiaza numai cheile Stripe din config.local.php local in configuratia protejata de pe server.",
+    )
+    parser.add_argument(
+        "--configure-merchant-from-json",
+        metavar="PATH",
+        help="Salveaza credentialele Merchant numai in config.local.php protejat de pe server.",
     )
     return parser.parse_args()
 
@@ -168,6 +176,44 @@ def configure_stripe_from_local(ftp: FTP_TLS, timestamp: str) -> None:
     print("Cheile Stripe LIVE au fost salvate numai in configuratia protejata de pe server.", flush=True)
 
 
+def configure_merchant_from_json(ftp: FTP_TLS, timestamp: str, credential_path: str) -> None:
+    path = Path(credential_path).expanduser().resolve()
+    payload = path.read_bytes()
+    credentials = json.loads(payload.decode("utf-8-sig"))
+    expected_email = "g-trots-merchant-sync@g-trots-merchant-api.iam.gserviceaccount.com"
+    if credentials.get("type") != "service_account" or credentials.get("project_id") != "g-trots-merchant-api":
+        raise RuntimeError("Cheia nu apartine proiectului Merchant G-Trots.")
+    if credentials.get("client_email") != expected_email or not credentials.get("private_key"):
+        raise RuntimeError("Identitatea din cheia Merchant nu este cea configurata in Merchant Center.")
+
+    buffer = BytesIO()
+    ftp.retrbinary("RETR config.local.php", buffer.write)
+    original = buffer.getvalue().decode("utf-8-sig")
+    updated = set_php_config_value(original, "merchant_account_id", "5849183182")
+    updated = set_php_config_value(updated, "merchant_data_source_id", "10722148869")
+    updated = set_php_config_value(updated, "merchant_developer_email", "servicegtrots@gmail.com")
+    updated = set_php_config_value(
+        updated,
+        "merchant_service_account_json_base64",
+        base64.b64encode(payload).decode("ascii"),
+    )
+    temporary = f"config.local.php.codex-upload-{timestamp}.tmp"
+    backup = f"config.local.php.bak-codex-merchant-{timestamp}"
+    ftp.storbinary(f"STOR {temporary}", BytesIO(updated.encode("utf-8")), blocksize=262144)
+    try:
+        ftp.rename("config.local.php", backup)
+        ftp.rename(temporary, "config.local.php")
+    except Exception:
+        try:
+            ftp.delete(temporary)
+        except Exception:
+            pass
+        if "config.local.php" not in set(ftp.nlst()) and backup in set(ftp.nlst()):
+            ftp.rename(backup, "config.local.php")
+        raise
+    print("Credentialele Merchant au fost salvate numai in configuratia protejata de pe server.", flush=True)
+
+
 def main() -> None:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     options = arguments()
@@ -214,6 +260,8 @@ def main() -> None:
             configure_spv(ftp, timestamp)
         if options.configure_stripe_from_local:
             configure_stripe_from_local(ftp, timestamp)
+        if options.configure_merchant_from_json:
+            configure_merchant_from_json(ftp, timestamp, options.configure_merchant_from_json)
     except Exception:
         for name in reversed(activated):
             try:

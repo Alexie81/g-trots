@@ -98,7 +98,7 @@ try {{
     }}
     $row = $db->query("SELECT COUNT(*) AS total, SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) AS active_total, SUM(CASE WHEN merchant_synced_at IS NOT NULL AND merchant_sync_error IS NULL THEN 1 ELSE 0 END) AS synced, SUM(CASE WHEN merchant_sync_error IS NOT NULL THEN 1 ELSE 0 END) AS errors FROM shop_products")->fetch();
     $samples = $db->query("SELECT id, merchant_sync_error FROM shop_products WHERE merchant_sync_error IS NOT NULL ORDER BY id ASC LIMIT 5")->fetchAll();
-    echo json_encode(['ok' => true, 'stats' => $row, 'error_samples' => $samples], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    echo json_encode(['ok' => true, 'enabled' => merchantSyncIsEnabled($config), 'stats' => $row, 'error_samples' => $samples], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }} catch (Throwable $error) {{
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => $error->getMessage()], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -115,6 +115,9 @@ try {{
         if options.diagnose_only:
             print(json.dumps(request_json(base + "&mode=stats"), ensure_ascii=False, indent=2), flush=True)
             return
+        state = request_json(base + "&mode=stats")
+        if not state.get("enabled"):
+            raise RuntimeError("Sincronizarea Merchant este pe pauza. Activeaz-o numai dupa publicarea site-ului.")
         registration = request_json(base + "&mode=register")
         print(json.dumps({"phase": "registration", "registered": bool(registration.get("registered"))}), flush=True)
 

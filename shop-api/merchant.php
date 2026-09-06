@@ -13,6 +13,13 @@ function merchantIsConfigured(array $config): bool {
         && trim((string)($config['merchant_service_account_json_base64'] ?? '')) !== '';
 }
 
+function merchantSyncIsEnabled(array $config): bool {
+    $value = $config['merchant_sync_enabled'] ?? false;
+    if (is_bool($value)) return $value;
+    if (is_int($value) || is_float($value)) return (int)$value === 1;
+    return in_array(strtolower(trim((string)$value)), ['1', 'true', 'yes', 'on', 'enabled'], true);
+}
+
 function merchantBase64Url(string $value): string {
     return rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
 }
@@ -195,6 +202,7 @@ function merchantRecordProductSync(PDO $db, string $productId, ?string $error): 
 }
 
 function merchantDeleteProduct(array $config, string $productId): array {
+    if (!merchantSyncIsEnabled($config)) return ['status' => 'disabled'];
     if (!merchantIsConfigured($config)) return ['status' => 'not_configured'];
     $url = 'https://merchantapi.googleapis.com/products/v1/' . merchantProductInputName($config, $productId)
         . '?dataSource=' . rawurlencode(merchantDataSourceName($config));
@@ -210,6 +218,7 @@ function merchantDeleteProduct(array $config, string $productId): array {
 }
 
 function merchantSyncProduct(PDO $db, array $config, string $productId): array {
+    if (!merchantSyncIsEnabled($config)) return ['status' => 'disabled'];
     if (!merchantIsConfigured($config)) {
         merchantRecordProductSync($db, $productId, 'Google Merchant nu este configurat.');
         return ['status' => 'not_configured'];
@@ -259,6 +268,7 @@ function merchantSyncCatalogBatch(PDO $db, array $config, string $afterId = '', 
     foreach ($batch as $id) $results[] = ['product_id' => $id, ...merchantSyncProductSafe($db, $config, $id)];
     return [
         'configured' => merchantIsConfigured($config),
+        'enabled' => merchantSyncIsEnabled($config),
         'processed' => count($batch),
         'results' => $results,
         'next_cursor' => $batch ? end($batch) : $afterId,

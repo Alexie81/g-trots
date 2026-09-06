@@ -67,6 +67,8 @@ $assert(str_contains($gomag, 'supplier_price_difference = ?'), 'importul Boomag 
 $assert(str_contains($api, 'syncCommerceCatalogProducts'), 'promoțiile de produs nu resincronizează canalele de vânzare');
 $assert(str_contains($api, "'catalog_sync'"), 'răspunsul promoțiilor nu expune rezultatul sincronizării catalogului');
 $assert(str_contains($merchant, 'applyCatalogPromotionPrices'), 'Merchant nu aplică promoția publică');
+$assert(str_contains($merchant, 'function merchantSyncIsEnabled'), 'Merchant nu are un comutator explicit de activare');
+$assert(str_contains($merchant, "return ['status' => 'disabled']"), 'Hook-urile Merchant nu respectă pauza de publicare');
 $assert(str_contains($stripe, 'applyCatalogPromotionPrices'), 'Stripe nu aplică promoția publică');
 
 echo "merchant_product_contract_test: OK\n";

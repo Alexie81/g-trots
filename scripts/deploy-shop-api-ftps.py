@@ -85,6 +85,11 @@ def arguments() -> argparse.Namespace:
         metavar="PATH",
         help="Salveaza credentialele Merchant numai in config.local.php protejat de pe server.",
     )
+    parser.add_argument(
+        "--merchant-sync",
+        choices=("enabled", "disabled"),
+        help="Activeaza sau pune pe pauza hook-urile de sincronizare Merchant.",
+    )
     return parser.parse_args()
 
 
@@ -192,6 +197,7 @@ def configure_merchant_from_json(ftp: FTP_TLS, timestamp: str, credential_path: 
     updated = set_php_config_value(original, "merchant_account_id", "5849183182")
     updated = set_php_config_value(updated, "merchant_data_source_id", "10722148869")
     updated = set_php_config_value(updated, "merchant_developer_email", "servicegtrots@gmail.com")
+    updated = set_php_config_value(updated, "merchant_sync_enabled", "false")
     updated = set_php_config_value(
         updated,
         "merchant_service_account_json_base64",
@@ -212,6 +218,28 @@ def configure_merchant_from_json(ftp: FTP_TLS, timestamp: str, credential_path: 
             ftp.rename(backup, "config.local.php")
         raise
     print("Credentialele Merchant au fost salvate numai in configuratia protejata de pe server.", flush=True)
+
+
+def configure_merchant_sync_state(ftp: FTP_TLS, timestamp: str, state: str) -> None:
+    buffer = BytesIO()
+    ftp.retrbinary("RETR config.local.php", buffer.write)
+    original = buffer.getvalue().decode("utf-8-sig")
+    updated = set_php_config_value(original, "merchant_sync_enabled", "true" if state == "enabled" else "false")
+    temporary = f"config.local.php.codex-upload-{timestamp}.tmp"
+    backup = f"config.local.php.bak-codex-merchant-state-{timestamp}"
+    ftp.storbinary(f"STOR {temporary}", BytesIO(updated.encode("utf-8")), blocksize=262144)
+    try:
+        ftp.rename("config.local.php", backup)
+        ftp.rename(temporary, "config.local.php")
+    except Exception:
+        try:
+            ftp.delete(temporary)
+        except Exception:
+            pass
+        if "config.local.php" not in set(ftp.nlst()) and backup in set(ftp.nlst()):
+            ftp.rename(backup, "config.local.php")
+        raise
+    print(f"Sincronizarea Merchant este acum {state}.", flush=True)
 
 
 def main() -> None:
@@ -262,6 +290,8 @@ def main() -> None:
             configure_stripe_from_local(ftp, timestamp)
         if options.configure_merchant_from_json:
             configure_merchant_from_json(ftp, timestamp, options.configure_merchant_from_json)
+        if options.merchant_sync:
+            configure_merchant_sync_state(ftp, timestamp, options.merchant_sync)
     except Exception:
         for name in reversed(activated):
             try:

@@ -59,6 +59,9 @@ function shopConfig(): array {
         'merchant_data_source_id' => '',
         'merchant_developer_email' => 'servicegtrots@gmail.com',
         'merchant_service_account_json_base64' => '',
+        // Activarea se face controlat numai dupa publicarea site-ului; pana
+        // atunci hook-urile CRUD/Boomag nu au voie sa trimita oferte.
+        'merchant_sync_enabled' => false,
         'order_email_from' => 'contact@g-trots.ro',
         'order_email_from_name' => 'G-Trots România',
         'order_email_reply_to' => 'contact@g-trots.ro',
@@ -7721,7 +7724,7 @@ try {
             foreach (array_slice(array_values(array_unique(array_map('strval', $body['product_ids']))), 0, 20) as $productId) {
                 $results[] = ['product_id' => $productId, ...merchantSyncProductSafe($db, $config, $productId)];
             }
-            jsonResponse(['configured' => merchantIsConfigured($config), 'processed' => count($results), 'results' => $results]);
+            jsonResponse(['configured' => merchantIsConfigured($config), 'enabled' => merchantSyncIsEnabled($config), 'processed' => count($results), 'results' => $results]);
         }
         $cursor = trim((string)($body['cursor'] ?? ''));
         $batchSize = max(1, min(20, (int)($body['batch_size'] ?? 5)));

@@ -10,8 +10,23 @@ electron-app/
 desktop-update-server/
 website/
 website_downloads/
+website_public_g-trots.ro/
 server/
 supabase/
+shop-api/
+
+# Reports, backups and one-off project tooling are not needed by Android builds
+reports/
+backups/
+output/
+outputs/
+tmp/
+docs/
+scripts/
+.github/
+.agents/
+.codex-tmp/
+.codex-sdk57-web-check/
 
 # Local tooling and repository metadata
 .git/

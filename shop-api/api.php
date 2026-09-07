@@ -2905,6 +2905,31 @@ function deduplicateCatalogProductRows(array $rows): array {
     return $unique;
 }
 
+function catalogRepresentativeProductIds(PDO $db): array {
+    static $cache = [];
+    $cacheKey = spl_object_id($db);
+    if (isset($cache[$cacheKey])) return $cache[$cacheKey];
+    $sql = publicCatalogProductSelectSql()
+        . ' WHERE p.is_active = 1'
+        . ' AND (p.source_id IS NULL OR COALESCE(s.is_active, 1) = 1)'
+        . ' AND (p.category_id IS NULL OR COALESCE(c.is_active, 0) = 1)'
+        . ' AND (p.manufacturer_id IS NULL OR COALESCE(m.is_active, 0) = 1)'
+        . ' AND NOT EXISTS (SELECT 1 FROM shop_product_brands pbx INNER JOIN shop_brands bx ON bx.id = pbx.brand_id WHERE pbx.product_id = p.id AND bx.is_active = 0)'
+        . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.is_featured DESC, COALESCE(p.featured_rank, 2147483647) ASC, p.created_at DESC';
+    $rows = $db->query($sql)->fetchAll();
+    $ids = [];
+    // Endpointul public deduplică fiecare pagină de maximum 500 de produse.
+    // Folosim aceeași regulă pentru ca Merchant, sitemap și HTML să reprezinte
+    // exact catalogul pe care îl vede un vizitator anonim.
+    foreach (array_chunk($rows, 500) as $page) {
+        foreach (deduplicateCatalogProductRows($page) as $row) {
+            $id = trim((string)($row['id'] ?? ''));
+            if ($id !== '') $ids[$id] = true;
+        }
+    }
+    return $cache[$cacheKey] = $ids;
+}
+
 function publicCatalogProductRow(array $row): array {
     $images = is_array($row['images'] ?? null) ? array_slice($row['images'], 0, 1) : [];
     $brands = is_array($row['brands'] ?? null) ? array_map(static fn(array $brand): array => [

@@ -126,7 +126,7 @@ try {{
         groups = chunks(product_ids, 5)
         print(json.dumps({"phase": "plan", "total": len(product_ids), "batches": len(groups)}), flush=True)
 
-        totals = {"synced": 0, "deleted": 0, "already_absent": 0, "errors": []}
+        totals = {"synced": 0, "deleted": 0, "already_absent": 0, "errors": [], "duplicate_catalog_rows_removed": 0}
         with ThreadPoolExecutor(max_workers=6) as executor:
             pending = {
                 executor.submit(request_json, base + "&" + urlencode({"mode": "sync", "ids": ",".join(group)})): group
@@ -141,6 +141,8 @@ try {{
                         status = str(result.get("status", ""))
                         if status in ("synced", "deleted", "already_absent"):
                             totals[status] += 1
+                            if result.get("reason") == "public_catalog_duplicate":
+                                totals["duplicate_catalog_rows_removed"] += 1
                         elif status == "error":
                             totals["errors"].append(result)
                         else:

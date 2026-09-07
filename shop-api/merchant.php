@@ -224,6 +224,12 @@ function merchantSyncProduct(PDO $db, array $config, string $productId): array {
         return ['status' => 'not_configured'];
     }
     $product = findProduct($db, $productId, $config, false, true);
+    $catalogIds = function_exists('catalogRepresentativeProductIds') ? catalogRepresentativeProductIds($db) : [];
+    if ($catalogIds && empty($catalogIds[$productId])) {
+        $result = merchantDeleteProduct($config, $productId);
+        merchantRecordProductSync($db, $productId, null);
+        return [...$result, 'reason' => 'public_catalog_duplicate'];
+    }
     // Merchant trebuie să publice exact prețul pe care îl vede un vizitator
     // anonim în catalog. Asta include promoțiile automate pe produs, nu doar
     // prețul de bază ori reducerea manuală salvată în produs.

@@ -310,13 +310,17 @@ function shopProductSeoRebuildSitemap(PDO $db, array $config): array {
     if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) throw new RuntimeException('Directorul sitemap nu poate fi creat.');
     $websiteBaseUrl = rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/');
     $rows = $db->query(
-        'SELECT p.slug, p.updated_at,
+        'SELECT p.id, p.slug, p.updated_at,
                 (SELECT pi.image_path FROM shop_product_images pi WHERE pi.product_id = p.id ORDER BY pi.sort_order ASC, pi.created_at ASC LIMIT 1) AS image_path
          FROM shop_products p
          LEFT JOIN shop_product_sources s ON s.id = p.source_id
          WHERE p.is_active = 1 AND (p.source_id IS NULL OR COALESCE(s.is_active, 1) = 1)
          ORDER BY p.slug ASC'
     )->fetchAll();
+    if (function_exists('catalogRepresentativeProductIds')) {
+        $representatives = catalogRepresentativeProductIds($db);
+        $rows = array_values(array_filter($rows, static fn(array $row): bool => !empty($representatives[(string)($row['id'] ?? '')])));
+    }
     $xml = '<?xml version="1.0" encoding="UTF-8"?>' . PHP_EOL
         . '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">' . PHP_EOL;
     foreach ($rows as $row) {
@@ -399,6 +403,23 @@ function shopProductSeoSync(PDO $db, array $config, string $productId, ?string $
             return ['success' => true, 'generated' => false, 'reason' => 'deleted', 'indexnow' => $indexNow];
         }
         $slug = (string)$state['slug'];
+        if (function_exists('catalogRepresentativeProductIds')) {
+            $representatives = catalogRepresentativeProductIds($db);
+            if ($representatives && empty($representatives[$productId])) {
+                shopProductSeoRemovePage($slug);
+                $sitemap = $rebuildSitemap ? shopProductSeoRebuildSitemap($db, $config) : null;
+                $url = rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/') . '/magazin/produs/' . rawurlencode($slug) . '/';
+                $indexNow = $notifyIndexNow ? shopProductSeoNotifyIndexNow([$url], $config) : null;
+                return [
+                    'success' => true,
+                    'generated' => false,
+                    'reason' => 'public_catalog_duplicate',
+                    'url' => $url,
+                    'sitemap' => $sitemap,
+                    'indexnow' => $indexNow,
+                ];
+            }
+        }
         $product = findProduct($db, $productId, $config, false, false);
         if (function_exists('applyCatalogPromotionPrices')) {
             $priced = applyCatalogPromotionPrices($db, [$product], null, '');

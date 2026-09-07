@@ -153,16 +153,19 @@ function jsonResponse($payload, int $status = 200): void {
 }
 
 function scheduleSupplierStockSyncAfterResponse(PDO $db, array $config): void {
-    // Pe hosting-ul PHP-FPM trimitem mai intai catalogul catre client, apoi lasam
-    // sincronizarea periodica Boomag sa ruleze in fundal. Astfel prima afisare a
-    // magazinului nu mai asteapta dupa furnizor.
-    if (!function_exists('fastcgi_finish_request')) return;
-    register_shutdown_function(static function () use ($db, $config): void {
-        fastcgi_finish_request();
+    // Trimitem mai intai catalogul catre client, apoi lasam sincronizarea
+    // periodica Boomag sa ruleze in fundal. Hostingul live foloseste LiteSpeed,
+    // iar mediile locale/de rezerva pot folosi PHP-FPM.
+    $finishRequest = function_exists('litespeed_finish_request')
+        ? 'litespeed_finish_request'
+        : (function_exists('fastcgi_finish_request') ? 'fastcgi_finish_request' : null);
+    if ($finishRequest === null) return;
+    register_shutdown_function(static function () use ($db, $config, $finishRequest): void {
+        $finishRequest();
         ignore_user_abort(true);
         @set_time_limit(120);
         try {
-            gomagMaybeSyncSupplierStock($db, $config);
+            gomagMaybeSyncSupplierStock($db, $config, 1);
         } catch (Throwable $error) {
             error_log('Sincronizarea Boomag de dupa raspuns a esuat: ' . $error->getMessage());
         }
@@ -4618,13 +4621,12 @@ try {
     $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     $db = shopDb($config);
 
-    // Catalogul public actualizeaza periodic, din acelasi feed Boomag, atat
-    // preturile (pastrand diferenta comerciala), cat si stocurile. Listele CRM
-    // si selectoarele usoare raman rapide, iar pagina unui produs are in plus
-    // propria sincronizare imediata mai jos.
-    // Sincronizarea completa Boomag ramane o actiune explicita/cron. Nu o
-    // atasam citirii catalogului: unele configuratii FastCGI nu elibereaza
-    // raspunsul inaintea shutdown-ului si ar tine pagina blocata cateva secunde.
+    // Citirea catalogului porneste cel mult o data pe minut scanarea feedului
+    // dupa raspuns. GET_LOCK din gomagMaybeSyncSupplierStock elimina dublurile,
+    // iar pagina unui produs pastreaza sincronizarea imediata dedicata.
+    if ($method === 'GET' && in_array($action, ['publicProducts', 'publicProductsCompact', 'publicProductsPage'], true)) {
+        scheduleSupplierStockSyncAfterResponse($db, $config);
+    }
 
     if ($action === 'stripeWebhook' && $method === 'POST') {
         jsonResponse(stripeProcessWebhook($db, $config, rawRequestBody(), requestHeader('Stripe-Signature')));

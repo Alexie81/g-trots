@@ -473,3 +473,53 @@ function shopProductSeoSync(PDO $db, array $config, string $productId, ?string $
         return ['success' => false, 'generated' => false, 'error' => mb_substr($error->getMessage(), 0, 500)];
     }
 }
+
+function shopProductSeoSyncCatalogBatch(PDO $db, array $config, string $cursor = '', int $limit = 25): array {
+    $limit = max(1, min(100, $limit));
+    $statement = $db->prepare(
+        'SELECT p.id
+         FROM shop_products p
+         LEFT JOIN shop_product_sources s ON s.id = p.source_id
+         WHERE p.id > ?
+           AND p.is_active = 1
+           AND (p.source_id IS NULL OR COALESCE(s.is_active, 1) = 1)
+         ORDER BY p.id ASC
+         LIMIT ' . ($limit + 1)
+    );
+    $statement->execute([$cursor]);
+    $productIds = array_values(array_map('strval', $statement->fetchAll(PDO::FETCH_COLUMN)));
+    $hasMore = count($productIds) > $limit;
+    if ($hasMore) array_pop($productIds);
+
+    $results = [];
+    $generated = 0;
+    $failed = 0;
+    foreach ($productIds as $productId) {
+        $result = shopProductSeoSync($db, $config, $productId, null, false, false);
+        $results[] = ['product_id' => $productId, ...$result];
+        if (!empty($result['success'])) {
+            if (!empty($result['generated'])) $generated++;
+        } else {
+            $failed++;
+        }
+    }
+
+    $sitemap = null;
+    $indexNow = null;
+    if (!$hasMore) {
+        $sitemap = shopProductSeoRebuildSitemap($db, $config);
+        if (!empty($sitemap['url'])) $indexNow = shopProductSeoNotifyIndexNow([(string)$sitemap['url']], $config);
+    }
+
+    return [
+        'success' => $failed === 0,
+        'processed' => count($productIds),
+        'generated' => $generated,
+        'failed' => $failed,
+        'cursor' => $productIds ? (string)end($productIds) : $cursor,
+        'has_more' => $hasMore,
+        'sitemap' => $sitemap,
+        'indexnow' => $indexNow,
+        'results' => $results,
+    ];
+}

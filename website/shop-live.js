@@ -805,27 +805,6 @@
     const whatsapp = document.querySelector("[data-product-whatsapp]");
     if (whatsapp) whatsapp.href = `https://wa.me/40762093915?text=${encodeURIComponent(`Bună, mă interesează ${normalized.name}. Vreau să verific compatibilitatea înainte de comandă.`)}`;
 
-    const safetySection = document.querySelector('[data-product-safety]');
-    const safetyTab = document.querySelector('[data-product-safety-tab]');
-    const safetyContent = document.querySelector('[data-product-safety-content]');
-    if (safetySection && safetyContent) {
-      const rows = [
-        ['Producător', product.manufacturer_name], ['Adresă producător', product.manufacturer_address], ['E-mail producător', product.manufacturer_email],
-        ['Persoană responsabilă în UE', product.eu_responsible_person_name], ['Adresă responsabil UE', product.eu_responsible_person_address], ['E-mail responsabil UE', product.eu_responsible_person_email],
-        ['Model', product.product_model], ['Identificator produs', product.product_identifier],
-        ['Marcaj CE', product.ce_marking_applicable == null ? '' : product.ce_marking_applicable ? 'Aplicabil' : 'Nu se aplică'],
-        ['Garanție legală', Number(product.legal_warranty_months || 0) > 0 ? `${Number(product.legal_warranty_months)} luni` : ''],
-        ['Garanție comercială', Number(product.commercial_warranty_months || 0) > 0 ? `${Number(product.commercial_warranty_months)} luni` : ''],
-        ['Actualizări software până la', product.software_updates_until], ['Reparabilitate', product.repairability_info], ['Piese de schimb', product.spare_parts_info]
-      ].filter(([, value]) => String(value || '').trim());
-      const documents = [...(product.safety_documents || []).map((url, index) => ({ url, label: `Document de siguranță ${index + 1}` })), ...(product.compliance_documents || []).map((url, index) => ({ url, label: `Document de conformitate ${index + 1}` }))].filter(item => safeUrl(item.url));
-      const warnings = String(product.safety_warnings_ro || '').trim();
-      const hasContent = rows.length > 0 || documents.length > 0 || warnings.length > 0;
-      safetySection.hidden = !hasContent;
-      if (safetyTab) safetyTab.hidden = !hasContent;
-      safetyContent.innerHTML = `${warnings ? `<article class="product-safety-warning"><small>AVERTISMENTE ÎN LIMBA ROMÂNĂ</small><p>${escapeHtml(warnings).replace(/\n/g, '<br>')}</p></article>` : ''}${rows.map(([label, value]) => `<article><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong></article>`).join('')}${documents.length ? `<article class="product-safety-documents"><small>DOCUMENTE</small>${documents.map(item => `<a href="${safeUrl(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.label)} <span>↗</span></a>`).join('')}</article>` : ''}`;
-    }
-
     document.title = product.meta_title || `${normalized.name} | G-Trots`;
     const metaDescription = product.meta_description || normalized.description;
     setMeta('meta[name="description"]', metaDescription);

@@ -44,10 +44,13 @@
   }
   loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260906-company-v2' });
   if (!document.querySelector('script[src*="google-measurement.js"]')) {
-    loadAsset('script', { src: '/google-measurement.js?v=20260907-ga4-v8', async: true });
+    loadAsset('script', { src: '/google-measurement.js?v=20260907-meta-v9', async: true });
+  }
+  if (!document.querySelector('script[src*="meta-measurement.js"]')) {
+    loadAsset('script', { src: '/meta-measurement.js?v=20260907-meta-v2', async: true });
   }
   if (!document.querySelector('script[src*="cookie-consent.js"]')) {
-    loadAsset('script', { src: '/cookie-consent.js?v=20260907-consent-v5', async: true });
+    loadAsset('script', { src: '/cookie-consent.js?v=20260907-meta-v6', async: true });
   }
 
   function phoneHref(phone) {
@@ -95,8 +98,10 @@
   }
 
   function ensureOriginalHeader() {
-    const legacyHeader = document.querySelector('.legal-top');
-    if (!legacyHeader || document.querySelector('.site-header:not(.legal-top)')) return;
+    if (document.querySelector('.site-header:not(.legal-top)')) return;
+    if (/^\/googledb9a3f7a7ad1d21d(?:\.html)?\/?$/i.test(location.pathname)) return;
+
+    const legacyHeader = document.querySelector('.legal-top, .tracking-header');
 
     const header = document.createElement('header');
     header.className = 'site-header gt-public-header';
@@ -123,7 +128,8 @@
         </a>
         <button class="menu-toggle" type="button" aria-label="Deschide meniul" aria-expanded="false"><span></span><span></span></button>
       </div>`;
-    legacyHeader.replaceWith(header);
+    if (legacyHeader) legacyHeader.replaceWith(header);
+    else document.body.prepend(header);
 
     const toggle = header.querySelector('.menu-toggle');
     const nav = header.querySelector('.main-nav');
@@ -163,7 +169,7 @@
       loadAsset('link', { rel: 'stylesheet', href: '/favorites.css?v=20260828-line-promotions-v1' });
     }
     if (!document.querySelector('script[src*="favorites.js"]')) {
-      loadAsset('script', { src: '/favorites.js?v=20260905-shared-header-v1' });
+      loadAsset('script', { src: '/favorites.js?v=20260907-meta-global-v6' });
     }
   }
 

@@ -31,6 +31,7 @@ FILES = (
     "order-return-confirmation.php",
     "stripe.php",
     "merchant.php",
+    "meta.php",
     "shopify.php",
     "invoice-theme.php",
     "invoice-service.php",
@@ -96,11 +97,16 @@ def arguments() -> argparse.Namespace:
         action="store_true",
         help="Copiaza numai credentialele Shopify din config.local.php local in configuratia protejata de pe server.",
     )
+    parser.add_argument(
+        "--configure-meta-from-env",
+        action="store_true",
+        help="Salveaza tokenul GT_META_CAPI_TOKEN numai in config.local.php protejat de pe server.",
+    )
     return parser.parse_args()
 
 
 def php_string(value: str) -> str:
-    if "\n" in value or "\r" in value or not value:
+    if "\n" in value or "\r" in value:
         raise RuntimeError("Valoarea de configurare lipseste sau are un format invalid.")
     return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
@@ -301,6 +307,35 @@ def configure_shopify_from_local(ftp: FTP_TLS, timestamp: str) -> None:
     print("Credentialele Shopify au fost salvate numai in configuratia protejata de pe server.", flush=True)
 
 
+def configure_meta_from_env(ftp: FTP_TLS, timestamp: str) -> None:
+    token = os.environ.get("GT_META_CAPI_TOKEN", "").strip()
+    if len(token) < 40 or any(character.isspace() for character in token):
+        raise RuntimeError("GT_META_CAPI_TOKEN lipseste sau nu are formatul asteptat.")
+    buffer = BytesIO()
+    ftp.retrbinary("RETR config.local.php", buffer.write)
+    original = buffer.getvalue().decode("utf-8-sig")
+    updated = set_php_config_value(original, "meta_pixel_id", "1077035528384445")
+    updated = set_php_config_value(updated, "meta_graph_api_version", "v26.0")
+    updated = set_php_config_value(updated, "meta_conversion_access_token", token)
+    updated = set_php_config_value(updated, "meta_conversion_api_enabled", "true")
+    updated = set_php_config_value(updated, "meta_test_event_code", "")
+    temporary = f"config.local.php.codex-upload-{timestamp}.tmp"
+    backup = f"config.local.php.bak-codex-meta-{timestamp}"
+    ftp.storbinary(f"STOR {temporary}", BytesIO(updated.encode("utf-8")), blocksize=262144)
+    try:
+        ftp.rename("config.local.php", backup)
+        ftp.rename(temporary, "config.local.php")
+    except Exception:
+        try:
+            ftp.delete(temporary)
+        except Exception:
+            pass
+        if "config.local.php" not in set(ftp.nlst()) and backup in set(ftp.nlst()):
+            ftp.rename(backup, "config.local.php")
+        raise
+    print("Meta Conversions API a fost activat in configuratia protejata de pe server.", flush=True)
+
+
 def main() -> None:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     options = arguments()
@@ -353,6 +388,8 @@ def main() -> None:
             configure_merchant_sync_state(ftp, timestamp, options.merchant_sync)
         if options.configure_shopify_from_local:
             configure_shopify_from_local(ftp, timestamp)
+        if options.configure_meta_from_env:
+            configure_meta_from_env(ftp, timestamp)
     except Exception:
         for name in reversed(activated):
             try:

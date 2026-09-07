@@ -2,7 +2,7 @@
   const ensureLegalFooter = () => {
     if (document.querySelector('script[src*="legal-footer.js"]')) return;
     const legal = document.createElement('script');
-    legal.src = '/legal-footer.js?v=20260907-ga4-v4';
+    legal.src = '/legal-footer.js?v=20260907-meta-v11';
     legal.defer = true;
     document.head.append(legal);
   };
@@ -661,7 +661,7 @@
   }
 
   function initialize() {
-    if (!COMMERCE_PREVIEW) {
+    if (!COMMERCE_ENABLED) {
       document.querySelectorAll([
         ".nav-shop-link",
         ".hero-shop-button",

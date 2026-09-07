@@ -156,9 +156,13 @@
     return Object.fromEntries(Object.entries(params || {}).filter(([, value]) => value !== undefined && value !== null && value !== ""));
   }
 
-  function track(eventName, params = {}) {
+  function track(eventName, params = {}, context = {}) {
     if (!/^[a-z][a-z0-9_]{0,39}$/.test(String(eventName || ""))) return;
-    window.gtag("event", eventName, cleanParams({ ...params, send_to: MEASUREMENT_ID }));
+    const cleanEventParams = cleanParams(params);
+    window.gtag("event", eventName, { ...cleanEventParams, send_to: MEASUREMENT_ID });
+    document.dispatchEvent(new CustomEvent("g-trots:analytics-event", {
+      detail: { eventName, params: cleanEventParams, context, timestamp: Date.now() }
+    }));
   }
 
   function trackEcommerce(eventName, items, params = {}) {
@@ -365,6 +369,18 @@
       coupon: String(state.promotionCode || state.promotion_code || ""),
       payment_type: String(state.paymentMethod || state.payment_method || ""),
       items
+    }, {
+      user_data: {
+        email: String(state.customerEmail || state.customer_email || ""),
+        phone: String(state.customerPhone || state.customer_phone || ""),
+        first_name: String(state.customerFirstName || state.customer_first_name || ""),
+        last_name: String(state.customerLastName || state.customer_last_name || ""),
+        city: String(state.customerCity || state.customer_city || ""),
+        state: String(state.customerCounty || state.customer_county || ""),
+        postal_code: String(state.customerPostalCode || state.customer_postal_code || ""),
+        country: "ro",
+        external_id: String(state.customerId || state.customer_id || "")
+      }
     });
     sent.add(transactionId);
     transientPurchases.add(transactionId);

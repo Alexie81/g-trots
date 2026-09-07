@@ -27,6 +27,7 @@ require_once __DIR__ . '/order-cancellation.php';
 require_once __DIR__ . '/order-return.php';
 require_once __DIR__ . '/order-return-confirmation.php';
 require_once __DIR__ . '/product-pricing.php';
+require_once __DIR__ . '/meta.php';
 require_once __DIR__ . '/product-page-service.php';
 require_once __DIR__ . '/gomag.php';
 require_once __DIR__ . '/nir-domain.php';
@@ -63,6 +64,11 @@ function shopConfig(): array {
         // Activarea se face controlat numai dupa publicarea site-ului; pana
         // atunci hook-urile CRUD/Boomag nu au voie sa trimita oferte.
         'merchant_sync_enabled' => false,
+        'meta_pixel_id' => '1077035528384445',
+        'meta_graph_api_version' => 'v26.0',
+        'meta_conversion_access_token' => '',
+        'meta_conversion_api_enabled' => false,
+        'meta_test_event_code' => '',
         // Shopify Agentic/Catalog ramane oprit pana cand aplicatia privata este
         // autorizata si tokenul Admin este salvat exclusiv pe server.
         'shopify_store_domain' => 'g-trots-agentic.myshopify.com',
@@ -4666,8 +4672,35 @@ try {
     // Citirea catalogului porneste cel mult o data pe minut scanarea feedului
     // dupa raspuns. GET_LOCK din gomagMaybeSyncSupplierStock elimina dublurile,
     // iar pagina unui produs pastreaza sincronizarea imediata dedicata.
-    if ($method === 'GET' && in_array($action, ['publicProducts', 'publicProductsCompact', 'publicProductsPage'], true)) {
+    if ($method === 'GET' && in_array($action, ['publicProducts', 'publicProductsCompact', 'publicProductsPage', 'metaCatalogFeed'], true)) {
         scheduleSupplierStockSyncAfterResponse($db, $config);
+    }
+
+    if ($action === 'publicMetaConfig' && $method === 'GET') {
+        header('Cache-Control: public, max-age=300');
+        jsonResponse(metaPublicConfig($config));
+    }
+
+    if ($action === 'metaCatalogFeed' && $method === 'GET') {
+        $csv = metaCatalogCsv($db, $config);
+        header_remove('Content-Type');
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: inline; filename="g-trots-meta-catalog.csv"');
+        header('Cache-Control: public, max-age=300, stale-while-revalidate=300');
+        header('X-Robots-Tag: noindex, nofollow');
+        header('ETag: "' . hash('sha256', $csv) . '"');
+        echo $csv;
+        exit;
+    }
+
+    if ($action === 'metaConversion' && $method === 'POST') {
+        if (!metaRequestOriginAllowed($config)) jsonResponse(['error' => 'Originea solicitarii Meta nu este permisa.'], 403);
+        if (!boolValue($body['marketing_consent'] ?? false)) jsonResponse(['error' => 'Consimtamantul de marketing lipseste.'], 403);
+        try {
+            jsonResponse(metaSendConversion($config, metaConversionEvent($body)));
+        } catch (InvalidArgumentException $error) {
+            jsonResponse(['error' => $error->getMessage()], 422);
+        }
     }
 
     if ($action === 'stripeWebhook' && $method === 'POST') {
@@ -7840,6 +7873,14 @@ try {
         $cursor = trim((string)($body['cursor'] ?? ''));
         $batchSize = max(1, min(10, (int)($body['batch_size'] ?? 2)));
         jsonResponse(shopifySyncCatalogBatch($db, $config, $cursor, $batchSize));
+    }
+
+    if ($action === 'syncProductSeoCatalog' && $method === 'POST') {
+        @set_time_limit(90);
+        ignore_user_abort(true);
+        $cursor = trim((string)($body['cursor'] ?? ''));
+        $batchSize = max(1, min(100, (int)($body['batch_size'] ?? 25)));
+        jsonResponse(shopProductSeoSyncCatalogBatch($db, $config, $cursor, $batchSize));
     }
 
     if ($action === 'updatePaymentSettings' && in_array($method, ['PUT', 'PATCH'], true)) {

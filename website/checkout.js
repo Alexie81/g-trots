@@ -413,6 +413,14 @@
         promoMessage.className = "is-success";
         promoMessage.textContent = cleanCode ? `Codul ${cleanCode} a fost aplicat. Ai economisit ${formatMoney(activePromotionQuote.discount_total)}.` : "Se aplică automat cea mai bună ofertă disponibilă.";
       }
+      if (showFeedback && cleanCode) {
+        document.dispatchEvent(new CustomEvent("g-trots:promotion-selected", { detail: {
+          id: cleanCode,
+          code: cleanCode,
+          title: activePromotionQuote.promotion_title || cleanCode,
+          creative_slot: "checkout_coupon"
+        } }));
+      }
       renderCheckoutItems(cart);
       updateTotals(cart, config);
       return true;
@@ -702,6 +710,8 @@
               shippingCost: Number(order.shipping_cost ?? totals.shippingCost),
               total: Number(order.total ?? totals.total),
               vatPayer: Boolean(order.vat_payer ?? totals.vatPayer),
+              vatTotal: Number(order.vat_total ?? totals.vatTotal ?? 0),
+              netTotal: Number(order.net_total ?? totals.netTotal ?? order.total ?? totals.total),
               customerName: String(order.customer_name || fields.customer_name || ""),
               customerContactName: String(order.customer_contact_name || order.customer_name || fields.customer_name || ""),
               customerDisplayName: String(order.customer_display_name || (fields.customer_type === "company" ? fields.company_name : fields.customer_name) || ""),

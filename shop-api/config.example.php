@@ -29,6 +29,13 @@ return [
     'stripe_publishable_key' => 'pk_test_replace_me',
     // Se primeste o singura data la crearea endpointului webhook Stripe.
     'stripe_webhook_secret' => 'whsec_replace_me',
+    // Meta Pixel se activează în browser numai după acordul pentru marketing.
+    // Tokenul Conversions API rămâne exclusiv în config.local.php pe server.
+    'meta_pixel_id' => '1077035528384445',
+    'meta_graph_api_version' => 'v26.0',
+    'meta_conversion_access_token' => '',
+    'meta_conversion_api_enabled' => false,
+    'meta_test_event_code' => '',
     // Shopify Agentic / Catalog. Aplicația cere read/write products, inventory,
     // files, locations și publications. Credentialele nu se pun în Git.
     'shopify_store_domain' => 'g-trots-agentic.myshopify.com',

@@ -60,7 +60,7 @@
         ${category('necessary', 'Strict necesare', 'Sesiune, securitate, coș și funcțiile de cumpărare.', true, true)}
         ${category('preferences', 'Preferințe', 'Memorează alegeri neesențiale pentru o experiență personalizată.', state.preferences)}
         ${category('analytics', 'Analiză', 'Google Analytics ne ajută să înțelegem utilizarea site-ului.', state.analytics)}
-        ${category('marketing', 'Marketing', 'Măsurare și personalizare publicitară, dacă vor fi configurate.', state.marketing)}
+        ${category('marketing', 'Marketing', 'Meta Pixel și semnale Google pentru măsurarea publicității și a conversiilor.', state.marketing)}
       </div>
       <div class="gt-cookie-actions">
         <button type="button" data-consent="reject">Refuză opționalele</button>

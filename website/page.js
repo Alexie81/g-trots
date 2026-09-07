@@ -1,4 +1,4 @@
-if (!document.querySelector('script[src*="legal-footer.js"]')) { const legal = document.createElement('script'); legal.src = '/legal-footer.js?v=20260906-company-v2'; legal.defer = true; document.head.append(legal); }
+if (!document.querySelector('script[src*="legal-footer.js"]')) { const legal = document.createElement('script'); legal.src = '/legal-footer.js?v=20260907-meta-v11'; legal.defer = true; document.head.append(legal); }
 function ensureGlobalPromotionBar() {
   if (!document.querySelector('link[href*="promotions.css"]')) {
     const link = document.createElement("link"); link.rel = "stylesheet"; link.href = "/promotions.css?v=20260828-marquee-v5"; document.head.append(link);
@@ -807,7 +807,7 @@ document.querySelectorAll(".vehicle-carousel").forEach(carousel => {
 
 if (!window.GTrotsFavorites && !document.querySelector('script[src*="favorites.js"]')) {
   const favoritesScript = document.createElement("script");
-  favoritesScript.src = "/favorites.js?v=20260907-store-live-v4";
+  favoritesScript.src = "/favorites.js?v=20260907-meta-global-v6";
   favoritesScript.defer = true;
   document.head.append(favoritesScript);
 }

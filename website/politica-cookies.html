@@ -6,7 +6,7 @@
   <title>Politica detaliată de cookie-uri | G-Trots</title>
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://g-trots.ro/politica-cookies">
-  <meta name="description" content="Politica detaliată G-Trots despre cookie-uri, localStorage, sessionStorage, Google Analytics 4, Google Tag Manager, autentificarea Google, Stripe și gestionarea consimțământului.">
+  <meta name="description" content="Politica detaliată G-Trots despre cookie-uri, localStorage, Google Analytics 4, Google Tag Manager, Meta Pixel, Conversions API, Stripe și gestionarea consimțământului.">
   <link rel="icon" href="/assets/logo.png">
   <link rel="stylesheet" href="/legal.css?v=20260905-3">
   <style>
@@ -57,7 +57,7 @@
           <li><strong>Strict necesare:</strong> securitate, sesiunea contului, coș, checkout, plata solicitată, prevenirea abuzului și memorarea alegerii de consimțământ. Fără ele, unele funcții cerute nu pot continua.</li>
           <li><strong>Preferințe:</strong> căutări recente și cache local de performanță. Se păstrează numai dacă accepți categoria „Preferințe”; la retragere, aceste stocări sunt șterse de aplicație.</li>
           <li><strong>Analiză:</strong> Google Analytics 4 și stocările auxiliare de deduplicare a evenimentelor. Cookie-urile Analytics sunt permise numai după acceptarea categoriei „Analiză”.</li>
-          <li><strong>Marketing:</strong> semnalele Google pentru publicitate, personalizare și eventuale măsurări Ads. La verificarea din 7 septembrie 2026, containerul G-Trots nu conține tag Google Ads, Floodlight sau Meta; categoria există pentru control înainte de o activare viitoare.</li>
+          <li><strong>Marketing:</strong> Meta Pixel și Meta Conversions API pentru măsurarea interacțiunilor și conversiilor, deduplicare browser–server, audiențe și optimizarea viitoarelor campanii, precum și semnalele Google pentru publicitate și personalizare. Aceste utilizări pornesc numai după acceptarea categoriei „Marketing”.</li>
         </ul>
       </article>
 
@@ -80,6 +80,8 @@
               <tr><td><code>g-trots-ga4-purchases-v1</code><br><code>g-trots-ga4-refunds-v1</code></td><td>localStorage · analiză</td><td>Păstrează numai identificatorii ultimelor tranzacții deja măsurate, pentru a evita evenimente <code>purchase</code>/<code>refund</code> duplicate.</td><td>Până la 500 de identificatori sau până la retragerea/ștergerea datelor Analytics.</td></tr>
               <tr><td><code>g-trots-ga4-auth-pending-v1</code></td><td>localStorage · analiză</td><td>Transferă o singură dată către pagina următoare tipul evenimentului de autentificare și metoda folosită; nu stochează parola sau credentialul Google.</td><td>Până la citirea imediată după autentificare sau ștergerea datelor site-ului.</td></tr>
               <tr><td><code>g-trots-ga4-select-pending-v1</code></td><td>sessionStorage · analiză</td><td>Leagă selectarea unei fișe din listă de deschiderea paginii produsului și evită pierderea evenimentului la navigare.</td><td>Până la citirea pe pagina produsului sau închiderea filei.</td></tr>
+              <tr><td><code>_fbp</code><br><code>_fbc</code></td><td>cookie · marketing</td><td>Identificatori Meta folosiți, când sunt disponibili, pentru atribuirea și corelarea evenimentelor trimise de Pixel și Conversions API. <code>_fbc</code> poate apărea după accesarea unei adrese care conține identificatorul de clic Meta.</td><td>Conform perioadei stabilite de Meta sau până la retragerea acordului/ștergerea cookie-urilor.</td></tr>
+              <tr><td><code>g-trots-meta-purchases-v1</code></td><td>localStorage · marketing</td><td>Păstrează numai identificatorii ultimelor tranzacții deja măsurate de Meta, pentru a evita evenimente <code>Purchase</code> duplicate.</td><td>Până la 500 de identificatori sau până la retragerea acordului pentru marketing.</td></tr>
             </tbody>
           </table>
         </div>
@@ -99,8 +101,11 @@
       </article>
 
       <article class="legal-card">
-        <h2>Marketing și campanii viitoare</h2>
-        <p>La data actualizării nu există în container un identificator Google Ads, Floodlight sau Meta. Dacă va fi activată măsurarea publicitară, ea va folosi categoria „Marketing”, iar stările <code>ad_storage</code>, <code>ad_user_data</code> și <code>ad_personalization</code> vor rămâne refuzate până la acord. Politica și inventarul vor fi actualizate înainte sau odată cu activarea unor furnizori ori cookie-uri noi, cum ar fi familia <code>_gcl_*</code>.</p>
+        <h2>Meta Pixel și Conversions API</h2>
+        <p>După acceptarea categoriei „Marketing”, site-ul poate încărca Meta Pixel pentru setul de date G‑Trots și poate trimite către Meta evenimente precum vizualizarea paginii sau produsului, căutare, favorite, coș, checkout, contact, formular și achiziție. Pentru continuitate și măsurare mai robustă, aceleași evenimente eligibile pot fi trimise server-side prin Meta Conversions API. Perechea browser–server folosește același <code>event_id</code>, astfel încât Meta să poată deduplica evenimentul și să nu numere de două ori aceeași acțiune.</p>
+        <p>Pentru evenimentele de comandă pot fi transmise în formă normalizată și hash-uită SHA-256 date furnizate în checkout, precum e-mailul, telefonul, numele, localitatea, județul, codul poștal și identificatorul intern al clientului, împreună cu IP-ul și user-agentul necesare potrivirii și securității. Numărul complet al cardului nu este transmis către Meta. Fluxul Meta este oprit fără acordul pentru marketing, iar la retragere aplicația încearcă să elimine cookie-urile și stocările Meta controlabile de pe domeniul G‑Trots.</p>
+        <p>Meta poate utiliza datele potrivit propriilor reguli și poate realiza transferuri internaționale în condițiile documentației sale. Detalii: <a href="https://www.facebook.com/privacy/policy/" rel="noopener noreferrer">Politica de confidențialitate Meta</a>, <a href="https://developers.facebook.com/docs/meta-pixel/" rel="noopener noreferrer">Meta Pixel</a> și <a href="https://developers.facebook.com/docs/marketing-api/conversions-api/" rel="noopener noreferrer">Conversions API</a>.</p>
+        <p>Nu este activat în prezent un tag Google Ads sau Floodlight. Dacă va fi adăugat ulterior, categoria „Marketing” și stările <code>ad_storage</code>, <code>ad_user_data</code> și <code>ad_personalization</code> vor rămâne refuzate până la acord, iar inventarul va fi actualizat.</p>
       </article>
 
       <article class="legal-card">
@@ -140,7 +145,7 @@
     </main>
   </div>
 
-  <script src="/legal-page.js?v=20260906-company-v3" defer></script>
-  <script src="/legal-footer.js?v=20260907-ga4-v4" defer></script>
+  <script src="/legal-page.js?v=20260907-meta-global-v1" defer></script>
+<script src="/legal-footer.js?v=20260907-meta-v11" defer></script>
 </body>
 </html>

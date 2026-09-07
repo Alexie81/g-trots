@@ -12,6 +12,8 @@ const PRODUCT_ROOT = path.join(WEBSITE_ROOT, "magazin", "produs");
 const TEMPLATE_PATH = path.join(WEBSITE_ROOT, "produs.html");
 const SITEMAP_PATH = path.join(WEBSITE_ROOT, "sitemaps", "sitemap-produse.xml");
 const SITEMAP_INDEX_PATH = path.join(WEBSITE_ROOT, "sitemap-index.xml");
+const CATALOG_PAGE_PATH = path.join(WEBSITE_ROOT, "catalog-produse.html");
+const AI_CATALOG_PATH = path.join(WEBSITE_ROOT, "ai-catalog.json");
 const MANIFEST_PATH = path.join(PRODUCT_ROOT, ".generated-product-pages.json");
 const WEBSITE_BASE_URL = (process.env.GTROTS_WEBSITE_URL || "https://g-trots.ro").replace(/\/$/, "");
 const API_URL = process.env.GTROTS_PUBLIC_API_URL || `${WEBSITE_BASE_URL}/shop-api/api-v2.php`;
@@ -85,8 +87,11 @@ function absoluteUrl(value) {
 }
 
 function currentPrice(product) {
-  const value = product.promotion_price ?? product.sale_price ?? product.price ?? 0;
-  return Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
+  for (const value of [product.promotion_price, product.sale_price, product.price]) {
+    const amount = Number(value);
+    if (Number.isFinite(amount) && amount > 0) return amount;
+  }
+  return 0;
 }
 
 function isInStock(product) {
@@ -234,7 +239,7 @@ function renderProductPage(template, product) {
       price: priceText,
       availability: availabilitySchema,
       itemCondition,
-      seller: { "@type": "Organization", name: "G-Trots România" },
+      seller: { "@id": `${WEBSITE_BASE_URL}/#organization` },
       hasMerchantReturnPolicy: {
         "@type": "MerchantReturnPolicy",
         applicableCountry: "RO",
@@ -245,6 +250,26 @@ function renderProductPage(template, product) {
         returnFees: "https://schema.org/ReturnFeesCustomerResponsibility",
         merchantReturnLink: `${WEBSITE_BASE_URL}/politica-de-retur`
       }
+    }
+  };
+  const organizationSchema = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": `${WEBSITE_BASE_URL}/#organization`,
+    name: "G-Trots România",
+    legalName: "CAB IT EXPERT S.R.L.",
+    taxID: "49972605",
+    url: `${WEBSITE_BASE_URL}/`,
+    logo: `${WEBSITE_BASE_URL}/assets/logo.png`,
+    telephone: "+40762093915",
+    email: "contact@g-trots.ro",
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: "Str. Humulești nr. 131-135, lot 4",
+      addressLocality: "București",
+      addressRegion: "Sector 5",
+      postalCode: "052262",
+      addressCountry: "RO"
     }
   };
   const gtin = String(product.ean || "").replace(/\D+/g, "");
@@ -279,8 +304,14 @@ function renderProductPage(template, product) {
   html = html.replace(/<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/i, `<link rel="canonical" href="${escapeHtml(canonical)}">`);
   html = html.replace(/<link\s+rel="preload"\s+href="[^"]*"\s+as="image"[^>]*>/i, `<link rel="preload" href="${escapeHtml(images[0])}" as="image">`);
   html = html.replace(/\s*<script\s+type="application\/ld\+json"(?![^>]*data-gt-organization-schema)[^>]*>.*?<\/script>/gis, "");
-  const structuredData = [productSchema, breadcrumbSchema]
-    .map((schema, index) => `    <script type="application/ld+json" ${index === 1 ? "data-gt-breadcrumb-schema" : 'data-gt-product-schema="1"'}>${safeJson(schema)}</script>`)
+  const structuredData = [organizationSchema, productSchema, breadcrumbSchema]
+    .map(schema => {
+      const type = schema["@type"];
+      const attribute = type === "Organization"
+        ? "data-gt-organization-schema"
+        : (type === "BreadcrumbList" ? "data-gt-breadcrumb-schema" : 'data-gt-product-schema="1"');
+      return `    <script type="application/ld+json" ${attribute}>${safeJson(schema)}</script>`;
+    })
     .join("\n");
   html = html.replace("</head>", `${structuredData}\n    <script type="application/json" id="gt-product-bootstrap">${safeJson(product)}</script>\n  </head>`);
   html = html.replace(/(<body\b[^>]*\bdata-product-id=")[^"]*(")/i, `$1${escapeHtml(slug)}$2`);
@@ -347,6 +378,65 @@ function buildSitemap(products) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${rows.join("\n")}\n</urlset>\n`;
 }
 
+function buildCatalogPage(products) {
+  const groups = new Map();
+  for (const product of products) {
+    const category = cleanText(product.category_name) || "Alte produse";
+    if (!groups.has(category)) groups.set(category, []);
+    groups.get(category).push(product);
+  }
+  const sections = [...groups.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, "ro"))
+    .map(([category, items]) => {
+      const links = items.map(product => {
+        const url = `${WEBSITE_BASE_URL}/magazin/produs/${encodeURIComponent(product.slug)}/`;
+        const price = currentPrice(product).toFixed(2);
+        const availability = isInStock(product) ? "În stoc" : "Stoc epuizat";
+        return `<li><a href="${escapeHtml(url)}">${escapeHtml(cleanText(product.name) || product.slug)}</a><span>${escapeHtml(`${price} ${cleanText(product.currency) || "RON"}`)} · ${availability}</span></li>`;
+      }).join("\n");
+      return `<section><h2>${escapeHtml(category)}</h2><ul>${links}</ul></section>`;
+    }).join("\n");
+  return `<!doctype html>
+<html lang="ro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Catalog complet produse G-Trots</title>
+<meta name="description" content="Catalogul HTML complet al produselor G-Trots, cu legături directe, preț efectiv și disponibilitate actualizată.">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<link rel="canonical" href="${WEBSITE_BASE_URL}/catalog-produse">
+<link rel="icon" href="/assets/logo.png" type="image/png">
+<style>html{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0b0b0d;color:#f7f2ed;font:16px/1.55 system-ui,sans-serif}main{width:min(1160px,calc(100% - 32px));margin:auto;padding:56px 0 80px}a{color:#ff8b33}h1{font-size:clamp(2rem,6vw,4.5rem);line-height:1.05;margin:.25em 0}h2{margin:2.2rem 0 .7rem;color:#ffb074}p{max-width:75ch;color:#c9c2bc}ul{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:8px;margin:0;padding:0;list-style:none}li{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border:1px solid #2f2f35;border-radius:14px;background:#17171b}li span{font-size:.85rem;color:#aaa3a0}.back{display:inline-block;margin-bottom:24px}</style></head>
+<body><main><a class="back" href="/magazin">← Magazin</a><h1>Catalog complet G-Trots</h1><p>${products.length} produse publice, fiecare cu pagină canonică și date structurate Product + Offer. Prețul și stocul de pe pagina produsului sunt sursa finală.</p>${sections}</main><script src="/legal-footer.js?v=20260907-ga4-v4" defer></script></body></html>\n`;
+}
+
+function buildAiCatalog(products) {
+  const payload = {
+    schema_version: 1,
+    generated_at: new Date().toISOString(),
+    publisher: {
+      name: "G-Trots România",
+      legal_name: "CAB IT EXPERT S.R.L.",
+      url: `${WEBSITE_BASE_URL}/`,
+      currency: "RON",
+      market: "RO",
+      language: "ro-RO"
+    },
+    source_of_truth: "Pagina canonică a produsului stabilește prețul și disponibilitatea curentă.",
+    products: products.map(product => ({
+      id: String(product.id ?? ""),
+      name: cleanText(product.name),
+      url: `${WEBSITE_BASE_URL}/magazin/produs/${encodeURIComponent(product.slug)}/`,
+      sku: cleanText(product.sku),
+      gtin: String(product.ean ?? "").replace(/\D+/g, ""),
+      brand: cleanText(product.manufacturer_name) || cleanText(product.brands?.[0]?.name) || "G-Trots",
+      category: cleanText(product.category_name),
+      price: Number(currentPrice(product).toFixed(2)),
+      currency: cleanText(product.currency) || "RON",
+      availability: isInStock(product) ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      image: absoluteUrl(product.images?.[0]?.url || product.images?.[0]?.image_path || "")
+    }))
+  };
+  return `${JSON.stringify(payload, null, 2)}\n`;
+}
+
 async function updateSitemapIndex() {
   let index = await readFile(SITEMAP_INDEX_PATH, "utf8");
   const location = `${WEBSITE_BASE_URL}/sitemaps/sitemap-produse.xml`;
@@ -371,11 +461,13 @@ async function main() {
   }
   const removed = await removeStaleGeneratedPages(previousSlugs, products.map(product => product.slug));
   await atomicWrite(SITEMAP_PATH, buildSitemap(products));
+  await atomicWrite(CATALOG_PAGE_PATH, buildCatalogPage(products));
+  await atomicWrite(AI_CATALOG_PATH, buildAiCatalog(products));
   await updateSitemapIndex();
   const excludedCatalogRows = Math.max(0, reportedTotal - products.length);
   await atomicWrite(MANIFEST_PATH, `${JSON.stringify({ version: 1, generated_at: new Date().toISOString(), source: API_URL, reported_total: reportedTotal, products: products.length, catalog_rows_excluded_by_public_deduplication: excludedCatalogRows, slugs: products.map(product => product.slug) }, null, 2)}\n`);
 
-  process.stdout.write(`${JSON.stringify({ success: true, generated: products.length, reportedTotal, excludedCatalogRows, removed, productRoot: PRODUCT_ROOT, sitemap: SITEMAP_PATH }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ success: true, generated: products.length, reportedTotal, excludedCatalogRows, removed, productRoot: PRODUCT_ROOT, sitemap: SITEMAP_PATH, catalogPage: CATALOG_PAGE_PATH, aiCatalog: AI_CATALOG_PATH }, null, 2)}\n`);
 }
 
 main().catch(error => {

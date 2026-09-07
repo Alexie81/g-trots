@@ -124,7 +124,7 @@ function shopProductSeoRender(array $product, array $config): string {
             'price' => $priceText,
             'availability' => $availabilitySchema,
             'itemCondition' => $itemCondition,
-            'seller' => ['@type' => 'Organization', 'name' => 'G-Trots România'],
+            'seller' => ['@id' => $websiteBaseUrl . '/#organization'],
             'hasMerchantReturnPolicy' => [
                 '@type' => 'MerchantReturnPolicy',
                 'applicableCountry' => 'RO',
@@ -163,7 +163,27 @@ function shopProductSeoRender(array $product, array $config): string {
             ['@type' => 'ListItem', 'position' => 3, 'name' => $name, 'item' => $canonical],
         ],
     ];
-    $schemas = [$productSchema, $breadcrumbSchema];
+    $organizationSchema = [
+        '@context' => 'https://schema.org',
+        '@type' => 'Organization',
+        '@id' => $websiteBaseUrl . '/#organization',
+        'name' => 'G-Trots România',
+        'legalName' => 'CAB IT EXPERT S.R.L.',
+        'taxID' => '49972605',
+        'url' => $websiteBaseUrl . '/',
+        'logo' => $websiteBaseUrl . '/assets/logo.png',
+        'telephone' => '+40762093915',
+        'email' => 'contact@g-trots.ro',
+        'address' => [
+            '@type' => 'PostalAddress',
+            'streetAddress' => 'Str. Humulești nr. 131-135, lot 4',
+            'addressLocality' => 'București',
+            'addressRegion' => 'Sector 5',
+            'postalCode' => '052262',
+            'addressCountry' => 'RO',
+        ],
+    ];
+    $schemas = [$organizationSchema, $productSchema, $breadcrumbSchema];
     $questions = [];
     foreach (array_slice((array)($product['questions'] ?? []), 0, 12) as $question) {
         $questionText = shopProductSeoText($question['question'] ?? '');
@@ -196,9 +216,11 @@ function shopProductSeoRender(array $product, array $config): string {
     $html = (string)preg_replace('#\s*<script\s+type="application/ld\+json"(?![^>]*data-gt-organization-schema)[^>]*>.*?</script>#is', '', $html);
     $headScripts = '';
     foreach ($schemas as $index => $schema) {
-        $schemaAttribute = ($schema['@type'] ?? '') === 'BreadcrumbList'
-            ? 'data-gt-breadcrumb-schema'
-            : 'data-gt-product-schema="' . ($index + 1) . '"';
+        $schemaAttribute = match ($schema['@type'] ?? '') {
+            'Organization' => 'data-gt-organization-schema',
+            'BreadcrumbList' => 'data-gt-breadcrumb-schema',
+            default => 'data-gt-product-schema="' . ($index + 1) . '"',
+        };
         $headScripts .= '    <script type="application/ld+json" ' . $schemaAttribute . '>' . shopProductSeoJson($schema) . '</script>' . PHP_EOL;
     }
     $headScripts .= '    <script type="application/json" id="gt-product-bootstrap">' . shopProductSeoJson($product) . '</script>' . PHP_EOL;
@@ -326,7 +348,43 @@ function shopProductSeoRebuildSitemap(PDO $db, array $config): array {
     return ['success' => true, 'products' => count($rows), 'path' => $path, 'url' => $websiteBaseUrl . '/sitemaps/sitemap-produse.xml'];
 }
 
-function shopProductSeoSync(PDO $db, array $config, string $productId, ?string $oldSlug = null, bool $rebuildSitemap = true): array {
+function shopProductSeoNotifyIndexNow(array $urls, array $config): array {
+    $websiteBaseUrl = rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/');
+    $host = (string)(parse_url($websiteBaseUrl, PHP_URL_HOST) ?: 'g-trots.ro');
+    $key = trim((string)($config['indexnow_key'] ?? 'e9da45c430d2234931472c94c3523db1'));
+    $urls = array_values(array_unique(array_filter(array_map(static function ($url) use ($host): string {
+        $url = trim((string)$url);
+        return parse_url($url, PHP_URL_HOST) === $host ? $url : '';
+    }, $urls))));
+    if (!$urls || !preg_match('/^[a-z0-9-]{8,128}$/i', $key)) return ['submitted' => 0, 'status' => 'skipped'];
+    $payload = json_encode([
+        'host' => $host,
+        'key' => $key,
+        'keyLocation' => $websiteBaseUrl . '/' . rawurlencode($key) . '.txt',
+        'urlList' => array_slice($urls, 0, 10000),
+    ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    if (!function_exists('curl_init')) return ['submitted' => 0, 'status' => 'curl_unavailable'];
+    $curl = curl_init('https://api.indexnow.org/indexnow');
+    curl_setopt_array($curl, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json; charset=utf-8'],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 2,
+        CURLOPT_TIMEOUT => 5,
+        CURLOPT_USERAGENT => 'G-Trots-IndexNow/1.0',
+    ]);
+    $response = curl_exec($curl);
+    $status = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+    $error = curl_error($curl);
+    curl_close($curl);
+    if ($status < 200 || $status >= 300) {
+        return ['submitted' => 0, 'status' => $status ?: 'network_error', 'error' => mb_substr($error ?: (string)$response, 0, 300)];
+    }
+    return ['submitted' => count($urls), 'status' => $status];
+}
+
+function shopProductSeoSync(PDO $db, array $config, string $productId, ?string $oldSlug = null, bool $rebuildSitemap = true, bool $notifyIndexNow = true): array {
     try {
         $stateStmt = $db->prepare('SELECT p.id, p.slug, p.is_active, COALESCE(s.is_active, 1) AS source_is_active FROM shop_products p LEFT JOIN shop_product_sources s ON s.id = p.source_id WHERE p.id = ? LIMIT 1');
         $stateStmt->execute([$productId]);
@@ -334,7 +392,11 @@ function shopProductSeoSync(PDO $db, array $config, string $productId, ?string $
         if (!$state) {
             if ($oldSlug !== null && trim($oldSlug) !== '') shopProductSeoWriteGonePage($oldSlug, 'Produs retras', $config);
             if ($rebuildSitemap) shopProductSeoRebuildSitemap($db, $config);
-            return ['success' => true, 'generated' => false, 'reason' => 'deleted'];
+            $deletedUrl = $oldSlug !== null && trim($oldSlug) !== ''
+                ? rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/') . '/magazin/produs/' . rawurlencode($oldSlug) . '/'
+                : null;
+            $indexNow = $notifyIndexNow && $deletedUrl ? shopProductSeoNotifyIndexNow([$deletedUrl], $config) : null;
+            return ['success' => true, 'generated' => false, 'reason' => 'deleted', 'indexnow' => $indexNow];
         }
         $slug = (string)$state['slug'];
         $product = findProduct($db, $productId, $config, false, false);
@@ -353,15 +415,22 @@ function shopProductSeoSync(PDO $db, array $config, string $productId, ?string $
             $redirectPath = shopProductSeoWriteRedirect($oldSlug, $slug, $config);
         }
         $sitemap = $rebuildSitemap ? shopProductSeoRebuildSitemap($db, $config) : null;
+        $url = rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/') . '/magazin/produs/' . rawurlencode($slug) . '/';
+        $notifyUrls = [$url];
+        if ($oldSlug !== null && trim($oldSlug) !== '' && $oldSlug !== $slug) {
+            $notifyUrls[] = rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/') . '/magazin/produs/' . rawurlencode($oldSlug) . '/';
+        }
+        $indexNow = $notifyIndexNow ? shopProductSeoNotifyIndexNow($notifyUrls, $config) : null;
         return [
             'success' => true,
             'generated' => true,
             'purchasable' => (bool)$product['is_purchasable'],
             'reason' => (bool)$product['is_purchasable'] ? 'active' : 'inactive',
-            'url' => rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/') . '/magazin/produs/' . rawurlencode($slug) . '/',
+            'url' => $url,
             'path' => $path,
             'redirect_path' => $redirectPath,
             'sitemap' => $sitemap,
+            'indexnow' => $indexNow,
         ];
     } catch (Throwable $error) {
         return ['success' => false, 'generated' => false, 'error' => mb_substr($error->getMessage(), 0, 500)];

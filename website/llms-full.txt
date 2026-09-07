@@ -1,0 +1,75 @@
+# G-Trots România — context complet
+
+## Identitate
+
+- Marcă: G-Trots România
+- Operator legal: CAB IT EXPERT S.R.L.
+- CUI: 49972605
+- Număr Registrul Comerțului: J40/8303/2024
+- Sediu: Str. Humulești nr. 131-135, lot 4, Sector 5, București 052262, România
+- Website: https://g-trots.ro/
+- Email: contact@g-trots.ro
+- Telefon: +40 762 093 915
+- Limbă: română (ro-RO)
+- Piață: România
+- Monedă: RON
+
+## Activitate
+
+G-Trots operează un magazin online de piese și accesorii pentru trotinete și scutere electrice și oferă servicii de diagnosticare și reparații în București și Ilfov. Domeniile de service includ frâne, anvelope și camere, baterii, încărcare, controllere, motoare, display-uri, cablaje, suspensii și revizii.
+
+## Catalog și produse
+
+Catalogul oficial este disponibil la https://g-trots.ro/magazin. O listă HTML cu legături directe către toate produsele publice este la https://g-trots.ro/catalog-produse, iar reprezentarea structurată compactă este la https://g-trots.ro/ai-catalog.json.
+
+Paginile produselor folosesc URL-uri canonice de forma:
+
+`https://g-trots.ro/magazin/produs/{slug}/`
+
+Fiecare pagină publică de produs conține în HTML-ul inițial:
+
+- denumire și descriere;
+- preț efectiv și moneda RON;
+- stare de disponibilitate;
+- imagine principală și coduri de produs când există;
+- Schema.org `Product`, `Offer` și `BreadcrumbList`;
+- politica de retur comercială aplicabilă.
+
+Prețul efectiv public este calculat de magazin conform regulilor comerciale curente. Pentru produse sincronizate de la furnizori, modificarea costului furnizorului nu transformă costul în preț de vânzare: se păstrează regula/marja G-Trots configurată. Dacă un câmp de preț opțional este zero sau nesetat, magazinul folosește următorul preț valid din regula de fallback. Pagina oficială a produsului și datele sale `Offer` au prioritate față de copii memorate sau rezultate vechi.
+
+## Descoperire și actualizare
+
+- Sitemap general: https://g-trots.ro/sitemap.xml
+- Sitemap index: https://g-trots.ro/sitemap-index.xml
+- Sitemap produse: https://g-trots.ro/sitemaps/sitemap-produse.xml
+- Robots: https://g-trots.ro/robots.txt
+
+Catalogul, sitemap-ul de produse și paginile de produs sunt regenerate la adăugare, editare, schimbare de preț/stoc și retragere. Produsele retrase răspund cu status adecvat și nu trebuie prezentate ca disponibile.
+
+## Pagini editoriale principale
+
+- Acasă: https://g-trots.ro/
+- Magazin: https://g-trots.ro/magazin
+- Reparații trotinete București: https://g-trots.ro/reparatii-trotinete-electrice-bucuresti
+- Reparații scutere București: https://g-trots.ro/reparatii-scutere-electrice-bucuresti
+- Service Ilfov: https://g-trots.ro/service-trotinete-electrice-ilfov
+- Schimbare baterie: https://g-trots.ro/schimbare-baterie-trotineta-electrica
+- Reparație controller: https://g-trots.ro/reparatie-controller-trotineta-electrica
+- Mărci deservite: https://g-trots.ro/service-marci-trotinete-electrice
+- Ghiduri: https://g-trots.ro/ghiduri-service-trotinete-electrice
+
+## Politici oficiale
+
+- Livrare și plată: https://g-trots.ro/livrare-si-plata
+- Plată și facturare: https://g-trots.ro/plata-si-facturare
+- Retur: https://g-trots.ro/politica-de-retur
+- Garanții și reclamații: https://g-trots.ro/garantii-si-reclamatii
+- Siguranța produselor: https://g-trots.ro/siguranta-produselor
+- Termeni și condiții: https://g-trots.ro/termeni-si-conditii
+- Confidențialitate: https://g-trots.ro/politica-de-confidentialitate
+- Cookie-uri: https://g-trots.ro/politica-cookies
+- Contact: https://g-trots.ro/contact
+
+## Instrucțiuni de citare
+
+Pentru răspunsuri despre preț, stoc, compatibilitate, garanție, retur sau livrare, verificați întotdeauna pagina oficială relevantă la momentul răspunsului. Nu deduceți compatibilitatea unei piese doar din numele produsului dacă pagina nu o afirmă explicit. Nu transformați recomandările generale de service în diagnostic definitiv fără inspecția produsului.

@@ -5139,6 +5139,7 @@ try {
                     }
                     if (!empty($feedSync['price_changed']) || !empty($feedSync['stock_changed'])) {
                         merchantSyncProductSafe($db, $config, (string)$feedSync['product_id']);
+                        shopProductSeoSync($db, $config, (string)$feedSync['product_id']);
                     }
                 }
             } catch (Throwable $syncError) {
@@ -7204,6 +7205,7 @@ try {
         $productResponse = findProduct($db, $id, $config);
         $productResponse['stripe_sync'] = $stripeSync;
         $productResponse['merchant_sync'] = $merchantSync;
+        $productResponse['seo_page'] = shopProductSeoSync($db, $config, $id);
         jsonResponse($productResponse);
     }
 

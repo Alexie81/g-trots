@@ -1389,6 +1389,30 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
             $merchantSyncResults[(string)$productId] = merchantSyncProductSafe($db, $config, (string)$productId);
         }
     }
+    $seoSyncResults = [];
+    $changedIds = array_values(array_unique(array_merge(array_keys($pricesChanged), array_keys($stocksChanged))));
+    if (function_exists('shopProductSeoSync')) {
+        foreach ($changedIds as $productId) {
+            $seoSyncResults[(string)$productId] = shopProductSeoSync($db, $config, (string)$productId, null, false, false);
+        }
+    }
+    $seoSitemap = null;
+    $indexNow = null;
+    if ($changedIds && function_exists('shopProductSeoRebuildSitemap')) {
+        try {
+            $seoSitemap = shopProductSeoRebuildSitemap($db, $config);
+            $productUrls = [];
+            $urlStmt = $db->prepare('SELECT slug FROM shop_products WHERE id = ? LIMIT 1');
+            foreach ($changedIds as $productId) {
+                $urlStmt->execute([(string)$productId]);
+                $slug = trim((string)($urlStmt->fetchColumn() ?: ''));
+                if ($slug !== '') $productUrls[] = rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/') . '/magazin/produs/' . rawurlencode($slug) . '/';
+            }
+            if ($productUrls && function_exists('shopProductSeoNotifyIndexNow')) $indexNow = shopProductSeoNotifyIndexNow($productUrls, $config);
+        } catch (Throwable $seoError) {
+            $seoSitemap = ['success' => false, 'error' => mb_substr($seoError->getMessage(), 0, 500)];
+        }
+    }
 
     return [
         'success' => true,
@@ -1402,6 +1426,10 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
         'stripe_errors' => count(array_filter($stripeSyncResults, static fn(array $result): bool => ($result['status'] ?? '') === 'error')),
         'merchant_synced' => count(array_filter($merchantSyncResults, static fn(array $result): bool => ($result['status'] ?? '') !== 'error')),
         'merchant_errors' => count(array_filter($merchantSyncResults, static fn(array $result): bool => ($result['status'] ?? '') === 'error')),
+        'seo_pages_synced' => count(array_filter($seoSyncResults, static fn(array $result): bool => !empty($result['success']))),
+        'seo_errors' => count(array_filter($seoSyncResults, static fn(array $result): bool => empty($result['success']))),
+        'seo_sitemap' => $seoSitemap,
+        'indexnow' => $indexNow,
         'synced_at' => date(DATE_ATOM),
     ];
 }

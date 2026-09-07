@@ -2,11 +2,21 @@ Options -Indexes
 DirectoryIndex index.html index.php
 ErrorDocument 404 /404.html
 
+AddType text/plain .txt
+AddType application/ld+json .jsonld
+
 <IfModule mod_rewrite.c>
   RewriteEngine On
 
   RewriteCond %{THE_REQUEST} \s/+index\.html[\s?] [NC]
   RewriteRule ^index\.html$ https://g-trots.ro/ [R=301,L]
+
+  # Aliasurile demonstrative vechi ale produselor merg direct la pagina
+  # canonică, fără un al doilea hop și fără URL public .html.
+  RewriteCond %{THE_REQUEST} \s/+[^?\s]+\.html[\s?] [NC]
+  RewriteRule ^(anvelopa-g10-all-terrain|baterie-powercore-52v-23ah|display-smart-ride-s3|incarcator-fastcharge-54-6v|kit-frana-hydrostop-pro|motor-dualhub-x2-2000w)\.html$ https://g-trots.ro/magazin/produs/$1/ [R=301,L]
+
+  RewriteRule ^(anvelopa-g10-all-terrain|baterie-powercore-52v-23ah|display-smart-ride-s3|incarcator-fastcharge-54-6v|kit-frana-hydrostop-pro|motor-dualhub-x2-2000w)/?$ https://g-trots.ro/magazin/produs/$1/ [R=301,L]
 
   RewriteCond %{THE_REQUEST} \s/+(.+?)\.html[\s?] [NC]
   RewriteRule ^(.+)\.html$ https://g-trots.ro/$1 [R=301,L]
@@ -53,4 +63,15 @@ ErrorDocument 404 /404.html
   Header always set X-Content-Type-Options "nosniff"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
   Header always set X-Frame-Options "SAMEORIGIN"
+
+  # llms.txt este o hartă editorială suplimentară pentru agenți AI. Nu
+  # înlocuiește robots.txt, sitemap-urile sau datele structurate Product.
+  <FilesMatch "\.(?:html|php)$">
+    Header set Link "</llms.txt>; rel=\"describedby\"; type=\"text/markdown\""
+  </FilesMatch>
+
+  # Paginile tranzacționale/private trebuie să poată fi accesate de utilizator,
+  # dar nu trebuie păstrate în indexul motoarelor de căutare.
+  SetEnvIf Request_URI "^/(?:login|cont|cont-nou|cos|favorite|produs|resetare-parola|shop-indisponibil|checkout|plata-finalizata|plata-esuata|urmarire-comanda|solicita-retur)(?:\.html)?/?(?:\?.*)?$" GT_PRIVATE_PAGE=1
+  Header always set X-Robots-Tag "noindex, follow" env=GT_PRIVATE_PAGE
 </IfModule>

@@ -1,5 +1,13 @@
 User-agent: *
 Allow: /
+Allow: /shop-api/uploads/products/
+Disallow: /shop-api/
+Disallow: /trotty-api/
+Disallow: /desktop-update-server/
+Disallow: /admin/
+Disallow: /config/
+Disallow: /*?*token=
+Disallow: /*?*session=
 
 Sitemap: https://g-trots.ro/sitemap.xml
 Sitemap: https://g-trots.ro/sitemap-index.xml

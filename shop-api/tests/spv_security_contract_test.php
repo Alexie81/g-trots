@@ -20,8 +20,11 @@ foreach ($clientFiles as $file) {
     }
 }
 $api = (string)file_get_contents($root . '/shop-api/api.php');
+$spvService = (string)file_get_contents($root . '/shop-api/spv-service.php');
 if (!str_contains($api, "'anaf_oauth_client_secret' => ''")) throw new RuntimeException('Configurația server nu are implicit secretul OAuth gol.');
 if (!str_contains($api, 'https://api.anaf.ro/test/FCTEL/rest') || str_contains($api, "'anaf_efactura_test_url' => 'https://webserviceapl.anaf.ro")) throw new RuntimeException('Gateway-ul e-Factura OAuth trebuie să fie api.anaf.ro, nu varianta mTLS.');
+if (!str_contains($spvService, "'litespeed_finish_request'")) throw new RuntimeException('Workerul SPV oportunist nu rulează după răspuns pe hostingul LiteSpeed.');
+if (!str_contains($spvService, "'fastcgi_finish_request'")) throw new RuntimeException('Workerul SPV oportunist nu păstrează compatibilitatea PHP-FPM.');
 $requiredActions = ['getSpvConnection', 'beginSpvOAuth', 'testSpvConnection', 'runSpvDiagnostics', 'pollSpvDiagnostics', 'updateSpvSettings', 'disconnectSpv', 'sendInvoiceToSpv', 'runSpvWorker', 'getShopNotificationSummary', 'listShopNotifications', 'markShopNotificationRead'];
 foreach ($requiredActions as $action) if (!str_contains($api, "'{$action}'")) throw new RuntimeException("Acțiunea API {$action} lipsește.");
 $desktopApi = (string)file_get_contents($root . '/electron-app/renderer/js/shop-api.js');

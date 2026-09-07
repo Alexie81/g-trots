@@ -560,10 +560,13 @@ final class GtrotsSpvService
 
     public static function scheduleWorkerAfterResponse(PDO $db, array $config): void
     {
-        if (!function_exists('fastcgi_finish_request') || !self::configReady($config) || !empty($GLOBALS['gtrotsSpvWorkerScheduled'])) return;
+        $finishRequest = function_exists('litespeed_finish_request')
+            ? 'litespeed_finish_request'
+            : (function_exists('fastcgi_finish_request') ? 'fastcgi_finish_request' : null);
+        if ($finishRequest === null || !self::configReady($config) || !empty($GLOBALS['gtrotsSpvWorkerScheduled'])) return;
         $GLOBALS['gtrotsSpvWorkerScheduled'] = true;
-        register_shutdown_function(static function () use ($db, $config): void {
-            @fastcgi_finish_request();
+        register_shutdown_function(static function () use ($db, $config, $finishRequest): void {
+            @$finishRequest();
             ignore_user_abort(true);
             @set_time_limit(90);
             try { self::runWorker($db, $config, 3); }

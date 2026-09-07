@@ -5655,8 +5655,8 @@ try {
     }
 
     $currentUser = validateAuthToken($db, $config, $body);
-    // Pe PHP-FPM, răspunsul ajunge întâi la aplicație, iar coada SPV este
-    // procesată apoi în fundal. Navigarea rămâne rapidă pe telefon și desktop.
+    // Pe LiteSpeed/PHP-FPM, răspunsul ajunge întâi la aplicație, iar coada SPV
+    // este procesată apoi în fundal. Navigarea rămâne rapidă pe telefon și desktop.
     if (!in_array($action, ['exportProducts', 'exportCatalog', 'exportInvoiceRegistry'], true)) {
         GtrotsSpvService::scheduleWorkerAfterResponse($db, $config);
     }

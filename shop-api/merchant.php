@@ -224,8 +224,9 @@ function merchantSyncProduct(PDO $db, array $config, string $productId): array {
         return ['status' => 'not_configured'];
     }
     $product = findProduct($db, $productId, $config, false, true);
-    $catalogIds = function_exists('catalogRepresentativeProductIds') ? catalogRepresentativeProductIds($db) : [];
-    if ($catalogIds && empty($catalogIds[$productId])) {
+    $skipCatalogDedup = !empty($GLOBALS['merchant_skip_catalog_dedup']);
+    $catalogIds = !$skipCatalogDedup && function_exists('catalogRepresentativeProductIds') ? catalogRepresentativeProductIds($db) : [];
+    if (!$skipCatalogDedup && $catalogIds && empty($catalogIds[$productId])) {
         $result = merchantDeleteProduct($config, $productId);
         merchantRecordProductSync($db, $productId, null);
         return [...$result, 'reason' => 'public_catalog_duplicate'];

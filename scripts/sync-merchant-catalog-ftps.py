@@ -7,6 +7,7 @@ from io import BytesIO
 import argparse
 import json
 import os
+import re
 import secrets
 import ssl
 from urllib.parse import urlencode
@@ -85,14 +86,33 @@ try {{
     }}
     if ($mode === 'plan') {{
         $ids = array_values(array_map('strval', $db->query('SELECT id FROM shop_products ORDER BY id ASC')->fetchAll(PDO::FETCH_COLUMN)));
-        echo json_encode(['ok' => true, 'product_ids' => $ids, 'total' => count($ids)]);
+        $representativeIds = function_exists('catalogRepresentativeProductIds') ? array_keys(catalogRepresentativeProductIds($db)) : $ids;
+        echo json_encode(['ok' => true, 'product_ids' => $ids, 'representative_ids' => $representativeIds, 'total' => count($ids)]);
         exit;
     }}
     if ($mode === 'sync') {{
         $ids = array_values(array_filter(array_map('trim', explode(',', (string)($_GET['ids'] ?? '')))));
         if (count($ids) > 5) throw new RuntimeException('Lotul depaseste limita de 5 produse.');
+        $GLOBALS['merchant_skip_catalog_dedup'] = true;
         $results = [];
         foreach ($ids as $id) $results[] = ['product_id' => $id, ...merchantSyncProductSafe($db, $config, $id)];
+        echo json_encode(['ok' => true, 'results' => $results], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }}
+    if ($mode === 'delete') {{
+        $ids = array_values(array_filter(array_map('trim', explode(',', (string)($_GET['ids'] ?? '')))));
+        if (count($ids) > 5) throw new RuntimeException('Lotul depaseste limita de 5 produse.');
+        $results = [];
+        foreach ($ids as $id) {{
+            try {{
+                $deleted = merchantDeleteProduct($config, $id);
+                merchantRecordProductSync($db, $id, null);
+                $results[] = ['product_id' => $id, ...$deleted, 'reason' => 'public_catalog_duplicate'];
+            }} catch (Throwable $error) {{
+                merchantRecordProductSync($db, $id, $error->getMessage());
+                $results[] = ['product_id' => $id, 'status' => 'error', 'error' => $error->getMessage()];
+            }}
+        }}
         echo json_encode(['ok' => true, 'results' => $results], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
     }}
@@ -107,6 +127,10 @@ try {{
 
     ftp = connect()
     try:
+        # Curăță exclusiv endpointurile temporare ale unor rulări întrerupte.
+        for remote_name in ftp.nlst():
+            if re.fullmatch(r"merchant-catalog-sync-[0-9a-f]{16}\.php", remote_name):
+                ftp.delete(remote_name)
         ftp.storbinary(f"STOR {filename}", BytesIO(php.encode("utf-8")), blocksize=262144)
         base = f"{PUBLIC_ROOT}/{filename}?" + urlencode({"token": token})
         bootstrap = request_json(base + "&mode=bootstrap")
@@ -123,14 +147,17 @@ try {{
 
         plan = request_json(base + "&mode=plan")
         product_ids = [str(value) for value in plan.get("product_ids", [])]
-        groups = chunks(product_ids, 5)
-        print(json.dumps({"phase": "plan", "total": len(product_ids), "batches": len(groups)}), flush=True)
+        representative_ids = {str(value) for value in plan.get("representative_ids", product_ids)}
+        public_ids = [value for value in product_ids if value in representative_ids]
+        duplicate_ids = [value for value in product_ids if value not in representative_ids]
+        jobs = [("sync", group) for group in chunks(public_ids, 5)] + [("delete", group) for group in chunks(duplicate_ids, 5)]
+        print(json.dumps({"phase": "plan", "total": len(product_ids), "public": len(public_ids), "duplicates": len(duplicate_ids), "batches": len(jobs)}), flush=True)
 
         totals = {"synced": 0, "deleted": 0, "already_absent": 0, "errors": [], "duplicate_catalog_rows_removed": 0}
         with ThreadPoolExecutor(max_workers=6) as executor:
             pending = {
-                executor.submit(request_json, base + "&" + urlencode({"mode": "sync", "ids": ",".join(group)})): group
-                for group in groups
+                executor.submit(request_json, base + "&" + urlencode({"mode": mode, "ids": ",".join(group)})): (mode, group)
+                for mode, group in jobs
             }
             completed = 0
             for future in as_completed(pending):
@@ -148,9 +175,10 @@ try {{
                         else:
                             totals["errors"].append({"product_id": result.get("product_id"), "error": f"Stare neasteptata: {status}"})
                 except Exception as error:
-                    totals["errors"].append({"product_ids": pending[future], "error": str(error)})
-                if completed % 25 == 0 or completed == len(groups):
-                    print(json.dumps({"phase": "sync", "completed_batches": completed, "total_batches": len(groups), "errors": len(totals["errors"])}), flush=True)
+                    mode, failed_group = pending[future]
+                    totals["errors"].append({"mode": mode, "product_ids": failed_group, "error": str(error)})
+                if completed % 25 == 0 or completed == len(jobs):
+                    print(json.dumps({"phase": "sync", "completed_batches": completed, "total_batches": len(jobs), "errors": len(totals["errors"])}), flush=True)
 
         stats = request_json(base + "&mode=stats")
         print(json.dumps({"phase": "complete", "result": totals, "server": stats.get("stats", {})}, ensure_ascii=False, indent=2), flush=True)

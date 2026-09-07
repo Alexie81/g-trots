@@ -66,9 +66,12 @@ function shopConfig(): array {
         // Shopify Agentic/Catalog ramane oprit pana cand aplicatia privata este
         // autorizata si tokenul Admin este salvat exclusiv pe server.
         'shopify_store_domain' => 'g-trots-agentic.myshopify.com',
+        'shopify_client_id' => '',
+        'shopify_client_secret' => '',
         'shopify_admin_access_token' => '',
         'shopify_api_version' => '2026-07',
         'shopify_location_id' => '',
+        'shopify_catalog_publication_id' => '',
         'shopify_sync_enabled' => false,
         'order_email_from' => 'contact@g-trots.ro',
         'order_email_from_name' => 'G-Trots România',

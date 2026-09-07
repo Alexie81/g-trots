@@ -29,7 +29,53 @@ function shopifyIsConfigured(array $config): bool {
     } catch (Throwable $error) {
         return false;
     }
-    return $domain !== '' && trim((string)($config['shopify_admin_access_token'] ?? '')) !== '';
+    $staticToken = trim((string)($config['shopify_admin_access_token'] ?? ''));
+    $clientId = trim((string)($config['shopify_client_id'] ?? ''));
+    $clientSecret = trim((string)($config['shopify_client_secret'] ?? ''));
+    return $domain !== '' && ($staticToken !== '' || ($clientId !== '' && $clientSecret !== ''));
+}
+
+function shopifyAccessToken(array $config): string {
+    $staticToken = trim((string)($config['shopify_admin_access_token'] ?? ''));
+    if ($staticToken !== '') return $staticToken;
+    if (!shopifyIsConfigured($config)) throw new RuntimeException('Shopify nu este configurat pe server.');
+
+    static $cached = [];
+    $domain = shopifyStoreDomain($config);
+    $clientId = trim((string)($config['shopify_client_id'] ?? ''));
+    $clientSecret = trim((string)($config['shopify_client_secret'] ?? ''));
+    $cacheKey = $domain . '|' . $clientId;
+    if (isset($cached[$cacheKey]) && (int)$cached[$cacheKey]['expires_at'] > time() + 120) {
+        return (string)$cached[$cacheKey]['token'];
+    }
+
+    $curl = curl_init('https://' . $domain . '/admin/oauth/access_token');
+    curl_setopt_array($curl, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => http_build_query([
+            'grant_type' => 'client_credentials',
+            'client_id' => $clientId,
+            'client_secret' => $clientSecret,
+        ], '', '&', PHP_QUERY_RFC3986),
+        CURLOPT_HTTPHEADER => ['Accept: application/json', 'Content-Type: application/x-www-form-urlencoded'],
+        CURLOPT_CONNECTTIMEOUT => 8,
+        CURLOPT_TIMEOUT => 30,
+    ]);
+    $raw = curl_exec($curl);
+    $status = (int)curl_getinfo($curl, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($curl);
+    curl_close($curl);
+    if ($raw === false) throw new RuntimeException('Autentificarea Shopify a esuat: ' . ($curlError ?: 'eroare necunoscuta'));
+    $response = json_decode((string)$raw, true);
+    $token = is_array($response) ? trim((string)($response['access_token'] ?? '')) : '';
+    if ($status < 200 || $status >= 300 || $token === '') {
+        $message = is_array($response) ? trim((string)($response['error_description'] ?? $response['error'] ?? '')) : '';
+        throw new RuntimeException('Autentificarea Shopify a esuat' . ($message !== '' ? ': ' . $message : ' (' . $status . ').'));
+    }
+    $expiresIn = max(300, (int)($response['expires_in'] ?? 86399));
+    $cached[$cacheKey] = ['token' => $token, 'expires_at' => time() + $expiresIn];
+    return $token;
 }
 
 function shopifyGraphql(array $config, string $query, array $variables = []): array {
@@ -41,7 +87,8 @@ function shopifyGraphql(array $config, string $query, array $variables = []): ar
     $url = 'https://' . shopifyStoreDomain($config) . '/admin/api/' . $version . '/graphql.json';
     $body = json_encode([
         'query' => $query,
-        'variables' => $variables,
+        // GraphQL cere un obiect JSON; în PHP o listă goală s-ar serializa [].
+        'variables' => $variables ?: (object)[],
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 
     $curl = curl_init($url);
@@ -52,7 +99,7 @@ function shopifyGraphql(array $config, string $query, array $variables = []): ar
         CURLOPT_HTTPHEADER => [
             'Accept: application/json',
             'Content-Type: application/json; charset=utf-8',
-            'X-Shopify-Access-Token: ' . trim((string)$config['shopify_admin_access_token']),
+            'X-Shopify-Access-Token: ' . shopifyAccessToken($config),
         ],
         CURLOPT_CONNECTTIMEOUT => 8,
         CURLOPT_TIMEOUT => 45,
@@ -86,6 +133,62 @@ function shopifyUserErrors(array $payload): array {
         $errors[] = $field !== '' ? $field . ': ' . $message : $message;
     }
     return $errors;
+}
+
+function shopifyCatalogPublicationId(array $config): string {
+    $configured = trim((string)($config['shopify_catalog_publication_id'] ?? ''));
+    if ($configured !== '') {
+        if (!preg_match('#^gid://shopify/Publication/\d+$#', $configured)) {
+            throw new RuntimeException('ID-ul publicatiei Shopify Catalog nu este valid.');
+        }
+        return $configured;
+    }
+
+    static $cached = [];
+    $domain = shopifyStoreDomain($config);
+    if (isset($cached[$domain])) return $cached[$domain];
+
+    $data = shopifyGraphql($config, '{ publications(first: 50) { nodes { id name } } }');
+    foreach ((array)($data['publications']['nodes'] ?? []) as $publication) {
+        if (!is_array($publication)) continue;
+        if (strcasecmp(trim((string)($publication['name'] ?? '')), 'Shopify Catalog') !== 0) continue;
+        $id = trim((string)($publication['id'] ?? ''));
+        if (preg_match('#^gid://shopify/Publication/\d+$#', $id)) {
+            $cached[$domain] = $id;
+            return $id;
+        }
+    }
+    throw new RuntimeException('Publicatia Shopify Catalog nu a fost gasita pentru acest magazin.');
+}
+
+function shopifySetCatalogPublished(array $config, string $productId, bool $published): array {
+    if (!preg_match('#^gid://shopify/Product/\d+$#', $productId)) {
+        throw new RuntimeException('ID-ul produsului Shopify nu este valid pentru publicare.');
+    }
+    $publicationId = shopifyCatalogPublicationId($config);
+    $field = $published ? 'publishablePublish' : 'publishableUnpublish';
+    $query = $published
+        ? <<<'GRAPHQL'
+mutation GtrotsCatalogPublish($id: ID!, $input: [PublicationInput!]!) {
+  publishablePublish(id: $id, input: $input) { userErrors { field message } }
+}
+GRAPHQL
+        : <<<'GRAPHQL'
+mutation GtrotsCatalogUnpublish($id: ID!, $input: [PublicationInput!]!) {
+  publishableUnpublish(id: $id, input: $input) { userErrors { field message } }
+}
+GRAPHQL;
+    $data = shopifyGraphql($config, $query, [
+        'id' => $productId,
+        'input' => [['publicationId' => $publicationId]],
+    ]);
+    $payload = is_array($data[$field] ?? null) ? $data[$field] : [];
+    $errors = shopifyUserErrors($payload);
+    if ($errors) throw new RuntimeException(implode('; ', $errors));
+    return [
+        'status' => $published ? 'published' : 'unpublished',
+        'publication_id' => $publicationId,
+    ];
 }
 
 function shopifyEffectivePricing(array $product): array {
@@ -260,11 +363,13 @@ GRAPHQL;
     $shopifyProductId = trim((string)($remote['id'] ?? ''));
     $variantId = trim((string)($remote['variants']['nodes'][0]['id'] ?? ''));
     if ($shopifyProductId === '' || $variantId === '') throw new RuntimeException('Shopify nu a returnat produsul si varianta sincronizata.');
+    $catalog = shopifySetCatalogPublished($config, $shopifyProductId, shopifyProductIsVisible($product));
     shopifyRecordProductSync($db, $productId, $shopifyProductId, $variantId, null);
     return [
         'status' => shopifyProductIsVisible($product) ? 'synced' : 'draft',
         'product_id' => $shopifyProductId,
         'variant_id' => $variantId,
+        'catalog' => $catalog,
     ];
 }
 

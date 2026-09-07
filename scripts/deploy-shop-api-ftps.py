@@ -31,6 +31,7 @@ FILES = (
     "order-return-confirmation.php",
     "stripe.php",
     "merchant.php",
+    "shopify.php",
     "invoice-theme.php",
     "invoice-service.php",
     "invoice-automation.php",
@@ -89,6 +90,11 @@ def arguments() -> argparse.Namespace:
         "--merchant-sync",
         choices=("enabled", "disabled"),
         help="Activeaza sau pune pe pauza hook-urile de sincronizare Merchant.",
+    )
+    parser.add_argument(
+        "--configure-shopify-from-local",
+        action="store_true",
+        help="Copiaza numai credentialele Shopify din config.local.php local in configuratia protejata de pe server.",
     )
     return parser.parse_args()
 
@@ -242,6 +248,59 @@ def configure_merchant_sync_state(ftp: FTP_TLS, timestamp: str, state: str) -> N
     print(f"Sincronizarea Merchant este acum {state}.", flush=True)
 
 
+def configure_shopify_from_local(ftp: FTP_TLS, timestamp: str) -> None:
+    local_source = (API_ROOT / "config.local.php").read_text(encoding="utf-8-sig")
+    keys = (
+        "shopify_store_domain",
+        "shopify_client_id",
+        "shopify_client_secret",
+        "shopify_api_version",
+        "shopify_location_id",
+        "shopify_catalog_publication_id",
+        "shopify_sync_enabled",
+    )
+    values: dict[str, str] = {}
+    for key in keys:
+        if key == "shopify_sync_enabled":
+            match = re.search(rf"['\"]{re.escape(key)}['\"]\s*=>\s*(?:['\"])?(true|false|1|0)(?:['\"])?", local_source, re.IGNORECASE)
+        else:
+            match = re.search(rf"['\"]{re.escape(key)}['\"]\s*=>\s*['\"]([^'\"\r\n]+)['\"]", local_source)
+        if not match:
+            raise RuntimeError(f"Lipseste {key} din config.local.php local.")
+        values[key] = match.group(1)
+    if values["shopify_store_domain"] != "g-trots-agentic.myshopify.com":
+        raise RuntimeError("Credentialele nu apartin magazinului Shopify G-Trots Agentic.")
+    if not values["shopify_client_id"] or not values["shopify_client_secret"].startswith("shpss_"):
+        raise RuntimeError("Credentialele Shopify locale nu sunt valide.")
+    if not values["shopify_location_id"].startswith("gid://shopify/Location/"):
+        raise RuntimeError("Locatia Shopify pentru stoc nu este configurata.")
+    if not values["shopify_catalog_publication_id"].startswith("gid://shopify/Publication/"):
+        raise RuntimeError("Publicatia Shopify Catalog nu este configurata.")
+
+    buffer = BytesIO()
+    ftp.retrbinary("RETR config.local.php", buffer.write)
+    original = buffer.getvalue().decode("utf-8-sig")
+    updated = original
+    for key, value in values.items():
+        updated = set_php_config_value(updated, key, value)
+
+    temporary = f"config.local.php.codex-upload-{timestamp}.tmp"
+    backup = f"config.local.php.bak-codex-shopify-{timestamp}"
+    ftp.storbinary(f"STOR {temporary}", BytesIO(updated.encode("utf-8")), blocksize=262144)
+    try:
+        ftp.rename("config.local.php", backup)
+        ftp.rename(temporary, "config.local.php")
+    except Exception:
+        try:
+            ftp.delete(temporary)
+        except Exception:
+            pass
+        if "config.local.php" not in set(ftp.nlst()) and backup in set(ftp.nlst()):
+            ftp.rename(backup, "config.local.php")
+        raise
+    print("Credentialele Shopify au fost salvate numai in configuratia protejata de pe server.", flush=True)
+
+
 def main() -> None:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     options = arguments()
@@ -292,6 +351,8 @@ def main() -> None:
             configure_merchant_from_json(ftp, timestamp, options.configure_merchant_from_json)
         if options.merchant_sync:
             configure_merchant_sync_state(ftp, timestamp, options.merchant_sync)
+        if options.configure_shopify_from_local:
+            configure_shopify_from_local(ftp, timestamp)
     except Exception:
         for name in reversed(activated):
             try:

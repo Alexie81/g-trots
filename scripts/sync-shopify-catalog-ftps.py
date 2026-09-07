@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from ftplib import FTP_TLS
 from getpass import getpass
 from io import BytesIO
+import argparse
 import json
 import os
 import secrets
@@ -40,7 +41,14 @@ def chunks(values: list[str], size: int) -> list[list[str]]:
     return [values[index:index + size] for index in range(0, len(values), size)]
 
 
+def arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Sincronizeaza catalogul Shopify prin API-ul protejat.")
+    parser.add_argument("--limit", type=int, default=0, help="Limiteaza sincronizarea pentru un test controlat; 0 inseamna tot catalogul.")
+    return parser.parse_args()
+
+
 def main() -> None:
+    options = arguments()
     token = secrets.token_urlsafe(32)
     filename = f"shopify-catalog-sync-{secrets.token_hex(8)}.php"
     php = f"""<?php
@@ -94,6 +102,8 @@ try {{
         print(json.dumps({"phase": "bootstrap", "location": selected}, ensure_ascii=False), flush=True)
         plan = request_json(base + "&mode=plan")
         product_ids = [str(value) for value in plan.get("product_ids", [])]
+        if options.limit > 0:
+            product_ids = product_ids[: options.limit]
         groups = chunks(product_ids, 5)
         print(json.dumps({"phase": "plan", "total": len(product_ids), "batches": len(groups)}), flush=True)
 

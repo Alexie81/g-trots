@@ -1,12 +1,13 @@
 {
   "name": "gtrots-desktop",
-  "version": "1.2.37",
+  "version": "1.2.38",
   "description": "G-Trots CRM Desktop",
   "main": "main.js",
   "scripts": {
     "postinstall": "node install-xlsx.js",
     "start": "electron .",
     "dist:win": "electron-builder --win",
+    "dist:win:ci": "electron-builder --win --publish never",
     "dist:mac": "electron-builder --mac"
   },
   "dependencies": {

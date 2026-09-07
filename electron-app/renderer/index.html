@@ -147,6 +147,14 @@
       <label>Parola</label>
       <input type="password" id="auth-password" autocomplete="current-password" placeholder="admin" required />
     </div>
+    <label class="auth-remember" for="auth-remember-me">
+      <span class="auth-remember-copy">
+        <strong>Tine-ma minte</strong>
+        <small>Pastreaza sesiunea activa si dupa repornirea calculatorului</small>
+      </span>
+      <input type="checkbox" id="auth-remember-me" role="switch" aria-label="Tine-ma minte pe acest calculator" />
+      <span class="auth-remember-switch" aria-hidden="true"><i></i></span>
+    </label>
     <div id="auth-error" class="error-box" style="display:none"></div>
     <button type="submit" class="btn-primary">Intra in aplicatie</button>
   </form>

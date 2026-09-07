@@ -288,10 +288,11 @@ window.API = {
   bootstrapSystem: bootstrapSystemAt,
 
   // Auth
-  login: (username, password, platform = 'desktop') => apiCall('login', 'POST', {
+  login: (username, password, platform = 'desktop', rememberMe = false) => apiCall('login', 'POST', {
     username,
     password,
     platform,
+    remember_me: rememberMe ? 1 : 0,
   }),
   adminLogin: (username, password) => apiCall('login', 'POST', {
     username,

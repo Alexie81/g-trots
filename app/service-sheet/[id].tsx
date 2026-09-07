@@ -165,6 +165,7 @@ export default function ServiceSheetDetailsScreen() {
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
   const [switchingCompanyDetails, setSwitchingCompanyDetails] = useState(false);
   const [signatureVisible, setSignatureVisible] = useState(false);
+  const [signatureDraftValue, setSignatureDraftValue] = useState('');
   const [error, setError] = useState('');
 
   const goBack = () => {
@@ -432,6 +433,18 @@ export default function ServiceSheetDetailsScreen() {
     setForm(sheetToForm(saved));
   };
 
+  const openClientSignature = () => {
+    // O resemnare trebuie sa porneasca pe o foaie curata. Semnatura salvata
+    // ramane neschimbata pana cand clientul confirma noua semnatura.
+    setSignatureDraftValue('');
+    setSignatureVisible(true);
+  };
+
+  const closeClientSignature = () => {
+    setSignatureVisible(false);
+    setSignatureDraftValue('');
+  };
+
   const input = (key: keyof ServiceSheetFormData, label: string, opts: { multiline?: boolean; keyboardType?: 'default' | 'numeric' | 'email-address'; placeholder?: string; autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters'; autoCorrect?: boolean } = {}) => (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
@@ -492,10 +505,6 @@ export default function ServiceSheetDetailsScreen() {
               <TouchableOpacity style={styles.whatsappBtn} onPress={sendPdfOnWhatsApp} disabled={sendingWhatsApp}>
                 {sendingWhatsApp ? <ActivityIndicator color={Colors.success} size="small" /> : <MessageCircle size={17} color={Colors.success} />}
                 <Text style={styles.whatsappText}>WhatsApp</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.pdfBtn} onPress={sharePdf} disabled={sharing}>
-                {sharing ? <ActivityIndicator color={Colors.white} size="small" /> : <Download size={17} color={Colors.white} />}
-                <Text style={styles.pdfText}>PDF</Text>
               </TouchableOpacity>
             </View>
           ) : null}
@@ -796,7 +805,7 @@ export default function ServiceSheetDetailsScreen() {
                 </Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.signatureButton} onPress={() => setSignatureVisible(true)}>
+            <TouchableOpacity style={styles.signatureButton} onPress={openClientSignature}>
               <Signature size={16} color={Colors.white} />
               <Text style={styles.signatureButtonText}>
                 {hasClientSignature(form.client_signature) ? 'Semneaza din nou' : 'Semneaza client'}
@@ -810,7 +819,13 @@ export default function ServiceSheetDetailsScreen() {
             <X size={16} color={Colors.textSecondary} />
             <Text style={styles.cancelText}>Inchide</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving}>
+          {canNormallyViewFinancials ? (
+            <TouchableOpacity style={styles.actionPdfBtn} onPress={sharePdf} disabled={sharing || saving}>
+              {sharing ? <ActivityIndicator color={Colors.orange} size="small" /> : <Download size={16} color={Colors.orange} />}
+              <Text style={styles.actionPdfText}>PDF</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving || sharing}>
             {saving ? <ActivityIndicator color={Colors.white} size="small" /> : <Save size={16} color={Colors.white} />}
             <Text style={styles.saveText}>Salveaza fisa</Text>
           </TouchableOpacity>
@@ -818,8 +833,8 @@ export default function ServiceSheetDetailsScreen() {
       </KeyboardAwareScrollView>
       <ClientSignatureModal
         visible={signatureVisible}
-        value={form.client_signature}
-        onClose={() => setSignatureVisible(false)}
+        value={signatureDraftValue}
+        onClose={closeClientSignature}
         onSave={saveClientSignature}
       />
     </KeyboardAvoidingView>
@@ -1119,6 +1134,20 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   cancelText: { color: Colors.textSecondary, fontSize: 14, fontFamily: 'Inter-Medium' },
+  actionPdfBtn: {
+    flex: 0.46,
+    minWidth: 76,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.orange + '66',
+    backgroundColor: Colors.orangeDim,
+    paddingVertical: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 7,
+  },
+  actionPdfText: { color: Colors.orange, fontSize: 14, fontFamily: 'Inter-Bold' },
   saveBtn: {
     flex: 1,
     borderRadius: 12,

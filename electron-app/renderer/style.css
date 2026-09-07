@@ -10295,6 +10295,7 @@ select:focus-visible,
 .auth-overlay.auth-entered .auth-card > *:nth-child(3) { animation-delay: .22s; }
 .auth-overlay.auth-entered .auth-card > *:nth-child(4) { animation-delay: .28s; }
 .auth-overlay.auth-entered .auth-card > *:nth-child(5) { animation-delay: .34s; }
+.auth-overlay.auth-entered .auth-card > *:nth-child(6) { animation-delay: .40s; }
 .auth-brand {
   display: flex;
   flex-direction: column;
@@ -10350,6 +10351,89 @@ select:focus-visible,
   border-color: rgba(255,107,0,.58);
   background: rgba(10,10,10,0.72);
   box-shadow: 0 0 0 4px rgba(255,107,0,.14);
+}
+.auth-remember {
+  min-height: 58px;
+  margin: 2px 0 15px;
+  padding: 9px 10px 9px 13px;
+  border: 1px solid rgba(255,255,255,.085);
+  border-radius: 17px;
+  background: rgba(10,10,10,.38);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: border-color .2s ease, background .2s ease, box-shadow .2s ease;
+}
+.auth-remember:hover,
+.auth-remember:focus-within {
+  border-color: rgba(255,107,0,.34);
+  background: rgba(255,107,0,.055);
+}
+.auth-remember.is-active {
+  border-color: rgba(255,107,0,.42);
+  background: linear-gradient(135deg, rgba(255,107,0,.12), rgba(255,154,61,.045));
+  box-shadow: inset 0 0 0 1px rgba(255,107,0,.05);
+}
+.auth-remember-copy {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 3px;
+}
+.auth-remember-copy strong {
+  color: #F7F3EF;
+  font-size: 12px;
+  line-height: 1.15;
+  font-weight: 850;
+}
+.auth-remember-copy small {
+  color: #8F8882;
+  font-size: 9px;
+  line-height: 1.35;
+  font-weight: 650;
+}
+.auth-remember input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.auth-remember-switch {
+  position: relative;
+  width: 47px;
+  height: 28px;
+  flex: 0 0 auto;
+  padding: 3px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 999px;
+  background: #282421;
+  box-shadow: inset 0 3px 8px rgba(0,0,0,.28);
+  transition: border-color .22s ease, background .22s ease, box-shadow .22s ease;
+}
+.auth-remember-switch i {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #D8D2CC, #A8A19B);
+  box-shadow: 0 4px 10px rgba(0,0,0,.35);
+  transform: translateX(0);
+  transition: transform .24s cubic-bezier(.2,.9,.2,1), background .22s ease;
+}
+.auth-remember input:focus-visible + .auth-remember-switch {
+  outline: 3px solid rgba(255,107,0,.24);
+  outline-offset: 3px;
+}
+.auth-remember input:checked + .auth-remember-switch {
+  border-color: rgba(255,173,92,.75);
+  background: linear-gradient(135deg, #FF6B00, #FF922B);
+  box-shadow: 0 8px 20px rgba(255,107,0,.22), inset 0 1px rgba(255,255,255,.26);
+}
+.auth-remember input:checked + .auth-remember-switch i {
+  transform: translateX(19px);
+  background: #FFF8F1;
 }
 .auth-card .error-box {
   border-radius: 14px;

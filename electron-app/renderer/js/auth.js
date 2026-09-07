@@ -2,13 +2,17 @@
 (function() {
   const TOKEN_KEY = 'gtrots_auth_token';
   const USER_KEY = 'gtrots_auth_user';
+  const REMEMBER_KEY = 'gtrots_auth_remember';
+  const REMEMBERED_USERNAME_KEY = 'gtrots_auth_remembered_username';
 
   const startupStartedAt = Date.now();
-  let authToken = sessionStorage.getItem(TOKEN_KEY) || '';
+  let rememberLogin = localStorage.getItem(REMEMBER_KEY) === '1';
+  const initialAuthStorage = rememberLogin ? localStorage : sessionStorage;
+  let authToken = initialAuthStorage.getItem(TOKEN_KEY) || '';
   let authUser = null;
 
   try {
-    authUser = JSON.parse(sessionStorage.getItem(USER_KEY) || 'null');
+    authUser = JSON.parse(initialAuthStorage.getItem(USER_KEY) || 'null');
   } catch {
     authUser = null;
   }
@@ -18,6 +22,7 @@
   const loginForm = document.getElementById('auth-login-form');
   const usernameInput = document.getElementById('auth-username');
   const passwordInput = document.getElementById('auth-password');
+  const rememberInput = document.getElementById('auth-remember-me');
   const errorBox = document.getElementById('auth-error');
   const userLabel = document.getElementById('auth-user-label');
   const logoutBtn = document.getElementById('auth-logout-btn');
@@ -71,16 +76,42 @@
     return Boolean(authToken && authUser);
   }
 
-  function persist(token, user) {
+  function updateRememberControl() {
+    if (!rememberInput) return;
+    rememberInput.checked = rememberLogin;
+    rememberInput.closest('.auth-remember')?.classList.toggle('is-active', rememberLogin);
+  }
+
+  function saveRememberPreference(enabled, username = '') {
+    rememberLogin = Boolean(enabled);
+    if (rememberLogin) {
+      localStorage.setItem(REMEMBER_KEY, '1');
+      const normalizedUsername = String(username || '').trim();
+      if (normalizedUsername) localStorage.setItem(REMEMBERED_USERNAME_KEY, normalizedUsername);
+    } else {
+      localStorage.removeItem(REMEMBER_KEY);
+      localStorage.removeItem(REMEMBERED_USERNAME_KEY);
+    }
+    updateRememberControl();
+  }
+
+  function clearStoredAuth() {
+    for (const storage of [sessionStorage, localStorage]) {
+      storage.removeItem(TOKEN_KEY);
+      storage.removeItem(USER_KEY);
+    }
+  }
+
+  function persist(token, user, remember = rememberLogin, username = '') {
     authToken = token || '';
     authUser = user || null;
+    clearStoredAuth();
     if (authToken && authUser) {
-      sessionStorage.setItem(TOKEN_KEY, authToken);
-      sessionStorage.setItem(USER_KEY, JSON.stringify(authUser));
-    } else {
-      sessionStorage.removeItem(TOKEN_KEY);
-      sessionStorage.removeItem(USER_KEY);
+      const storage = remember ? localStorage : sessionStorage;
+      storage.setItem(TOKEN_KEY, authToken);
+      storage.setItem(USER_KEY, JSON.stringify(authUser));
     }
+    saveRememberPreference(remember, username || authUser?.username || '');
   }
 
   function updateAdminVisibility() {
@@ -129,6 +160,9 @@
       } else {
         overlay.style.display = 'flex';
         overlay.classList.remove('auth-entered');
+        if (rememberLogin && usernameInput && !usernameInput.value) {
+          usernameInput.value = localStorage.getItem(REMEMBERED_USERNAME_KEY) || '';
+        }
         if (startupComplete) {
           requestAnimationFrame(() => {
             overlay.classList.add('auth-entered');
@@ -168,16 +202,17 @@
     }, delay);
   }
 
-  async function login(username, password) {
-    const result = await window.API.login(username, password, 'desktop');
-    persist(result.token, result.user);
+  async function login(username, password, remember = Boolean(rememberInput?.checked)) {
+    const result = await window.API.login(username, password, 'desktop', remember);
+    persist(result.token, result.user, remember, username);
     renderAuthState();
     return result;
   }
 
   async function logout() {
     const token = authToken;
-    persist('', null);
+    const username = localStorage.getItem(REMEMBERED_USERNAME_KEY) || authUser?.username || '';
+    persist('', null, rememberLogin, username);
     renderAuthState();
     if (token) {
       try {
@@ -217,6 +252,10 @@
 
   async function initializeAuth() {
     try {
+      updateRememberControl();
+      if (rememberLogin && usernameInput) {
+        usernameInput.value = localStorage.getItem(REMEMBERED_USERNAME_KEY) || authUser?.username || '';
+      }
       await validateStoredSession();
       renderAuthState();
       hideStartupLoader();
@@ -248,13 +287,17 @@
     event.preventDefault();
     setError('');
     try {
-      await login(usernameInput.value.trim(), passwordInput.value.trim());
+      await login(usernameInput.value.trim(), passwordInput.value.trim(), Boolean(rememberInput?.checked));
       passwordInput.value = '';
     } catch (e) {
       persist('', null);
       renderAuthState();
       setError(e.message || 'Autentificare esuata.');
     }
+  });
+
+  rememberInput?.addEventListener('change', () => {
+    saveRememberPreference(Boolean(rememberInput.checked), usernameInput?.value || '');
   });
 
   logoutBtn?.addEventListener('click', () => {

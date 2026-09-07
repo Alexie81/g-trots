@@ -39,12 +39,14 @@ Prețul efectiv public este calculat de magazin conform regulilor comerciale cur
 
 ## Descoperire și actualizare
 
+- Document canonic pentru agenți AI: https://g-trots.ro/agents.md
+- Rezumat pentru modele lingvistice: https://g-trots.ro/llms.txt
 - Sitemap general: https://g-trots.ro/sitemap.xml
 - Sitemap index: https://g-trots.ro/sitemap-index.xml
 - Sitemap produse: https://g-trots.ro/sitemaps/sitemap-produse.xml
 - Robots: https://g-trots.ro/robots.txt
 
-Catalogul, sitemap-ul de produse și paginile de produs sunt regenerate la adăugare, editare, schimbare de preț/stoc și retragere. Produsele retrase răspund cu status adecvat și nu trebuie prezentate ca disponibile.
+Catalogul, sitemap-ul de produse și paginile de produs sunt regenerate la adăugare, editare, schimbare de preț/stoc și retragere. Produsele retrase răspund cu status adecvat și nu trebuie prezentate ca disponibile. Dacă furnizorul are mai multe rânduri pentru aceeași identitate comercială, catalogul public și sitemap-ul păstrează un singur reprezentant canonic pentru a evita conținutul duplicat.
 
 ## Pagini editoriale principale
 

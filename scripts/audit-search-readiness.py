@@ -115,12 +115,32 @@ def main() -> int:
         "product_schema_valid": 0,
         "internal_html_urls": 0,
         "sitemap_urls": 0,
+        "agent_discovery_files": 0,
     }
 
     def record(target: dict[str, list[str]], kind: str, value: str):
         target.setdefault(kind, [])
         if len(target[kind]) < args.max_examples:
             target[kind].append(value)
+
+    if not args.product_only:
+        discovery_files = {
+            "agents.md": ("https://g-trots.ro/magazin", "https://g-trots.ro/ai-catalog.json", "https://g-trots.ro/llms.txt"),
+            "llms.txt": ("https://g-trots.ro/agents.md", "https://g-trots.ro/sitemaps/sitemap-produse.xml"),
+            "llms-full.txt": ("https://g-trots.ro/agents.md", "https://g-trots.ro/magazin"),
+            "robots.txt": ("https://g-trots.ro/sitemap-index.xml",),
+        }
+        for name, required_values in discovery_files.items():
+            discovery_path = root / name
+            if not discovery_path.is_file():
+                record(failures, "agent_discovery_missing", name)
+                continue
+            content = discovery_path.read_text(encoding="utf-8")
+            missing_values = [value for value in required_values if value not in content]
+            if missing_values:
+                record(failures, "agent_discovery_incomplete", f"{name}: {missing_values[0]}")
+                continue
+            counts["agent_discovery_files"] += 1
 
     for file_path in root.rglob("*.html"):
         relative = file_path.relative_to(root).as_posix()

@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 import argparse
+from ftplib import FTP_TLS
+from getpass import getpass
+from io import BytesIO
 import json
+import os
+import re
+import ssl
 import sys
 import urllib.error
 import urllib.parse
@@ -11,6 +17,46 @@ from typing import Any
 
 
 DEFAULT_ENDPOINT = "https://g-trots.ro/shop-api/api-v2.php"
+
+
+def php_config_value(source: str, key: str) -> str:
+    match = re.search(rf"['\"]{re.escape(key)}['\"]\s*=>\s*['\"]([^'\"\r\n]+)['\"]", source)
+    if not match or not match.group(1).strip():
+        raise RuntimeError(f"Configurația protejată nu conține {key}.")
+    return match.group(1).strip()
+
+
+def credentials_from_ftps() -> tuple[str, str]:
+    username = os.environ.get("GT_FTP_USER", "").strip()
+    if not username:
+        raise RuntimeError("Lipsește utilizatorul FTPS (GT_FTP_USER).")
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    ftp = FTP_TLS(context=context, timeout=90)
+    ftp.connect(os.environ.get("GT_FTP_HOST", "ftp.cab-it.ro"), int(os.environ.get("GT_FTP_PORT", "21")))
+    ftp.login(username, os.environ.get("GT_FTP_PASS", "") or getpass("Parola FTPS: "))
+    ftp.prot_p()
+    ftp.set_pasv(True)
+    shop_config = BytesIO()
+    shared_config = BytesIO()
+    gomag_config = BytesIO()
+    try:
+        ftp.retrbinary("RETR /g-trots.ro/shop-api/config.local.php", shop_config.write)
+        ftp.retrbinary("RETR /g-trots.ro/trotty-api/api_config.local.php", shared_config.write)
+        ftp.retrbinary("RETR /g-trots.ro/shop-api/gomag.local.php", gomag_config.write)
+    finally:
+        try:
+            ftp.quit()
+        except Exception:
+            ftp.close()
+    shop_source = shop_config.getvalue().decode("utf-8-sig")
+    gomag_source = gomag_config.getvalue().decode("utf-8-sig")
+    try:
+        import_key = php_config_value(shop_source, "boomag_import_key")
+    except RuntimeError:
+        import_key = php_config_value(gomag_source, "gomag_api_key")
+    return php_config_value(shared_config.getvalue().decode("utf-8-sig"), "api_key"), import_key
 
 
 def load_codes(path: Path) -> list[str]:
@@ -99,8 +145,13 @@ def main() -> int:
     )
     parser.add_argument("json_file", type=Path)
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
-    parser.add_argument("--api-key", required=True)
-    parser.add_argument("--import-key", required=True)
+    parser.add_argument("--api-key")
+    parser.add_argument("--import-key")
+    parser.add_argument(
+        "--credentials-from-ftps",
+        action="store_true",
+        help="Citește cheile API exclusiv în memorie din configurația protejată de pe server.",
+    )
     parser.add_argument(
         "--preserve-rest",
         action="store_true",
@@ -108,12 +159,21 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    api_key = (args.api_key or "").strip()
+    import_key = (args.import_key or "").strip()
+    if args.credentials_from_ftps:
+        remote_api_key, remote_import_key = credentials_from_ftps()
+        api_key = api_key or remote_api_key
+        import_key = import_key or remote_import_key
+    if not api_key or not import_key:
+        parser.error("Folosește --api-key și --import-key sau --credentials-from-ftps.")
+
     promoted_codes = load_codes(args.json_file)
     codes = promoted_codes
     if args.preserve_rest:
         codes = promote_codes(promoted_codes, fetch_current_featured_codes(args.endpoint))
     url = args.endpoint + "?" + urllib.parse.urlencode({"action": "applyFeaturedProducts"})
-    result = request_json(url, {"codes": codes}, args.api_key, args.import_key)
+    result = request_json(url, {"codes": codes}, api_key, import_key)
     if not isinstance(result, dict) or not result.get("success"):
         raise RuntimeError("API-ul nu a confirmat aplicarea listei.")
 

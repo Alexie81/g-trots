@@ -14,9 +14,13 @@ WEBSITE_ROOT = PROJECT_ROOT / "website"
 REMOTE_ROOT = "/g-trots.ro"
 FILES = (
     ".htaccess",
+    "agents.md",
+    "llms.txt",
+    "llms-full.txt",
     "index.html",
     "page.js",
     "script.js",
+    "shop-live.js",
     "styles.css",
     "styles.min.css",
     "favorites.js",
@@ -45,6 +49,7 @@ FILES = (
     "cookie-consent.js",
     "cookie-consent.css",
     "politica-cookies.html",
+    "garantii-si-reclamatii.html",
     "assets/anpc-sal.png",
     "assets/magazin-produse-v1.webp",
     "assets/second-hand-scooters-reconditioned.png",

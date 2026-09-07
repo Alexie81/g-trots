@@ -3,6 +3,7 @@ DirectoryIndex index.html index.php
 ErrorDocument 404 /404.html
 
 AddType text/plain .txt
+AddType text/markdown .md
 AddType application/ld+json .jsonld
 
 <IfModule mod_rewrite.c>

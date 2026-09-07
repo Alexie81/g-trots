@@ -1,10 +1,17 @@
 (() => {
-  if (!document.querySelector('script[src*="legal-footer.js"]')) { const legal = document.createElement('script'); legal.src = '/legal-footer.js?v=20260906-company-v2'; legal.defer = true; document.head.append(legal); }
+  const ensureLegalFooter = () => {
+    if (document.querySelector('script[src*="legal-footer.js"]')) return;
+    const legal = document.createElement('script');
+    legal.src = '/legal-footer.js?v=20260907-ga4-v4';
+    legal.defer = true;
+    document.head.append(legal);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ensureLegalFooter, { once: true });
+  else ensureLegalFooter();
   if (window.GTrotsFavorites) return;
 
-  const COMMERCE_PREVIEW = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)
-    || window.location.hostname.endsWith(".localhost");
-  document.documentElement.classList.toggle("commerce-preview", COMMERCE_PREVIEW);
+  const COMMERCE_ENABLED = true;
+  document.documentElement.classList.toggle("commerce-preview", COMMERCE_ENABLED);
 
   const STORAGE_KEY = "g-trots-favorite-products-v1";
   const CART_STORAGE_KEY = "g-trots-cart-products-v1";

@@ -21,6 +21,8 @@ $assert = static function (bool $condition, string $message): void {
 $assert(str_contains($footer, 'google-measurement.js'), 'componenta globală nu este încărcată de footer');
 $assert(str_contains($measurement, 'G-6EWM36QSDY'), 'ID-ul GA4 lipsește');
 $assert(str_contains($measurement, 'GTM-K2N32ZFD'), 'ID-ul GTM lipsește');
+$assert(str_contains($measurement, 'send_to: MEASUREMENT_ID'), 'evenimentele nu au destinația GA4 explicită');
+$assert(str_contains($measurement, 'send_page_view: false'), 'configurarea directă GA4 ar putea dubla page_view');
 foreach ([
     'view_item_list', 'select_item', 'view_item', 'add_to_wishlist', 'remove_from_wishlist', 'add_to_cart',
     'remove_from_cart', 'view_cart', 'begin_checkout', 'add_shipping_info',

@@ -10,10 +10,12 @@
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://g-trots.ro/">
     <link rel="alternate" hreflang="ro-RO" href="https://g-trots.ro/">
-    <link rel="icon" href="assets/logo.png" type="image/png">
+    <link rel="icon" href="assets/favicon.png" type="image/png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://www.googletagmanager.com">
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
     <meta property="og:type" content="website">
     <meta property="og:locale" content="ro_RO">
     <meta property="og:title" content="Service Trotinete Electrice București și Ilfov | G-Trots">
@@ -22,10 +24,11 @@
     <meta property="og:image" content="https://g-trots.ro/assets/vehicle-performance-scooter.png">
     <meta property="og:image:alt" content="Trotinetă electrică reparată de service-ul G-Trots">
     <meta name="twitter:card" content="summary_large_image">
-    <link rel="preload" href="assets/vehicle-urban-scooter.png?v=2" as="image" type="image/png">
-  <link rel="stylesheet" href="styles.css?v=20260905-second-hand-v6">
-    <link rel="stylesheet" href="favorites.css?v=20260828-line-promotions-v1">
-    <link rel="stylesheet" href="performance.css?v=20260828-catalog-v2">
+    <link rel="preload" href="assets/vehicle-urban-scooter-560.webp" imagesrcset="assets/vehicle-urban-scooter-560.webp 560w, assets/vehicle-urban-scooter.webp 850w" imagesizes="(max-width: 700px) 78vw, 42vw" as="image" type="image/webp" fetchpriority="high">
+    <link rel="stylesheet" href="styles.min.css?v=20260907-vitals-v1">
+    <link rel="preload" as="style" href="favorites.css?v=20260828-line-promotions-v1" onload="this.onload=null;this.rel='stylesheet'">
+    <link rel="preload" as="style" href="performance.css?v=20260907-vitals-v1" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="favorites.css?v=20260828-line-promotions-v1"><link rel="stylesheet" href="performance.css?v=20260907-vitals-v1"></noscript>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -154,7 +157,7 @@
     <header class="site-header">
       <div class="header-inner">
         <a class="logo" href="#top" aria-label="G-Trots, pagina principală">
-          <img src="assets/logo.png" width="1024" height="1024" alt="" fetchpriority="high">
+          <img src="assets/favicon.png" width="128" height="128" alt="">
           <b><span>G</span>-Trots</b>
         </a>
 
@@ -191,14 +194,14 @@
     <main id="main">
       <section class="hero shell" id="top">
         <div class="hero-grid">
-          <div class="hero-copy reveal">
+          <div class="hero-copy">
             <div class="availability"><i aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13.3 2 5.8 13h5.1l-.2 9L18.2 11h-5.1l.2-9Z"/></svg></i><span>Service trotinete · <strong>București</strong> și Ilfov</span></div>
             <h1 class="hero-typewriter" aria-label="Trotineta ta. Reparată corect. Diagnosticăm clar, reparăm atent și îți spunem ce facem înainte să începem.">
               <span class="hero-typewriter-text" aria-hidden="true">Trotineta ta.<br><em>Reparată corect.</em></span><span class="hero-cursor" aria-hidden="true"></span>
             </h1>
             <div class="hero-actions">
               <a class="button hero-shop-button" href="/magazin" aria-label="Vezi magazinul" title="Vezi magazinul"><span class="hero-shop-label">Vezi magazinul</span><span class="hero-shop-icon" aria-hidden="true"><svg class="hero-shop-desktop-icon" viewBox="0 0 24 24"><path d="M3.5 4.5h2.1l2.05 9.55a2 2 0 0 0 1.95 1.58h7.5a2 2 0 0 0 1.92-1.45L20.55 8H6.35"/><circle cx="9.3" cy="19.2" r="1.15"/><circle cx="17.2" cy="19.2" r="1.15"/></svg><svg class="hero-shop-mobile-icon" viewBox="0 0 24 24"><path d="M6 8.5h12l1 11H5l1-11Z"/><path d="M9 8.5V7a3 3 0 0 1 6 0v1.5"/></svg></span></a>
-              <a class="button call-button" href="tel:+40762093915"><strong class="call-button-label">Sună chiar acum</strong><span class="call-button-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.6 10.8c1.7 3.3 3.3 4.9 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.4.6 3.6.6.6 0 .9.4.9.9V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.6c.5 0 .9.3.9.8.1 1.3.3 2.5.6 3.6.1.4 0 .8-.3 1.1l-2.2 2.3Z"/></svg></span></a>
+              <a class="button call-button" href="tel:+40762093915" aria-label="Sună G-Trots la 0762 093 915"><strong class="call-button-label">Sună chiar acum</strong><span class="call-button-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.6 10.8c1.7 3.3 3.3 4.9 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.4.6 3.6.6.6 0 .9.4.9.9V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.6c.5 0 .9.3.9.8.1 1.3.3 2.5.6 3.6.1.4 0 .8-.3 1.1l-2.2 2.3Z"/></svg></span></a>
               <a class="button button-ghost" href="#servicii">Vezi serviciile</a>
             </div>
             <ul class="hero-notes" aria-label="Beneficii">
@@ -208,18 +211,18 @@
             </ul>
           </div>
 
-          <div class="hero-visual vehicle-carousel reveal" aria-roledescription="carousel" aria-label="Vehicule electrice reparate de G-Trots">
+          <div class="hero-visual vehicle-carousel" aria-roledescription="carousel" aria-label="Vehicule electrice reparate de G-Trots">
             <div class="carousel-slides">
               <article class="vehicle-slide active" aria-hidden="false">
-                <img src="assets/vehicle-urban-scooter.png?v=2" srcset="assets/vehicle-urban-scooter-560.png 560w, assets/vehicle-urban-scooter.png?v=2 850w" sizes="(max-width: 700px) 78vw, 42vw" width="850" height="1316" fetchpriority="high" alt="Trotinetă electrică urbană reparată de G-Trots" decoding="async">
+                <img src="assets/vehicle-urban-scooter.webp" srcset="assets/vehicle-urban-scooter-560.webp 560w, assets/vehicle-urban-scooter.webp 850w" sizes="(max-width: 700px) 78vw, 42vw" width="850" height="1316" loading="eager" fetchpriority="high" alt="Trotinetă electrică urbană reparată de G-Trots">
                 <div class="vehicle-caption"><strong>Trotinete urbane</strong><span>Service complet pentru deplasările zilnice</span></div>
               </article>
               <article class="vehicle-slide" aria-hidden="true">
-                <img src="assets/vehicle-performance-scooter.png?v=2" srcset="assets/vehicle-performance-scooter-620.png 620w, assets/vehicle-performance-scooter.png?v=2 935w" sizes="(max-width: 700px) 78vw, 42vw" width="935" height="1304" loading="lazy" alt="Trotinetă electrică mare de performanță" decoding="async">
+                <img src="assets/vehicle-performance-scooter.webp" srcset="assets/vehicle-performance-scooter-620.webp 620w, assets/vehicle-performance-scooter.webp 935w" sizes="(max-width: 700px) 78vw, 42vw" width="935" height="1304" loading="lazy" alt="Trotinetă electrică mare de performanță" decoding="async">
                 <div class="vehicle-caption"><strong>Trotinete de mari dimensiuni</strong><span>Diagnostic și reparații pentru modele performance</span></div>
               </article>
               <article class="vehicle-slide" aria-hidden="true">
-                <img src="assets/vehicle-electric-moped.png?v=2" srcset="assets/vehicle-electric-moped-560.png 560w, assets/vehicle-electric-moped.png?v=2 875w" sizes="(max-width: 700px) 78vw, 42vw" width="875" height="939" loading="lazy" alt="Scuter electric urban reparat de G-Trots" decoding="async">
+                <img src="assets/vehicle-electric-moped.webp" srcset="assets/vehicle-electric-moped-560.webp 560w, assets/vehicle-electric-moped.webp 875w" sizes="(max-width: 700px) 78vw, 42vw" width="875" height="939" loading="lazy" alt="Scuter electric urban reparat de G-Trots" decoding="async">
                 <div class="vehicle-caption"><strong>Scutere electrice</strong><span>Revizii, mentenanță și intervenții tehnice</span></div>
               </article>
             </div>
@@ -344,7 +347,7 @@
             <span class="second-hand-orbit second-hand-orbit-one"></span>
             <span class="second-hand-orbit second-hand-orbit-two"></span>
             <img src="assets/second-hand-scooters-reconditioned.png" width="1536" height="1024" loading="lazy" decoding="async" alt="">
-            <span class="second-hand-stamp"><i><img src="assets/logo.png" width="1024" height="1024" alt=""></i><span><small>VERIFICATĂ</small><strong>în service</strong></span></span>
+            <span class="second-hand-stamp"><i><img src="assets/favicon.png" width="128" height="128" alt=""></i><span><small>VERIFICATĂ</small><strong>în service</strong></span></span>
             <span class="second-hand-stock"><i></i><span><small>EXEMPLARE UNICE</small><strong>Stoc actualizat</strong></span></span>
           </span>
         </a>
@@ -353,10 +356,10 @@
       <section class="section shell" id="proces">
         <div class="process-wrap">
           <div class="process-copy reveal">
-            <span class="section-label process-label-typewriter" aria-label="Cum lucrăm?">
+            <span class="section-label process-label-typewriter"><span class="sr-only">Cum lucrăm?</span>
               <span class="process-label-typewriter-line" aria-hidden="true"><span class="process-label-typewriter-text"></span><span class="process-typewriter-cursor"></span></span>
             </span>
-            <h2>Simplu de la primul <span class="process-message-typewriter" aria-label="mesaj."><span class="process-message-typewriter-line" aria-hidden="true"><span class="process-message-typewriter-text"></span><span class="process-typewriter-cursor"></span></span></span></h2>
+            <h2>Simplu de la primul <span class="process-message-typewriter"><span class="sr-only">mesaj.</span><span class="process-message-typewriter-line" aria-hidden="true"><span class="process-message-typewriter-text"></span><span class="process-typewriter-cursor"></span></span></span></h2>
             <p>Fără jargon inutil și fără intervenții făcute înainte să știi ce implică.</p>
             <a class="text-link" href="tel:+40762093915"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.6 10.8c1.7 3.3 3.3 4.9 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.4.6 3.6.6.6 0 .9.4.9.9V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.6c.5 0 .9.3.9.8.1 1.3.3 2.5.6 3.6.1.4 0 .8-.3 1.1l-2.2 2.3Z"/></svg></span>Sună chiar acum</a>
           </div>
@@ -381,20 +384,20 @@
       <section class="section shell">
         <div class="area-card reveal">
           <div>
-            <span class="section-label area-label-typewriter" aria-label="Aproape de tine">
+            <span class="section-label area-label-typewriter"><span class="sr-only">Aproape de tine</span>
               <span class="area-label-typewriter-line" aria-hidden="true"><span class="area-label-typewriter-text"></span><span class="area-typewriter-cursor"></span></span>
             </span>
-            <h2>Service pentru<br><span class="area-city-typewriter" aria-label="București și Ilfov."><span class="area-city-typewriter-line" aria-hidden="true"><span class="area-city-typewriter-text"></span><span class="area-typewriter-cursor"></span></span></span></h2>
+            <h2>Service pentru<br><span class="area-city-typewriter"><span class="sr-only">București și Ilfov.</span><span class="area-city-typewriter-line" aria-hidden="true"><span class="area-city-typewriter-text"></span><span class="area-typewriter-cursor"></span></span></span></h2>
             <p>Te ajutăm să revii rapid pe traseu, fie că ai nevoie de o reparație punctuală sau de o revizie completă.</p>
           </div>
           <div class="romania-map">
             <div class="map-stage">
-              <img src="assets/romania-bucharest-ilfov.svg" loading="lazy" alt="Harta reală a României cu județul Ilfov colorat portocaliu și Bucureștiul marcat" decoding="async">
+              <img src="assets/romania-bucharest-ilfov.svg" width="1611" height="1152" loading="lazy" alt="Harta reală a României cu județul Ilfov colorat portocaliu și Bucureștiul marcat" decoding="async">
               <span class="bucharest-pulse" tabindex="0" aria-describedby="map-zoom-card"><i></i></span>
               <div class="map-zoom-card" id="map-zoom-card">
                 <span class="zoom-kicker">Zonă selectată</span>
                 <div class="zoom-canvas" aria-hidden="true">
-                  <img src="assets/romania-bucharest-ilfov-clean.svg" loading="lazy" alt="" decoding="async">
+                  <img src="assets/romania-bucharest-ilfov-clean.svg" width="1611" height="1152" loading="lazy" alt="" decoding="async">
                   <span class="zoom-bucharest"><i></i></span>
                 </div>
                 <div class="zoom-copy">
@@ -415,7 +418,7 @@
         <div class="section-heading reveal">
           <div>
             <span class="section-label">Întrebări frecvente</span>
-            <h2>Lucruri utile,<br>spuse <span class="faq-direct-typewriter" aria-label="direct."><span class="faq-direct-typewriter-line" aria-hidden="true"><span class="faq-direct-typewriter-text"></span><span class="faq-typewriter-cursor"></span></span></span></h2>
+            <h2>Lucruri utile,<br>spuse <span class="faq-direct-typewriter"><span class="sr-only">direct.</span><span class="faq-direct-typewriter-line" aria-hidden="true"><span class="faq-direct-typewriter-text"></span><span class="faq-typewriter-cursor"></span></span></span></h2>
           </div>
           <p class="faq-heading-badge">Dacă nu găsești răspunsul aici, trimite-ne modelul trotinetei și problema observată.</p>
         </div>
@@ -497,7 +500,7 @@
 
     <footer class="shell">
       <div class="footer-inner">
-        <a class="logo" href="#top"><img src="assets/logo.png" width="1024" height="1024" alt=""><b><span>G</span>-Trots</b></a>
+        <a class="logo" href="#top"><img src="assets/favicon.png" width="128" height="128" alt=""><b><span>G</span>-Trots</b></a>
         <p>Reparații trotinete și scutere electrice în București și Ilfov.</p>
         <nav aria-label="Navigație subsol">
           <a href="#servicii">Servicii</a>
@@ -515,7 +518,7 @@
       <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3a12.8 12.8 0 0 0-11 19.3L3.4 29l6.9-1.6A12.9 12.9 0 1 0 16 3Zm0 23.3c-2 0-3.8-.5-5.4-1.5l-.4-.2-4 .9.9-3.9-.3-.4A10.3 10.3 0 1 1 16 26.3Zm5.7-7.7c-.3-.2-1.9-.9-2.2-1s-.5-.2-.7.2-.8 1-1 1.2-.4.2-.7.1a8.5 8.5 0 0 1-2.5-1.6 9.3 9.3 0 0 1-1.7-2.1c-.2-.3 0-.5.1-.7l.5-.6.3-.6c.1-.2 0-.4 0-.6l-1-2.3c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.6.1-.9.4-.3.4-1.2 1.2-1.2 2.9s1.3 3.4 1.5 3.6c.2.2 2.5 3.8 6 5.3 3.6 1.6 3.6 1 4.3.9.6 0 1.9-.8 2.2-1.6.3-.8.3-1.5.2-1.6-.1-.2-.3-.3-.6-.4Z"/></svg>
       <span>WhatsApp</span>
     </a>
-    <script src="favorites.js?v=20260906-cookie-order-v2"></script>
-  <script src="script.js?v=20260907-ga4-leads-v2"></script>
-  <script src="/legal-footer.js?v=20260907-ga4-v4" defer></script></body>
+    <script src="favorites.js?v=20260907-store-live-v4"></script>
+  <script src="script.js?v=20260907-vitals-v3"></script>
+  <script src="/legal-footer.js?v=20260907-ga4-v8" defer></script></body>
 </html>

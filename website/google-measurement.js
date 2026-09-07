@@ -9,6 +9,7 @@
   const PURCHASES_KEY = "g-trots-ga4-purchases-v1";
   const REFUNDS_KEY = "g-trots-ga4-refunds-v1";
   const AUTH_EVENT_KEY = "g-trots-ga4-auth-pending-v1";
+  const SELECT_EVENT_KEY = "g-trots-ga4-select-pending-v1";
   const CURRENCY = "RON";
   const once = new Set();
 
@@ -47,6 +48,12 @@
 
   function loadGoogleTag() {
     if (/^GTM-[A-Z0-9]+$/.test(GTM_CONTAINER_ID)) {
+      window.gtag("js", new Date());
+      window.gtag("config", MEASUREMENT_ID, {
+        send_page_view: false,
+        anonymize_ip: true,
+        allow_google_signals: Boolean(readConsent()?.marketing)
+      });
       window.dataLayer.push({ "gtm.start": Date.now(), event: "gtm.js" });
       const script = document.createElement("script");
       script.async = true;
@@ -118,7 +125,7 @@
 
   function track(eventName, params = {}) {
     if (!/^[a-z][a-z0-9_]{0,39}$/.test(String(eventName || ""))) return;
-    window.gtag("event", eventName, cleanParams(params));
+    window.gtag("event", eventName, cleanParams({ ...params, send_to: MEASUREMENT_ID }));
   }
 
   function trackEcommerce(eventName, items, params = {}) {
@@ -131,6 +138,24 @@
     if (once.has(key)) return;
     once.add(key);
     callback();
+  }
+
+  function normalizedSearchTerm(value) {
+    return String(value || "").trim().replace(/\s+/g, " ").slice(0, 100);
+  }
+
+  function currentSearchTerm(trigger) {
+    const explicit = trigger?.dataset?.popularSearch;
+    const input = document.querySelector('input[type="search"],#product-search,[data-smart-search-input]');
+    return normalizedSearchTerm(explicit || input?.value);
+  }
+
+  function trackSearch(term) {
+    const searchTerm = normalizedSearchTerm(term);
+    if (!searchTerm) return;
+    const key = searchTerm.toLocaleLowerCase("ro-RO");
+    onceTrack(`search:${key}`, () => track("search", { search_term: searchTerm }));
+    onceTrack(`view_search_results:${key}`, () => track("view_search_results", { search_term: searchTerm }));
   }
 
   let previousCart = readJson(CART_KEY, []);
@@ -196,8 +221,12 @@
       const items = cartItems();
       if (items.length) onceTrack("begin_checkout", () => trackEcommerce("begin_checkout", items));
     }
-    const searchTerm = String(new URLSearchParams(location.search).get("q") || new URLSearchParams(location.search).get("search") || "").trim();
-    if (searchTerm) onceTrack(`view_search_results:${searchTerm}`, () => track("view_search_results", { search_term: searchTerm.slice(0, 100) }));
+    const searchTerm = normalizedSearchTerm(new URLSearchParams(location.search).get("q") || new URLSearchParams(location.search).get("search"));
+    if (searchTerm) onceTrack(`view_search_results:${searchTerm.toLocaleLowerCase("ro-RO")}`, () => track("view_search_results", { search_term: searchTerm }));
+  }
+
+  function schedulePageCommerceTracking() {
+    [120, 600, 1600, 4000].forEach(delay => window.setTimeout(trackPageCommerce, delay));
   }
 
   function formName(form) {
@@ -215,11 +244,27 @@
           track("click_whatsapp", { link_url: `${url.origin}${url.pathname}`, link_text: link.textContent.trim().slice(0, 100) });
         }
       }
-      const productLink = event.target.closest(".product-card-link,.favorite-product-link,.order-receipt-product-image");
+      const searchTrigger = event.target.closest("[data-smart-search-submit],[data-smart-search-all],[data-search-choice]");
+      if (searchTrigger) trackSearch(currentSearchTerm(searchTrigger));
+
+      const productLink = event.target.closest(".product-card-link,.favorite-product-link,.order-receipt-product-image,.smart-search-result");
       const card = productLink?.closest("[data-product-id],.product-card,[data-cart-card]");
       const productId = card?.dataset.productId || card?.dataset.cartCard || document.body.dataset.productId;
       const item = productItem(productById(productId));
-      if (productLink && item) trackEcommerce("select_item", [item], { item_list_id: location.pathname.includes("favorite") ? "favorites" : "catalog" });
+      if (productLink && item) {
+        const listId = productLink.matches(".smart-search-result") ? "search_results" : location.pathname.includes("favorite") ? "favorites" : "catalog";
+        const url = productLink instanceof HTMLAnchorElement ? new URL(productLink.href, location.href) : null;
+        const params = {
+          item_list_id: listId,
+          item_list_name: listId === "search_results" ? "Rezultate căutare" : listId === "favorites" ? "Favorite" : "Catalog G-Trots"
+        };
+        if (url?.origin === location.origin && /^\/magazin\/produs\//.test(url.pathname)) {
+          try { sessionStorage.setItem(SELECT_EVENT_KEY, JSON.stringify({ item, params })); }
+          catch { trackEcommerce("select_item", [item], params); }
+        } else {
+          trackEcommerce("select_item", [item], params);
+        }
+      }
     }, true);
 
     document.addEventListener("focusin", event => {
@@ -252,8 +297,7 @@
     document.addEventListener("keydown", event => {
       if (event.key !== "Enter") return;
       const input = event.target.closest('input[type="search"],#product-search,[data-smart-search-input]');
-      const term = String(input?.value || "").trim();
-      if (term) track("search", { search_term: term.slice(0, 100) });
+      trackSearch(input?.value);
     });
   }
 
@@ -341,7 +385,7 @@
   document.addEventListener("g-trots:consent-changed", event => updateConsent(event.detail));
   document.addEventListener("g-trots:cart-changed", event => handleCartChanged(event.detail));
   document.addEventListener("g-trots:favorites-changed", event => handleFavoritesChanged(event.detail));
-  document.addEventListener("g-trots:live-products", () => setTimeout(trackPageCommerce, 80));
+  document.addEventListener("g-trots:live-products", schedulePageCommerceTracking);
   document.addEventListener("g-trots:purchase-ready", event => trackPurchase(event.detail));
   document.addEventListener("g-trots:promotions-viewed", event => trackPromotion("view_promotion", event.detail));
   document.addEventListener("g-trots:promotion-selected", event => trackPromotion("select_promotion", event.detail));
@@ -369,10 +413,15 @@
     trackPurchase(window.GTrotsPendingPurchase);
     delete window.GTrotsPendingPurchase;
   }
+  try {
+    const pendingSelect = JSON.parse(sessionStorage.getItem(SELECT_EVENT_KEY) || "null");
+    if (pendingSelect?.item) trackEcommerce("select_item", [pendingSelect.item], pendingSelect.params || {});
+    sessionStorage.removeItem(SELECT_EVENT_KEY);
+  } catch { /* sessionStorage poate fi indisponibil */ }
   document.dispatchEvent(new CustomEvent("g-trots:google-ready"));
 
   loadGoogleTag();
   bindInteractions();
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => setTimeout(trackPageCommerce, 120), { once: true });
-  else setTimeout(trackPageCommerce, 120);
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", schedulePageCommerceTracking, { once: true });
+  else schedulePageCommerceTracking();
 })();

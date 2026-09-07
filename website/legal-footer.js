@@ -1,6 +1,7 @@
 (() => {
   if (window.__gtLegalFooter) return;
   window.__gtLegalFooter = true;
+  document.documentElement.classList.add('commerce-preview');
 
   const CACHE_KEY = 'g-trots-public-shop-config-v3';
   const CACHE_TTL = 5 * 60 * 1000;
@@ -34,14 +35,19 @@
   const esc = value => String(value || '').replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 
   if (!document.querySelector('link[href*="fonts.googleapis.com/css2?family=Manrope"]')) {
-    loadAsset('link', { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap' });
+    loadAsset('link', {
+      rel: 'stylesheet',
+      href: 'https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap',
+      media: 'print',
+      onload() { this.media = 'all'; },
+    });
   }
   loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260906-company-v2' });
   if (!document.querySelector('script[src*="google-measurement.js"]')) {
-    loadAsset('script', { src: '/google-measurement.js?v=20260907-ga4-v3', defer: true });
+    loadAsset('script', { src: '/google-measurement.js?v=20260907-ga4-v8', async: true });
   }
   if (!document.querySelector('script[src*="cookie-consent.js"]')) {
-    loadAsset('script', { src: '/cookie-consent.js?v=20260906-compact-v4', defer: true });
+    loadAsset('script', { src: '/cookie-consent.js?v=20260907-consent-v5', async: true });
   }
 
   function phoneHref(phone) {
@@ -97,7 +103,7 @@
     header.innerHTML = `
       <div class="header-inner">
         <a class="logo" href="/" aria-label="G-Trots, pagina principală">
-          <img src="/assets/logo.png" width="1024" height="1024" alt="">
+          <img src="/assets/favicon.png" width="128" height="128" alt="">
           <b><span>G</span>-Trots</b>
         </a>
         <nav class="main-nav" aria-label="Navigație principală">
@@ -222,11 +228,11 @@
 
   function paymentMarks() {
     return `
-      <span class="gt-pay-mark gt-pay-visa" aria-label="Visa"><svg viewBox="0 0 72 28" aria-hidden="true"><text x="36" y="20" text-anchor="middle">VISA</text></svg></span>
-      <span class="gt-pay-mark gt-pay-mastercard" aria-label="Mastercard"><svg viewBox="0 0 72 28" aria-hidden="true"><circle cx="30" cy="14" r="9"/><circle cx="42" cy="14" r="9"/><path d="M36 7.3a9 9 0 0 1 0 13.4A9 9 0 0 1 36 7.3Z"/></svg></span>
-      <span class="gt-pay-mark gt-pay-google" aria-label="Google Pay"><svg viewBox="0 0 82 28" aria-hidden="true"><g transform="translate(3 2)"><path fill="#4285f4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.05H12v3.87h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.24c1.9-1.75 2.98-4.33 2.98-7.35Z"/><path fill="#34a853" d="M12 22c2.7 0 4.96-.9 6.62-2.42l-3.24-2.51c-.9.6-2.05.96-3.38.96-2.61 0-4.82-1.76-5.61-4.13H3.04v2.59A10 10 0 0 0 12 22Z"/><path fill="#fbbc05" d="M6.39 13.9a6.02 6.02 0 0 1 0-3.8V7.51H3.04A10 10 0 0 0 2 12c0 1.61.38 3.14 1.04 4.49l3.35-2.59Z"/><path fill="#ea4335" d="M12 5.97c1.47 0 2.79.5 3.83 1.5L18.7 4.6A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.96 5.51l3.35 2.59C7.18 7.73 9.39 5.97 12 5.97Z"/></g><text x="31" y="20">Pay</text></svg></span>
-      <span class="gt-pay-mark gt-pay-apple" aria-label="Apple Pay"><svg viewBox="0 0 76 28" aria-hidden="true"><path d="M18.7 9.2c-1.1 0-2.8-1.2-4.6-1.2-2.3 0-4.4 1.3-5.6 3.4-2.4 4.2-.6 10.3 1.7 13.6 1.1 1.6 2.4 3.4 4.2 3.3 1.7-.1 2.3-1.1 4.4-1.1 2 0 2.6 1.1 4.4 1.1 1.8 0 3-1.6 4.1-3.2 1.3-1.9 1.8-3.8 1.8-3.9-.1 0-3.5-1.3-3.5-5.4 0-3.4 2.8-5 2.9-5.1-1.6-2.3-4.1-2.6-5-2.7-2.3-.2-4.2 1.2-5.2 1.2Zm3.6-3.5c.9-1.1 1.5-2.7 1.3-4.2-1.3.1-2.9.9-3.9 2-.8.9-1.5 2.5-1.3 4 1.5.1 3-.7 3.9-1.8Z" transform="translate(0 -1) scale(.72)"/><text x="27" y="20">Pay</text></svg></span>
-      <span class="gt-pay-mark gt-pay-stripe" aria-label="Stripe"><svg viewBox="0 0 76 28" aria-hidden="true"><text x="38" y="20" text-anchor="middle">stripe</text></svg></span>`;
+      <span class="gt-pay-mark gt-pay-visa" role="img" aria-label="Visa"><svg viewBox="0 0 72 28" aria-hidden="true"><text x="36" y="20" text-anchor="middle">VISA</text></svg></span>
+      <span class="gt-pay-mark gt-pay-mastercard" role="img" aria-label="Mastercard"><svg viewBox="0 0 72 28" aria-hidden="true"><circle cx="30" cy="14" r="9"/><circle cx="42" cy="14" r="9"/><path d="M36 7.3a9 9 0 0 1 0 13.4A9 9 0 0 1 36 7.3Z"/></svg></span>
+      <span class="gt-pay-mark gt-pay-google" role="img" aria-label="Google Pay"><svg viewBox="0 0 82 28" aria-hidden="true"><g transform="translate(3 2)"><path fill="#4285f4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.05H12v3.87h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.24c1.9-1.75 2.98-4.33 2.98-7.35Z"/><path fill="#34a853" d="M12 22c2.7 0 4.96-.9 6.62-2.42l-3.24-2.51c-.9.6-2.05.96-3.38.96-2.61 0-4.82-1.76-5.61-4.13H3.04v2.59A10 10 0 0 0 12 22Z"/><path fill="#fbbc05" d="M6.39 13.9a6.02 6.02 0 0 1 0-3.8V7.51H3.04A10 10 0 0 0 2 12c0 1.61.38 3.14 1.04 4.49l3.35-2.59Z"/><path fill="#ea4335" d="M12 5.97c1.47 0 2.79.5 3.83 1.5L18.7 4.6A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.96 5.51l3.35 2.59C7.18 7.73 9.39 5.97 12 5.97Z"/></g><text x="31" y="20">Pay</text></svg></span>
+      <span class="gt-pay-mark gt-pay-apple" role="img" aria-label="Apple Pay"><svg viewBox="0 0 76 28" aria-hidden="true"><path d="M18.7 9.2c-1.1 0-2.8-1.2-4.6-1.2-2.3 0-4.4 1.3-5.6 3.4-2.4 4.2-.6 10.3 1.7 13.6 1.1 1.6 2.4 3.4 4.2 3.3 1.7-.1 2.3-1.1 4.4-1.1 2 0 2.6 1.1 4.4 1.1 1.8 0 3-1.6 4.1-3.2 1.3-1.9 1.8-3.8 1.8-3.9-.1 0-3.5-1.3-3.5-5.4 0-3.4 2.8-5 2.9-5.1-1.6-2.3-4.1-2.6-5-2.7-2.3-.2-4.2 1.2-5.2 1.2Zm3.6-3.5c.9-1.1 1.5-2.7 1.3-4.2-1.3.1-2.9.9-3.9 2-.8.9-1.5 2.5-1.3 4 1.5.1 3-.7 3.9-1.8Z" transform="translate(0 -1) scale(.72)"/><text x="27" y="20">Pay</text></svg></span>
+      <span class="gt-pay-mark gt-pay-stripe" role="img" aria-label="Stripe"><svg viewBox="0 0 76 28" aria-hidden="true"><text x="38" y="20" text-anchor="middle">stripe</text></svg></span>`;
   }
 
   function render(company) {
@@ -261,7 +267,7 @@
     inner.innerHTML = `
       <section class="gt-site-footer__brand">
         <a class="gt-site-footer__logo" href="/">
-          <img src="/assets/logo.png" width="1024" height="1024" alt="">
+          <img src="/assets/favicon.png" width="128" height="128" alt="">
           <span><strong>${esc(tradeName)}</strong><small>Service & shop pentru mobilitate electrică</small></span>
         </a>
         <p>Cumpărături clare, piese alese atent și asistență reală înainte și după comandă.</p>
@@ -279,10 +285,10 @@
       </div>
       <section class="gt-site-footer__assurance" aria-label="Plăți și protecția consumatorilor">
         <div class="gt-site-footer__payments"><span><b>Plăți securizate</b><small>Procesate prin Stripe</small></span><div>${paymentMarks()}</div></div>
-        <a class="gt-sal-link" href="https://reclamatiisal.anpc.ro" target="_blank" rel="noopener noreferrer"><img src="/assets/anpc-sal.png" width="201" height="50" alt="ANPC - Soluționarea Alternativă a Litigiilor"></a>
+        <a class="gt-sal-link" href="https://reclamatiisal.anpc.ro" target="_blank" rel="noopener noreferrer"><img src="/assets/anpc-sal.png" width="201" height="50" loading="lazy" decoding="async" alt="ANPC - Soluționarea Alternativă a Litigiilor"></a>
       </section>
       <div class="gt-site-footer__bottom">
-        <a class="cab-it-credit" href="https://cab-it.ro/" target="_blank" rel="noopener noreferrer"><span>Designed by</span><img src="https://cab-it.ro/assets/img/brand/cab-it-header-symbol-clean.webp" width="44" height="44" alt="Sigla CAB-IT Expert"><strong>cab-it.ro</strong></a>
+        <a class="cab-it-credit" href="https://cab-it.ro/" target="_blank" rel="noopener noreferrer"><span>Designed by</span><img src="https://cab-it.ro/assets/img/brand/cab-it-header-symbol-clean.webp" width="44" height="44" loading="lazy" decoding="async" alt="Sigla CAB-IT Expert"><strong>cab-it.ro</strong></a>
         <span class="gt-site-footer__copyright">© ${new Date().getFullYear()} ${esc(tradeName)}</span>
       </div>`;
 

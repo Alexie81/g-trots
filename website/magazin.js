@@ -1006,7 +1006,7 @@ function smartSearchResultMarkup(card) {
   const category = card.dataset.categoryName || "Produs";
   const compatibility = card.dataset.brandNames || card.dataset.manufacturerName || card.dataset.shortDescription || "Disponibil în catalog";
   const stockLabel = card.dataset.stockLabel || "În stoc";
-  return `<a class="smart-search-result" href="${escapeCatalogHtml(route)}" data-search-choice>
+  return `<a class="smart-search-result" href="${escapeCatalogHtml(route)}" data-product-id="${escapeCatalogHtml(card.dataset.productId || "")}" data-search-choice>
     <span class="smart-search-result-image" style="background-image:url(&quot;${escapeCatalogHtml(image)}&quot;)" aria-hidden="true"></span>
     <span class="smart-search-result-copy"><small>${escapeCatalogHtml(category)}</small><strong>${escapeCatalogHtml(name)}</strong><span>${escapeCatalogHtml(compatibility)}</span></span>
     <span class="smart-search-result-stock${smartSearchStockClass(card)}">${escapeCatalogHtml(stockLabel)}</span>

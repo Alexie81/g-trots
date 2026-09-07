@@ -2,9 +2,7 @@
   if (window.GTrotsConsent) return;
 
   const STORAGE_KEY = 'g-trots-cookie-consent-v1';
-  const MEASUREMENT_ID = 'G-6EWM36QSDY';
   let choice = readChoice();
-  let analyticsLoaded = false;
 
   const css = document.createElement('link');
   css.rel = 'stylesheet';
@@ -37,27 +35,11 @@
     window.dispatchEvent(new CustomEvent('g-trots:consent-changed', { detail: { ...choice } }));
   }
 
-  function loadAnalytics() {
-    if (analyticsLoaded || document.querySelector(`script[src*="googletagmanager.com/gtag/js?id=${MEASUREMENT_ID}"]`)) return;
-    analyticsLoaded = true;
-    window.dataLayer = window.dataLayer || [];
-    window.gtag = window.gtag || function gtag() { window.dataLayer.push(arguments); };
-    window.gtag('consent', 'default', {
-      analytics_storage: 'granted',
-      ad_storage: choice?.marketing ? 'granted' : 'denied',
-      ad_user_data: choice?.marketing ? 'granted' : 'denied',
-      ad_personalization: choice?.marketing ? 'granted' : 'denied'
-    });
-    window.gtag('js', new Date());
-    window.gtag('config', MEASUREMENT_ID, { anonymize_ip: true });
-    const script = document.createElement('script');
-    script.async = true;
-    script.src = `https://www.googletagmanager.com/gtag/js?id=${MEASUREMENT_ID}`;
-    document.head.append(script);
-  }
-
   function apply(value) {
-    if (value?.analytics) loadAnalytics();
+    if (window.GTrotsGoogle?.updateConsent) {
+      window.GTrotsGoogle.updateConsent(value);
+      return;
+    }
     if (window.gtag) window.gtag('consent', 'update', {
       analytics_storage: value?.analytics ? 'granted' : 'denied',
       ad_storage: value?.marketing ? 'granted' : 'denied',
@@ -72,7 +54,7 @@
     const layer = document.createElement('div');
     layer.className = `gt-cookie-layer${customize ? ' is-customizing' : ''}`;
     layer.innerHTML = `<section class="gt-cookie-card" role="dialog" aria-modal="true" aria-labelledby="gt-cookie-title">
-      <div class="gt-cookie-brand"><img src="/assets/logo.png" alt=""><div><small>CONTROLUL TĂU</small><h2 id="gt-cookie-title">Preferințe de confidențialitate</h2></div></div>
+      <div class="gt-cookie-brand"><img src="/assets/favicon.png" width="128" height="128" alt=""><div><small>CONTROLUL TĂU</small><h2 id="gt-cookie-title">Preferințe de confidențialitate</h2></div></div>
       <p>Cookie-urile necesare țin în siguranță coșul și checkout-ul. Tu alegi dacă accepți și analiza, preferințele sau marketingul.</p>
       <div class="gt-cookie-details"${customize ? '' : ' hidden'}>
         ${category('necessary', 'Strict necesare', 'Sesiune, securitate, coș și funcțiile de cumpărare.', true, true)}

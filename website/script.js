@@ -516,7 +516,6 @@ const dots = [...document.querySelectorAll(".carousel-dots button")];
 const carousel = document.querySelector(".vehicle-carousel");
 const count = document.querySelector(".carousel-count");
 let currentSlide = 0;
-let carouselTimer;
 
 function showSlide(index) {
   currentSlide = (index + slides.length) % slides.length;
@@ -530,31 +529,19 @@ function showSlide(index) {
   count.textContent = `${String(currentSlide + 1).padStart(2, "0")} / ${String(slides.length).padStart(2, "0")}`;
 }
 
-function startCarousel() {
-  window.clearInterval(carouselTimer);
-  carouselTimer = window.setInterval(() => showSlide(currentSlide + 1), 5500);
-}
-
 document.querySelector(".carousel-prev").addEventListener("click", () => {
   showSlide(currentSlide - 1);
-  startCarousel();
 });
 
 document.querySelector(".carousel-next").addEventListener("click", () => {
   showSlide(currentSlide + 1);
-  startCarousel();
 });
 
 dots.forEach((dot, index) => {
   dot.addEventListener("click", () => {
     showSlide(index);
-    startCarousel();
   });
 });
-
-carousel.addEventListener("mouseenter", () => window.clearInterval(carouselTimer));
-carousel.addEventListener("mouseleave", startCarousel);
-startCarousel();
 
 const mapStage = document.querySelector(".map-stage");
 

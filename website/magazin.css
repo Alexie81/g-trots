@@ -2351,7 +2351,7 @@ body.smart-search-closing .smart-search-overlay {
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 0.78rem;
   background-color: #f3f0ec;
-  background-image: url("assets/magazin-produse-v1.png");
+  background-image: url("assets/magazin-produse-v1.webp");
   background-repeat: no-repeat;
   background-size: 300% 200%;
   transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
@@ -3162,7 +3162,7 @@ body.smart-search-closing .smart-search-overlay {
   position: absolute;
   z-index: 1;
   inset: 0;
-  background-image: url("assets/magazin-produse-v1.png");
+  background-image: url("assets/magazin-produse-v1.webp");
   background-repeat: no-repeat;
   background-size: 300% 200%;
   transition: transform 500ms cubic-bezier(0.2, 0.8, 0.2, 1);

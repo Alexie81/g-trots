@@ -17,6 +17,17 @@
   --shell: min(1480px, calc(100% - 2rem));
 }
 
+.sr-only {
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  position: absolute !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
 /* Magazin entry point — keeps the service homepage intact while opening the new retail area. */
 .shop-bridge {
   margin-top: clamp(1.5rem, 3vw, 3rem);
@@ -249,7 +260,7 @@
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 2.2rem;
-  background-image: url("assets/magazin-produse-v1.png");
+  background-image: url("assets/magazin-produse-v1.webp");
   background-repeat: no-repeat;
   background-size: 300% 200%;
   box-shadow: 0 2.2rem 5rem rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.42);
@@ -1360,7 +1371,7 @@ h1 em {
   bottom: 5rem;
   background:
     linear-gradient(90deg, rgba(7, 7, 7, 0.92) 0%, rgba(7, 7, 7, 0.35) 36%, rgba(7, 7, 7, 0) 74%),
-    url("assets/vehicle-performance-scooter.png?v=2") center right / contain no-repeat;
+    url("assets/vehicle-performance-scooter.webp") center right / contain no-repeat;
   opacity: 0.34;
   filter: drop-shadow(0 2.5rem 3.5rem rgba(0, 0, 0, 0.55));
   pointer-events: none;
@@ -1475,7 +1486,7 @@ h2 {
   right: max(-8rem, -6vw);
   background:
     linear-gradient(90deg, rgba(7, 7, 7, 0.86), rgba(7, 7, 7, 0.08)),
-    url("assets/vehicle-urban-scooter.png?v=2") center / contain no-repeat;
+    url("assets/vehicle-urban-scooter.webp") center / contain no-repeat;
   opacity: 0.2;
   filter: drop-shadow(0 2rem 3rem rgba(0, 0, 0, 0.6));
   pointer-events: none;
@@ -2821,7 +2832,7 @@ h2 {
   bottom: 3rem;
   background:
     linear-gradient(90deg, rgba(7, 7, 7, 0.94) 0%, rgba(7, 7, 7, 0.38) 35%, rgba(7, 7, 7, 0) 74%),
-    url("assets/vehicle-electric-moped.png?v=2") center right / contain no-repeat;
+    url("assets/vehicle-electric-moped.webp") center right / contain no-repeat;
   opacity: 0.34;
   filter: drop-shadow(0 2.5rem 3.5rem rgba(0, 0, 0, 0.58));
   pointer-events: none;
@@ -4716,17 +4727,32 @@ footer nav {
 }
 
 .carousel-dots button {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.carousel-dots button::after {
+  content: "";
   width: 0.45rem;
   height: 0.45rem;
-  padding: 0;
   border-radius: 999px;
   background: #4b4946;
   transition: width 180ms ease, background 180ms ease;
 }
 
-.carousel-dots button.active {
+.carousel-dots button.active::after {
   width: 1.6rem;
   background: var(--orange);
+}
+
+.carousel-dots button:focus-visible {
+  outline: 2px solid #f39936;
+  outline-offset: 1px;
 }
 
 .carousel-count {
@@ -5553,25 +5579,3 @@ footer nav {
 }
 /* Magazinul este inca in lucru: elementele comerciale sunt vizibile doar pe
    localhost. Regula se aplica din primul frame, inainte sa ruleze JavaScript. */
-html:not(.commerce-preview) .nav-shop-link,
-html:not(.commerce-preview) .hero-shop-button,
-html:not(.commerce-preview) .shop-bridge,
-html:not(.commerce-preview) .global-shop-actions,
-html:not(.commerce-preview) .mobile-nav-account,
-html:not(.commerce-preview) .shop-header-cta,
-html:not(.commerce-preview) .product-detail-favorite,
-html:not(.commerce-preview) .product-add-cart,
-html:not(.commerce-preview) .favorite-button,
-html:not(.commerce-preview) .cart-button,
-html:not(.commerce-preview) a[href="magazin.html"],
-html:not(.commerce-preview) a[href="/magazin.html"],
-html:not(.commerce-preview) a[href="favorite.html"],
-html:not(.commerce-preview) a[href="/favorite.html"],
-html:not(.commerce-preview) a[href="cos.html"],
-html:not(.commerce-preview) a[href="/cos.html"],
-html:not(.commerce-preview) a[href="cont.html"],
-html:not(.commerce-preview) a[href="/cont.html"],
-html:not(.commerce-preview) a[href="login.html"],
-html:not(.commerce-preview) a[href="/login.html"] {
-  display: none !important;
-}

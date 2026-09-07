@@ -442,7 +442,7 @@
 .favorite-product-image {
   position: absolute;
   inset: 0;
-  background: url("assets/magazin-produse-v1.png") no-repeat;
+  background: url("assets/magazin-produse-v1.webp") no-repeat;
   background-size: 300% 200%;
   transition: transform 450ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }

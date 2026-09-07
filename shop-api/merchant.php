@@ -165,7 +165,11 @@ function merchantValidGtin(string $value): ?string {
 function merchantProductTitle(string $value): string {
     $title = trim(preg_replace('/\s+/u', ' ', $value) ?: '');
     $letters = preg_replace('/[^\p{L}]+/u', '', $title) ?: '';
-    if ($letters !== '' && mb_strtoupper($letters, 'UTF-8') === $letters && mb_strtolower($letters, 'UTF-8') !== $letters) {
+    $letterCount = preg_match_all('/\p{L}/u', $title, $letterMatches);
+    $uppercaseCount = preg_match_all('/\p{Lu}/u', $title, $uppercaseMatches);
+    $allCaps = $letters !== '' && mb_strtoupper($letters, 'UTF-8') === $letters && mb_strtolower($letters, 'UTF-8') !== $letters;
+    $excessCaps = $letterCount >= 8 && $uppercaseCount / $letterCount >= 0.6;
+    if ($allCaps || $excessCaps) {
         $title = mb_convert_case(mb_strtolower($title, 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
         $title = (string)preg_replace_callback(
             '/\b(\d+(?:[.,]\d+)?)\s*(ah|wh|mah|kw|v|w|a|s|h)\b/iu',
@@ -186,6 +190,10 @@ function merchantProductTitle(string $value): string {
         if ($normalizedLetters !== '' && mb_strtoupper($normalizedLetters, 'UTF-8') === $normalizedLetters) {
             $title = 'Modul ' . $title;
         }
+    }
+    $technicalTokens = preg_match_all('/\b(?:\d+(?:[.,]\d+)?(?:V|W|A|S|H)|LCD|[A-Z]{2,}(?:-[A-Z0-9]+)*)\b/u', $title, $technicalMatches);
+    if (preg_match('/^Controller\b/iu', $title) && $technicalTokens >= 3 && stripos($title, 'pentru trotinetă electrică') === false) {
+        $title = 'Controller pentru trotinetă electrică ' . trim(mb_substr($title, mb_strlen('Controller', 'UTF-8'), null, 'UTF-8'));
     }
     return $title;
 }

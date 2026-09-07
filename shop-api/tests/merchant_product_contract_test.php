@@ -53,6 +53,8 @@ $assert(!isset($invalidGtinAttributes['gtins']), 'GTIN cu checksum invalid a fos
 $assert(merchantValidGtin('2000000000000') === null, 'GTIN din intervalul restricționat a fost acceptat');
 $assert(merchantProductTitle('MOTOR BICICLETA ELECTRICA 36V 250W') === 'Motor Bicicleta Electrica 36V 250W', 'titlul all-caps nu este normalizat');
 $assert(merchantProductTitle('BMS 16S 60V 50A') === 'Modul de protecție pentru baterie BMS 16S 60V 50A', 'titlul BMS rămâne excesiv capitalizat');
+$assert(merchantProductTitle('ROATA SPATE SOLIDA TROTINETA ELECTRICA NINEBOT E2 E2 Plus') === 'Roata Spate Solida Trotineta Electrica Ninebot E2 E2 Plus', 'titlul majoritar all-caps nu este normalizat');
+$assert(merchantProductTitle('Controller 60V 30A 1500W-B LCD SQ-S4') === 'Controller pentru trotinetă electrică 60V 30A 1500W-B LCD SQ-S4', 'titlul tehnic nu primește context suficient');
 $assert(merchantProductIsVisible($product), 'produsul cumpărabil este tratat ca invizibil');
 $product['is_purchasable'] = false;
 $assert(!merchantProductIsVisible($product), 'produsul dezactivat rămâne vizibil');

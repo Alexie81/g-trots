@@ -21,6 +21,9 @@ export default function OtaUpdateManager() {
         const update = await Updates.checkForUpdateAsync();
         if (active && update.isAvailable) {
           await Updates.fetchUpdateAsync();
+          if (active) {
+            await Updates.reloadAsync();
+          }
         }
       } catch {
         // Actualizarea OTA este opțională: aplicația continuă normal când dispozitivul este offline.

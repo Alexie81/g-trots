@@ -5422,10 +5422,19 @@ footer nav {
     margin-top: 1rem;
   }
 
+  .vehicle-carousel::before {
+    display: none;
+  }
+
+  .vehicle-slide {
+    transition: none;
+  }
+
   .hero-visual .vehicle-slide img {
     height: calc(100% - 5rem);
     padding-inline: 0;
     object-position: 50% 100%;
+    filter: none;
   }
 
   .vehicle-slide:nth-child(3) img {

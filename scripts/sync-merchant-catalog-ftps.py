@@ -50,6 +50,7 @@ def chunks(values: list[str], size: int) -> list[list[str]]:
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Sincronizeaza catalogul Google Merchant prin API-ul protejat.")
     parser.add_argument("--diagnose-only", action="store_true", help="Citeste starea si erorile existente fara a trimite produse.")
+    parser.add_argument("--repair-images", action="store_true", help="Reface imaginile Boomag lipsa si resincronizeaza produsele afectate.")
     return parser.parse_args()
 
 
@@ -88,6 +89,136 @@ try {{
         $ids = array_values(array_map('strval', $db->query('SELECT id FROM shop_products ORDER BY id ASC')->fetchAll(PDO::FETCH_COLUMN)));
         $representativeIds = function_exists('catalogRepresentativeProductIds') ? array_keys(catalogRepresentativeProductIds($db)) : $ids;
         echo json_encode(['ok' => true, 'product_ids' => $ids, 'representative_ids' => $representativeIds, 'total' => count($ids)]);
+        exit;
+    }}
+    if ($mode === 'merchant-products') {{
+        $account = merchantAccountName($config);
+        $expectedDataSource = merchantDataSourceName($config);
+        $pageToken = '';
+        $pages = 0;
+        $accountTotal = 0;
+        $dataSourceTotal = 0;
+        $withoutDestinations = 0;
+        $destinationSummary = [];
+        $issueSummary = [];
+        $issueSamples = [];
+        $issueSamplesByCode = [];
+        $merchantOfferIds = [];
+        do {{
+            $url = 'https://merchantapi.googleapis.com/products/v1/' . $account . '/products?pageSize=1000';
+            if ($pageToken !== '') $url .= '&pageToken=' . rawurlencode($pageToken);
+            $response = merchantRequest($config, 'GET', $url);
+            $pages++;
+            foreach ((array)($response['products'] ?? []) as $product) {{
+                $accountTotal++;
+                if ((string)($product['dataSource'] ?? '') !== $expectedDataSource) continue;
+                $dataSourceTotal++;
+                $offerId = (string)($product['offerId'] ?? '');
+                if ($offerId !== '') $merchantOfferIds[$offerId] = true;
+                $statuses = (array)($product['productStatus']['destinationStatuses'] ?? []);
+                if (!$statuses) $withoutDestinations++;
+                foreach ($statuses as $status) {{
+                    $context = (string)($status['reportingContext'] ?? 'UNSPECIFIED');
+                    if (!isset($destinationSummary[$context])) {{
+                        $destinationSummary[$context] = ['approved_ro' => 0, 'pending_ro' => 0, 'disapproved_ro' => 0];
+                    }}
+                    if (in_array('RO', (array)($status['approvedCountries'] ?? []), true)) $destinationSummary[$context]['approved_ro']++;
+                    if (in_array('RO', (array)($status['pendingCountries'] ?? []), true)) $destinationSummary[$context]['pending_ro']++;
+                    if (in_array('RO', (array)($status['disapprovedCountries'] ?? []), true)) $destinationSummary[$context]['disapproved_ro']++;
+                }}
+                foreach ((array)($product['productStatus']['itemLevelIssues'] ?? []) as $issue) {{
+                    $key = implode('|', [
+                        (string)($issue['severity'] ?? 'UNSPECIFIED'),
+                        (string)($issue['reportingContext'] ?? 'UNSPECIFIED'),
+                        (string)($issue['code'] ?? 'unknown'),
+                    ]);
+                    $issueSummary[$key] = ($issueSummary[$key] ?? 0) + 1;
+                    if (count($issueSamples) < 12) {{
+                        $issueSamples[] = [
+                            'offer_id' => (string)($product['offerId'] ?? ''),
+                            'link' => (string)($product['productAttributes']['link'] ?? ''),
+                            'image_link' => (string)($product['productAttributes']['imageLink'] ?? ''),
+                            'severity' => (string)($issue['severity'] ?? ''),
+                            'context' => (string)($issue['reportingContext'] ?? ''),
+                            'code' => (string)($issue['code'] ?? ''),
+                            'description' => (string)($issue['description'] ?? ''),
+                        ];
+                    }}
+                    $issueCode = (string)($issue['code'] ?? 'unknown');
+                    if (count($issueSamplesByCode[$issueCode] ?? []) < 3) {{
+                        $issueSamplesByCode[$issueCode][] = [
+                            'offer_id' => (string)($product['offerId'] ?? ''),
+                            'title' => (string)($product['productAttributes']['title'] ?? ''),
+                            'link' => (string)($product['productAttributes']['link'] ?? ''),
+                            'image_link' => (string)($product['productAttributes']['imageLink'] ?? ''),
+                            'severity' => (string)($issue['severity'] ?? ''),
+                            'context' => (string)($issue['reportingContext'] ?? ''),
+                            'description' => (string)($issue['description'] ?? ''),
+                        ];
+                    }}
+                }}
+            }}
+            $pageToken = trim((string)($response['nextPageToken'] ?? ''));
+        }} while ($pageToken !== '' && $pages < 20);
+        ksort($destinationSummary);
+        arsort($issueSummary);
+        $databaseOfferIds = function_exists('catalogRepresentativeProductIds')
+            ? catalogRepresentativeProductIds($db)
+            : array_fill_keys(array_map('strval', $db->query('SELECT id FROM shop_products')->fetchAll(PDO::FETCH_COLUMN)), true);
+        $unexpectedOfferIds = array_values(array_diff(array_keys($merchantOfferIds), array_keys($databaseOfferIds)));
+        $missingOfferIds = array_values(array_diff(array_keys($databaseOfferIds), array_keys($merchantOfferIds)));
+        echo json_encode([
+            'ok' => true,
+            'account_total' => $accountTotal,
+            'data_source_total' => $dataSourceTotal,
+            'expected_data_source' => $expectedDataSource,
+            'without_destinations' => $withoutDestinations,
+            'unexpected_offer_ids' => $unexpectedOfferIds,
+            'missing_offer_ids' => $missingOfferIds,
+            'destination_summary' => $destinationSummary,
+            'issue_summary' => $issueSummary,
+            'issue_samples' => $issueSamples,
+            'issue_samples_by_code' => $issueSamplesByCode,
+            'pages' => $pages,
+            'pagination_complete' => $pageToken === '',
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }}
+    if ($mode === 'repair-images') {{
+        set_time_limit(0);
+        $offset = max(0, (int)($_GET['offset'] ?? 0));
+        $limit = max(1, min(10, (int)($_GET['limit'] ?? 10)));
+        echo json_encode(boomagRepairProductImagesBatch($db, $config, $offset, $limit), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }}
+    if ($mode === 'image-files') {{
+        $paths = $db->query('SELECT product_id, image_path FROM shop_product_images ORDER BY product_id, sort_order')->fetchAll();
+        $existing = 0;
+        $missing = 0;
+        $samples = [];
+        foreach ($paths as $row) {{
+            $relative = ltrim(str_replace('\\\\', '/', (string)$row['image_path']), '/');
+            $absolute = __DIR__ . '/' . $relative;
+            $present = is_file($absolute) && filesize($absolute) >= 500;
+            if ($present) $existing++; else $missing++;
+            if (count($samples) < 8 || in_array((string)$row['product_id'], ['37f88f21-0ad1-5d97-80d0-367824e81922', '5b887cfb-ff87-58b7-9488-8eb2c6136de6'], true)) {{
+                $samples[] = [
+                    'product_id' => (string)$row['product_id'],
+                    'image_path' => (string)$row['image_path'],
+                    'present' => $present,
+                    'size' => $present ? filesize($absolute) : 0,
+                ];
+            }}
+        }}
+        echo json_encode([
+            'ok' => true,
+            'database_images' => count($paths),
+            'existing_files' => $existing,
+            'missing_files' => $missing,
+            'directory_files' => count(glob(__DIR__ . '/uploads/products/*') ?: []),
+            'public_base_url' => (string)($config['public_base_url'] ?? ''),
+            'samples' => array_slice($samples, -12),
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
     }}
     if ($mode === 'sync') {{
@@ -137,7 +268,47 @@ try {{
         if not bootstrap.get("schema_ready"):
             raise RuntimeError("Schema Merchant nu a putut fi pregatita.")
         if options.diagnose_only:
-            print(json.dumps(request_json(base + "&mode=stats"), ensure_ascii=False, indent=2), flush=True)
+            diagnosis = {
+                "server": request_json(base + "&mode=stats"),
+                "images": request_json(base + "&mode=image-files"),
+                "merchant": request_json(base + "&mode=merchant-products", timeout=180),
+            }
+            print(json.dumps(diagnosis, ensure_ascii=False, indent=2), flush=True)
+            return
+        if options.repair_images:
+            first = request_json(base + "&" + urlencode({"mode": "repair-images", "offset": 0, "limit": 10}), timeout=300)
+            total = int(first.get("total") or 0)
+            results = [first]
+            offsets = list(range(10, total, 10))
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                pending = {
+                    executor.submit(
+                        request_json,
+                        base + "&" + urlencode({"mode": "repair-images", "offset": offset, "limit": 10}),
+                        300,
+                    ): offset
+                    for offset in offsets
+                }
+                completed = 1
+                for future in as_completed(pending):
+                    results.append(future.result())
+                    completed += 1
+                    if completed % 20 == 0 or completed == len(offsets) + 1:
+                        print(json.dumps({"phase": "repair-images", "completed_batches": completed, "total_batches": len(offsets) + 1}), flush=True)
+
+            numeric_keys = ["checked", "already_present", "products_repaired", "images_saved", "products_missing", "images_missing"]
+            list_keys = ["stripe_errors", "merchant_errors", "seo_errors", "errors"]
+            totals = {key: 0 for key in numeric_keys}
+            totals.update({key: [] for key in list_keys})
+            for result in results:
+                stats = result.get("stats", {})
+                for key in numeric_keys:
+                    totals[key] += int(stats.get(key) or 0)
+                for key in list_keys:
+                    totals[key].extend(stats.get(key) or [])
+            print(json.dumps({"phase": "repair-images-complete", "total": total, "result": totals}, ensure_ascii=False, indent=2), flush=True)
+            if any(totals[key] for key in list_keys):
+                raise SystemExit(1)
             return
         state = request_json(base + "&mode=stats")
         if not state.get("enabled"):

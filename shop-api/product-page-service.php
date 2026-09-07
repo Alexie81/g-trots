@@ -60,6 +60,22 @@ function shopProductSeoJson(array $value): string {
     return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
 }
 
+function shopProductSeoValidGtin(string $value): ?string {
+    $gtin = preg_replace('/\D+/', '', $value) ?: '';
+    $length = strlen($gtin);
+    if (!in_array($length, [8, 12, 13, 14], true)) return null;
+    if (str_starts_with($gtin, '2') || str_starts_with($gtin, '02') || str_starts_with($gtin, '04')
+        || str_starts_with($gtin, '98') || str_starts_with($gtin, '99')) return null;
+    $sum = 0;
+    $weight = 3;
+    for ($index = $length - 2; $index >= 0; $index--) {
+        $sum += ((int)$gtin[$index]) * $weight;
+        $weight = $weight === 3 ? 1 : 3;
+    }
+    $expected = (10 - ($sum % 10)) % 10;
+    return $expected === (int)$gtin[$length - 1] ? $gtin : null;
+}
+
 function shopProductSeoRender(array $product, array $config): string {
     $root = shopProductSeoWebsiteRoot();
     $templatePath = $root . DIRECTORY_SEPARATOR . 'produs.html';
@@ -138,8 +154,8 @@ function shopProductSeoRender(array $product, array $config): string {
         ],
     ];
     foreach ($productSchema as $key => $value) if ($value === null || $value === '') unset($productSchema[$key]);
-    $gtin = preg_replace('/\D+/', '', (string)($product['gtin'] ?? $product['ean'] ?? ''));
-    if (in_array(strlen($gtin), [8, 12, 13, 14], true)) $productSchema['gtin' . strlen($gtin)] = $gtin;
+    $gtin = shopProductSeoValidGtin((string)($product['gtin'] ?? $product['ean'] ?? ''));
+    if ($gtin !== null) $productSchema['gtin' . strlen($gtin)] = $gtin;
     if ((int)($product['review_count'] ?? 0) > 0 && (float)($product['review_average'] ?? 0) > 0) {
         $productSchema['aggregateRating'] = [
             '@type' => 'AggregateRating',

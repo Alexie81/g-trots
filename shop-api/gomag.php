@@ -959,6 +959,103 @@ function boomagSyncImportedImages(PDO $db, string $productId, string $externalId
     return ['saved' => count($saved), 'requested' => count($urls)];
 }
 
+function boomagProductImagesNeedRepair(PDO $db, string $productId): bool {
+    $stmt = $db->prepare('SELECT image_path FROM shop_product_images WHERE product_id = ? ORDER BY sort_order ASC, created_at ASC');
+    $stmt->execute([$productId]);
+    $paths = array_values(array_filter(array_map('strval', $stmt->fetchAll(PDO::FETCH_COLUMN))));
+    if (!$paths) return true;
+    foreach ($paths as $path) {
+        if (preg_match('#^https?://#i', $path)) continue;
+        $relative = ltrim(str_replace('\\', '/', $path), '/');
+        if (!preg_match('#^uploads/products/[a-f0-9]{32}\.(?:jpg|png|webp|gif)$#i', $relative)) return true;
+        if (!is_file(__DIR__ . '/' . $relative) || filesize(__DIR__ . '/' . $relative) < 500) return true;
+    }
+    return false;
+}
+
+function boomagRepairProductImagesBatch(PDO $db, array $config, int $offset, int $limit): array {
+    $rows = boomagFeedRows($config);
+    $total = count($rows);
+    $offset = max(0, min($offset, $total));
+    $limit = max(1, min($limit, 10));
+    $batch = array_slice($rows, $offset, $limit);
+    $sourceId = (string)($db->query("SELECT id FROM shop_product_sources WHERE LOWER(domain) = 'boomag.ro' LIMIT 1")->fetchColumn() ?: '');
+    if ($sourceId === '') throw new RuntimeException('Sursa boomag.ro nu exista in catalog.');
+
+    $find = $db->prepare(
+        'SELECT id FROM shop_products
+         WHERE (source_id = ? AND supplier_external_id = ?) OR supplier_product_code = ?
+         LIMIT 1'
+    );
+    $stats = [
+        'checked' => 0,
+        'already_present' => 0,
+        'products_repaired' => 0,
+        'images_saved' => 0,
+        'products_missing' => 0,
+        'images_missing' => 0,
+        'stripe_errors' => [],
+        'merchant_errors' => [],
+        'seo_errors' => [],
+        'errors' => [],
+    ];
+    foreach ($batch as $batchIndex => $row) {
+        $externalId = trim((string)($row['id'] ?? ''));
+        $supplierSku = boomagNormalizeProductCode((string)($row['sku'] ?? ''));
+        try {
+            $stats['checked']++;
+            $find->execute([$sourceId, $externalId, $supplierSku]);
+            $productId = (string)($find->fetchColumn() ?: '');
+            if ($productId === '') {
+                $stats['products_missing']++;
+                continue;
+            }
+            if (!boomagProductImagesNeedRepair($db, $productId)) {
+                $stats['already_present']++;
+                continue;
+            }
+            $name = boomagCleanTitle((string)($row['name'] ?? 'Produs G-Trots'));
+            $imageResult = boomagSyncImportedImages($db, $productId, $externalId, $name, $row);
+            $saved = (int)($imageResult['saved'] ?? 0);
+            $stats['images_saved'] += $saved;
+            if ($saved <= 0) {
+                $stats['images_missing']++;
+                continue;
+            }
+            $stats['products_repaired']++;
+            if (function_exists('stripeSyncProductSafe')) {
+                $result = stripeSyncProductSafe($db, $config, $productId);
+                if (($result['status'] ?? '') === 'error') $stats['stripe_errors'][] = ['product_id' => $productId, 'error' => (string)($result['error'] ?? '')];
+            }
+            if (function_exists('merchantSyncProductSafe')) {
+                $result = merchantSyncProductSafe($db, $config, $productId);
+                if (($result['status'] ?? '') === 'error') $stats['merchant_errors'][] = ['product_id' => $productId, 'error' => (string)($result['error'] ?? '')];
+            }
+            if (function_exists('shopProductSeoSync')) {
+                $result = shopProductSeoSync($db, $config, $productId, null, false);
+                if (empty($result['success'])) $stats['seo_errors'][] = ['product_id' => $productId, 'error' => (string)($result['error'] ?? '')];
+            }
+        } catch (Throwable $error) {
+            $stats['errors'][] = [
+                'offset' => $offset + $batchIndex,
+                'external_id' => $externalId,
+                'sku' => $supplierSku,
+                'error' => mb_substr($error->getMessage(), 0, 500),
+            ];
+        }
+    }
+    $nextOffset = min($total, $offset + count($batch));
+    return [
+        'success' => !$stats['errors'] && !$stats['stripe_errors'] && !$stats['merchant_errors'] && !$stats['seo_errors'],
+        'offset' => $offset,
+        'processed' => count($batch),
+        'next_offset' => $nextOffset,
+        'total' => $total,
+        'done' => $nextOffset >= $total,
+        'stats' => $stats,
+    ];
+}
+
 function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $limit, bool $forceFeedRefresh = false): array {
     $rows = boomagFeedRows($config, $forceFeedRefresh);
     $total = count($rows);
@@ -1110,7 +1207,11 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
             shopNirEnsureBoomagKidotoysReferences($db, $productId);
             $db->commit();
 
-            $imageResult = $refreshEditorialContent
+            // Fișierul poate lipsi chiar dacă referința lui există în baza de date
+            // (de exemplu după o migrare de hosting). Reparăm automat imaginile la
+            // următoarea importare Boomag, inclusiv pentru conținutul editorial SEO.
+            $repairMissingImages = boomagProductImagesNeedRepair($db, $productId);
+            $imageResult = ($refreshEditorialContent || $repairMissingImages)
                 ? boomagSyncImportedImages($db, $productId, $externalId, $content['name'], $row)
                 : ['saved' => 0, 'requested' => 0];
             $stats['images_saved'] += (int)$imageResult['saved'];

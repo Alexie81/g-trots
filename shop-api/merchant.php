@@ -146,6 +146,50 @@ function merchantProductIsVisible(array $product): bool {
     ));
 }
 
+function merchantValidGtin(string $value): ?string {
+    $gtin = preg_replace('/\D+/', '', $value) ?: '';
+    $length = strlen($gtin);
+    if (!in_array($length, [8, 12, 13, 14], true)) return null;
+    if (str_starts_with($gtin, '2') || str_starts_with($gtin, '02') || str_starts_with($gtin, '04')
+        || str_starts_with($gtin, '98') || str_starts_with($gtin, '99')) return null;
+    $sum = 0;
+    $weight = 3;
+    for ($index = $length - 2; $index >= 0; $index--) {
+        $sum += ((int)$gtin[$index]) * $weight;
+        $weight = $weight === 3 ? 1 : 3;
+    }
+    $expected = (10 - ($sum % 10)) % 10;
+    return $expected === (int)$gtin[$length - 1] ? $gtin : null;
+}
+
+function merchantProductTitle(string $value): string {
+    $title = trim(preg_replace('/\s+/u', ' ', $value) ?: '');
+    $letters = preg_replace('/[^\p{L}]+/u', '', $title) ?: '';
+    if ($letters !== '' && mb_strtoupper($letters, 'UTF-8') === $letters && mb_strtolower($letters, 'UTF-8') !== $letters) {
+        $title = mb_convert_case(mb_strtolower($title, 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
+        $title = (string)preg_replace_callback(
+            '/\b(\d+(?:[.,]\d+)?)\s*(ah|wh|mah|kw|v|w|a|s|h)\b/iu',
+            static fn(array $match): string => $match[1] . strtoupper($match[2]),
+            $title
+        );
+        $title = (string)preg_replace_callback(
+            '/\b(bms|led|lcd|usb|gps|oem|dc|ac|niu|vsett)\b/iu',
+            static fn(array $match): string => strtoupper($match[1]),
+            $title
+        );
+        if (preg_match('/^BMS\b/iu', $title)) {
+            $title = 'Modul de protecție pentru baterie ' . $title;
+        }
+        // Un titlu alcătuit doar din acronime și specificații rămâne lizibil și
+        // nu mai este interpretat de Google ca exces de majuscule.
+        $normalizedLetters = preg_replace('/[^\p{L}]+/u', '', $title) ?: '';
+        if ($normalizedLetters !== '' && mb_strtoupper($normalizedLetters, 'UTF-8') === $normalizedLetters) {
+            $title = 'Modul ' . $title;
+        }
+    }
+    return $title;
+}
+
 function merchantProductPayload(array $product, array $config): array {
     $description = trim((string)($product['meta_description'] ?? ''));
     if ($description === '') $description = trim((string)($product['short_description'] ?? ''));
@@ -163,7 +207,7 @@ function merchantProductPayload(array $product, array $config): array {
         : max(0.0, (float)($product['sale_price'] ?? 0), (float)($product['price'] ?? 0), (float)($product['supplier_base_price'] ?? 0));
     $stockAvailable = (string)($product['stock_mode'] ?? 'tracked') === 'unlimited' || (int)($product['stock_quantity'] ?? 0) > 0;
     $attributes = [
-        'title' => mb_substr(trim((string)($product['name'] ?? 'Produs G-Trots')), 0, 150),
+        'title' => mb_substr(merchantProductTitle((string)($product['name'] ?? 'Produs G-Trots')), 0, 150),
         'description' => mb_substr($description !== '' ? $description : 'Produs disponibil în magazinul online G-Trots.', 0, 5000),
         'link' => $baseUrl . '/magazin/produs/' . rawurlencode((string)$product['slug']) . '/',
         'availability' => $stockAvailable ? 'IN_STOCK' : 'OUT_OF_STOCK',
@@ -180,8 +224,8 @@ function merchantProductPayload(array $product, array $config): array {
     $brand = trim((string)($product['manufacturer_name'] ?? ''));
     if ($brand === '' && !empty($product['brands'][0]['name'])) $brand = trim((string)$product['brands'][0]['name']);
     if ($brand !== '') $attributes['brand'] = mb_substr($brand, 0, 70);
-    $gtin = preg_replace('/\D+/', '', (string)($product['ean'] ?? ''));
-    if (preg_match('/^\d{8,14}$/', $gtin)) $attributes['gtins'] = [$gtin];
+    $gtin = merchantValidGtin((string)($product['ean'] ?? ''));
+    if ($gtin !== null) $attributes['gtins'] = [$gtin];
     $mpn = trim((string)($product['supplier_product_code'] ?? $product['sku'] ?? ''));
     if ($mpn !== '') $attributes['mpn'] = mb_substr($mpn, 0, 70);
     return [

@@ -22,7 +22,7 @@ $product = [
     'manufacturer_name' => 'G-Trots',
     'category_id' => SHOP_CATEGORY_SECOND_HAND_ID,
     'supplier_product_code' => 'SE-CMM087',
-    'ean' => '1234567890123',
+    'ean' => '1234567890128',
     'price' => 0,
     'supplier_base_price' => 99.50,
     'sale_price' => null,
@@ -46,7 +46,13 @@ $assert($attributes['condition'] === 'USED', 'categoria SH nu este marcată USED
 $assert($attributes['link'] === 'https://g-trots.ro/magazin/produs/controller-trotineta-electrica/', 'ruta conține .html sau este incorectă');
 $assert($attributes['imageLink'] === $product['images'][0]['url'], 'imaginea principală nu este prima imagine');
 $assert($attributes['additionalImageLinks'][0] === $product['images'][1]['url'], 'imaginile suplimentare lipsesc');
-$assert($attributes['gtins'][0] === '1234567890123', 'GTIN valid lipsă');
+$assert($attributes['gtins'][0] === '1234567890128', 'GTIN valid lipsă');
+$product['ean'] = '1234567890123';
+$invalidGtinAttributes = merchantProductPayload($product, ['website_base_url' => 'https://g-trots.ro'])['productAttributes'];
+$assert(!isset($invalidGtinAttributes['gtins']), 'GTIN cu checksum invalid a fost trimis către Merchant');
+$assert(merchantValidGtin('2000000000000') === null, 'GTIN din intervalul restricționat a fost acceptat');
+$assert(merchantProductTitle('MOTOR BICICLETA ELECTRICA 36V 250W') === 'Motor Bicicleta Electrica 36V 250W', 'titlul all-caps nu este normalizat');
+$assert(merchantProductTitle('BMS 16S 60V 50A') === 'Modul de protecție pentru baterie BMS 16S 60V 50A', 'titlul BMS rămâne excesiv capitalizat');
 $assert(merchantProductIsVisible($product), 'produsul cumpărabil este tratat ca invizibil');
 $product['is_purchasable'] = false;
 $assert(!merchantProductIsVisible($product), 'produsul dezactivat rămâne vizibil');

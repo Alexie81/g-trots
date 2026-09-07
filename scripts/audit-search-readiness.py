@@ -79,6 +79,20 @@ def type_contains(value, expected: str) -> bool:
     return value == expected
 
 
+def valid_gtin(value: object) -> bool:
+    gtin = re.sub(r"\D+", "", str(value or ""))
+    if len(gtin) not in {8, 12, 13, 14}:
+        return False
+    if gtin.startswith(("2", "02", "04", "98", "99")):
+        return False
+    total = 0
+    weight = 3
+    for digit in reversed(gtin[:-1]):
+        total += int(digit) * weight
+        weight = 1 if weight == 3 else 3
+    return (10 - total % 10) % 10 == int(gtin[-1])
+
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--website", type=Path, default=Path(__file__).resolve().parents[1] / "website")
@@ -178,6 +192,9 @@ def main() -> int:
                 record(failures, "product_schema_missing", relative)
                 continue
             product = product_nodes[0]
+            for gtin_key in ("gtin8", "gtin12", "gtin13", "gtin14", "gtin"):
+                if gtin_key in product and not valid_gtin(product[gtin_key]):
+                    record(failures, "product_gtin_invalid", f"{relative}: {gtin_key}={product[gtin_key]}")
             offers = product.get("offers")
             if isinstance(offers, list):
                 offers = offers[0] if offers else None

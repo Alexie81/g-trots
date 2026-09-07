@@ -33,6 +33,19 @@ function cleanText(value) {
     .trim();
 }
 
+function validGtin(value) {
+  const gtin = String(value ?? "").replace(/\D+/g, "");
+  if (![8, 12, 13, 14].includes(gtin.length)) return "";
+  if (/^(?:2|02|04|98|99)/.test(gtin)) return "";
+  let sum = 0;
+  let weight = 3;
+  for (let index = gtin.length - 2; index >= 0; index -= 1) {
+    sum += Number(gtin[index]) * weight;
+    weight = weight === 3 ? 1 : 3;
+  }
+  return (10 - (sum % 10)) % 10 === Number(gtin.at(-1)) ? gtin : "";
+}
+
 function excerpt(value, limit) {
   const text = cleanText(value);
   if (text.length <= limit) return text;
@@ -272,8 +285,8 @@ function renderProductPage(template, product) {
       addressCountry: "RO"
     }
   };
-  const gtin = String(product.ean || "").replace(/\D+/g, "");
-  if ([8, 12, 13, 14].includes(gtin.length)) productSchema[`gtin${gtin.length}`] = gtin;
+  const gtin = validGtin(product.ean);
+  if (gtin) productSchema[`gtin${gtin.length}`] = gtin;
   const breadcrumbSchema = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -425,7 +438,7 @@ function buildAiCatalog(products) {
       name: cleanText(product.name),
       url: `${WEBSITE_BASE_URL}/magazin/produs/${encodeURIComponent(product.slug)}/`,
       sku: cleanText(product.sku),
-      gtin: String(product.ean ?? "").replace(/\D+/g, ""),
+      gtin: validGtin(product.ean),
       brand: cleanText(product.manufacturer_name) || cleanText(product.brands?.[0]?.name) || "G-Trots",
       category: cleanText(product.category_name),
       price: Number(currentPrice(product).toFixed(2)),

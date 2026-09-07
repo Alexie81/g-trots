@@ -996,6 +996,7 @@ function boomagRepairProductImagesBatch(PDO $db, array $config, int $offset, int
         'images_missing' => 0,
         'stripe_errors' => [],
         'merchant_errors' => [],
+        'shopify_errors' => [],
         'seo_errors' => [],
         'errors' => [],
     ];
@@ -1031,6 +1032,10 @@ function boomagRepairProductImagesBatch(PDO $db, array $config, int $offset, int
                 $result = merchantSyncProductSafe($db, $config, $productId);
                 if (($result['status'] ?? '') === 'error') $stats['merchant_errors'][] = ['product_id' => $productId, 'error' => (string)($result['error'] ?? '')];
             }
+            if (function_exists('shopifySyncProductSafe')) {
+                $result = shopifySyncProductSafe($db, $config, $productId);
+                if (($result['status'] ?? '') === 'error') $stats['shopify_errors'][] = ['product_id' => $productId, 'error' => (string)($result['error'] ?? '')];
+            }
             if (function_exists('shopProductSeoSync')) {
                 $result = shopProductSeoSync($db, $config, $productId, null, false);
                 if (empty($result['success'])) $stats['seo_errors'][] = ['product_id' => $productId, 'error' => (string)($result['error'] ?? '')];
@@ -1046,7 +1051,7 @@ function boomagRepairProductImagesBatch(PDO $db, array $config, int $offset, int
     }
     $nextOffset = min($total, $offset + count($batch));
     return [
-        'success' => !$stats['errors'] && !$stats['stripe_errors'] && !$stats['merchant_errors'] && !$stats['seo_errors'],
+        'success' => !$stats['errors'] && !$stats['stripe_errors'] && !$stats['merchant_errors'] && !$stats['shopify_errors'] && !$stats['seo_errors'],
         'offset' => $offset,
         'processed' => count($batch),
         'next_offset' => $nextOffset,
@@ -1080,6 +1085,8 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
         'stripe_errors' => [],
         'merchant_synced' => 0,
         'merchant_errors' => [],
+        'shopify_synced' => 0,
+        'shopify_errors' => [],
         'seo_pages_generated' => 0,
         'seo_errors' => [],
         'errors' => [],
@@ -1232,6 +1239,14 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
                     $stats['merchant_synced']++;
                 }
             }
+            if (function_exists('shopifySyncProductSafe')) {
+                $shopifyResult = shopifySyncProductSafe($db, $config, $productId);
+                if (($shopifyResult['status'] ?? '') === 'error') {
+                    $stats['shopify_errors'][] = ['id' => $externalId, 'sku' => $supplierSku, 'message' => (string)($shopifyResult['error'] ?? 'Sincronizarea Shopify a esuat.')];
+                } else {
+                    $stats['shopify_synced']++;
+                }
+            }
             $seoResult = shopProductSeoSync($db, $config, $productId, $existing ? (string)($existing['slug'] ?? '') : null, false);
             if (!empty($seoResult['generated'])) {
                 $stats['seo_pages_generated']++;
@@ -1257,7 +1272,11 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
 
     $nextOffset = min($total, $offset + count($batch));
     return [
-        'success' => count($stats['errors']) === 0,
+        'success' => count($stats['errors']) === 0
+            && count($stats['stripe_errors']) === 0
+            && count($stats['merchant_errors']) === 0
+            && count($stats['shopify_errors']) === 0
+            && count($stats['seo_errors']) === 0,
         'source' => 'boomag.ro',
         'offset' => $offset,
         'processed' => count($batch),
@@ -1473,7 +1492,7 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
     shopNirEnsureBoomagKidotoysReferences($db);
 
     // O schimbare Boomag nu se oprește în baza locală: prețul și stocul sunt
-    // propagate imediat atât în Stripe, cât și în Merchant. Funcțiile
+    // propagate imediat în Stripe, Merchant și Shopify Catalog. Funcțiile
     // Safe păstrează sincronizarea furnizorului reușită chiar dacă un canal
     // extern are temporar o eroare și memorează eroarea pe produs pentru retry.
     $stripeSyncResults = [];
@@ -1488,6 +1507,13 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
         $merchantChangedIds = array_values(array_unique(array_merge(array_keys($pricesChanged), array_keys($stocksChanged))));
         foreach ($merchantChangedIds as $productId) {
             $merchantSyncResults[(string)$productId] = merchantSyncProductSafe($db, $config, (string)$productId);
+        }
+    }
+    $shopifySyncResults = [];
+    if (function_exists('shopifySyncProductSafe')) {
+        $shopifyChangedIds = array_values(array_unique(array_merge(array_keys($pricesChanged), array_keys($stocksChanged))));
+        foreach ($shopifyChangedIds as $productId) {
+            $shopifySyncResults[(string)$productId] = shopifySyncProductSafe($db, $config, (string)$productId);
         }
     }
     $seoSyncResults = [];
@@ -1527,6 +1553,8 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
         'stripe_errors' => count(array_filter($stripeSyncResults, static fn(array $result): bool => ($result['status'] ?? '') === 'error')),
         'merchant_synced' => count(array_filter($merchantSyncResults, static fn(array $result): bool => ($result['status'] ?? '') !== 'error')),
         'merchant_errors' => count(array_filter($merchantSyncResults, static fn(array $result): bool => ($result['status'] ?? '') === 'error')),
+        'shopify_synced' => count(array_filter($shopifySyncResults, static fn(array $result): bool => ($result['status'] ?? '') !== 'error')),
+        'shopify_errors' => count(array_filter($shopifySyncResults, static fn(array $result): bool => ($result['status'] ?? '') === 'error')),
         'seo_pages_synced' => count(array_filter($seoSyncResults, static fn(array $result): bool => !empty($result['success']))),
         'seo_errors' => count(array_filter($seoSyncResults, static fn(array $result): bool => empty($result['success']))),
         'seo_sitemap' => $seoSitemap,

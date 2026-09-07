@@ -22,6 +22,7 @@ require_once __DIR__ . '/invoice-automation.php';
 require_once __DIR__ . '/spv-service.php';
 require_once __DIR__ . '/stripe.php';
 require_once __DIR__ . '/merchant.php';
+require_once __DIR__ . '/shopify.php';
 require_once __DIR__ . '/order-cancellation.php';
 require_once __DIR__ . '/order-return.php';
 require_once __DIR__ . '/order-return-confirmation.php';
@@ -62,6 +63,13 @@ function shopConfig(): array {
         // Activarea se face controlat numai dupa publicarea site-ului; pana
         // atunci hook-urile CRUD/Boomag nu au voie sa trimita oferte.
         'merchant_sync_enabled' => false,
+        // Shopify Agentic/Catalog ramane oprit pana cand aplicatia privata este
+        // autorizata si tokenul Admin este salvat exclusiv pe server.
+        'shopify_store_domain' => 'g-trots-agentic.myshopify.com',
+        'shopify_admin_access_token' => '',
+        'shopify_api_version' => '2026-07',
+        'shopify_location_id' => '',
+        'shopify_sync_enabled' => false,
         'order_email_from' => 'contact@g-trots.ro',
         'order_email_from_name' => 'G-Trots România',
         'order_email_reply_to' => 'contact@g-trots.ro',
@@ -236,7 +244,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026090601;
+    $schemaVersion = 2026090701;
     // Ruta normala face doar SELECT-ul indexat. Un CREATE TABLE IF NOT EXISTS la
     // fiecare request tot cere verificari de metadata si poate astepta lock-uri.
     try {
@@ -462,6 +470,12 @@ function ensureShopSchema(PDO $db): void {
             stripe_price_id VARCHAR(80) NULL,
             stripe_synced_at DATETIME NULL,
             stripe_sync_error VARCHAR(500) NULL,
+            merchant_synced_at DATETIME NULL,
+            merchant_sync_error VARCHAR(500) NULL,
+            shopify_product_id VARCHAR(100) NULL,
+            shopify_variant_id VARCHAR(100) NULL,
+            shopify_synced_at DATETIME NULL,
+            shopify_sync_error VARCHAR(500) NULL,
             content_status VARCHAR(20) NOT NULL DEFAULT 'manual',
             seo_researched_at DATETIME NULL,
             seo_word_count INT NOT NULL DEFAULT 0,
@@ -477,7 +491,9 @@ function ensureShopSchema(PDO $db): void {
             INDEX idx_shop_products_featured (is_featured, featured_rank),
             INDEX idx_shop_products_stock (stock_mode, stock_quantity),
             UNIQUE INDEX idx_shop_products_stripe_product (stripe_product_id),
-            INDEX idx_shop_products_stripe_price (stripe_price_id)
+            INDEX idx_shop_products_stripe_price (stripe_price_id),
+            UNIQUE INDEX idx_shop_products_shopify_product (shopify_product_id),
+            INDEX idx_shop_products_shopify_variant (shopify_variant_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     $discountTypeColumn = $db->query("SHOW COLUMNS FROM shop_products LIKE 'discount_type'")->fetch();
@@ -599,6 +615,17 @@ function ensureShopSchema(PDO $db): void {
             $db->exec("ALTER TABLE shop_products ADD COLUMN {$column} {$definition}");
         }
     }
+    $shopifyProductColumns = [
+        'shopify_product_id' => 'VARCHAR(100) NULL AFTER merchant_sync_error',
+        'shopify_variant_id' => 'VARCHAR(100) NULL AFTER shopify_product_id',
+        'shopify_synced_at' => 'DATETIME NULL AFTER shopify_variant_id',
+        'shopify_sync_error' => 'VARCHAR(500) NULL AFTER shopify_synced_at',
+    ];
+    foreach ($shopifyProductColumns as $column => $definition) {
+        if (!$db->query("SHOW COLUMNS FROM shop_products LIKE " . $db->quote($column))->fetch()) {
+            $db->exec("ALTER TABLE shop_products ADD COLUMN {$column} {$definition}");
+        }
+    }
     if (!$db->query("SHOW COLUMNS FROM shop_products LIKE 'content_status'")->fetch()) {
         $db->exec("ALTER TABLE shop_products ADD COLUMN content_status VARCHAR(20) NOT NULL DEFAULT 'manual' AFTER stripe_sync_error");
     }
@@ -620,6 +647,12 @@ function ensureShopSchema(PDO $db): void {
     }
     if (!$db->query("SHOW INDEX FROM shop_products WHERE Key_name = 'idx_shop_products_stripe_price'")->fetch()) {
         $db->exec('ALTER TABLE shop_products ADD INDEX idx_shop_products_stripe_price (stripe_price_id)');
+    }
+    if (!$db->query("SHOW INDEX FROM shop_products WHERE Key_name = 'idx_shop_products_shopify_product'")->fetch()) {
+        $db->exec('ALTER TABLE shop_products ADD UNIQUE INDEX idx_shop_products_shopify_product (shopify_product_id)');
+    }
+    if (!$db->query("SHOW INDEX FROM shop_products WHERE Key_name = 'idx_shop_products_shopify_variant'")->fetch()) {
+        $db->exec('ALTER TABLE shop_products ADD INDEX idx_shop_products_shopify_variant (shopify_variant_id)');
     }
     if (!$db->query("SHOW INDEX FROM shop_products WHERE Key_name = 'idx_shop_products_featured'")->fetch()) {
         $db->exec('ALTER TABLE shop_products ADD INDEX idx_shop_products_featured (is_featured, featured_rank)');
@@ -2797,6 +2830,10 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['stripe_sync_status'] = $row['stripe_sync_error'] !== null ? 'error' : ($row['stripe_product_id'] !== null ? 'synced' : 'pending');
     $row['merchant_sync_error'] = empty($row['merchant_sync_error']) ? null : (string)$row['merchant_sync_error'];
     $row['merchant_sync_status'] = $row['merchant_sync_error'] !== null ? 'error' : (!empty($row['merchant_synced_at']) ? 'synced' : 'pending');
+    $row['shopify_product_id'] = empty($row['shopify_product_id']) ? null : (string)$row['shopify_product_id'];
+    $row['shopify_variant_id'] = empty($row['shopify_variant_id']) ? null : (string)$row['shopify_variant_id'];
+    $row['shopify_sync_error'] = empty($row['shopify_sync_error']) ? null : (string)$row['shopify_sync_error'];
+    $row['shopify_sync_status'] = $row['shopify_sync_error'] !== null ? 'error' : ($row['shopify_product_id'] !== null ? 'synced' : 'pending');
     $row['seo_ready'] = (string)($row['content_status'] ?? '') === 'seo';
     $row['gtin'] = preg_match('/^[0-9]{8,14}$/', (string)($row['ean'] ?? '')) ? (string)$row['ean'] : null;
     $row['stock_available'] = $row['is_purchasable'] && ($row['stock_mode'] === 'unlimited' || $row['stock_quantity'] > 0);
@@ -3940,12 +3977,14 @@ function syncCommerceCatalogProducts(PDO $db, array $config, array $productIds):
         'products' => count($productIds),
         'stripe' => [],
         'merchant' => [],
+        'shopify' => [],
         'seo' => [],
         'sitemap' => null,
     ];
     foreach ($productIds as $productId) {
         $result['stripe'][$productId] = stripeSyncProductSafe($db, $config, $productId);
         $result['merchant'][$productId] = merchantSyncProductSafe($db, $config, $productId);
+        $result['shopify'][$productId] = shopifySyncProductSafe($db, $config, $productId);
         $result['seo'][$productId] = shopProductSeoSync($db, $config, $productId, null, false);
     }
     if ($productIds) {
@@ -5166,6 +5205,7 @@ try {
                     }
                     if (!empty($feedSync['price_changed']) || !empty($feedSync['stock_changed'])) {
                         merchantSyncProductSafe($db, $config, (string)$feedSync['product_id']);
+                        shopifySyncProductSafe($db, $config, (string)$feedSync['product_id']);
                         shopProductSeoSync($db, $config, (string)$feedSync['product_id']);
                     }
                 }
@@ -5648,9 +5688,11 @@ try {
         }
         $stripeSync = stripeSyncProductSafe($db, $config, (string)$current['id']);
         $merchantSync = merchantSyncProductSafe($db, $config, (string)$current['id']);
+        $shopifySync = shopifySyncProductSafe($db, $config, (string)$current['id']);
         $product = findProduct($db, (string)$current['id'], $config, false);
         $product['stripe_sync'] = $stripeSync;
         $product['merchant_sync'] = $merchantSync;
+        $product['shopify_sync'] = $shopifySync;
         jsonResponse($product);
     }
 
@@ -6961,9 +7003,11 @@ try {
         }
         $stripeSync = stripeSyncProductSafe($db, $config, $id);
         $merchantSync = merchantSyncProductSafe($db, $config, $id);
+        $shopifySync = shopifySyncProductSafe($db, $config, $id);
         $productResponse = findProduct($db, $id, $config);
         $productResponse['stripe_sync'] = $stripeSync;
         $productResponse['merchant_sync'] = $merchantSync;
+        $productResponse['shopify_sync'] = $shopifySync;
         $productResponse['seo_page'] = shopProductSeoSync($db, $config, $id);
         jsonResponse($productResponse, 201);
     }
@@ -7060,9 +7104,11 @@ try {
         }
         $stripeSync = stripeSyncProductSafe($db, $config, $id);
         $merchantSync = merchantSyncProductSafe($db, $config, $id);
+        $shopifySync = shopifySyncProductSafe($db, $config, $id);
         $productResponse = findProduct($db, $id, $config);
         $productResponse['stripe_sync'] = $stripeSync;
         $productResponse['merchant_sync'] = $merchantSync;
+        $productResponse['shopify_sync'] = $shopifySync;
         $productResponse['seo_page'] = shopProductSeoSync($db, $config, $id, $oldSlug);
         jsonResponse($productResponse);
     }
@@ -7071,6 +7117,7 @@ try {
         $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
         $stripeArchive = stripeArchiveProduct($db, $config, $id);
         $merchantDelete = merchantDeleteProduct($config, $id);
+        $shopifyDelete = shopifyDeleteProduct($db, $config, $id);
         $descriptionStmt = $db->prepare('SELECT description_html, slug, name FROM shop_products WHERE id = ?');
         $descriptionStmt->execute([$id]);
         $deletedProduct = $descriptionStmt->fetch() ?: [];
@@ -7125,6 +7172,7 @@ try {
             'seo_sitemap' => $seoSitemap,
             'stripe_sync' => $stripeArchive,
             'merchant_sync' => $merchantDelete,
+            'shopify_sync' => $shopifyDelete,
         ]);
     }
 
@@ -7229,9 +7277,11 @@ try {
         }
         $stripeSync = stripeSyncProductSafe($db, $config, $id);
         $merchantSync = merchantSyncProductSafe($db, $config, $id);
+        $shopifySync = shopifySyncProductSafe($db, $config, $id);
         $productResponse = findProduct($db, $id, $config);
         $productResponse['stripe_sync'] = $stripeSync;
         $productResponse['merchant_sync'] = $merchantSync;
+        $productResponse['shopify_sync'] = $shopifySync;
         $productResponse['seo_page'] = shopProductSeoSync($db, $config, $id);
         jsonResponse($productResponse);
     }
@@ -7758,6 +7808,35 @@ try {
         $cursor = trim((string)($body['cursor'] ?? ''));
         $batchSize = max(1, min(20, (int)($body['batch_size'] ?? 5)));
         jsonResponse(merchantSyncCatalogBatch($db, $config, $cursor, $batchSize));
+    }
+
+    if ($action === 'syncShopifyCatalog' && $method === 'POST') {
+        @set_time_limit(90);
+        ignore_user_abort(true);
+        if (boolValue($body['discover_location'] ?? false)) {
+            jsonResponse([
+                'configured' => shopifyIsConfigured($config),
+                'enabled' => shopifySyncIsEnabled($config),
+                ...shopifyDiscoverLocation($config),
+            ]);
+        }
+        if (boolValue($body['enable_external_url'] ?? false)) {
+            jsonResponse([
+                'configured' => shopifyIsConfigured($config),
+                'enabled' => shopifySyncIsEnabled($config),
+                ...shopifyEnableExternalUrlDefinition($config),
+            ]);
+        }
+        if (is_array($body['product_ids'] ?? null)) {
+            $results = [];
+            foreach (array_slice(array_values(array_unique(array_map('strval', $body['product_ids']))), 0, 10) as $productId) {
+                $results[] = ['product_id' => $productId, ...shopifySyncProductSafe($db, $config, $productId)];
+            }
+            jsonResponse(['configured' => shopifyIsConfigured($config), 'enabled' => shopifySyncIsEnabled($config), 'processed' => count($results), 'results' => $results]);
+        }
+        $cursor = trim((string)($body['cursor'] ?? ''));
+        $batchSize = max(1, min(10, (int)($body['batch_size'] ?? 2)));
+        jsonResponse(shopifySyncCatalogBatch($db, $config, $cursor, $batchSize));
     }
 
     if ($action === 'updatePaymentSettings' && in_array($method, ['PUT', 'PATCH'], true)) {

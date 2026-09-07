@@ -29,6 +29,13 @@ return [
     'stripe_publishable_key' => 'pk_test_replace_me',
     // Se primeste o singura data la crearea endpointului webhook Stripe.
     'stripe_webhook_secret' => 'whsec_replace_me',
+    // Shopify Agentic / Catalog. Tokenul se obtine dintr-o aplicatie custom cu
+    // write_products, read_locations si write_inventory. Nu il pune in Git.
+    'shopify_store_domain' => 'g-trots-agentic.myshopify.com',
+    'shopify_admin_access_token' => 'shpat_replace_me',
+    'shopify_api_version' => '2026-07',
+    'shopify_location_id' => 'gid://shopify/Location/replace_me',
+    'shopify_sync_enabled' => false,
     // E-mailuri tranzactionale pentru comenzi. Parola ramane doar in config.local.php.
     'order_email_from' => 'contact@g-trots.ro',
     'order_email_from_name' => 'G-Trots România',

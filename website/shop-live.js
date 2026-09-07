@@ -115,7 +115,17 @@
   }
 
   const CATALOG_CACHE_KEY = "g-trots:catalog-compact:v1";
+  const CONSENT_STORAGE_KEY = "g-trots-cookie-consent-v1";
+  function catalogCacheAllowed() {
+    try {
+      const consent = JSON.parse(localStorage.getItem(CONSENT_STORAGE_KEY) || "null");
+      return consent?.version === 1 && consent.preferences === true;
+    } catch {
+      return false;
+    }
+  }
   function readCatalogSnapshot() {
+    if (!catalogCacheAllowed()) return [];
     try {
       const cached = JSON.parse(localStorage.getItem(CATALOG_CACHE_KEY) || "null");
       if (!cached?.savedAt || Date.now() - Number(cached.savedAt) > 24 * 60 * 60 * 1000 || !Array.isArray(cached.rows)) return [];
@@ -126,6 +136,7 @@
   }
 
   function writeCatalogSnapshot(payloads) {
+    if (!catalogCacheAllowed()) return;
     try {
       const rows = payloads.flatMap(payload => payload?.v === 1 && Array.isArray(payload.p) ? payload.p : []);
       if (rows.length) localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), rows }));
@@ -133,6 +144,11 @@
       // Catalogul rămâne funcțional chiar dacă browserul nu permite cache local.
     }
   }
+
+  document.addEventListener("g-trots:consent-changed", event => {
+    if (event.detail?.preferences) return;
+    try { localStorage.removeItem(CATALOG_CACHE_KEY); } catch { /* storage poate fi indisponibil */ }
+  });
 
   function normalizeProductIdentity(value) {
     return String(value ?? "")

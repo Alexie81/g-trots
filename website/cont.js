@@ -127,6 +127,15 @@
   }
 
   function queueAuthMeasurement(event, method) {
+    let analyticsAllowed = false;
+    try {
+      const consent = JSON.parse(localStorage.getItem("g-trots-cookie-consent-v1") || "null");
+      analyticsAllowed = consent?.version === 1 && consent.analytics === true;
+    } catch { /* preferința poate fi indisponibilă */ }
+    if (!analyticsAllowed) {
+      window.GTrotsGoogle?.track?.(event, { method });
+      return;
+    }
     try {
       localStorage.setItem("g-trots-ga4-auth-pending-v1", JSON.stringify({ event, method }));
     } catch {

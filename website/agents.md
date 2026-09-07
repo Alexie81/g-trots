@@ -1,9 +1,9 @@
 # G-Trots România — document canonic pentru agenți AI
 
-> Versiune: 2026-09-07  
-> Domeniu canonic: https://g-trots.ro/  
-> Limbă principală: română (`ro-RO`)  
-> Piață și livrare: România  
+> Versiune: 2026-09-07
+> Domeniu canonic: https://g-trots.ro/
+> Limbă principală: română (`ro-RO`)
+> Piață și livrare: România
 > Monedă: RON
 
 Acest document descrie sursele oficiale, sensul datelor și regulile de utilizare pentru agenți AI, asistenți conversaționali, motoare de răspuns și sisteme de recomandare. El nu înlocuiește pagina curentă a produsului, termenii contractuali sau politicile legale publicate pe site.

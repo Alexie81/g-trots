@@ -90,6 +90,7 @@ document.addEventListener("click", event => {
 const globalSearchIndexPromises = new Map();
 const smartSearchers = new WeakMap();
 const RECENT_SEARCH_KEY = "gtrots_recent_searches";
+const CONSENT_STORAGE_KEY = "g-trots-cookie-consent-v1";
 const SEARCH_WORKER_PATH = "smart-search-worker.js?v=search-v76";
 const SEARCH_WORKER_TIMEOUT_READY = 180;
 const SEARCH_WORKER_TIMEOUT_LOADING = 28;
@@ -209,6 +210,7 @@ function cleanRecentSearchValue(query) {
 }
 
 function getRecentSearches() {
+  if (!preferenceStorageAllowed()) return [];
   try {
     const data = JSON.parse(localStorage.getItem(RECENT_SEARCH_KEY) || "[]");
     if (!Array.isArray(data)) return [];
@@ -228,7 +230,17 @@ function getRecentSearches() {
   }
 }
 
+function preferenceStorageAllowed() {
+  try {
+    const consent = JSON.parse(localStorage.getItem(CONSENT_STORAGE_KEY) || "null");
+    return consent?.version === 1 && consent.preferences === true;
+  } catch {
+    return false;
+  }
+}
+
 function saveRecentSearch(query) {
+  if (!preferenceStorageAllowed()) return;
   const clean = cleanRecentSearchValue(query);
   if (clean.length < 2) return;
   const normalized = normalizeSearch(clean);
@@ -236,6 +248,7 @@ function saveRecentSearch(query) {
   try { localStorage.setItem(RECENT_SEARCH_KEY, JSON.stringify(next)); } catch {}
 }
 function deleteRecentSearch(query) {
+  if (!preferenceStorageAllowed()) return;
   const normalized = normalizeSearch(query);
   if (!normalized) return;
   const next = getRecentSearches().filter(item => normalizeSearch(item) !== normalized);
@@ -437,6 +450,11 @@ function syncMobileSearchPopupSize(popup) {
   popup.style.setProperty("height", `${wantedHeight}px`, "important");
   popup.style.setProperty("max-height", `${maxPopupHeight}px`, "important");
 }
+
+document.addEventListener("g-trots:consent-changed", event => {
+  if (event.detail?.preferences) return;
+  try { localStorage.removeItem(RECENT_SEARCH_KEY); } catch {}
+});
 
 function syncDesktopSearchPopupDirection(popup) {
   if (!window.matchMedia || window.matchMedia("(max-width: 700px)").matches) {

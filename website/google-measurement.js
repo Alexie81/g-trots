@@ -12,6 +12,8 @@
   const SELECT_EVENT_KEY = "g-trots-ga4-select-pending-v1";
   const CURRENCY = "RON";
   const once = new Set();
+  const transientPurchases = new Set();
+  const transientRefunds = new Set();
 
   window.dataLayer = window.dataLayer || [];
   window.gtag = window.gtag || function gtag() { window.dataLayer.push(arguments); };
@@ -40,6 +42,37 @@
       personalization_storage: value?.preferences ? "granted" : "denied",
       security_storage: "granted"
     };
+  }
+
+  function analyticsStorageAllowed() {
+    return readConsent()?.analytics === true;
+  }
+
+  function expireFirstPartyCookies(prefixes) {
+    try {
+      const baseDomain = location.hostname.replace(/^www\./i, "");
+      document.cookie.split(";").forEach(part => {
+        const name = part.split("=", 1)[0].trim();
+        if (!name || !prefixes.some(prefix => name === prefix || name.startsWith(prefix))) return;
+        const removal = `${encodeURIComponent(name)}=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; SameSite=Lax`;
+        document.cookie = removal;
+        document.cookie = `${removal}; Domain=${location.hostname}`;
+        document.cookie = `${removal}; Domain=.${baseDomain}`;
+      });
+    } catch { /* cookie-urile pot fi blocate de browser */ }
+  }
+
+  function clearDisallowedMeasurementStorage(consent = readConsent()) {
+    if (!consent?.analytics) {
+      try {
+        localStorage.removeItem(PURCHASES_KEY);
+        localStorage.removeItem(REFUNDS_KEY);
+        localStorage.removeItem(AUTH_EVENT_KEY);
+        sessionStorage.removeItem(SELECT_EVENT_KEY);
+      } catch { /* stocarea poate fi indisponibilă */ }
+      expireFirstPartyCookies(["_ga"]);
+    }
+    if (!consent?.marketing) expireFirstPartyCookies(["_gcl_", "_gac_"]);
   }
 
   window.gtag("consent", "default", { ...consentState(), wait_for_update: 500 });
@@ -259,8 +292,12 @@
           item_list_name: listId === "search_results" ? "Rezultate căutare" : listId === "favorites" ? "Favorite" : "Catalog G-Trots"
         };
         if (url?.origin === location.origin && /^\/magazin\/produs\//.test(url.pathname)) {
-          try { sessionStorage.setItem(SELECT_EVENT_KEY, JSON.stringify({ item, params })); }
-          catch { trackEcommerce("select_item", [item], params); }
+          if (analyticsStorageAllowed()) {
+            try { sessionStorage.setItem(SELECT_EVENT_KEY, JSON.stringify({ item, params })); }
+            catch { trackEcommerce("select_item", [item], params); }
+          } else {
+            trackEcommerce("select_item", [item], params);
+          }
         } else {
           trackEcommerce("select_item", [item], params);
         }
@@ -304,7 +341,10 @@
   function trackPurchase(state) {
     const transactionId = String(state?.orderNumber || state?.order_number || state?.orderId || state?.order_id || "").trim();
     if (!transactionId) return false;
-    const sent = new Set(readJson(PURCHASES_KEY, []).map(String));
+    const sent = new Set([
+      ...(analyticsStorageAllowed() ? readJson(PURCHASES_KEY, []).map(String) : []),
+      ...transientPurchases,
+    ]);
     if (sent.has(transactionId)) return false;
     const items = (Array.isArray(state?.items) ? state.items : []).map((item, index) => ({
       item_id: String(item.apiId || item.product_id || item.id || ""),
@@ -327,7 +367,10 @@
       items
     });
     sent.add(transactionId);
-    try { localStorage.setItem(PURCHASES_KEY, JSON.stringify([...sent].slice(-500))); } catch { /* fără persistență */ }
+    transientPurchases.add(transactionId);
+    if (analyticsStorageAllowed()) {
+      try { localStorage.setItem(PURCHASES_KEY, JSON.stringify([...sent].slice(-500))); } catch { /* fără persistență */ }
+    }
     return true;
   }
 
@@ -352,7 +395,10 @@
   function trackRefund(order) {
     const transactionId = String(order?.order_number || order?.orderNumber || order?.order_id || order?.id || "").trim();
     if (!transactionId) return false;
-    const sent = new Set(readJson(REFUNDS_KEY, []).map(String));
+    const sent = new Set([
+      ...(analyticsStorageAllowed() ? readJson(REFUNDS_KEY, []).map(String) : []),
+      ...transientRefunds,
+    ]);
     if (sent.has(transactionId)) return false;
     const items = (Array.isArray(order?.items) ? order.items : []).map((item, index) => {
       const quantity = finite(item.return_accepted_quantity ?? item.accepted_quantity ?? item.quantity, 0);
@@ -374,7 +420,10 @@
       items
     });
     sent.add(transactionId);
-    try { localStorage.setItem(REFUNDS_KEY, JSON.stringify([...sent].slice(-500))); } catch { /* fără persistență */ }
+    transientRefunds.add(transactionId);
+    if (analyticsStorageAllowed()) {
+      try { localStorage.setItem(REFUNDS_KEY, JSON.stringify([...sent].slice(-500))); } catch { /* fără persistență */ }
+    }
     return true;
   }
 
@@ -382,7 +431,10 @@
     (Array.isArray(orders) ? orders : []).filter(order => order?.status === "refunded" || order?.payment_status === "refunded").forEach(trackRefund);
   }
 
-  document.addEventListener("g-trots:consent-changed", event => updateConsent(event.detail));
+  document.addEventListener("g-trots:consent-changed", event => {
+    updateConsent(event.detail);
+    clearDisallowedMeasurementStorage(event.detail);
+  });
   document.addEventListener("g-trots:cart-changed", event => handleCartChanged(event.detail));
   document.addEventListener("g-trots:favorites-changed", event => handleFavoritesChanged(event.detail));
   document.addEventListener("g-trots:live-products", schedulePageCommerceTracking);
@@ -404,7 +456,9 @@
     itemFromProduct: productItem
   };
 
-  const pendingAuth = readJson(AUTH_EVENT_KEY, null);
+  clearDisallowedMeasurementStorage();
+
+  const pendingAuth = analyticsStorageAllowed() ? readJson(AUTH_EVENT_KEY, null) : null;
   if (pendingAuth && ["login", "sign_up"].includes(pendingAuth.event)) {
     track(pendingAuth.event, { method: String(pendingAuth.method || "email") });
     try { localStorage.removeItem(AUTH_EVENT_KEY); } catch { /* fără persistență */ }
@@ -413,11 +467,13 @@
     trackPurchase(window.GTrotsPendingPurchase);
     delete window.GTrotsPendingPurchase;
   }
-  try {
-    const pendingSelect = JSON.parse(sessionStorage.getItem(SELECT_EVENT_KEY) || "null");
-    if (pendingSelect?.item) trackEcommerce("select_item", [pendingSelect.item], pendingSelect.params || {});
-    sessionStorage.removeItem(SELECT_EVENT_KEY);
-  } catch { /* sessionStorage poate fi indisponibil */ }
+  if (analyticsStorageAllowed()) {
+    try {
+      const pendingSelect = JSON.parse(sessionStorage.getItem(SELECT_EVENT_KEY) || "null");
+      if (pendingSelect?.item) trackEcommerce("select_item", [pendingSelect.item], pendingSelect.params || {});
+      sessionStorage.removeItem(SELECT_EVENT_KEY);
+    } catch { /* sessionStorage poate fi indisponibil */ }
+  }
   document.dispatchEvent(new CustomEvent("g-trots:google-ready"));
 
   loadGoogleTag();

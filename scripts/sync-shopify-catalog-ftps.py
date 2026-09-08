@@ -7,6 +7,7 @@ from io import BytesIO
 import argparse
 import json
 import os
+import re
 import secrets
 import ssl
 from urllib.parse import urlencode
@@ -44,6 +45,7 @@ def chunks(values: list[str], size: int) -> list[list[str]]:
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Sincronizeaza catalogul Shopify prin API-ul protejat.")
     parser.add_argument("--limit", type=int, default=0, help="Limiteaza sincronizarea pentru un test controlat; 0 inseamna tot catalogul.")
+    parser.add_argument("--diagnose-only", action="store_true", help="Citeste starea existenta fara a sincroniza produse.")
     return parser.parse_args()
 
 
@@ -93,8 +95,14 @@ try {{
 
     ftp = connect()
     try:
+        for remote_name in ftp.nlst():
+            if re.fullmatch(r"shopify-catalog-sync-[0-9a-f]{16}\.php", remote_name):
+                ftp.delete(remote_name)
         ftp.storbinary(f"STOR {filename}", BytesIO(php.encode("utf-8")), blocksize=262144)
         base = f"{PUBLIC_ROOT}/{filename}?" + urlencode({"token": token})
+        if options.diagnose_only:
+            print(json.dumps({"server": request_json(base + "&mode=stats")}, ensure_ascii=False, indent=2), flush=True)
+            return
         bootstrap = request_json(base + "&mode=bootstrap")
         selected = (bootstrap.get("location") or {}).get("selected")
         if not selected:

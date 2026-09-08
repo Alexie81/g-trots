@@ -9,7 +9,9 @@ function pricingAssert(bool $condition, string $message): void {
 }
 
 $fallback = boomagResolvePublicPricing(100.0, 0.0, null);
-pricingAssert($fallback['price'] === 100.0 && $fallback['difference'] === 0.0, 'Pretul furnizorului trebuie sa devina public cand pretul G-Trots este 0.');
+pricingAssert($fallback['price'] === 0.0 && $fallback['difference'] === null, 'Pretul G-Trots 0 trebuie sa ramana nesetat, fara o marja artificiala.');
+$fallbackWithStaleDifference = boomagResolvePublicPricing(120.0, 0.0, 49.0);
+pricingAssert($fallbackWithStaleDifference['price'] === 0.0 && $fallbackWithStaleDifference['difference'] === null, 'Pretul G-Trots 0 trebuie sa anuleze o diferenta veche si sa foloseasca direct furnizorul.');
 
 $initialMargin = boomagResolvePublicPricing(100.0, 149.0, null);
 pricingAssert($initialMargin['price'] === 149.0 && $initialMargin['difference'] === 49.0, 'Prima sincronizare trebuie sa memoreze marja fixa existenta.');

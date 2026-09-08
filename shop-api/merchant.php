@@ -223,7 +223,10 @@ function merchantProductPayload(array $product, array $config): array {
             'amountMicros' => (string)max(0, (int)round($price * 1000000)),
             'currencyCode' => strtoupper((string)($product['currency'] ?? 'RON')),
         ],
-        'condition' => (string)($product['category_id'] ?? '') === (defined('SHOP_CATEGORY_SECOND_HAND_ID') ? SHOP_CATEGORY_SECOND_HAND_ID : '') ? 'USED' : 'NEW',
+        'condition' => (
+            (string)($product['category_system_key'] ?? '') === (defined('SHOP_CATEGORY_SECOND_HAND_KEY') ? SHOP_CATEGORY_SECOND_HAND_KEY : 'second_hand_scooters')
+            || (string)($product['category_id'] ?? '') === (defined('SHOP_CATEGORY_SECOND_HAND_ID') ? SHOP_CATEGORY_SECOND_HAND_ID : '')
+        ) ? 'USED' : 'NEW',
     ];
     if ($images) {
         $attributes['imageLink'] = $images[0];

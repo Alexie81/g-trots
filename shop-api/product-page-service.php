@@ -108,7 +108,10 @@ function shopProductSeoRender(array $product, array $config): string {
     $availabilityText = $inStock ? 'in stock' : 'out of stock';
     $availabilitySchema = $inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock';
     $conditionSearch = mb_strtolower($name . ' ' . $description, 'UTF-8');
-    $itemCondition = preg_match('/second[\s-]*hand|recondiționat|reconditionat|refurbished|folosit/u', $conditionSearch)
+    $isSecondHand = (string)($product['category_system_key'] ?? '') === (defined('SHOP_CATEGORY_SECOND_HAND_KEY') ? SHOP_CATEGORY_SECOND_HAND_KEY : 'second_hand_scooters')
+        || (string)($product['category_id'] ?? '') === (defined('SHOP_CATEGORY_SECOND_HAND_ID') ? SHOP_CATEGORY_SECOND_HAND_ID : '')
+        || preg_match('/second[\s-]*hand|recondiționat|reconditionat|refurbished|folosit/u', $conditionSearch) === 1;
+    $itemCondition = $isSecondHand
         ? 'https://schema.org/UsedCondition'
         : 'https://schema.org/NewCondition';
     $images = [];

@@ -55,6 +55,15 @@ $assert($variant['metafields'][0]['value'] === 'https://g-trots.ro/magazin/produ
 $assert($payload['files'][0]['originalSource'] === $product['images'][0]['url'], 'imaginea principală nu este transmisă');
 $assert($payload['files'][0]['duplicateResolutionMode'] === 'REPLACE', 'imaginile nu sunt actualizate idempotent');
 $assert($payload['metafields'][0]['value'] === 'product-stable-id', 'ID-ul intern stabil lipsește');
+
+$unlimited = $product;
+$unlimited['stock_mode'] = 'unlimited';
+$unlimited['stock_quantity'] = 0;
+$unlimitedPayload = shopifyProductPayload($unlimited, $config);
+$unlimitedVariant = $unlimitedPayload['variants'][0];
+$assert($unlimitedPayload['status'] === 'ACTIVE', 'produsul cu stoc online nelimitat trebuie să rămână activ în Shopify');
+$assert($unlimitedVariant['inventoryItem']['tracked'] === false, 'stocul nelimitat nu trebuie urmărit ca stoc fizic în Shopify');
+$assert(!isset($unlimitedVariant['inventoryQuantities']), 'stocul nelimitat nu trebuie limitat printr-o cantitate fizică Shopify');
 $assert(!shopifySyncIsEnabled(['shopify_sync_enabled' => false]), 'pauza de publicare Shopify nu este respectată');
 $assert(shopifyIsConfigured(['shopify_store_domain' => 'g-trots-agentic.myshopify.com', 'shopify_client_id' => 'client', 'shopify_client_secret' => 'secret']), 'autentificarea client credentials nu este recunoscută');
 

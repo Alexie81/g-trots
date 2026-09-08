@@ -2848,6 +2848,9 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     $row['stock_available'] = $row['is_purchasable'] && ($row['stock_mode'] === 'unlimited' || $row['stock_quantity'] > 0);
     if (!$withDescription) unset($row['description_html']);
     if (!$includeInternal) {
+        // Clientii publici primesc pretul efectiv. Pentru Boomag, pretul G-Trots
+        // 0 ramane intern „nesetat”, dar storefrontul vede baza furnizorului.
+        $row['price'] = function_exists('productPublicBasePrice') ? productPublicBasePrice($row) : (float)$row['price'];
         unset($row['source_id'], $row['source_domain'], $row['source_url'], $row['source_name'], $row['source_is_active'], $row['category_is_active'], $row['manufacturer_is_active'], $row['brands_are_active'], $row['supplier_external_id'], $row['supplier_product_code'], $row['ean'], $row['supplier_base_price'], $row['supplier_price_difference'], $row['supplier_price_updated_at'], $row['accounting_stock_quantity'], $row['is_accounting_stock_tracked'], $row['content_status'], $row['seo_researched_at'], $row['seo_word_count'], $row['seo_sources']);
     }
     return $row;
@@ -2999,12 +3002,13 @@ function publicCatalogProductRow(array $row): array {
         'category_id' => empty($row['category_id']) ? null : (string)$row['category_id'],
         'category_name' => (string)($row['category_name'] ?? ''),
         'category_slug' => (string)($row['category_slug'] ?? ''),
+        'category_system_key' => empty($row['category_system_key']) ? null : (string)$row['category_system_key'],
         'manufacturer_id' => empty($row['manufacturer_id']) ? null : (string)$row['manufacturer_id'],
         'manufacturer_name' => (string)($row['manufacturer_name'] ?? ''),
         'manufacturer_slug' => (string)($row['manufacturer_slug'] ?? ''),
         'brands' => $brands,
         'images' => $images,
-        'price' => (float)($row['price'] ?? 0),
+        'price' => function_exists('productPublicBasePrice') ? productPublicBasePrice($row) : (float)($row['price'] ?? 0),
         'sale_price' => $row['sale_price'] === null ? null : (float)$row['sale_price'],
         'discount_type' => (string)($row['discount_type'] ?? 'percent'),
         'discount_value' => $row['discount_value'] === null ? null : (float)$row['discount_value'],
@@ -3078,7 +3082,7 @@ function publicCatalogProductSelectSql(): string {
     return 'SELECT p.id, p.category_id, p.manufacturer_id, p.source_id,
                    p.sku, p.supplier_external_id, p.supplier_product_code, p.ean,
                    p.name, p.slug, p.short_description, p.meta_title, p.meta_description,
-                   p.price, p.sale_price, p.discount_type, p.discount_value, p.currency,
+                   p.price, p.supplier_base_price, p.sale_price, p.discount_type, p.discount_value, p.currency,
                    p.stock_mode, p.stock_quantity, p.low_stock_threshold,
                    p.is_featured, p.featured_rank,
                    c.name AS category_name, c.slug AS category_slug,
@@ -3163,7 +3167,7 @@ function publicCatalogRows(PDO $db, array $rows, array $config): array {
 }
 
 function productSelectSql(): string {
-    return 'SELECT p.*, c.name AS category_name, c.slug AS category_slug,
+    return 'SELECT p.*, c.name AS category_name, c.slug AS category_slug, c.system_key AS category_system_key,
                    c.is_active AS category_is_active,
                    m.name AS manufacturer_name, m.slug AS manufacturer_slug, m.is_active AS manufacturer_is_active,
                    s.name AS source_name, s.is_active AS source_is_active,
@@ -3355,16 +3359,17 @@ function productPayload(PDO $db, array $body, bool $allowInactiveSource = false)
     $softwareUpdatesUntil = trim((string)($body['software_updates_until'] ?? ''));
     if ($softwareUpdatesUntil !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $softwareUpdatesUntil)) throw new InvalidArgumentException('Data actualizărilor software nu este validă.');
     $sourceId = existingReference($db, 'shop_product_sources', $body['source_id'] ?? null, 'Sursa produsului');
-    if ($sourceId === null) {
-        $source = $db->query('SELECT * FROM shop_product_sources WHERE is_active = 1 ORDER BY is_default DESC, sort_order ASC LIMIT 1')->fetch();
-    } else {
+    $source = null;
+    $sourceDomain = 'g-trots.ro';
+    if ($sourceId !== null) {
         $sourceStmt = $db->prepare('SELECT * FROM shop_product_sources WHERE id = ?' . ($allowInactiveSource ? '' : ' AND is_active = 1'));
         $sourceStmt->execute([$sourceId]);
         $source = $sourceStmt->fetch();
+        if (!$source) throw new InvalidArgumentException($allowInactiveSource ? 'Sursa produsului nu exista.' : 'Sursa produsului nu este activa.');
+        $sourceDomain = (string)$source['domain'];
     }
-    if (!$source) throw new InvalidArgumentException($allowInactiveSource ? 'Sursa produsului nu exista.' : 'Sursa produsului nu este activa.');
-    $sourceId = (string)$source['id'];
-    $sourceDomain = (string)$source['domain'];
+    // Lipsa unei surse este un produs manual G-Trots, nu produsul sursei
+    // implicite. Astfel Boomag nu ii poate rescrie pretul sau stocul.
     if (mb_strtolower(trim($sourceDomain)) === 'boomag.ro') {
         $stockMode = 'tracked';
         $stockQuantity = 0;
@@ -7073,14 +7078,6 @@ try {
         if (mb_strtolower(trim((string)$payload['source_domain'])) === 'boomag.ro') {
             $payload['stock_mode'] = 'tracked';
             $payload['stock_quantity'] = (int)($current['supplier_stock_quantity'] ?? $current['stock_quantity'] ?? 0);
-            if ($payload['price'] <= 0 && (float)($current['supplier_base_price'] ?? 0) > 0) {
-                $payload['price'] = round((float)$current['supplier_base_price'], 2);
-                $payload['sale_price'] = boomagSalePriceForBase(
-                    $payload['price'],
-                    (string)$payload['discount_type'],
-                    $payload['discount_value']
-                );
-            }
             if (!$payload['is_accounting_stock_tracked'] && (float)($current['supplier_base_price'] ?? 0) > 0) {
                 $payload['cost_price'] = round((float)$current['supplier_base_price'], 2);
             }
@@ -7112,7 +7109,9 @@ try {
             ]);
             if (mb_strtolower(trim((string)$payload['source_domain'])) === 'boomag.ro') {
                 $supplierBase = (float)($current['supplier_base_price'] ?? 0);
-                $differenceValue = $supplierBase > 0 ? round($payload['price'] - $supplierBase, 2) : null;
+                $differenceValue = $payload['price'] > 0 && $supplierBase > 0
+                    ? round($payload['price'] - $supplierBase, 2)
+                    : null;
                 $difference = $db->prepare('UPDATE shop_products SET supplier_price_difference = ?, updated_at = updated_at WHERE id = ?');
                 $difference->execute([$differenceValue, $id]);
             }

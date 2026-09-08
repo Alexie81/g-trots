@@ -74,9 +74,14 @@ function stripeEffectiveProductPrice(array $product): float {
 }
 
 function stripeProductIsVisible(array $product): bool {
-    return (bool)($product['is_active'] ?? false)
+    $visible = (bool)($product['is_purchasable'] ?? (
+        (bool)($product['is_active'] ?? false)
         && (bool)($product['source_is_active'] ?? true)
-        && stripeEffectiveProductPrice($product) > 0;
+        && (bool)($product['category_is_active'] ?? true)
+        && (bool)($product['manufacturer_is_active'] ?? true)
+        && (bool)($product['brands_are_active'] ?? true)
+    ));
+    return $visible && stripeEffectiveProductPrice($product) > 0;
 }
 
 function stripeProductParams(array $product, array $config, string $stripeProductId = ''): array {

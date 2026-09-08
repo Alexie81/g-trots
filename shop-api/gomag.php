@@ -476,23 +476,24 @@ function boomagSalePriceForBase(float $price, ?string $discountType, $discountVa
 }
 
 /**
- * Pretul 0 este tratat ca nesetat. La prima sincronizare pastram pretul
- * G-Trots daca exista; altfel folosim pretul valid al furnizorului cu marja 0.
- * Sincronizarile urmatoare pastreaza diferenta comerciala fixa deja memorata.
+ * Pretul G-Trots 0 ramane nesetat in baza de date. Afisarea publica foloseste
+ * atunci direct pretul furnizorului prin productPublicBasePrice(). Daca exista
+ * un pret G-Trots pozitiv, memoram diferenta fata de furnizor si o pastram la
+ * sincronizarile urmatoare.
  *
  * @return array{price: float, difference: ?float}
  */
 function boomagResolvePublicPricing(?float $supplierBase, float $currentPrice, ?float $difference): array {
     $currentPrice = max(0.0, round($currentPrice, 2));
     $difference = $difference === null ? null : round($difference, 2);
+    if ($currentPrice <= 0) {
+        return ['price' => 0.0, 'difference' => null];
+    }
     if ($supplierBase === null || $supplierBase <= 0) {
         return ['price' => $currentPrice, 'difference' => $difference];
     }
 
     $supplierBase = round($supplierBase, 2);
-    if ($currentPrice <= 0) {
-        return ['price' => $supplierBase, 'difference' => 0.0];
-    }
     if ($difference === null) $difference = round($currentPrice - $supplierBase, 2);
     return [
         'price' => max(0.01, round($supplierBase + $difference, 2)),
@@ -557,17 +558,20 @@ function gomagSyncProductFromFeed(PDO $db, array $config, string $idOrSlug): arr
     $pricing = boomagResolvePublicPricing($supplierBase, $currentPrice, $difference);
     $nextPrice = $pricing['price'];
     $difference = $pricing['difference'];
+    $previousPublicBase = $currentPrice > 0 ? $currentPrice : max(0.0, round((float)($product['supplier_base_price'] ?? 0), 2));
+    $nextPublicBase = $nextPrice > 0 ? $nextPrice : max(0.0, round((float)($supplierBase ?? 0), 2));
     $nextCostPrice = boomagResolveAcquisitionPrice(
         $supplierBase,
         (float)($product['cost_price'] ?? 0),
         (bool)($product['is_accounting_stock_tracked'] ?? true)
     );
     $nextSalePrice = boomagSalePriceForBase(
-        $nextPrice,
+        $nextPublicBase,
         isset($product['discount_type']) ? (string)$product['discount_type'] : null,
         $product['discount_value'] ?? null
     );
-    $priceChanged = abs($nextPrice - $currentPrice) >= 0.005
+    $priceChanged = abs($nextPublicBase - $previousPublicBase) >= 0.005
+        || abs($nextPrice - $currentPrice) >= 0.005
         || (($product['sale_price'] === null) !== ($nextSalePrice === null))
         || ($nextSalePrice !== null && abs((float)$product['sale_price'] - $nextSalePrice) >= 0.005);
     $stockChanged = (int)$product['stock_quantity'] !== $stock
@@ -1151,8 +1155,9 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
             $pricing = boomagResolvePublicPricing($price, $currentPrice, $storedDifference);
             $publicPrice = $pricing['price'];
             $priceDifference = $pricing['difference'];
+            $effectiveBasePrice = $publicPrice > 0 ? $publicPrice : max(0.0, round((float)($price ?? 0), 2));
             $salePrice = $existing
-                ? boomagSalePriceForBase($publicPrice, (string)($existing['discount_type'] ?? 'percent'), $existing['discount_value'] === null ? null : (float)$existing['discount_value'])
+                ? boomagSalePriceForBase($effectiveBasePrice, (string)($existing['discount_type'] ?? 'percent'), $existing['discount_value'] === null ? null : (float)$existing['discount_value'])
                 : null;
             $costPrice = $existing
                 ? boomagResolveAcquisitionPrice($price, (float)($existing['cost_price'] ?? 0), (bool)($existing['is_accounting_stock_tracked'] ?? true))
@@ -1437,6 +1442,8 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
             $pricing = boomagResolvePublicPricing($supplierBase, $currentPrice, $difference);
             $nextPrice = $pricing['price'];
             $difference = $pricing['difference'];
+            $previousPublicBase = $currentPrice > 0 ? $currentPrice : max(0.0, round((float)($product['supplier_base_price'] ?? 0), 2));
+            $nextPublicBase = $nextPrice > 0 ? $nextPrice : max(0.0, round((float)($supplierBase ?? 0), 2));
             $nextCostPrice = boomagResolveAcquisitionPrice(
                 $supplierBase,
                 (float)($product['cost_price'] ?? 0),
@@ -1448,11 +1455,12 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
                 $pricesSynced[$productId] = true;
             }
             $nextSalePrice = boomagSalePriceForBase(
-                $nextPrice,
+                $nextPublicBase,
                 isset($product['discount_type']) ? (string)$product['discount_type'] : null,
                 $product['discount_value'] ?? null
             );
-            $priceChanged = abs($nextPrice - $currentPrice) >= 0.005
+            $priceChanged = abs($nextPublicBase - $previousPublicBase) >= 0.005
+                || abs($nextPrice - $currentPrice) >= 0.005
                 || (($product['sale_price'] === null) !== ($nextSalePrice === null))
                 || ($nextSalePrice !== null && abs((float)$product['sale_price'] - $nextSalePrice) >= 0.005);
             if ($priceChanged) $pricesChanged[$productId] = true;

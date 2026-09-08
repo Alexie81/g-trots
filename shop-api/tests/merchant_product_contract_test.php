@@ -20,7 +20,8 @@ $product = [
     'short_description' => 'Controller verificat pentru trotinete electrice.',
     'meta_description' => 'Controller pentru reparații trotinete electrice, verificat de G-Trots.',
     'manufacturer_name' => 'G-Trots',
-    'category_id' => SHOP_CATEGORY_SECOND_HAND_ID,
+    'category_id' => 'legacy-second-hand-category-id',
+    'category_system_key' => 'second_hand_scooters',
     'supplier_product_code' => 'SE-CMM087',
     'ean' => '1234567890128',
     'price' => 0,
@@ -42,7 +43,7 @@ $attributes = $payload['productAttributes'];
 $assert($payload['offerId'] === 'product-stable-id', 'offerId nu este ID-ul intern stabil');
 $assert($attributes['price']['amountMicros'] === '89990000', 'prețul nu respectă regula publică comună');
 $assert($attributes['availability'] === 'IN_STOCK', 'stocul activ nu este IN_STOCK');
-$assert($attributes['condition'] === 'USED', 'categoria SH nu este marcată USED');
+$assert($attributes['condition'] === 'USED', 'categoria SH identificată prin cheia tehnică nu este marcată USED');
 $assert($attributes['link'] === 'https://g-trots.ro/magazin/produs/controller-trotineta-electrica/', 'ruta conține .html sau este incorectă');
 $assert($attributes['imageLink'] === $product['images'][0]['url'], 'imaginea principală nu este prima imagine');
 $assert($attributes['additionalImageLinks'][0] === $product['images'][1]['url'], 'imaginile suplimentare lipsesc');
@@ -58,6 +59,14 @@ $assert(merchantProductTitle('Controller 60V 30A 1500W-B LCD SQ-S4') === 'Contro
 $assert(merchantProductIsVisible($product), 'produsul cumpărabil este tratat ca invizibil');
 $product['is_purchasable'] = false;
 $assert(!merchantProductIsVisible($product), 'produsul dezactivat rămâne vizibil');
+
+$unlimited = $product;
+$unlimited['is_purchasable'] = true;
+$unlimited['category_system_key'] = null;
+$unlimited['stock_mode'] = 'unlimited';
+$unlimited['stock_quantity'] = 0;
+$unlimitedAttributes = merchantProductPayload($unlimited, ['website_base_url' => 'https://g-trots.ro'])['productAttributes'];
+$assert($unlimitedAttributes['availability'] === 'IN_STOCK', 'stocul online nelimitat fără stoc fizic nu este transmis IN_STOCK');
 
 $api = (string)file_get_contents(dirname(__DIR__) . '/api.php');
 $gomag = (string)file_get_contents(dirname(__DIR__) . '/gomag.php');

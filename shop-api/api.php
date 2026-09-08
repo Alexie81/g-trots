@@ -5127,7 +5127,12 @@ try {
                           AND (sh_product.source_id IS NULL OR COALESCE(sh_source.is_active, 1) = 1)
                     )
                )
-             ORDER BY CASE WHEN c.system_key = 'second_hand_scooters' THEN 0 ELSE 1 END ASC,
+             ORDER BY CASE
+                        WHEN c.parent_id IS NULL AND c.slug = 'piese-trotinete-electrice' THEN 0
+                        WHEN c.system_key = 'second_hand_scooters' THEN 1
+                        WHEN c.parent_id IS NULL AND c.slug = 'accesorii-trotinete-electrice' THEN 3
+                        ELSE 2
+                      END ASC,
                       COALESCE(p.name, c.name) ASC, c.parent_id IS NOT NULL ASC, c.name ASC"
         )->fetchAll();
         $brands = $db->query('SELECT * FROM shop_brands WHERE is_active = 1 ORDER BY name ASC')->fetchAll();

@@ -502,6 +502,10 @@ export default function ServiceSheetDetailsScreen() {
           </View>
           {canNormallyViewFinancials ? (
             <View style={styles.heroActions}>
+              <TouchableOpacity style={styles.pdfBtn} onPress={sharePdf} disabled={sharing || saving}>
+                {sharing ? <ActivityIndicator color={Colors.white} size="small" /> : <Download size={17} color={Colors.white} />}
+                <Text style={styles.pdfText}>PDF</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={styles.whatsappBtn} onPress={sendPdfOnWhatsApp} disabled={sendingWhatsApp}>
                 {sendingWhatsApp ? <ActivityIndicator color={Colors.success} size="small" /> : <MessageCircle size={17} color={Colors.success} />}
                 <Text style={styles.whatsappText}>WhatsApp</Text>

@@ -22,7 +22,12 @@ secondHandCategoryCheck(str_contains($api, "const SHOP_CATEGORY_SECOND_HAND_KEY 
 secondHandCategoryCheck(str_contains($api, 'system_key VARCHAR(80) NULL') && str_contains($api, 'is_protected TINYINT(1)'), 'Schema trebuie sa pastreze cheia tehnica si protectia.');
 secondHandCategoryCheck(str_contains($api, 'ensureSecondHandShopCategory($db)') && str_contains($api, 'SHOP_CATEGORY_SECOND_HAND_ID'), 'Categoria trebuie creata automat cu un UUID stabil.');
 secondHandCategoryCheck(str_contains($api, 'shopCategoryIsProtected($category)') && str_contains($api, "'code' => 'protected_category'"), 'Serverul trebuie sa blocheze stergerea categoriei protejate.');
-secondHandCategoryCheck(substr_count($api, "CASE WHEN c.system_key = 'second_hand_scooters' THEN 0 ELSE 1 END") >= 3, 'API-ul trebuie sa livreze categoria second-hand prima in toate listele de categorii.');
+secondHandCategoryCheck(substr_count($api, "CASE WHEN c.system_key = 'second_hand_scooters' THEN 0 ELSE 1 END") >= 2, 'API-ul trebuie sa livreze categoria second-hand prima in listele de administrare.');
+secondHandCategoryCheck(
+    str_contains($api, "c.slug = 'piese-trotinete-electrice' THEN 0")
+    && str_contains($api, "c.slug = 'accesorii-trotinete-electrice' THEN 3"),
+    'Filtrul public trebuie sa afiseze piesele inaintea accesoriilor.'
+);
 secondHandCategoryCheck(
     str_contains($api, "COALESCE(c.system_key, '') <> 'second_hand_scooters'")
     && str_contains($api, 'sh_product.category_id = c.id')
@@ -79,8 +84,9 @@ secondHandCategoryCheck(
     str_contains($catalog, 'category-filter-root-leaf')
     && str_contains($catalog, 'category-root-link-arrow')
     && str_contains($catalogStyles, '.category-filter-root-leaf')
-    && str_contains($catalog, 'left.category.system_key === "second_hand_scooters"'),
-    'Categoria second-hand trebuie sa arate ca o categorie principala si sa fie prima in storefront.'
+    && str_contains($catalog, 'slug === "piese-trotinete-electrice"')
+    && str_contains($catalog, 'slug === "accesorii-trotinete-electrice"'),
+    'Categoriile principale trebuie sa pastreze stilul storefront, cu piesele inaintea accesoriilor.'
 );
 secondHandCategoryCheck(
     str_contains($catalog, 'params.get("filters") === "open"')

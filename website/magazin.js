@@ -734,8 +734,15 @@ function renderCategoryFilters(categories) {
     .filter(category => category && category.is_active !== false && category.id)
     .map((category, index) => ({ category, index }))
     .sort((left, right) => {
-      const leftPriority = left.category.system_key === "second_hand_scooters" ? 0 : 1;
-      const rightPriority = right.category.system_key === "second_hand_scooters" ? 0 : 1;
+      const filterPriority = category => {
+        const slug = String(category.slug || "").toLowerCase();
+        if (!category.parent_id && slug === "piese-trotinete-electrice") return 0;
+        if (category.system_key === "second_hand_scooters") return 1;
+        if (!category.parent_id && slug === "accesorii-trotinete-electrice") return 3;
+        return 2;
+      };
+      const leftPriority = filterPriority(left.category);
+      const rightPriority = filterPriority(right.category);
       return leftPriority - rightPriority || left.index - right.index;
     })
     .map(({ category }) => category);

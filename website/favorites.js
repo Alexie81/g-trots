@@ -2,7 +2,7 @@
   const ensureLegalFooter = () => {
     if (document.querySelector('script[src*="legal-footer.js"]')) return;
     const legal = document.createElement('script');
-    legal.src = '/legal-footer.js?v=20260907-meta-v11';
+    legal.src = '/legal-footer.js?v=20260908-social-v2';
     legal.defer = true;
     document.head.append(legal);
   };
@@ -251,18 +251,20 @@
     const cartActive = ["/cos", "/checkout", "/plata-finalizata", "/plata-esuata"].some(path => cleanPath.endsWith(path));
     const accountActive = ["/cont", "/login", "/cont-nou", "/resetare-parola"].some(path => cleanPath.endsWith(path));
     const shopActive = !favoritesActive && !cartActive && /\/(magazin|produs)(?:\/|$)|anvelopa-g10|display-smart|incarcator-fastcharge|motor-dualhub|baterie-powercore|kit-frana/.test(cleanPath);
-    const guidesActive = !shopActive && !favoritesActive && !cartActive && !accountActive && currentPath !== "/" && !currentPath.endsWith("/");
+    const serviceActive = cleanPath === "/service-trotinete-electrice";
+    const aboutActive = cleanPath === "/despre-g-trots";
+    const contactActive = cleanPath === "/contact";
+    const guidesActive = cleanPath === "/ghiduri-service-trotinete-electrice" || cleanPath.startsWith("/ghid-");
 
     document.querySelectorAll(".main-nav").forEach(nav => {
       nav.setAttribute("aria-label", "Navigație principală");
       nav.innerHTML = `
         <div class="mobile-nav-heading" aria-hidden="true"><span>Meniu</span><small>G-Trots service</small></div>
-        <a href="/#servicii">Servicii</a>
         <a class="nav-shop-link${shopActive ? " active" : ""}" href="/magazin"${shopActive ? ' aria-current="page"' : ""}><span class="nav-shop-icon" aria-hidden="true"></span><span>Shop</span></a>
+        <a href="/service-trotinete-electrice"${serviceActive ? ' aria-current="page"' : ""}>Service</a>
+        <a href="/despre-g-trots"${aboutActive ? ' aria-current="page"' : ""}>Despre</a>
+        <a href="/contact"${contactActive ? ' aria-current="page"' : ""}>Contact</a>
         <a href="/ghiduri-service-trotinete-electrice"${guidesActive ? ' aria-current="page"' : ""}>Ghiduri</a>
-        <a href="/#proces">Cum lucrăm</a>
-        <a href="/#intrebari">Întrebări</a>
-        <a href="/#contact">Contact</a>
         <a class="mobile-nav-account" href="/login" aria-label="Intră în cont sau creează un cont"><span class="mobile-nav-account-avatar" aria-hidden="true"><i></i></span><span class="mobile-nav-account-copy"><small>CONT CLIENT</small><strong>Login</strong></span><b aria-hidden="true">›</b></a>
         <a class="mobile-nav-call" href="tel:+40762093915"><span>${phoneIcon}</span><strong>Sună chiar acum</strong><small>+40 0762 093 915</small></a>`;
     });

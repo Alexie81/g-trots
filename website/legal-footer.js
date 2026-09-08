@@ -42,7 +42,7 @@
       onload() { this.media = 'all'; },
     });
   }
-  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260906-company-v2' });
+  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260908-social-v1' });
   if (!document.querySelector('script[src*="google-measurement.js"]')) {
     loadAsset('script', { src: '/google-measurement.js?v=20260907-meta-v9', async: true });
   }
@@ -98,8 +98,34 @@
   }
 
   function ensureOriginalHeader() {
-    if (document.querySelector('.site-header:not(.legal-top)')) return;
     if (/^\/googledb9a3f7a7ad1d21d(?:\.html)?\/?$/i.test(location.pathname)) return;
+
+    const currentPath = location.pathname.toLowerCase().replace(/\/+$/, '').replace(/\.html$/, '') || '/';
+    const shopActive = /\/(magazin|produs)(?:\/|$)|anvelopa-g10|display-smart|incarcator-fastcharge|motor-dualhub|baterie-powercore|kit-frana/.test(currentPath);
+    const serviceActive = currentPath === '/service-trotinete-electrice';
+    const aboutActive = currentPath === '/despre-g-trots';
+    const contactActive = currentPath === '/contact';
+    const guidesActive = currentPath === '/ghiduri-service-trotinete-electrice' || currentPath.startsWith('/ghid-');
+    const navigationHtml = `
+          <div class="mobile-nav-heading" aria-hidden="true"><span>Meniu</span><small>G-Trots</small></div>
+          <a class="nav-shop-link${shopActive ? ' active' : ''}" href="/magazin"${shopActive ? ' aria-current="page"' : ''}><span class="nav-shop-icon" aria-hidden="true"></span><span>Shop</span></a>
+          <a href="/service-trotinete-electrice"${serviceActive ? ' aria-current="page"' : ''}>Service</a>
+          <a href="/despre-g-trots"${aboutActive ? ' aria-current="page"' : ''}>Despre</a>
+          <a href="/contact"${contactActive ? ' aria-current="page"' : ''}>Contact</a>
+          <a href="/ghiduri-service-trotinete-electrice"${guidesActive ? ' aria-current="page"' : ''}>Ghiduri</a>
+          <a class="mobile-nav-account" href="/login" aria-label="Intră în cont sau creează un cont"><span class="mobile-nav-account-avatar" aria-hidden="true"><i></i></span><span class="mobile-nav-account-copy"><small>CONT G-TROTS</small><strong>Login</strong></span><b aria-hidden="true">›</b></a>
+          <a class="mobile-nav-call" href="tel:+40762093915"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.6 10.8c1.7 3.3 3.3 4.9 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.4.6 3.6.6.6 0 .9.4.9.9V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.6c.5 0 .9.3.9.8.1 1.3.3 2.5.6 3.6.1.4 0 .8-.3 1.1l-2.2 2.3Z"/></svg></span><strong>Sună chiar acum</strong><small>+40 0762 093 915</small></a>`;
+
+    const existingHeader = document.querySelector('.site-header:not(.legal-top)');
+    if (existingHeader) {
+      const existingNav = existingHeader.querySelector('.main-nav');
+      if (existingNav) {
+        existingNav.setAttribute('aria-label', 'Navigație principală');
+        existingNav.innerHTML = navigationHtml;
+        document.dispatchEvent(new CustomEvent('g-trots:customer-changed'));
+      }
+      return;
+    }
 
     const legacyHeader = document.querySelector('.legal-top, .tracking-header');
 
@@ -112,15 +138,7 @@
           <b><span>G</span>-Trots</b>
         </a>
         <nav class="main-nav" aria-label="Navigație principală">
-          <div class="mobile-nav-heading" aria-hidden="true"><span>Meniu</span><small>G-Trots service</small></div>
-          <a href="/#servicii">Servicii</a>
-          <a class="nav-shop-link" href="/magazin"><span class="nav-shop-icon" aria-hidden="true"></span><span>Shop</span></a>
-          <a href="/ghiduri-service-trotinete-electrice">Ghiduri</a>
-          <a href="/#proces">Cum lucrăm</a>
-          <a href="/#intrebari">Întrebări</a>
-          <a href="/#contact">Contact</a>
-          <a class="mobile-nav-account" href="/login" aria-label="Intră în cont sau creează un cont"><span class="mobile-nav-account-avatar" aria-hidden="true"><i></i></span><span class="mobile-nav-account-copy"><small>CONT G-TROTS</small><strong>Login</strong></span><b aria-hidden="true">›</b></a>
-          <a class="mobile-nav-call" href="tel:+40762093915"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.6 10.8c1.7 3.3 3.3 4.9 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.4.6 3.6.6.6 0 .9.4.9.9V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.6c.5 0 .9.3.9.8.1 1.3.3 2.5.6 3.6.1.4 0 .8-.3 1.1l-2.2 2.3Z"/></svg></span><strong>Sună chiar acum</strong><small>+40 0762 093 915</small></a>
+${navigationHtml}
         </nav>
         <a class="button button-small header-cta call-button" href="tel:+40762093915">
           Sună acum
@@ -130,6 +148,7 @@
       </div>`;
     if (legacyHeader) legacyHeader.replaceWith(header);
     else document.body.prepend(header);
+    document.dispatchEvent(new CustomEvent('g-trots:customer-changed'));
 
     const toggle = header.querySelector('.menu-toggle');
     const nav = header.querySelector('.main-nav');
@@ -169,7 +188,7 @@
       loadAsset('link', { rel: 'stylesheet', href: '/favorites.css?v=20260828-line-promotions-v1' });
     }
     if (!document.querySelector('script[src*="favorites.js"]')) {
-      loadAsset('script', { src: '/favorites.js?v=20260907-meta-global-v6' });
+      loadAsset('script', { src: '/favorites.js?v=20260908-sitelinks-v1' });
     }
   }
 
@@ -208,6 +227,14 @@
       alternateName: 'G-Trots',
       url: `${location.origin}/`,
       logo: `${location.origin}/assets/logo.png`,
+      sameAs: [
+        'https://www.instagram.com/gtrots.ro/',
+        'https://www.facebook.com/profile.php?id=61590892933228',
+        'https://www.tiktok.com/@gtrots.service',
+        'https://x.com/servicegtrots',
+        'https://www.youtube.com/@g-trots',
+        'https://medium.com/@servicegtrots',
+      ],
       hasMerchantReturnPolicy: {
         '@type': 'MerchantReturnPolicy',
         applicableCountry: 'RO',
@@ -239,6 +266,30 @@
       <span class="gt-pay-mark gt-pay-google" role="img" aria-label="Google Pay"><svg viewBox="0 0 82 28" aria-hidden="true"><g transform="translate(3 2)"><path fill="#4285f4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.05H12v3.87h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.24c1.9-1.75 2.98-4.33 2.98-7.35Z"/><path fill="#34a853" d="M12 22c2.7 0 4.96-.9 6.62-2.42l-3.24-2.51c-.9.6-2.05.96-3.38.96-2.61 0-4.82-1.76-5.61-4.13H3.04v2.59A10 10 0 0 0 12 22Z"/><path fill="#fbbc05" d="M6.39 13.9a6.02 6.02 0 0 1 0-3.8V7.51H3.04A10 10 0 0 0 2 12c0 1.61.38 3.14 1.04 4.49l3.35-2.59Z"/><path fill="#ea4335" d="M12 5.97c1.47 0 2.79.5 3.83 1.5L18.7 4.6A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.96 5.51l3.35 2.59C7.18 7.73 9.39 5.97 12 5.97Z"/></g><text x="31" y="20">Pay</text></svg></span>
       <span class="gt-pay-mark gt-pay-apple" role="img" aria-label="Apple Pay"><svg viewBox="0 0 76 28" aria-hidden="true"><path d="M18.7 9.2c-1.1 0-2.8-1.2-4.6-1.2-2.3 0-4.4 1.3-5.6 3.4-2.4 4.2-.6 10.3 1.7 13.6 1.1 1.6 2.4 3.4 4.2 3.3 1.7-.1 2.3-1.1 4.4-1.1 2 0 2.6 1.1 4.4 1.1 1.8 0 3-1.6 4.1-3.2 1.3-1.9 1.8-3.8 1.8-3.9-.1 0-3.5-1.3-3.5-5.4 0-3.4 2.8-5 2.9-5.1-1.6-2.3-4.1-2.6-5-2.7-2.3-.2-4.2 1.2-5.2 1.2Zm3.6-3.5c.9-1.1 1.5-2.7 1.3-4.2-1.3.1-2.9.9-3.9 2-.8.9-1.5 2.5-1.3 4 1.5.1 3-.7 3.9-1.8Z" transform="translate(0 -1) scale(.72)"/><text x="27" y="20">Pay</text></svg></span>
       <span class="gt-pay-mark gt-pay-stripe" role="img" aria-label="Stripe"><svg viewBox="0 0 76 28" aria-hidden="true"><text x="38" y="20" text-anchor="middle">stripe</text></svg></span>`;
+  }
+
+  function socialLinks() {
+    return `
+      <div class="gt-site-footer__social" role="navigation" aria-label="Urmărește G-Trots pe rețelele sociale">
+        <a class="gt-social-link gt-social-link--instagram" href="https://www.instagram.com/gtrots.ro/" target="_blank" rel="noopener noreferrer" aria-label="G-Trots pe Instagram" title="Instagram">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.2" y="3.2" width="17.6" height="17.6" rx="5.1"/><circle cx="12" cy="12" r="4.05"/><circle class="gt-social-detail" cx="17.45" cy="6.65" r="1.05"/></svg>
+        </a>
+        <a class="gt-social-link gt-social-link--facebook" href="https://www.facebook.com/profile.php?id=61590892933228" target="_blank" rel="noopener noreferrer" aria-label="G-Trots pe Facebook" title="Facebook">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.35 8.15h3.05V4.2c-.53-.07-2.34-.2-4.08-.2-3.64 0-6.13 2.2-6.13 6.28v3.5H3.07v4.42H7.2V24h5.06v-5.8h4.16l.66-4.42h-4.82V10.7c0-1.28.35-2.55 2.1-2.55Z"/></svg>
+        </a>
+        <a class="gt-social-link gt-social-link--tiktok" href="https://www.tiktok.com/@gtrots.service" target="_blank" rel="noopener noreferrer" aria-label="G-Trots pe TikTok" title="TikTok">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path class="gt-social-tiktok-shadow" d="M14.2 3h3.1c.35 2.08 1.55 3.45 3.7 4.02v3.12a8 8 0 0 1-3.7-1.02v5.57A6.32 6.32 0 1 1 11 8.37v3.18a3.15 3.15 0 1 0 3.2 3.14V3Z"/><path d="M13.35 2.2h3.1c.35 2.08 1.55 3.45 3.7 4.02v3.12a8 8 0 0 1-3.7-1.02v5.57a6.32 6.32 0 1 1-6.3-6.32v3.18a3.15 3.15 0 1 0 3.2 3.14V2.2Z"/></svg>
+        </a>
+        <a class="gt-social-link gt-social-link--x" href="https://x.com/servicegtrots" target="_blank" rel="noopener noreferrer" aria-label="G-Trots pe X" title="X">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 3h5.22l4.15 5.57L17.7 3h2.28l-6.16 7.17L21 21h-5.23l-4.58-6.15L5.9 21H3.6l6.54-7.75L3.4 3Zm4.1 1.7 9.13 14.6h1.94L9.43 4.7H7.5Z"/></svg>
+        </a>
+        <a class="gt-social-link gt-social-link--youtube" href="https://www.youtube.com/@g-trots" target="_blank" rel="noopener noreferrer" aria-label="G-Trots pe YouTube" title="YouTube">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23.5 6.2a3.04 3.04 0 0 0-2.14-2.15C19.47 3.54 12 3.54 12 3.54s-7.47 0-9.36.51A3.04 3.04 0 0 0 .5 6.2 31.6 31.6 0 0 0 0 12a31.6 31.6 0 0 0 .5 5.8 3.04 3.04 0 0 0 2.14 2.15c1.89.51 9.36.51 9.36.51s7.47 0 9.36-.51a3.04 3.04 0 0 0 2.14-2.15A31.6 31.6 0 0 0 24 12a31.6 31.6 0 0 0-.5-5.8Z"/><path class="gt-social-detail" d="m9.55 15.65 6.23-3.65-6.23-3.65v7.3Z"/></svg>
+        </a>
+        <a class="gt-social-link gt-social-link--medium" href="https://medium.com/@servicegtrots" target="_blank" rel="noopener noreferrer" aria-label="G-Trots pe Medium" title="Medium">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="6.3" cy="12" rx="5.3" ry="7.15"/><ellipse cx="15.55" cy="12" rx="2.65" ry="7.15"/><ellipse cx="21.15" cy="12" rx="1.35" ry="6.45"/></svg>
+        </a>
+      </div>`;
   }
 
   function render(company) {
@@ -285,10 +336,11 @@
         <div class="gt-site-footer__contact">${company.phone ? `<a href="${phoneHref(company.phone)}">${esc(company.phone)}</a>` : ''}${company.email ? `<a href="mailto:${esc(company.email)}">${esc(company.email)}</a>` : ''}</div>
       </section>
       <div class="gt-site-footer__nav-grid">
-        <nav aria-label="Magazin și servicii"><b>Magazin și servicii</b><div><a href="/">Service G-Trots</a><a href="/magazin">Catalog produse</a><a href="/livrare-si-plata">Livrare și plată</a><a href="/plata-si-facturare">Plată și facturare</a><a href="/despre-g-trots">Despre G-Trots</a></div></nav>
-        <nav aria-label="Comenzi și retururi"><b>Comenzi și retururi</b><div><a href="/urmarire-comanda">Urmărește comanda</a><a href="/politica-de-retur">Politica de retur</a><a class="gt-withdrawal-link" href="/solicita-retur">Solicită un retur</a><a href="/garantii-si-reclamatii">Garanții și reclamații</a><a href="/contact">Contact</a></div></nav>
+        <nav aria-label="Pagini principale G-Trots"><b>Pagini principale</b><div><a href="/magazin">Magazin piese trotinete electrice</a><a href="/service-trotinete-electrice">Service trotinete electrice</a><a href="/despre-g-trots">Despre G-Trots</a><a href="/contact">Contact și date firmă</a><a href="/ghiduri-service-trotinete-electrice">Ghiduri service trotinete electrice</a></div></nav>
+        <nav aria-label="Comenzi, livrare și retururi"><b>Comenzi și retururi</b><div><a href="/urmarire-comanda">Urmărește comanda</a><a href="/livrare-si-plata">Livrare și plată</a><a href="/plata-si-facturare">Plată și facturare</a><a href="/politica-de-retur">Politica de retur</a><a class="gt-withdrawal-link" href="/solicita-retur">Solicită un retur</a><a href="/garantii-si-reclamatii">Garanții și reclamații</a></div></nav>
         <nav aria-label="Legal și confidențialitate"><b>Legal și confidențialitate</b><div><a href="/termeni-si-conditii">Termeni și condiții</a><a href="/politica-de-confidentialitate">Confidențialitate</a><a href="/politica-cookies">Politica de cookie-uri</a><button type="button" data-cookie-preferences>Preferințe cookie</button><a href="/siguranta-produselor">Siguranța produselor</a><a href="/conditii-b2b">Condiții B2B</a><a href="/accesibilitate">Accesibilitate</a></div></nav>
       </div>
+      ${socialLinks()}
       <section class="gt-site-footer__assurance" aria-label="Plăți și protecția consumatorilor">
         <div class="gt-site-footer__payments"><span><b>Plăți securizate</b><small>Procesate prin Stripe</small></span><div>${paymentMarks()}</div></div>
         <a class="gt-sal-link" href="https://reclamatiisal.anpc.ro" target="_blank" rel="noopener noreferrer"><img src="/assets/anpc-sal.png" width="201" height="50" loading="lazy" decoding="async" alt="ANPC - Soluționarea Alternativă a Litigiilor"></a>

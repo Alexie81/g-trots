@@ -114,6 +114,20 @@
             "name": "G-Trots",
             "publisher": {"@id": "https://g-trots.ro/#organization"},
             "inLanguage": "ro-RO"
+          },
+          {
+            "@type": "ItemList",
+            "@id": "https://g-trots.ro/#pagini-principale",
+            "name": "Pagini principale G-Trots",
+            "itemListOrder": "https://schema.org/ItemListOrderAscending",
+            "numberOfItems": 5,
+            "itemListElement": [
+              {"@type": "ListItem", "position": 1, "name": "Magazin piese trotinete electrice", "url": "https://g-trots.ro/magazin"},
+              {"@type": "ListItem", "position": 2, "name": "Service Trotinete Electrice", "url": "https://g-trots.ro/service-trotinete-electrice"},
+              {"@type": "ListItem", "position": 3, "name": "Despre G-Trots", "url": "https://g-trots.ro/despre-g-trots"},
+              {"@type": "ListItem", "position": 4, "name": "Contact și date firmă", "url": "https://g-trots.ro/contact"},
+              {"@type": "ListItem", "position": 5, "name": "Ghiduri service trotinete electrice", "url": "https://g-trots.ro/ghiduri-service-trotinete-electrice"}
+            ]
           }
         ]
       }
@@ -166,12 +180,11 @@
             <span>Meniu</span>
             <small>G-Trots service</small>
           </div>
-          <a href="#servicii">Servicii</a>
           <a class="nav-shop-link" href="/magazin"><span class="nav-shop-icon" aria-hidden="true"></span><span>Shop</span></a>
+          <a href="/service-trotinete-electrice">Service</a>
+          <a href="/despre-g-trots">Despre</a>
+          <a href="/contact">Contact</a>
           <a href="/ghiduri-service-trotinete-electrice">Ghiduri</a>
-          <a href="#proces">Cum lucrăm</a>
-          <a href="#intrebari">Întrebări</a>
-          <a href="#contact">Contact</a>
           <a class="mobile-nav-call" href="tel:+40762093915">
             <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 10.8c1.7 3.3 3.3 4.9 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.4.6 3.6.6.6 0 .9.4.9.9V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.6c.5 0 .9.3.9.8.1 1.3.3 2.5.6 3.6.1.4 0 .8-.3 1.1l-2.2 2.3Z"/></svg></span>
             <strong>Sună chiar acum</strong>
@@ -347,7 +360,7 @@
             <span class="second-hand-orbit second-hand-orbit-one"></span>
             <span class="second-hand-orbit second-hand-orbit-two"></span>
             <img src="assets/second-hand-scooters-reconditioned.png" width="1536" height="1024" loading="lazy" decoding="async" alt="">
-            <span class="second-hand-stamp"><i><img src="assets/favicon.png" width="128" height="128" alt=""></i><span><small>VERIFICATĂ</small><strong>în service</strong></span></span>
+            <span class="second-hand-stamp"><i><img src="assets/logo.png" width="1024" height="1024" alt=""></i><span><small>VERIFICATĂ</small><strong>în service</strong></span></span>
             <span class="second-hand-stock"><i></i><span><small>EXEMPLARE UNICE</small><strong>Stoc actualizat</strong></span></span>
           </span>
         </a>
@@ -503,11 +516,11 @@
         <a class="logo" href="#top"><img src="assets/favicon.png" width="128" height="128" alt=""><b><span>G</span>-Trots</b></a>
         <p>Reparații trotinete și scutere electrice în București și Ilfov.</p>
         <nav aria-label="Navigație subsol">
-          <a href="#servicii">Servicii</a>
-          <a href="/magazin">Magazin</a>
-          <a href="/ghiduri-service-trotinete-electrice">Ghiduri</a>
-          <a href="#proces">Proces</a>
-          <a href="#contact">Contact</a>
+          <a href="/magazin">Magazin piese trotinete electrice</a>
+          <a href="/service-trotinete-electrice">Service trotinete electrice</a>
+          <a href="/despre-g-trots">Despre G-Trots</a>
+          <a href="/contact">Contact și date firmă</a>
+          <a href="/ghiduri-service-trotinete-electrice">Ghiduri service trotinete electrice</a>
         </nav>
         <a class="footer-phone" href="tel:+40762093915">+40 0762 093 915</a>
         <small>© 2026 G-Trots</small>
@@ -518,7 +531,7 @@
       <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3a12.8 12.8 0 0 0-11 19.3L3.4 29l6.9-1.6A12.9 12.9 0 1 0 16 3Zm0 23.3c-2 0-3.8-.5-5.4-1.5l-.4-.2-4 .9.9-3.9-.3-.4A10.3 10.3 0 1 1 16 26.3Zm5.7-7.7c-.3-.2-1.9-.9-2.2-1s-.5-.2-.7.2-.8 1-1 1.2-.4.2-.7.1a8.5 8.5 0 0 1-2.5-1.6 9.3 9.3 0 0 1-1.7-2.1c-.2-.3 0-.5.1-.7l.5-.6.3-.6c.1-.2 0-.4 0-.6l-1-2.3c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.6.1-.9.4-.3.4-1.2 1.2-1.2 2.9s1.3 3.4 1.5 3.6c.2.2 2.5 3.8 6 5.3 3.6 1.6 3.6 1 4.3.9.6 0 1.9-.8 2.2-1.6.3-.8.3-1.5.2-1.6-.1-.2-.3-.3-.6-.4Z"/></svg>
       <span>WhatsApp</span>
     </a>
-    <script src="favorites.js?v=20260907-meta-global-v6"></script>
+    <script src="favorites.js?v=20260908-sitelinks-v1"></script>
   <script src="script.js?v=20260907-vitals-v3"></script>
-<script src="/legal-footer.js?v=20260907-meta-v11" defer></script></body>
+<script src="/legal-footer.js?v=20260908-social-v2" defer></script></body>
 </html>

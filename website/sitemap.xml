@@ -2,9 +2,39 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://g-trots.ro/</loc>
-    <lastmod>2026-06-13</lastmod>
+    <lastmod>2026-09-08</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://g-trots.ro/magazin</loc>
+    <lastmod>2026-09-08</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.95</priority>
+  </url>
+  <url>
+    <loc>https://g-trots.ro/service-trotinete-electrice</loc>
+    <lastmod>2026-09-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://g-trots.ro/despre-g-trots</loc>
+    <lastmod>2026-09-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://g-trots.ro/contact</loc>
+    <lastmod>2026-09-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://g-trots.ro/ghiduri-service-trotinete-electrice</loc>
+    <lastmod>2026-09-08</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://g-trots.ro/reparatii-trotinete-electrice-bucuresti</loc>
@@ -43,12 +73,6 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://g-trots.ro/magazin</loc>
-    <lastmod>2026-09-07</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
     <loc>https://g-trots.ro/catalog-produse</loc>
     <lastmod>2026-09-07</lastmod>
     <changefreq>daily</changefreq>
@@ -63,8 +87,6 @@
   <url><loc>https://g-trots.ro/politica-de-confidentialitate</loc><lastmod>2026-09-05</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
   <url><loc>https://g-trots.ro/politica-cookies</loc><lastmod>2026-09-05</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
   <url><loc>https://g-trots.ro/solutionarea-litigiilor</loc><lastmod>2026-09-05</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
-  <url><loc>https://g-trots.ro/contact</loc><lastmod>2026-09-05</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>
-  <url><loc>https://g-trots.ro/despre-g-trots</loc><lastmod>2026-09-05</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
   <url><loc>https://g-trots.ro/accesibilitate</loc><lastmod>2026-09-05</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>
   <url><loc>https://g-trots.ro/conditii-b2b</loc><lastmod>2026-09-05</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
 </urlset>

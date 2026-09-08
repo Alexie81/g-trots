@@ -2776,9 +2776,13 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     }
     $row['brands'] = $preloadedBrands;
     $row['brand_ids'] = array_map(fn(array $brand): string => (string)$brand['id'], $row['brands']);
-    $categoryIds = $db->prepare('SELECT category_id FROM shop_product_categories WHERE product_id = ? ORDER BY is_primary DESC, category_id ASC');
-    $categoryIds->execute([$productId]);
-    $row['category_ids'] = array_map('strval', $categoryIds->fetchAll(PDO::FETCH_COLUMN));
+    $preloadedCategoryIds = $row['_preloaded_category_ids'] ?? null;
+    if (!is_array($preloadedCategoryIds)) {
+        $categoryIds = $db->prepare('SELECT category_id FROM shop_product_categories WHERE product_id = ? ORDER BY is_primary DESC, category_id ASC');
+        $categoryIds->execute([$productId]);
+        $preloadedCategoryIds = $categoryIds->fetchAll(PDO::FETCH_COLUMN);
+    }
+    $row['category_ids'] = array_map('strval', $preloadedCategoryIds);
     if (!$row['category_ids'] && !empty($row['category_id'])) $row['category_ids'] = [(string)$row['category_id']];
     $decodedSpecifications = json_decode((string)($row['specifications_json'] ?? ''), true);
     $row['specifications'] = is_array($decodedSpecifications) ? array_values($decodedSpecifications) : [];
@@ -2797,6 +2801,7 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     unset($row['seo_sources_json']);
     unset($row['_preloaded_images']);
     unset($row['_preloaded_brands']);
+    unset($row['_preloaded_category_ids']);
     $row['price'] = (float)$row['price'];
     $row['cost_price'] = (float)($row['cost_price'] ?? 0);
     $row['supplier_base_price'] = $row['supplier_base_price'] === null ? null : (float)$row['supplier_base_price'];
@@ -2900,10 +2905,21 @@ function productRows(PDO $db, array $rows, array $config, bool $withDescription 
         $brandsByProduct[$productId][] = $brand;
     }
 
-    return array_map(static function (array $row) use ($db, $config, $withDescription, $includeInternal, $imagesByProduct, $brandsByProduct): array {
+    $categoriesByProduct = [];
+    $categoryStmt = $db->prepare(
+        "SELECT product_id, category_id
+         FROM shop_product_categories
+         WHERE product_id IN ({$placeholders})
+         ORDER BY product_id ASC, is_primary DESC, category_id ASC"
+    );
+    $categoryStmt->execute($ids);
+    foreach ($categoryStmt->fetchAll() as $category) $categoriesByProduct[(string)$category['product_id']][] = (string)$category['category_id'];
+
+    return array_map(static function (array $row) use ($db, $config, $withDescription, $includeInternal, $imagesByProduct, $brandsByProduct, $categoriesByProduct): array {
         $productId = (string)$row['id'];
         $row['_preloaded_images'] = $imagesByProduct[$productId] ?? [];
         $row['_preloaded_brands'] = $brandsByProduct[$productId] ?? [];
+        $row['_preloaded_category_ids'] = $categoriesByProduct[$productId] ?? [];
         return productRow($db, $row, $config, $withDescription, $includeInternal);
     }, $rows);
 }

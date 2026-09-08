@@ -16056,3 +16056,12 @@ body::after {
 .shop-spv-mode-list{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:13px}.shop-spv-mode{min-height:62px;display:grid;grid-template-columns:20px minmax(0,1fr);gap:7px;border-radius:14px;padding:8px}.shop-spv-mode>i{width:19px;height:19px}.shop-spv-mode>span{min-width:0}.shop-spv-mode small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .shop-spv-reminder{min-height:70px;border-radius:19px;padding:13px 15px}.shop-spv-save{width:min(360px,100%);min-height:50px;justify-self:end;border-radius:16px;background:linear-gradient(135deg,#8ab4f8,#669df6);box-shadow:0 12px 28px rgba(66,133,244,.16)}
 @media(max-width:760px){.shop-spv-page{padding:13px 10px 64px}.shop-spv-content{gap:11px}.shop-spv-hero{min-height:272px;border-radius:25px;padding:20px}.shop-spv-icon{width:155px;height:54px;border-radius:15px}.shop-spv-icon img{width:145px;height:49px}.shop-spv-state{right:15px;top:15px;padding:7px 9px;font-size:7px}.shop-spv-hero>small{margin-top:21px}.shop-spv-hero h1{font-size:31px}.shop-spv-hero p{font-size:10px;line-height:1.55}.shop-spv-connection{grid-template-columns:1fr;border-radius:21px;padding:14px}.shop-spv-connection>header,.shop-spv-token,.shop-spv-connection footer{grid-column:1;grid-row:auto}.shop-spv-connection footer{display:grid;grid-template-columns:1fr 1fr}.shop-spv-token{grid-template-columns:1fr 1fr}.shop-spv-diagnostics>header{padding:15px}.shop-spv-automation-grid{grid-template-columns:1fr}.shop-spv-mode-list{grid-template-columns:repeat(3,minmax(0,1fr))}.shop-spv-mode{grid-template-columns:1fr;place-items:center;text-align:center}.shop-spv-mode small{display:none}.shop-spv-settings-head{align-items:flex-start;flex-direction:column}.shop-spv-save{width:100%}}
+
+/* Barele de căutare din Produse și Stocuri rămân în fereastra de scroll. */
+.shop-commerce-page .shop-products-tools,
+.shop-commerce-page .shop-inventory-searchbar {
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  box-shadow: 0 16px 34px rgba(0,0,0,.34);
+}

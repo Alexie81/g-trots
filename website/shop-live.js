@@ -754,6 +754,12 @@
     let warrantyCard = document.querySelector("[data-product-warranty]");
     const legalWarranty = Math.max(0, Number(product.legal_warranty_months || 0));
     const commercialWarranty = Math.max(0, Number(product.commercial_warranty_months || 0));
+    const warrantyBadge = document.querySelector("[data-product-warranty-badge]");
+    if (warrantyBadge) {
+      const badgeMonths = commercialWarranty > 0 ? commercialWarranty : legalWarranty;
+      warrantyBadge.hidden = badgeMonths <= 0;
+      warrantyBadge.textContent = badgeMonths > 0 ? `Garanție ${badgeMonths} luni` : "";
+    }
     if (legalWarranty > 0 || commercialWarranty > 0) {
       if (!warrantyCard) {
         warrantyCard = document.createElement("aside");

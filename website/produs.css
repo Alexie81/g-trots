@@ -1156,6 +1156,42 @@ body.image-viewer-open {
   gap: 1rem;
 }
 
+.product-detail-identifiers {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.product-warranty-badge {
+  min-height: 2.75rem;
+  padding: 0.65rem 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid rgba(52, 211, 153, 0.38);
+  border-radius: 1rem;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(16, 185, 129, 0.055)), #151b18;
+  color: #9af2ca;
+  font-size: 0.66rem;
+  font-weight: 850;
+  letter-spacing: 0.025em;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.045), 0 0.45rem 1.2rem rgba(0,0,0,0.16);
+}
+
+.product-warranty-badge::before {
+  content: "";
+  width: 1.38rem;
+  height: 1.38rem;
+  flex: 0 0 1.38rem;
+  background: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235eeab3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3 4.5 6v5.5c0 4.6 3 7.7 7.5 9.5 4.5-1.8 7.5-4.9 7.5-9.5V6L12 3Z'/%3E%3Cpath d='m8.8 12 2 2 4.4-4.5'/%3E%3C/svg%3E");
+}
+
+.product-warranty-badge[hidden] { display: none; }
+
 .product-detail-meta a {
   display: inline-flex;
   align-items: center;
@@ -2650,6 +2686,11 @@ body.image-viewer-open {
     gap: 0.55rem;
   }
 
+  .product-detail-identifiers {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
   .product-purchase-row {
     grid-template-columns: 1fr;
   }
@@ -3513,7 +3554,7 @@ body.image-viewer-open {
   }
 }
 .product-safety-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.product-safety-grid article{padding:18px;border:1px solid var(--product-line,#303038);border-radius:18px;background:color-mix(in srgb,currentColor 3%,transparent)}.product-safety-grid small{display:block;margin-bottom:7px;color:#f27922;font-size:10px;font-weight:900;letter-spacing:.09em}.product-safety-grid strong,.product-safety-grid p{margin:0;white-space:pre-wrap}.product-safety-warning,.product-safety-documents{grid-column:1/-1}.product-safety-warning{border-color:color-mix(in srgb,#f27922 45%,transparent)!important;background:color-mix(in srgb,#f27922 8%,transparent)!important}.product-safety-documents a{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid color-mix(in srgb,currentColor 12%,transparent);color:inherit;text-decoration:none}.product-safety-documents a:last-child{border-bottom:0}@media(max-width:700px){.product-safety-grid{grid-template-columns:1fr}.product-safety-warning,.product-safety-documents{grid-column:auto}}
-.product-warranty-card{display:flex;align-items:center;gap:16px;margin-top:24px;padding:20px;border:1px solid rgba(52,211,153,.34);border-radius:20px;background:linear-gradient(135deg,rgba(16,185,129,.14),rgba(5,46,22,.22));box-shadow:0 16px 45px rgba(16,185,129,.08)}.product-warranty-card__shield{display:grid;flex:0 0 58px;width:58px;height:58px;place-items:center;border-radius:18px;color:#6ee7b7;background:rgba(16,185,129,.16)}.product-warranty-card__shield svg{width:32px;height:32px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.product-warranty-card small{display:block;color:#6ee7b7;font-size:10px;font-weight:900;letter-spacing:.12em}.product-warranty-card strong{display:block;margin-top:5px;color:#ecfdf5;font-size:18px}.product-warranty-card p{margin:5px 0 0;color:#a7cbbd;line-height:1.55}@media(max-width:600px){.product-warranty-card{align-items:flex-start;padding:16px}.product-warranty-card__shield{flex-basis:48px;width:48px;height:48px;border-radius:15px}.product-warranty-card strong{font-size:15px}}
+.product-warranty-card{display:flex;align-items:center;gap:16px;margin-top:0;padding:20px;border:1px solid rgba(52,211,153,.34);border-radius:20px;background:linear-gradient(135deg,rgba(16,185,129,.14),rgba(5,46,22,.22));box-shadow:0 16px 45px rgba(16,185,129,.08)}.product-warranty-card__shield{display:grid;flex:0 0 58px;width:58px;height:58px;place-items:center;border-radius:18px;color:#6ee7b7;background:rgba(16,185,129,.16)}.product-warranty-card__shield svg{width:32px;height:32px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.product-warranty-card small{display:block;color:#6ee7b7;font-size:10px;font-weight:900;letter-spacing:.12em}.product-warranty-card strong{display:block;margin-top:5px;color:#ecfdf5;font-size:18px}.product-warranty-card p{margin:5px 0 0;color:#a7cbbd;line-height:1.55}#descriere .product-expand-content{gap:1rem}#descriere .product-feature-grid,#descriere .product-fit-notice{margin-top:0}@media(max-width:600px){.product-warranty-card{align-items:flex-start;padding:16px}.product-warranty-card__shield{flex-basis:48px;width:48px;height:48px;border-radius:15px}.product-warranty-card strong{font-size:15px}#descriere .product-expand-content{gap:.8rem}}
 .product-static-seo {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 420px);

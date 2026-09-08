@@ -18,7 +18,6 @@ import { runWhenIdle } from '@/utils/runWhenIdle';
 import * as ImagePicker from 'expo-image-picker';
 import {
   Check,
-  Building2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -46,7 +45,6 @@ import AutoScrollProductName from '@/components/AutoScrollProductName';
 import useAndroidSearchBack from '@/hooks/useAndroidSearchBack';
 import {
   shopApi,
-  shopSupplierDisplayName,
   ShopBrand,
   ShopCategory,
   ShopManufacturer,
@@ -59,7 +57,6 @@ import {
   ShopProductSource,
   ShopProductSpecification,
   ShopProductStats,
-  ShopSupplierProductReference,
 } from '@/services/shopApi';
 
 type EditorImage = ShopProductImage & { key: string; preview_uri: string };
@@ -68,7 +65,6 @@ type EditorQuestion = ShopProductQuestion & { key: string };
 
 const MOBILE_GALLERY_STEP = 182;
 const DETAIL_REVIEWS_PAGE_SIZE = 5;
-const DETAIL_PURCHASES_PAGE_SIZE = 5;
 
 function detailPaginationItems(totalPages: number, currentPage: number): Array<number | 'ellipsis'> {
   if (totalPages <= 5) return Array.from({ length: totalPages }, (_, index) => index + 1);
@@ -311,12 +307,8 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState<ShopProductStats | null>(null);
-  const [supplierReferences, setSupplierReferences] = useState<ShopSupplierProductReference[]>([]);
-  const [purchaseHistory, setPurchaseHistory] = useState<Record<string, string>[]>([]);
-  const [purchaseStatistics, setPurchaseStatistics] = useState<Record<string, string | number | null>>({});
   const [detailSalesPage, setDetailSalesPage] = useState(1);
   const [detailReviewPage, setDetailReviewPage] = useState(1);
-  const [detailPurchasesPage, setDetailPurchasesPage] = useState(1);
   const [reviewReplies, setReviewReplies] = useState<Record<string, string>>({});
   const [galleryDragging, setGalleryDragging] = useState(false);
   const [slugTouched, setSlugTouched] = useState(false);
@@ -416,62 +408,6 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
   const detailReviewTotal = detail?.reviews.length || 0;
   const detailReviewSafePage = Math.min(detailReviewPage, Math.max(1, Math.ceil(detailReviewTotal / DETAIL_REVIEWS_PAGE_SIZE)));
   const pagedDetailReviews = detail?.reviews.slice((detailReviewSafePage - 1) * DETAIL_REVIEWS_PAGE_SIZE, detailReviewSafePage * DETAIL_REVIEWS_PAGE_SIZE) || [];
-  const detailPurchasesTotal = purchaseHistory.length;
-  const detailPurchasesSafePage = Math.min(detailPurchasesPage, Math.max(1, Math.ceil(detailPurchasesTotal / DETAIL_PURCHASES_PAGE_SIZE)));
-  const pagedPurchaseHistory = purchaseHistory.slice((detailPurchasesSafePage - 1) * DETAIL_PURCHASES_PAGE_SIZE, detailPurchasesSafePage * DETAIL_PURCHASES_PAGE_SIZE);
-  const averageGrossPurchaseCost = Number(purchaseStatistics.weighted_average_gross_unit_cost_ron || 0);
-  const productSuppliers = useMemo(() => {
-    type SupplierAlias = { type: 'code' | 'name' | 'ean'; value: string };
-    type ProductSupplierSummary = { key: string; supplierName: string; isActive: boolean; lastCostRon: string | null; lastPurchaseAt: string | null; purchaseCount: number; aliases: SupplierAlias[] };
-    const referencesBySupplier = new Map<string, ShopSupplierProductReference>();
-    const aliasesBySupplier = new Map<string, SupplierAlias[]>();
-    const addAlias = (key: string, type: SupplierAlias['type'], rawValue: unknown) => {
-      const value = String(rawValue || '').trim();
-      if (!value) return;
-      const aliases = aliasesBySupplier.get(key) || [];
-      if (!aliases.some((alias) => alias.type === type && alias.value.toLocaleLowerCase('ro-RO') === value.toLocaleLowerCase('ro-RO'))) aliases.push({ type, value });
-      aliasesBySupplier.set(key, aliases);
-    };
-    supplierReferences.forEach((reference) => {
-      const key = reference.supplier_id || reference.supplier_name || reference.id;
-      const current = referencesBySupplier.get(key);
-      if (!current || reference.is_primary_for_supplier || (!current.last_confirmed_at && reference.last_confirmed_at)) referencesBySupplier.set(key, reference);
-      (reference.aliases || []).forEach((alias) => addAlias(key, alias.type, alias.value));
-      addAlias(key, 'code', reference.supplier_product_code_original);
-      addAlias(key, 'name', reference.supplier_product_name);
-      addAlias(key, 'ean', reference.supplier_ean);
-    });
-    const purchased = new Map<string, ProductSupplierSummary>();
-    purchaseHistory.forEach((purchase) => {
-      const supplierName = shopSupplierDisplayName(purchase, 'Furnizor');
-      const key = String(purchase.supplier_id || '').trim() || supplierName.toLocaleLowerCase('ro-RO');
-      addAlias(key, 'code', purchase.supplier_code);
-      addAlias(key, 'name', purchase.supplier_product_name);
-      addAlias(key, 'ean', purchase.supplier_ean);
-      const current = purchased.get(key);
-      if (current) { current.purchaseCount += 1; current.aliases = aliasesBySupplier.get(key) || current.aliases; return; }
-      const reference = referencesBySupplier.get(key);
-      purchased.set(key, {
-        key,
-        supplierName,
-        isActive: reference?.is_active !== false,
-        lastCostRon: String(purchase.gross_unit_cost_ron || reference?.last_confirmed_price_ron || '').trim() || null,
-        lastPurchaseAt: String(purchase.reception_date || reference?.last_confirmed_at || '').trim() || null,
-        purchaseCount: 1,
-        aliases: aliasesBySupplier.get(key) || [],
-      });
-    });
-    if (purchased.size) return [...purchased.values()];
-    return [...referencesBySupplier.entries()].map(([key, reference]) => ({
-      key,
-      supplierName: shopSupplierDisplayName(reference, 'Furnizor'),
-      isActive: reference.is_active !== false,
-      lastCostRon: reference.last_confirmed_price_ron,
-      lastPurchaseAt: reference.last_confirmed_at,
-      purchaseCount: reference.last_confirmed_at ? 1 : 0,
-      aliases: aliasesBySupplier.get(key) || [],
-    }));
-  }, [purchaseHistory, supplierReferences]);
   const normalizedFormName = form.name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ro-RO');
   const duplicateProductName = normalizedFormName
     ? products.find((product) => product.id !== form.id && product.name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ro-RO') === normalizedFormName)
@@ -574,17 +510,9 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
     setDetail(null);
     setDetailSalesPage(1);
     setDetailReviewPage(1);
-    setDetailPurchasesPage(1);
     try {
-      const [next, references, history] = await Promise.all([
-        shopApi.getProductStats(token, product.id),
-        shopApi.listProductSupplierReferences(token, product.id),
-        shopApi.getProductPurchaseHistory(token, product.id).catch(() => ({ items: [], statistics: {} })),
-      ]);
+      const next = await shopApi.getProductStats(token, product.id);
       setDetail(next);
-      setSupplierReferences(references);
-      setPurchaseHistory(history.items);
-      setPurchaseStatistics(history.statistics);
       setReviewReplies(Object.fromEntries(next.reviews.map((review) => [review.id, review.admin_reply || ''])));
     } catch (detailError) {
       Alert.alert('Fisa indisponibila', detailError instanceof Error ? detailError.message : 'Nu s-a putut deschide fisa produsului.');
@@ -612,16 +540,6 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
     const next = await shopApi.getProductStats(token, detail.product.id);
     setDetail(next);
     setReviewReplies(Object.fromEntries(next.reviews.map((review) => [review.id, review.admin_reply || ''])));
-  };
-
-  const updateSupplierReference = async (reference: ShopSupplierProductReference, patch: Partial<ShopSupplierProductReference>) => {
-    if (!token || !detail) return;
-    try {
-      await shopApi.updateSupplierProductReference(token, reference.id, { ...patch, row_version: reference.row_version });
-      setSupplierReferences(await shopApi.listProductSupplierReferences(token, detail.product.id));
-    } catch (referenceError) {
-      Alert.alert('Asocierea nu s-a actualizat', referenceError instanceof Error ? referenceError.message : 'Reîncarcă fișa produsului.');
-    }
   };
 
   const saveReviewReply = async (review: ShopProductReview) => {
@@ -836,11 +754,11 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
         showsVerticalScrollIndicator={false}>
       <View style={styles.pageHeader}>{header}</View>
       <View style={styles.stickyToolbar}>
+        <View accessibilityLabel={`${productTotal} produse`} style={styles.summary}><Text style={styles.summaryValue}>{productTotal}</Text></View>
         <View style={styles.search}><Search size={17} color={Colors.orange} /><TextInput value={query} onChangeText={(value) => { setQuery(value); setPage(1); }} placeholder="Caută" placeholderTextColor={Colors.textMuted} style={styles.searchInput} />{query ? <TouchableOpacity accessibilityLabel="Șterge căutarea" style={styles.clearSearch} onPress={clearSearch}><X size={16} color={Colors.textSecondary} /></TouchableOpacity> : null}</View>
         <ShopProductExportButton sources={sources} total={productTotal} compact />
         <TouchableOpacity style={styles.refresh} onPress={() => void load(true, { page, pageSize, query, includeMetadata: false })}>{listRefreshing ? <ActivityIndicator size="small" color={Colors.orange} /> : <RefreshCw size={18} color={Colors.textSecondary} />}</TouchableOpacity>
         <TouchableOpacity accessibilityLabel="Adaugă produs" style={styles.add} onPress={openNew}><Plus size={21} color={Colors.white} /></TouchableOpacity>
-        <View accessibilityLabel={`${productTotal} produse`} style={styles.summary}><Text style={styles.summaryValue}>{productTotal}</Text></View>
       </View>
       <View style={styles.listContent}>
       {filtered.length ? pagedProducts.map((product) => (
@@ -869,7 +787,7 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
         <SafeAreaView style={styles.editorSafe} edges={['top', 'bottom']}>
           <View style={styles.editorHeader}>
             <TouchableOpacity style={styles.close} onPress={closeDetail}><X size={21} color={Colors.textSecondary} /></TouchableOpacity>
-            <View style={styles.editorHeaderCopy}><Text style={styles.editorKicker}>COD PRODUS</Text><Text numberOfLines={1} style={styles.productCodeTop}>{detail?.product.sku || 'FĂRĂ COD'}</Text><Text numberOfLines={1} style={styles.editorProductName}>{detail?.product.name || 'Se incarca...'}</Text></View>
+            <View style={styles.editorHeaderCopy}><Text style={styles.editorKicker}>COD PRODUS</Text><Text numberOfLines={1} style={styles.productCodeTop}>{detail?.product.sku || 'FĂRĂ COD'}</Text><AutoScrollProductName value={detail?.product.name || 'Se incarca...'} style={styles.editorProductName} /></View>
             {detail ? <TouchableOpacity style={styles.saveTop} onPress={() => { const product = detail.product; closeDetail(); setTimeout(() => void openEdit(product), 0); }}><Pencil size={17} color={Colors.white} /><Text style={styles.saveTopText}>Editeaza</Text></TouchableOpacity> : null}
           </View>
           {detailLoading || !detail ? <View style={styles.detailLoading}><ActivityIndicator color={Colors.orange} /><Text style={styles.stateText}>Se incarca fisa produsului...</Text></View> : <ScrollView contentContainerStyle={[styles.detailContent, { paddingBottom: Math.max(insets.bottom, 24) + 30 }]} showsVerticalScrollIndicator={false}>
@@ -877,8 +795,6 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
             <View style={styles.metricGrid}>
               <Metric label="TOTAL VÂNZĂRI" value={money(detail.revenue)} />
               <Metric label="PREȚ VÂNZARE MEDIU" value={money(detail.units_sold ? detail.revenue / detail.units_sold : 0)} />
-              <Metric label="COST ACHIZIȚIE MEDIU · TVA INCLUS" value={averageGrossPurchaseCost > 0 ? money(averageGrossPurchaseCost) : '—'} />
-              <Metric label="PROFIT MEDIU" value={money(detail.units_sold ? detail.profit / detail.units_sold : 0)} accent />
               <Metric label="BUCĂȚI VÂNDUTE" value={String(detail.units_sold)} />
               <Metric label="VIZUALIZĂRI PE SITE" value={String(detail.product.view_count)} icon="eye" />
               <Metric label="NUMĂR RECENZII" value={String(detail.reviews.length)} />
@@ -886,28 +802,17 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
             </View>
             <SectionTitle number="01" title="Comenzi si vanzari" text="Comenzile in care apare acest produs." />
             {detail.orders.length ? pagedDetailSales.map((order) => {
-              const acquisitionPrice = Number(detail.product.cost_price || 0);
               const salePrice = Number(order.unit_price || 0);
-              const orderProfit = Number(order.line_total || 0) - (acquisitionPrice * Number(order.quantity || 0));
               return <TouchableOpacity key={order.id} activeOpacity={0.76} style={styles.saleCard} onPress={() => { closeDetail(); onOpenOrder?.(order.id); }}>
                 <View style={styles.saleHead}><View><Text style={styles.saleLabel}>NUMAR COMANDA</Text><Text style={styles.saleNumber}>{order.order_number}</Text></View><View style={styles.saleStatus}><Text style={styles.saleStatusText}>{order.status}</Text></View></View>
                 <Text style={styles.saleMeta}>{order.customer_display_name || order.customer_name} · {order.created_at} · {order.quantity} buc.</Text>
-                <View style={styles.saleStats}>
-                  <View style={styles.saleStat}><Text style={styles.saleLabel}>PRET ACHIZITIE</Text><Text style={styles.saleValue}>{money(acquisitionPrice)}</Text></View>
-                  <View style={styles.saleStat}><Text style={styles.saleLabel}>PRET VANZARE</Text><Text style={styles.saleValue}>{money(salePrice)}</Text></View>
-                  <View style={styles.saleStat}><Text style={styles.saleLabel}>PROFIT</Text><Text style={styles.saleProfit}>{money(orderProfit)}</Text></View>
-                </View>
+                <View style={styles.saleStats}><View style={styles.saleStat}><Text style={styles.saleLabel}>PRET VANZARE</Text><Text style={styles.saleValue}>{money(salePrice)}</Text></View></View>
               </TouchableOpacity>;
             }) : <Text style={styles.detailEmpty}>Produsul nu apare in nicio comanda.</Text>}
             <DetailGooglePagination label="comenzi" page={detailSalesSafePage} pageSize={DETAIL_SALES_PAGE_SIZE} total={detailSalesTotal} onPageChange={setDetailSalesPage} />
             <SectionTitle number="02" title="Recenzii" text="Raspunde clientilor sau sterge recenziile direct de aici." />
             {detail.reviews.length ? pagedDetailReviews.map((review) => <View key={review.id} style={styles.reviewCard}><View style={styles.reviewHead}><View><Text style={styles.reviewName}>{review.customer_name}</Text>{review.verified_purchase ? <View style={styles.reviewVerified}><Text style={styles.reviewVerifiedText}>✓ ACHIZIȚIE VERIFICATĂ</Text></View> : review.review_source && review.review_source !== 'g-trots.ro' ? <Text style={styles.reviewSource}>Sursa: {review.review_source}</Text> : null}<Text style={styles.reviewMeta}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)} · {review.created_at}</Text></View><TouchableOpacity style={styles.reviewDelete} onPress={() => removeReview(review)}><Trash2 size={16} color={Colors.error} /></TouchableOpacity></View><Text style={styles.reviewMessage}>{review.message}</Text><TextInput value={reviewReplies[review.id] || ''} onChangeText={(value) => setReviewReplies((current) => ({ ...current, [review.id]: value }))} placeholder="Scrie raspunsul magazinului..." placeholderTextColor={Colors.textMuted} multiline style={styles.reviewReply} /><TouchableOpacity style={styles.reviewSave} onPress={() => void saveReviewReply(review)}><MessageSquare size={15} color={Colors.white} /><Text style={styles.reviewSaveText}>Salveaza raspunsul</Text></TouchableOpacity></View>) : <Text style={styles.detailEmpty}>Produsul nu are inca recenzii.</Text>}
             <DetailGooglePagination label="recenzii" page={detailReviewSafePage} pageSize={DETAIL_REVIEWS_PAGE_SIZE} total={detailReviewTotal} onPageChange={setDetailReviewPage} />
-            <SectionTitle number="03" title="Furnizori" text="Firmele de la care a fost sau poate fi cumpărat acest produs." />
-            {productSuppliers.length ? productSuppliers.map((supplier) => { const invoiceNames = supplier.aliases.filter((alias) => alias.type === 'name').map((alias) => alias.value); const supplierCodes = supplier.aliases.filter((alias) => alias.type === 'code').map((alias) => alias.value); const aliasSummary = [`Pe factură: ${invoiceNames.join(', ')}`, `Cod: ${supplierCodes.join(', ')}`].filter((part) => !part.endsWith(': ')).join(' · '); return <View key={supplier.key} style={[styles.referenceCard, !supplier.isActive && styles.referenceInactive]}><View style={styles.referenceIcon}><Building2 size={18} color="#2DD4BF" /></View><View style={styles.referenceCopy}><View style={styles.referenceHeading}><Text numberOfLines={1} style={styles.referenceSupplier}>{supplier.supplierName}</Text><View style={styles.referencePrimary}><Text style={styles.referencePrimaryText}>CUMPĂRAT PRIN NIR</Text></View></View><Text style={styles.referenceMeta}>{supplier.purchaseCount ? `${supplier.purchaseCount} ${supplier.purchaseCount === 1 ? 'recepție confirmată' : 'recepții confirmate'}` : 'Furnizor asociat produsului'}</Text>{aliasSummary ? <Text numberOfLines={2} style={styles.referenceAliases}>{aliasSummary}</Text> : null}<Text numberOfLines={1} style={styles.referenceCost}>{supplier.lastCostRon ? `Ultimul cost cu TVA ${money(Number(supplier.lastCostRon))}${supplier.lastPurchaseAt ? ` · ${supplier.lastPurchaseAt}` : ''}` : 'Fără cost confirmat'}</Text></View></View>; }) : <Text style={styles.detailEmpty}>Produsul nu are furnizori în istoricul NIR.</Text>}
-            <SectionTitle number="04" title="Istoric preturi de achizitie" text="Fiecare NIR confirmat ramane un snapshot separat." />
-            {purchaseHistory.length ? pagedPurchaseHistory.map((item) => <View key={item.nir_line_id} style={styles.purchaseCard}><View><Text style={styles.purchaseNir}>{item.nir_number}</Text><Text style={styles.purchaseMeta}>{item.reception_date} · {shopSupplierDisplayName(item, 'Furnizor')} · cod {item.supplier_code || '—'}</Text></View><View style={styles.purchaseRight}><Text style={styles.purchaseCost}>{money(Number(item.gross_unit_cost_ron || 0))}/u</Text><Text style={styles.purchaseMeta}>TVA inclus · {item.stock_quantity} buc.</Text></View></View>) : <Text style={styles.detailEmpty}>Nu exista achizitii confirmate.</Text>}
-            <DetailGooglePagination label="achizitii" page={detailPurchasesSafePage} pageSize={DETAIL_PURCHASES_PAGE_SIZE} total={detailPurchasesTotal} onPageChange={setDetailPurchasesPage} />
           </ScrollView>}
         </SafeAreaView>
       </Modal> : null}
@@ -1133,20 +1038,20 @@ const styles = StyleSheet.create({
   stateText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 11 },
   error: { color: '#FCA5A5', fontFamily: 'Inter-Regular', fontSize: 11, textAlign: 'center', paddingHorizontal: 22 },
   retry: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: Colors.orangeDim }, retryText: { color: Colors.orange, fontFamily: 'Inter-SemiBold', fontSize: 10 },
-  stickyToolbar: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#302C33', backgroundColor: Colors.bg, elevation: 8, shadowColor: '#000', shadowOpacity: 0.24, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
-  search: { flex: 1, minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 15, paddingHorizontal: 12, backgroundColor: '#1B1B1F' },
+  stickyToolbar: { height: 58, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#302C33', backgroundColor: Colors.bg, elevation: 14, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 9, shadowOffset: { width: 0, height: 4 } },
+  search: { flex: 1, minWidth: 0, height: 42, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 13, paddingHorizontal: 10, backgroundColor: '#1B1B1F' },
   searchInput: { flex: 1, color: Colors.textPrimary, fontFamily: 'Inter-Regular', fontSize: 11 },
   clearSearch: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: '#2B282E' },
-  refresh: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: '#1B1B1F' },
-  add: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: Colors.orange },
-  summary: { minWidth: 42, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 15, paddingHorizontal: 6, backgroundColor: '#211F24' }, summaryValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 11 },
+  refresh: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: '#1B1B1F' },
+  add: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: Colors.orange },
+  summary: { minWidth: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 13, paddingHorizontal: 5, backgroundColor: '#211F24' }, summaryValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 },
   productCard: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 7, borderRadius: 19, padding: 10, backgroundColor: '#1B1B1F', marginBottom: 8 },
   productMain: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
   productImage: { width: 66, height: 66, borderRadius: 14, backgroundColor: '#111' }, productImageFallback: { width: 66, height: 66, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#27242A' },
   productCopy: { flex: 1, minWidth: 0 }, productTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 }, productName: { flex: 1, color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 12 }, productMeta: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 4 }, productBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 9 }, productPrice: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 11 }, stock: { color: '#9CD9AE', fontFamily: 'Inter-SemiBold', fontSize: 8 }, stockLow: { color: '#FCA5A5' },
   iconAction: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(56,189,248,0.11)' }, deleteAction: { backgroundColor: 'rgba(239,68,68,0.10)' },
   empty: { minHeight: 230, alignItems: 'center', justifyContent: 'center', borderRadius: 24, backgroundColor: '#1B1B1F' }, emptyTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 15, marginTop: 13 }, emptyText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, marginTop: 5 },
-  editorSafe: { flex: 1, backgroundColor: Colors.bg }, editorHeader: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#29272B', paddingHorizontal: 12, backgroundColor: '#171513' }, close: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#27242A' }, editorHeaderCopy: { flex: 1, minWidth: 0 }, editorKicker: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 1 }, editorTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 16, marginTop: 2 }, productCodeTop: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 19, lineHeight: 22, marginTop: 1 }, editorProductName: { color: Colors.textMuted, fontFamily: 'Inter-SemiBold', fontSize: 8, marginTop: 2 }, saveTop: { minWidth: 96, height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 13, backgroundColor: Colors.orange }, saveTopText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 }, disabled: { opacity: 0.55 }, editorLoadingState: { flex: 1, paddingHorizontal: 32, alignItems: 'center', justifyContent: 'center' }, editorLoadingIcon: { width: 68, height: 68, marginBottom: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#70431D', borderRadius: 23, backgroundColor: '#2D1E14' }, editorLoadingTitle: { marginTop: 17, color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 20 }, editorLoadingText: { maxWidth: 330, marginTop: 7, color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 11, lineHeight: 17, textAlign: 'center' },
+  editorSafe: { flex: 1, backgroundColor: Colors.bg }, editorHeader: { minHeight: 80, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#29272B', paddingHorizontal: 12, backgroundColor: '#171513' }, close: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#27242A' }, editorHeaderCopy: { flex: 1, minWidth: 0 }, editorKicker: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 1 }, editorTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 16, marginTop: 2 }, productCodeTop: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 22, lineHeight: 25, marginTop: 1 }, editorProductName: { color: Colors.textMuted, fontFamily: 'Inter-SemiBold', fontSize: 10, lineHeight: 15, marginTop: 2 }, saveTop: { minWidth: 96, height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 13, backgroundColor: Colors.orange }, saveTopText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 }, disabled: { opacity: 0.55 }, editorLoadingState: { flex: 1, paddingHorizontal: 32, alignItems: 'center', justifyContent: 'center' }, editorLoadingIcon: { width: 68, height: 68, marginBottom: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#70431D', borderRadius: 23, backgroundColor: '#2D1E14' }, editorLoadingTitle: { marginTop: 17, color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 20 }, editorLoadingText: { maxWidth: 330, marginTop: 7, color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 11, lineHeight: 17, textAlign: 'center' },
   form: { width: '100%', maxWidth: 920, alignSelf: 'center', padding: 16 },
   detailLoading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }, detailContent: { width: '100%', maxWidth: 920, alignSelf: 'center', padding: 16 }, detailGallery: { gap: 10, paddingBottom: 12 }, detailImage: { width: 210, height: 190, overflow: 'hidden', borderRadius: 20, backgroundColor: '#211F24' },
   metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }, metricCard: { width: '48%', minHeight: 72, justifyContent: 'space-between', borderWidth: 1, borderColor: '#343137', borderRadius: 16, padding: 11, backgroundColor: '#1B1B1F' }, metricCardAccent: { borderColor: 'rgba(34,197,94,0.35)', backgroundColor: 'rgba(34,197,94,0.07)' }, metricLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5 }, metricLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.55 }, metricValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 14, marginTop: 6 }, metricValueAccent: { color: '#9CD9AE' },

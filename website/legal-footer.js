@@ -1,5 +1,7 @@
 (() => {
-  if (window.__gtLegalFooter) return;
+  const COMPONENT_VERSION = '20260908-nav-v2';
+  if (window.__gtLegalFooterVersion === COMPONENT_VERSION) return;
+  window.__gtLegalFooterVersion = COMPONENT_VERSION;
   window.__gtLegalFooter = true;
   document.documentElement.classList.add('commerce-preview');
 
@@ -42,7 +44,7 @@
       onload() { this.media = 'all'; },
     });
   }
-  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260908-social-icons-v3' });
+  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260908-nav-v1' });
   if (!document.querySelector('script[src*="google-measurement.js"]')) {
     loadAsset('script', { src: '/google-measurement.js?v=20260907-meta-v9', async: true });
   }
@@ -103,35 +105,32 @@
     const currentPath = location.pathname.toLowerCase().replace(/\/+$/, '').replace(/\.html$/, '') || '/';
     const shopActive = /\/(magazin|produs)(?:\/|$)|anvelopa-g10|display-smart|incarcator-fastcharge|motor-dualhub|baterie-powercore|kit-frana/.test(currentPath);
     const serviceActive = currentPath === '/service-trotinete-electrice';
-    const aboutActive = currentPath === '/despre-g-trots';
     const contactActive = currentPath === '/contact';
-    const guidesActive = currentPath === '/ghiduri-service-trotinete-electrice' || currentPath.startsWith('/ghid-');
+    const guidesActive = !shopActive && !serviceActive && !contactActive && (
+      currentPath === '/ghiduri-service-trotinete-electrice'
+      || currentPath.startsWith('/ghid-')
+      || Boolean(document.querySelector('main.seo-page'))
+    );
     const navigationHtml = `
           <div class="mobile-nav-heading" aria-hidden="true"><span>Meniu</span><small>G-Trots</small></div>
+          <a href="/service-trotinete-electrice"${serviceActive ? ' aria-current="page"' : ''}>Servicii</a>
           <a class="nav-shop-link${shopActive ? ' active' : ''}" href="/magazin"${shopActive ? ' aria-current="page"' : ''}><span class="nav-shop-icon" aria-hidden="true"></span><span>Shop</span></a>
-          <a href="/service-trotinete-electrice"${serviceActive ? ' aria-current="page"' : ''}>Service</a>
-          <a href="/despre-g-trots"${aboutActive ? ' aria-current="page"' : ''}>Despre</a>
-          <a href="/contact"${contactActive ? ' aria-current="page"' : ''}>Contact</a>
           <a href="/ghiduri-service-trotinete-electrice"${guidesActive ? ' aria-current="page"' : ''}>Ghiduri</a>
+          <a href="/#proces">Cum lucrăm</a>
+          <a href="/#intrebari">Întrebări</a>
+          <a href="/contact"${contactActive ? ' aria-current="page"' : ''}>Contact</a>
           <a class="mobile-nav-account" href="/login" aria-label="Intră în cont sau creează un cont"><span class="mobile-nav-account-avatar" aria-hidden="true"><i></i></span><span class="mobile-nav-account-copy"><small>CONT G-TROTS</small><strong>Login</strong></span><b aria-hidden="true">›</b></a>
           <a class="mobile-nav-call" href="tel:+40762093915"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.6 10.8c1.7 3.3 3.3 4.9 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.4.6 3.6.6.6 0 .9.4.9.9V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.6c.5 0 .9.3.9.8.1 1.3.3 2.5.6 3.6.1.4 0 .8-.3 1.1l-2.2 2.3Z"/></svg></span><strong>Sună chiar acum</strong><small>+40 0762 093 915</small></a>`;
 
+    const callButtonHtml = `Sună acum <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.6 10.8c1.7 3.3 3.3 4.9 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.4.6 3.6.6.6 0 .9.4.9.9V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.6c.5 0 .9.3.9.8.1 1.3.3 2.5.6 3.6.1.4 0 .8-.3 1.1l-2.2 2.3Z"/></svg></span>`;
+
     const existingHeader = document.querySelector('.site-header:not(.legal-top)');
-    if (existingHeader) {
-      const existingNav = existingHeader.querySelector('.main-nav');
-      if (existingNav) {
-        existingNav.setAttribute('aria-label', 'Navigație principală');
-        existingNav.innerHTML = navigationHtml;
-        document.dispatchEvent(new CustomEvent('g-trots:customer-changed'));
-      }
-      return;
-    }
-
-    const legacyHeader = document.querySelector('.legal-top, .tracking-header');
-
-    const header = document.createElement('header');
-    header.className = 'site-header gt-public-header';
-    header.innerHTML = `
+    let header = existingHeader;
+    if (!header) {
+      const legacyHeader = document.querySelector('.legal-top, .tracking-header');
+      header = document.createElement('header');
+      header.className = 'site-header gt-public-header';
+      header.innerHTML = `
       <div class="header-inner">
         <a class="logo" href="/" aria-label="G-Trots, pagina principală">
           <img src="/assets/favicon.png" width="128" height="128" alt="">
@@ -141,17 +140,57 @@
 ${navigationHtml}
         </nav>
         <a class="button button-small header-cta call-button" href="tel:+40762093915">
-          Sună acum
-          <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.6 10.8c1.7 3.3 3.3 4.9 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.4.6 3.6.6.6 0 .9.4.9.9V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.6c.5 0 .9.3.9.8.1 1.3.3 2.5.6 3.6.1.4 0 .8-.3 1.1l-2.2 2.3Z"/></svg></span>
+          ${callButtonHtml}
         </a>
         <button class="menu-toggle" type="button" aria-label="Deschide meniul" aria-expanded="false"><span></span><span></span></button>
       </div>`;
-    if (legacyHeader) legacyHeader.replaceWith(header);
-    else document.body.prepend(header);
+      if (legacyHeader) legacyHeader.replaceWith(header);
+      else document.body.prepend(header);
+    }
+
+    header.classList.add('gt-public-header');
+    const headerInner = header.querySelector('.header-inner');
+    const logo = header.querySelector('.logo');
+    if (logo) {
+      logo.href = '/';
+      logo.setAttribute('aria-label', 'G-Trots, pagina principală');
+      logo.innerHTML = '<img src="/assets/favicon.png" width="128" height="128" alt=""><b><span>G</span>-Trots</b>';
+    }
+
+    let nav = header.querySelector('.main-nav');
+    if (!nav && headerInner) {
+      nav = document.createElement('nav');
+      nav.className = 'main-nav';
+      headerInner.append(nav);
+    }
+    if (!nav) return;
+    nav.setAttribute('aria-label', 'Navigație principală');
+    nav.innerHTML = navigationHtml;
+
+    let callButton = header.querySelector('.header-cta');
+    if (!callButton && headerInner) {
+      callButton = document.createElement('a');
+      headerInner.insertBefore(callButton, headerInner.querySelector('.global-shop-actions, .menu-toggle'));
+    }
+    if (callButton) {
+      callButton.className = 'button button-small header-cta call-button';
+      callButton.href = 'tel:+40762093915';
+      callButton.innerHTML = callButtonHtml;
+    }
+
+    let toggle = header.querySelector('.menu-toggle');
+    if (!toggle && headerInner) {
+      toggle = document.createElement('button');
+      toggle.className = 'menu-toggle';
+      toggle.type = 'button';
+      toggle.innerHTML = '<span></span><span></span>';
+      headerInner.append(toggle);
+    }
+    if (!toggle) return;
+    toggle.setAttribute('aria-label', 'Deschide meniul');
+    toggle.setAttribute('aria-expanded', 'false');
     document.dispatchEvent(new CustomEvent('g-trots:customer-changed'));
 
-    const toggle = header.querySelector('.menu-toggle');
-    const nav = header.querySelector('.main-nav');
     const syncMobileAccount = () => {
       const account = nav.querySelector('.mobile-nav-account');
       if (!account) return;
@@ -174,12 +213,15 @@ ${navigationHtml}
       toggle.setAttribute('aria-expanded', String(open));
       toggle.setAttribute('aria-label', open ? 'Închide meniul' : 'Deschide meniul');
     };
-    toggle.addEventListener('click', () => setOpen(!nav.classList.contains('open')));
-    nav.addEventListener('click', event => { if (event.target.closest('a')) setOpen(false); });
-    addEventListener('keydown', event => { if (event.key === 'Escape') setOpen(false); });
-    addEventListener('storage', event => {
-      if (event.key === 'g-trots-customer-session-v1' || event.key === 'g-trots-customer-profile-v1') syncMobileAccount();
-    });
+    if (toggle.dataset.gtNavigationBound !== 'true') {
+      toggle.dataset.gtNavigationBound = 'true';
+      toggle.addEventListener('click', () => setOpen(!nav.classList.contains('open')));
+      nav.addEventListener('click', event => { if (event.target.closest('a')) setOpen(false); });
+      addEventListener('keydown', event => { if (event.key === 'Escape') setOpen(false); });
+      addEventListener('storage', event => {
+        if (event.key === 'g-trots-customer-session-v1' || event.key === 'g-trots-customer-profile-v1') syncMobileAccount();
+      });
+    }
     syncMobileAccount();
   }
 
@@ -188,7 +230,7 @@ ${navigationHtml}
       loadAsset('link', { rel: 'stylesheet', href: '/favorites.css?v=20260828-line-promotions-v1' });
     }
     if (!document.querySelector('script[src*="favorites.js"]')) {
-      loadAsset('script', { src: '/favorites.js?v=20260908-sitelinks-v1' });
+      loadAsset('script', { src: '/favorites.js?v=20260908-nav-v1' });
     }
   }
 

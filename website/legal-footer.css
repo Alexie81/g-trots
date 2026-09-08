@@ -103,6 +103,10 @@
   transform: translateY(-1px);
 }
 
+.gt-public-header .main-nav > a:not(.nav-shop-link):not(.mobile-nav-call)[aria-current="page"] {
+  color: var(--gt-orange);
+}
+
 .gt-public-header .nav-shop-link {
   min-height: 2.75rem;
   margin-block: -0.75rem;

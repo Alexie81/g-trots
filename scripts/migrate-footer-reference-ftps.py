@@ -13,7 +13,7 @@ import ssl
 
 REMOTE_ROOT = "/g-trots.ro"
 PUBLIC_BASE = "https://g-trots.ro"
-TARGET_VERSION = "20260908-social-v4"
+TARGET_VERSION = "20260908-nav-v2"
 
 
 def connect() -> FTP_TLS:
@@ -42,8 +42,9 @@ $expectedToken = {token_php};
 if (!hash_equals($expectedToken, (string)($_GET['token'] ?? ''))) {{ http_response_code(404); exit; }}
 $target = 'legal-footer.js?v=' . {version_php};
 $targetTag = '<script src="/' . $target . '" defer></script>';
+$favoritesTarget = 'favorites.js?v=' . {version_php};
 $excluded = ['download-app/index.html', 'fact/index.html', 'fs/index.html'];
-$result = ['ok' => true, 'scanned' => 0, 'excluded' => 0, 'removed_from_excluded' => 0, 'matched' => 0, 'changed' => 0, 'inserted' => 0, 'already_current' => 0, 'missing' => [], 'failed' => []];
+$result = ['ok' => true, 'scanned' => 0, 'excluded' => 0, 'removed_from_excluded' => 0, 'matched' => 0, 'changed' => 0, 'favorites_changed' => 0, 'inserted' => 0, 'already_current' => 0, 'missing' => [], 'failed' => []];
 foreach ($excluded as $relative) {{
     $excludedPath = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
     if (!is_file($excludedPath)) {{ continue; }}
@@ -70,6 +71,10 @@ foreach ($iterator as $file) {{
     $path = $file->getPathname();
     $contents = @file_get_contents($path);
     if ($contents === false) {{ $result['failed'][] = $path; continue; }}
+    $originalContents = $contents;
+    $contents = preg_replace('#favorites\\.js\\?v=[^"\\'<>\\s]+#', $favoritesTarget, $contents);
+    if (!is_string($contents)) {{ $result['failed'][] = $path; continue; }}
+    if ($contents !== $originalContents) {{ $result['favorites_changed']++; }}
     if (!preg_match('#legal-footer\\.js\\?v=[^"\\'<>\\s]+#', $contents)) {{
         $injection = $targetTag;
         $bodyPosition = strripos($contents, '</body>');
@@ -90,7 +95,7 @@ foreach ($iterator as $file) {{
     $result['matched']++;
     $updated = preg_replace('#legal-footer\\.js\\?v=[^"\\'<>\\s]+#', $target, $contents);
     if (!is_string($updated)) {{ $result['failed'][] = $path; continue; }}
-    if ($updated === $contents) {{ $result['already_current']++; continue; }}
+    if ($updated === $originalContents) {{ $result['already_current']++; continue; }}
     $temporary = $path . '.codex-footer.tmp';
     if (@file_put_contents($temporary, $updated, LOCK_EX) !== strlen($updated) || !@rename($temporary, $path)) {{
         @unlink($temporary);

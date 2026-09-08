@@ -77,14 +77,13 @@ async function repairCanonical(fileName, expected) {
   await atomicWrite(filePath, html);
 }
 
-function renderGuide(doc) {
+function guideSchema(doc) {
   const url = `${BASE}/${doc.slug}`;
-  const description = doc.quick_answer.slice(0, 158).replace(/\s+\S*$/, "") + "…";
   const organization = {
     "@type": "Organization", "@id": `${BASE}/#organization`, name: "G-Trots România",
     legalName: "CAB IT EXPERT S.R.L.", url: `${BASE}/`, telephone: "+40762093915"
   };
-  const schema = {
+  return {
     "@context": "https://schema.org",
     "@graph": [
       organization,
@@ -92,7 +91,9 @@ function renderGuide(doc) {
         "@type": "Article", "@id": `${url}#article`, headline: doc.title, description: doc.quick_answer,
         mainEntityOfPage: url, author: { "@id": `${BASE}/#organization` }, publisher: { "@id": `${BASE}/#organization` },
         inLanguage: "ro-RO", datePublished: "2026-07-14", dateModified: "2026-09-07",
-        about: [{ "@type": "Brand", name: doc.brand }, { "@type": "Product", name: `${doc.brand} ${doc.model}` }]
+        // Pagina descrie un diagnostic, nu o ofertă comercială pentru modelul
+        // vehiculului. `Product` ar face Google să ceară offers/review/rating.
+        about: [{ "@type": "Brand", name: doc.brand }, { "@type": "Thing", name: `${doc.brand} ${doc.model}` }]
       },
       {
         "@type": "BreadcrumbList", itemListElement: [
@@ -103,6 +104,12 @@ function renderGuide(doc) {
       }
     ]
   };
+}
+
+function renderGuide(doc) {
+  const url = `${BASE}/${doc.slug}`;
+  const description = doc.quick_answer.slice(0, 158).replace(/\s+\S*$/, "") + "…";
+  const schema = guideSchema(doc);
   const list = values => values.map(value => `<li>${escapeHtml(value)}</li>`).join("");
   return `<!doctype html><html lang="ro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(doc.title)} | G-Trots</title><meta name="description" content="${escapeHtml(description)}"><meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1"><link rel="canonical" href="${url}">
@@ -125,7 +132,78 @@ async function repairBrokenGuides() {
   if (slugs.size) throw new Error(`Lipsesc documentele sursă: ${[...slugs].join(", ")}`);
 }
 
+function replaceProductSubjectsInArticleSchema(html) {
+  let replacements = 0;
+  const nextHtml = html.replace(
+    /(<script\b[^>]*\btype=["']application\/ld\+json["'][^>]*>)([\s\S]*?)(<\/script>)/gi,
+    (full, opening, json, closing) => {
+      const replacementsBeforeScript = replacements;
+      let data;
+      try {
+        data = JSON.parse(json);
+      } catch {
+        return full;
+      }
+
+      const visit = value => {
+        if (!value || typeof value !== "object") return;
+        if (Array.isArray(value)) {
+          value.forEach(visit);
+          return;
+        }
+
+        const types = Array.isArray(value["@type"]) ? value["@type"] : [value["@type"]];
+        if (types.some(type => ["Article", "TechArticle", "BlogPosting"].includes(type)) && Array.isArray(value.about)) {
+          value.about.forEach(subject => {
+            if (subject && typeof subject === "object" && subject["@type"] === "Product") {
+              subject["@type"] = "Thing";
+              replacements += 1;
+            }
+          });
+        }
+        Object.values(value).forEach(visit);
+      };
+
+      visit(data);
+      return replacements > replacementsBeforeScript ? `${opening}${safeJson(data)}${closing}` : full;
+    }
+  );
+  return { html: nextHtml, replacements };
+}
+
+async function repairGuideProductSubjects() {
+  const documents = JSON.parse(await readFile(path.join(ROOT, "search", "data", "diagnostic-docs.json"), "utf8"));
+  let changedFiles = 0;
+  let replacements = 0;
+  let invalidSchemasRebuilt = 0;
+  for (const doc of documents) {
+    const filePath = path.join(ROOT, `${doc.slug}.html`);
+    let html = await readFile(filePath, "utf8");
+    let rebuilt = false;
+    html = html.replace(
+      /(<script\b[^>]*\btype=["']application\/ld\+json["'][^>]*>)([\s\S]*?)(<\/script>)/gi,
+      (full, opening, json, closing) => {
+        try {
+          JSON.parse(json);
+          return full;
+        } catch {
+          rebuilt = true;
+          return `${opening}${safeJson(guideSchema(doc))}${closing}`;
+        }
+      }
+    );
+    const repaired = replaceProductSubjectsInArticleSchema(html);
+    if (!rebuilt && !repaired.replacements) continue;
+    await atomicWrite(filePath, repaired.html);
+    changedFiles += 1;
+    replacements += repaired.replacements;
+    invalidSchemasRebuilt += rebuilt ? 1 : 0;
+  }
+  return { changedFiles, replacements, invalidSchemasRebuilt };
+}
+
 for (const [fileName, description] of Object.entries(metadata)) await ensureMetadata(fileName, description);
 for (const [fileName, expected] of Object.entries(canonicalRepairs)) await repairCanonical(fileName, expected);
 await repairBrokenGuides();
-process.stdout.write(`${JSON.stringify({ metadata: Object.keys(metadata).length, canonicals: Object.keys(canonicalRepairs).length, repairedGuides: 2 })}\n`);
+const repairedSubjects = await repairGuideProductSubjects();
+process.stdout.write(`${JSON.stringify({ metadata: Object.keys(metadata).length, canonicals: Object.keys(canonicalRepairs).length, repairedGuides: 2, repairedSubjects })}\n`);

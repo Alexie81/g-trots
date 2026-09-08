@@ -36,6 +36,7 @@ productPageAssert(str_contains($html, 'href="https://g-trots.ro/magazin/produs/t
 productPageAssert(str_contains($html, 'index, follow, max-image-preview:large'), 'Pagina produsului trebuie să fie indexabilă.');
 productPageAssert(str_contains($html, 'https://schema.org/UsedCondition'), 'Produsele second hand trebuie marcate cu UsedCondition.');
 productPageAssert(str_contains($html, '"@type":"Product"') && str_contains($html, '"@type":"FAQPage"') && str_contains($html, '"@type":"BreadcrumbList"'), 'Datele structurate Product, FAQ și Breadcrumb trebuie generate.');
+productPageAssert(str_contains($html, '"merchantReturnDays":30') && !str_contains($html, '"merchantReturnDays":14'), 'Politica structurată a produsului trebuie să coincidă cu fereastra publică B2C de 30 de zile.');
 productPageAssert(str_contains($html, 'id="gt-product-bootstrap"') && str_contains($html, 'data-gt-static-product'), 'Pagina trebuie să poată porni imediat din conținutul generat și să aibă text semantic în HTML.');
 productPageAssert(str_contains($html, 'data-product-id="trotineta-second-hand-xiaomi-pro-2"'), 'Identificatorul produsului trebuie fixat în pagină.');
 productPageAssert(!str_contains($html, '"sku": "GT-ANV-G10-AT"'), 'Schemele JSON-LD vechi ale șablonului nu trebuie păstrate.');

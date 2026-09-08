@@ -869,7 +869,7 @@
         availability: normalized.stock === "Stoc epuizat" || !purchasable ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
         url: canonicalUrl,
         seller: { "@type": "Organization", name: liveShopConfig?.company?.trade_name || liveShopConfig?.company?.legal_name || "G-Trots" },
-        hasMerchantReturnPolicy: { "@type": "MerchantReturnPolicy", applicableCountry: "RO", returnPolicyCountry: "RO", returnPolicyCategory: "https://schema.org/MerchantReturnFiniteReturnWindow", merchantReturnDays: 14, returnMethod: "https://schema.org/ReturnByMail", returnFees: "https://schema.org/ReturnFeesCustomerResponsibility", merchantReturnLink: "https://g-trots.ro/politica-de-retur" },
+        hasMerchantReturnPolicy: { "@type": "MerchantReturnPolicy", applicableCountry: "RO", returnPolicyCountry: "RO", returnPolicyCategory: "https://schema.org/MerchantReturnFiniteReturnWindow", merchantReturnDays: 30, returnMethod: "https://schema.org/ReturnByMail", returnFees: "https://schema.org/ReturnFeesCustomerResponsibility", merchantReturnLink: "https://g-trots.ro/politica-de-retur" },
         shippingDetails: shippingDetails.length ? shippingDetails : undefined
       }
     };

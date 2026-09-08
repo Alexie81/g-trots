@@ -36,6 +36,7 @@ complianceCheck(str_contains($publicReturn, 'normalizeOrderNumber') && str_conta
 complianceCheck(str_contains($publicReturnHtml, 'Solicită chiar acum') && str_contains($publicReturnHtml, 'return-experience'), 'Pagina de retur trebuie să păstreze titlul și experiența vizuală G-Trots aprobate.');
 
 complianceCheck(str_contains($storefront, 'hasMerchantReturnPolicy') && str_contains($storefront, 'shippingDetails'), 'Produsul trebuie să publice politica de retur și livrarea în datele structurate.');
+complianceCheck(str_contains($storefront, 'merchantReturnDays: 30') && !str_contains($storefront, 'merchantReturnDays: 14'), 'Datele structurate dinamice trebuie să publice fereastra reală de retur B2C de 30 de zile.');
 complianceCheck(str_contains($footer, "'@type': 'OnlineStore'") && str_contains($footer, 'hasMerchantReturnPolicy'), 'Magazinul trebuie să publice date structurate de organizație și retur.');
 complianceCheck(str_contains($footer, "website: 'https://g-trots.ro'"), 'Paginile juridice trebuie să afișeze website-ul firmei inclusiv când API-ul nu este disponibil local.');
 complianceCheck(str_contains($cookies, 'g-trots:open-consent'), 'Preferințele cookie trebuie să poată fi redeschise din footer.');

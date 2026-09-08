@@ -146,7 +146,7 @@ function shopProductSeoRender(array $product, array $config): string {
                 'applicableCountry' => 'RO',
                 'returnPolicyCountry' => 'RO',
                 'returnPolicyCategory' => 'https://schema.org/MerchantReturnFiniteReturnWindow',
-                'merchantReturnDays' => 14,
+                'merchantReturnDays' => 30,
                 'returnMethod' => 'https://schema.org/ReturnByMail',
                 'returnFees' => 'https://schema.org/ReturnFeesCustomerResponsibility',
                 'merchantReturnLink' => $websiteBaseUrl . '/politica-de-retur',

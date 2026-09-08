@@ -258,7 +258,7 @@ function renderProductPage(template, product) {
         applicableCountry: "RO",
         returnPolicyCountry: "RO",
         returnPolicyCategory: "https://schema.org/MerchantReturnFiniteReturnWindow",
-        merchantReturnDays: 14,
+        merchantReturnDays: 30,
         returnMethod: "https://schema.org/ReturnByMail",
         returnFees: "https://schema.org/ReturnFeesCustomerResponsibility",
         merchantReturnLink: `${WEBSITE_BASE_URL}/politica-de-retur`

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import useAndroidSearchBack from '@/hooks/useAndroidSearchBack';
 import {
   ActivityIndicator,
   Alert,
@@ -223,6 +224,7 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
   const [ordersTotal, setOrdersTotal] = useState(() => initialSnapshot?.result.total || 0);
   const [orderSummary, setOrderSummary] = useState(() => initialSnapshot?.result.summary || emptyOrderSummary);
   const [query, setQuery] = useState('');
+  useAndroidSearchBack(query, useCallback(() => setQuery(''), []));
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<OrderStatusFilter>(initialStatusFilter);

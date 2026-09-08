@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import useAndroidSearchBack from '@/hooks/useAndroidSearchBack';
 import {
   ActivityIndicator,
   Alert,
@@ -228,6 +229,7 @@ export default function ServiceSheetsScreen() {
   const [hasMore, setHasMore] = useState(() => initialSnapshot?.hasMore || false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState(() => initialQuery.search || '');
+  useAndroidSearchBack(search, useCallback(() => setSearch(''), []));
   const [sortIndex, setSortIndex] = useState<number | null>(() => initialSnapshot ? serviceSortIndex(initialQuery) : 0);
   const [paymentFilter, setPaymentFilter] = useState<SheetPaymentFilter>(() => initialQuery.paymentStatus || '');
   const [loading, setLoading] = useState(() => !initialSnapshot);

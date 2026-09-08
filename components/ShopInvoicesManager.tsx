@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import useAndroidSearchBack from '@/hooks/useAndroidSearchBack';
 import { ActivityIndicator, Alert, Animated, Easing, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -58,6 +59,7 @@ export default function ShopInvoicesManager({ initialInvoiceId = null, onInitial
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  useAndroidSearchBack(query, useCallback(() => setQuery(''), []));
   const [status, setStatus] = useState<'all' | 'paid' | 'unpaid' | 'return'>('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);

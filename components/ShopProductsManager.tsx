@@ -42,6 +42,8 @@ import RichTextEditor from '@/components/RichTextEditor';
 import ShopPagination from '@/components/ShopPagination';
 import ShopProductPicture from '@/components/ShopProductPicture';
 import ShopProductExportButton from '@/components/ShopProductExportButton';
+import AutoScrollProductName from '@/components/AutoScrollProductName';
+import useAndroidSearchBack from '@/hooks/useAndroidSearchBack';
 import {
   shopApi,
   shopSupplierDisplayName,
@@ -152,6 +154,7 @@ type FormState = {
   discount_type: 'percent' | 'fixed';
   discount_value: string;
   category_id: string | null;
+  category_ids: string[];
   manufacturer_id: string | null;
   manufacturer_address: string;
   manufacturer_email: string;
@@ -204,6 +207,7 @@ function emptyForm(): FormState {
     discount_type: 'percent',
     discount_value: '',
     category_id: null,
+    category_ids: [],
     manufacturer_id: null,
     manufacturer_address: '',
     manufacturer_email: '',
@@ -254,6 +258,7 @@ type ProductManagerSnapshot = { data: ShopProductManagerBootstrap; cachedAt: num
 const PRODUCT_MANAGER_SNAPSHOT_TTL_MS = 30_000;
 const PRODUCT_MANAGER_SNAPSHOT_TOKEN_LIMIT = 2;
 const productManagerSnapshots = new Map<string, ProductManagerSnapshot>();
+let persistedProductManagerUi = { query: '', page: 1, pageSize: 10, scrollY: 0 };
 
 function readProductManagerSnapshot(token: string) {
   if (!token) return undefined;
@@ -283,7 +288,7 @@ function rememberProductManagerSnapshot(token: string, bootstrap: ShopProductMan
   productManagerSnapshots.set(token, { data, cachedAt: Date.now() });
 }
 
-export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (orderId: string) => void }) {
+export default function ShopProductsManager({ onOpenOrder, header, bottomInset = 0 }: { onOpenOrder?: (orderId: string) => void; header?: React.ReactNode; bottomInset?: number }) {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
   const initialSnapshot = useMemo(() => readProductManagerSnapshot(token || ''), [token]);
@@ -293,9 +298,9 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
   const [brands, setBrands] = useState<ShopBrand[]>(() => initialBootstrap?.brands || []);
   const [manufacturers, setManufacturers] = useState<ShopManufacturer[]>(() => initialBootstrap?.manufacturers || []);
   const [sources, setSources] = useState<ShopProductSource[]>(() => initialBootstrap?.sources || []);
-  const [query, setQuery] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [query, setQuery] = useState(persistedProductManagerUi.query);
+  const [page, setPage] = useState(persistedProductManagerUi.page);
+  const [pageSize, setPageSize] = useState(persistedProductManagerUi.pageSize);
   const [productTotal, setProductTotal] = useState(initialBootstrap?.total || initialBootstrap?.products.length || 0);
   const [loading, setLoading] = useState(!initialBootstrap);
   const [listRefreshing, setListRefreshing] = useState(false);
@@ -320,6 +325,12 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
   const metadataLoaded = useRef(Boolean(initialBootstrap?.categories?.length));
   const hasLoaded = useRef(Boolean(initialBootstrap));
   const initialLoadEffect = useRef(true);
+  const clearSearch = useCallback(() => { setQuery(''); setPage(1); }, []);
+  useAndroidSearchBack(query, clearSearch);
+
+  useEffect(() => {
+    persistedProductManagerUi = { ...persistedProductManagerUi, query, page, pageSize };
+  }, [page, pageSize, query]);
 
   const load = useCallback(async (
     quiet = false,
@@ -517,6 +528,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
         discount_type: full.discount_type || 'percent',
         discount_value: full.discount_value ? String(full.discount_value) : '',
         category_id: full.category_id,
+        category_ids: full.category_ids?.length ? full.category_ids : (full.category_id ? [full.category_id] : []),
         manufacturer_id: full.manufacturer_id,
         manufacturer_address: full.manufacturer_address || '',
         manufacturer_email: full.manufacturer_email || '',
@@ -703,6 +715,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
       : null;
     const payload: ShopProductPayload = {
       category_id: form.category_id,
+      category_ids: form.category_ids,
       manufacturer_id: form.manufacturer_id,
       brand_ids: form.brand_ids,
       supplier_product_code: form.supplier_product_code.trim(),
@@ -807,26 +820,35 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
   const seoTitle = form.meta_title.trim() || form.name.trim() || 'Titlul produsului';
   const seoDescription = form.meta_description.trim() || form.short_description.trim() || 'Descrierea produsului va aparea aici.';
 
-  if (loading) return <View style={styles.state}><ActivityIndicator color={Colors.orange} /><Text style={styles.stateText}>Se incarca produsele...</Text></View>;
-  if (error) return <View style={styles.state}><Text style={styles.error}>{error}</Text><TouchableOpacity style={styles.retry} onPress={() => void load(false, { page, pageSize, query, includeMetadata: !metadataLoaded.current })}><Text style={styles.retryText}>Incearca din nou</Text></TouchableOpacity></View>;
+  if (loading) return <ScrollView style={styles.wrap} contentContainerStyle={styles.scrollContent}><View style={styles.pageHeader}>{header}</View><View style={styles.state}><ActivityIndicator color={Colors.orange} /><Text style={styles.stateText}>Se incarca produsele...</Text></View></ScrollView>;
+  if (error) return <ScrollView style={styles.wrap} contentContainerStyle={styles.scrollContent}><View style={styles.pageHeader}>{header}</View><View style={styles.state}><Text style={styles.error}>{error}</Text><TouchableOpacity style={styles.retry} onPress={() => void load(false, { page, pageSize, query, includeMetadata: !metadataLoaded.current })}><Text style={styles.retryText}>Incearca din nou</Text></TouchableOpacity></View></ScrollView>;
 
   return (
-    <View style={styles.wrap}>
-      <View style={styles.actions}>
-        <View style={styles.search}><Search size={17} color={Colors.orange} /><TextInput value={query} onChangeText={(value) => { setQuery(value); setPage(1); }} placeholder="Caută semantic: nume, cod, model, compatibilitate" placeholderTextColor={Colors.textMuted} style={styles.searchInput} /></View>
-        <ShopProductExportButton sources={sources} total={productTotal} />
-      </View>
-      <View style={styles.actions}>
+    <>
+      <ScrollView
+        style={styles.wrap}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 94 + bottomInset }]}
+        stickyHeaderIndices={[1]}
+        contentOffset={{ x: 0, y: persistedProductManagerUi.scrollY }}
+        onScroll={(event) => { persistedProductManagerUi.scrollY = event.nativeEvent.contentOffset.y; }}
+        scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}>
+      <View style={styles.pageHeader}>{header}</View>
+      <View style={styles.stickyToolbar}>
+        <View style={styles.search}><Search size={17} color={Colors.orange} /><TextInput value={query} onChangeText={(value) => { setQuery(value); setPage(1); }} placeholder="Caută" placeholderTextColor={Colors.textMuted} style={styles.searchInput} />{query ? <TouchableOpacity accessibilityLabel="Șterge căutarea" style={styles.clearSearch} onPress={clearSearch}><X size={16} color={Colors.textSecondary} /></TouchableOpacity> : null}</View>
+        <ShopProductExportButton sources={sources} total={productTotal} compact />
         <TouchableOpacity style={styles.refresh} onPress={() => void load(true, { page, pageSize, query, includeMetadata: false })}>{listRefreshing ? <ActivityIndicator size="small" color={Colors.orange} /> : <RefreshCw size={18} color={Colors.textSecondary} />}</TouchableOpacity>
-        <TouchableOpacity style={styles.add} onPress={openNew}><Plus size={19} color={Colors.white} /><Text style={styles.addText}>Produs</Text></TouchableOpacity>
+        <TouchableOpacity accessibilityLabel="Adaugă produs" style={styles.add} onPress={openNew}><Plus size={21} color={Colors.white} /></TouchableOpacity>
+        <View accessibilityLabel={`${productTotal} produse`} style={styles.summary}><Text style={styles.summaryValue}>{productTotal}</Text></View>
       </View>
-      <View style={styles.summary}><Text style={styles.summaryLabel}>PRODUSE</Text><Text style={styles.summaryValue}>{productTotal}</Text></View>
+      <View style={styles.listContent}>
       {filtered.length ? pagedProducts.map((product) => (
         <View key={product.id} style={styles.productCard}>
           <TouchableOpacity style={styles.productMain} activeOpacity={0.72} onPress={() => void openDetail(product)}>
             {product.images?.[0]?.url ? <ShopProductPicture image={product.images[0]} width={66} height={66} borderRadius={14} /> : <View style={styles.productImageFallback}><Package size={25} color={Colors.textMuted} /></View>}
             <View style={styles.productCopy}>
-              <View style={styles.productTitleRow}><Text numberOfLines={1} style={styles.productName}>{product.name}</Text>{product.is_featured ? <Star size={13} color="#F59E0B" fill="#F59E0B" /> : null}</View>
+              <View style={styles.productTitleRow}><AutoScrollProductName value={product.name} style={styles.productName} />{product.is_featured ? <Star size={13} color="#F59E0B" fill="#F59E0B" /> : null}</View>
               <Text style={styles.productMeta}>{product.sku || 'Fara SKU'} · {product.source_domain}</Text>
               <View style={styles.productBottom}>
                 <Text style={styles.productPrice}>{money(product.sale_price ?? product.price)}</Text>
@@ -840,12 +862,14 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
         </View>
       )) : <View style={styles.empty}><Package size={32} color="#A78BFA" /><Text style={styles.emptyTitle}>Niciun produs</Text><Text style={styles.emptyText}>Adauga primul produs pentru a-l publica pe site.</Text></View>}
       <ShopPagination page={safePage} pageSize={pageSize} total={productTotal} onPageChange={setPage} onPageSizeChange={(nextSize) => { setPage(1); setPageSize(nextSize); }} />
+      </View>
+      </ScrollView>
 
       {detailVisible ? <Modal visible animationType="none" onRequestClose={closeDetail}>
         <SafeAreaView style={styles.editorSafe} edges={['top', 'bottom']}>
           <View style={styles.editorHeader}>
             <TouchableOpacity style={styles.close} onPress={closeDetail}><X size={21} color={Colors.textSecondary} /></TouchableOpacity>
-            <View style={styles.editorHeaderCopy}><Text style={styles.editorKicker}>FISA PRODUSULUI</Text><Text numberOfLines={1} style={styles.editorTitle}>{detail?.product.name || 'Se incarca...'}</Text></View>
+            <View style={styles.editorHeaderCopy}><Text style={styles.editorKicker}>COD PRODUS</Text><Text numberOfLines={1} style={styles.productCodeTop}>{detail?.product.sku || 'FĂRĂ COD'}</Text><Text numberOfLines={1} style={styles.editorProductName}>{detail?.product.name || 'Se incarca...'}</Text></View>
             {detail ? <TouchableOpacity style={styles.saveTop} onPress={() => { const product = detail.product; closeDetail(); setTimeout(() => void openEdit(product), 0); }}><Pencil size={17} color={Colors.white} /><Text style={styles.saveTopText}>Editeaza</Text></TouchableOpacity> : null}
           </View>
           {detailLoading || !detail ? <View style={styles.detailLoading}><ActivityIndicator color={Colors.orange} /><Text style={styles.stateText}>Se incarca fisa produsului...</Text></View> : <ScrollView contentContainerStyle={[styles.detailContent, { paddingBottom: Math.max(insets.bottom, 24) + 30 }]} showsVerticalScrollIndicator={false}>
@@ -957,28 +981,14 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
 
             <SectionTitle number="07" title="Catalog si compatibilitate" text="Leaga produsul de structura magazinului." />
             <Text style={styles.label}>CATEGORIE</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.choices}><Choice label="Fara categorie" selected={!form.category_id} onPress={() => patchForm('category_id', null)} />{categories.map((item) => <Choice key={item.id} label={item.name} selected={form.category_id === item.id} onPress={() => patchForm('category_id', item.id)} />)}</ScrollView>
+            <CategoryTreeDropdown items={categories} selectedIds={form.category_ids} onChange={(ids) => setForm((current) => ({ ...current, category_ids: ids, category_id: preferredCategoryId(categories, ids) }))} />
             <Text style={styles.label}>PRODUCATOR</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.choices}><Choice label="Fara producator" selected={!form.manufacturer_id} onPress={() => patchForm('manufacturer_id', null)} />{manufacturers.map((item) => <Choice key={item.id} label={item.name} selected={form.manufacturer_id === item.id} onPress={() => patchForm('manufacturer_id', item.id)} />)}</ScrollView>
+            <SearchableSingleDropdown items={manufacturers} selectedId={form.manufacturer_id} onChange={(id) => patchForm('manufacturer_id', id)} placeholder="Alege producatorul" />
             <Text style={styles.label}>COMPATIBILITATI</Text>
             <MultiSelectDropdown items={brands} selectedIds={form.brand_ids} onChange={(ids) => patchForm('brand_ids', ids)} />
 
-            <SectionTitle number="08" title="Siguranta si conformitate" text="Date GPSR, avertismente, documente si garantii. Campurile goale nu sunt inventate pe site." />
-            <Field label="ADRESA PRODUCATOR" value={form.manufacturer_address} onChangeText={(value) => patchForm('manufacturer_address', value)} placeholder="Adresa postala completa" multiline />
-            <Field label="E-MAIL PRODUCATOR" value={form.manufacturer_email} onChangeText={(value) => patchForm('manufacturer_email', value)} placeholder="contact@producator.ro" autoCapitalize="none" keyboardType="email-address" />
-            <Field label="PERSOANA RESPONSABILA IN UE" value={form.eu_responsible_person_name} onChangeText={(value) => patchForm('eu_responsible_person_name', value)} placeholder="Denumire operator economic" />
-            <Field label="ADRESA PERSOANA RESPONSABILA UE" value={form.eu_responsible_person_address} onChangeText={(value) => patchForm('eu_responsible_person_address', value)} placeholder="Adresa postala completa" multiline />
-            <Field label="E-MAIL PERSOANA RESPONSABILA UE" value={form.eu_responsible_person_email} onChangeText={(value) => patchForm('eu_responsible_person_email', value)} placeholder="contact@operator.eu" autoCapitalize="none" keyboardType="email-address" />
-            <View style={styles.twoColumns}><View style={styles.column}><Field label="MODEL" value={form.product_model} onChangeText={(value) => patchForm('product_model', value)} placeholder="Model comercial" /></View><View style={styles.column}><Field label="IDENTIFICATOR PRODUS" value={form.product_identifier} onChangeText={(value) => patchForm('product_identifier', value)} placeholder="Cod, lot sau tip" /></View></View>
-            <Field label="AVERTISMENTE DE SIGURANTA (RO)" value={form.safety_warnings_ro} onChangeText={(value) => patchForm('safety_warnings_ro', value)} placeholder="Cate un avertisment clar, in limba romana" multiline />
-            <Field label="DOCUMENTE SIGURANTA · UN URL PE LINIE" value={form.safety_documents} onChangeText={(value) => patchForm('safety_documents', value)} placeholder="https://.../manual.pdf" multiline autoCapitalize="none" />
-            <Text style={styles.label}>MARCAJ CE APLICABIL</Text>
-            <View style={styles.sourceRow}><Choice label="Necunoscut" selected={form.ce_marking_applicable === null} onPress={() => patchForm('ce_marking_applicable', null)} /><Choice label="Da" selected={form.ce_marking_applicable === true} onPress={() => patchForm('ce_marking_applicable', true)} /><Choice label="Nu" selected={form.ce_marking_applicable === false} onPress={() => patchForm('ce_marking_applicable', false)} /></View>
-            <Field label="DOCUMENTE CONFORMITATE · UN URL PE LINIE" value={form.compliance_documents} onChangeText={(value) => patchForm('compliance_documents', value)} placeholder="https://.../declaratie-conformitate.pdf" multiline autoCapitalize="none" />
+            <SectionTitle number="08" title="Garantia produsului" text="Este afisata public pe pagina produsului atunci cand are o valoare mai mare de zero." />
             <View style={styles.twoColumns}><View style={styles.column}><Field label="GARANTIE LEGALA · LUNI" value={form.legal_warranty_months} onChangeText={(value) => patchForm('legal_warranty_months', value)} keyboardType="number-pad" placeholder="24" /></View><View style={styles.column}><Field label="GARANTIE COMERCIALA · LUNI" value={form.commercial_warranty_months} onChangeText={(value) => patchForm('commercial_warranty_months', value)} keyboardType="number-pad" placeholder="Optional" /></View></View>
-            <Field label="ACTUALIZARI SOFTWARE PANA LA" value={form.software_updates_until} onChangeText={(value) => patchForm('software_updates_until', value)} placeholder="AAAA-LL-ZZ · daca se aplica" autoCapitalize="none" />
-            <Field label="INFORMATII REPARABILITATE" value={form.repairability_info} onChangeText={(value) => patchForm('repairability_info', value)} placeholder="Informatii disponibile despre reparare" multiline />
-            <Field label="PIESE DE SCHIMB" value={form.spare_parts_info} onChangeText={(value) => patchForm('spare_parts_info', value)} placeholder="Disponibilitate si conditii" multiline />
 
             <SectionTitle number="09" title="Stoc" text={form.source_domain.toLowerCase() === 'boomag.ro' ? 'Stocul online este egal cu stocul furnizorului si se actualizeaza zilnic din feed.' : 'Alege stoc online nelimitat sau cantitate urmarita automat.'} />
             {form.source_domain.toLowerCase() === 'boomag.ro' ? <View style={styles.nirNote}><Text style={styles.nirNoteTitle}>Stoc furnizor: {form.supplier_stock_quantity} buc.</Text><Text style={styles.nirNoteText}>Stoc online: {form.stock_quantity} buc. · Actualizare automata Boomag · Stocul conta ramane separat si va fi calculat din facturi.</Text></View> : <><View style={styles.sourceRow}><Choice label="Stoc cu numar" selected={form.stock_mode === 'tracked'} onPress={() => patchForm('stock_mode', 'tracked')} /><Choice label="Stoc nelimitat" selected={form.stock_mode === 'unlimited'} onPress={() => patchForm('stock_mode', 'unlimited')} /></View>{form.stock_mode === 'tracked' ? <View style={styles.twoColumns}><View style={styles.column}><Field label="CANTITATE" value={form.stock_quantity} onChangeText={(value) => patchForm('stock_quantity', value)} placeholder="0" keyboardType="number-pad" /></View><View style={styles.column}><Field label="ALERTA SUB" value={form.low_stock_threshold} onChangeText={(value) => patchForm('low_stock_threshold', value)} placeholder="3" keyboardType="number-pad" /></View></View> : null}</>}
@@ -998,7 +1008,7 @@ export default function ShopProductsManager({ onOpenOrder }: { onOpenOrder?: (or
           </ScrollView>}
         </SafeAreaView>
       </Modal> : null}
-    </View>
+    </>
   );
 }
 
@@ -1022,8 +1032,76 @@ function Choice({ label, selected, onPress }: { label: string; selected: boolean
   return <TouchableOpacity style={[styles.choice, selected && styles.choiceActive]} onPress={onPress}>{selected ? <Check size={13} color={Colors.orange} /> : null}<Text style={[styles.choiceText, selected && styles.choiceTextActive]}>{label}</Text></TouchableOpacity>;
 }
 
+function categoryDepth(items: ShopCategory[], id: string) {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  let depth = 0;
+  let current = byId.get(id);
+  const seen = new Set<string>();
+  while (current?.parent_id && !seen.has(current.parent_id)) {
+    seen.add(current.parent_id);
+    depth += 1;
+    current = byId.get(current.parent_id);
+  }
+  return depth;
+}
+
+function preferredCategoryId(items: ShopCategory[], ids: string[]) {
+  return [...ids].sort((left, right) => categoryDepth(items, right) - categoryDepth(items, left))[0] || null;
+}
+
+function CategoryTreeDropdown({ items, selectedIds, onChange }: { items: ShopCategory[]; selectedIds: string[]; onChange: (ids: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const byId = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
+  const ordered = useMemo(() => {
+    const children = new Map<string | null, ShopCategory[]>();
+    items.forEach((item) => children.set(item.parent_id, [...(children.get(item.parent_id) || []), item]));
+    children.forEach((list) => list.sort((a, b) => a.name.localeCompare(b.name, 'ro')));
+    const result: ShopCategory[] = [];
+    const visit = (parent: string | null) => (children.get(parent) || []).forEach((item) => { result.push(item); visit(item.id); });
+    visit(null);
+    items.filter((item) => !result.includes(item)).forEach((item) => result.push(item));
+    return result;
+  }, [items]);
+  const visible = ordered.filter((item) => !query.trim() || item.name.toLocaleLowerCase('ro').includes(query.trim().toLocaleLowerCase('ro')) || (item.parent_name || '').toLocaleLowerCase('ro').includes(query.trim().toLocaleLowerCase('ro')));
+  const toggle = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) {
+      const removeBranch = (parentId: string) => items.filter((item) => item.parent_id === parentId).forEach((child) => { next.delete(child.id); removeBranch(child.id); });
+      next.delete(id);
+      removeBranch(id);
+      let parentId = byId.get(id)?.parent_id || null;
+      while (parentId) {
+        const hasSelectedChild = items.some((item) => item.parent_id === parentId && next.has(item.id));
+        if (hasSelectedChild) break;
+        next.delete(parentId);
+        parentId = byId.get(parentId)?.parent_id || null;
+      }
+    } else {
+      next.add(id);
+      let parentId = byId.get(id)?.parent_id || null;
+      while (parentId) { next.add(parentId); parentId = byId.get(parentId)?.parent_id || null; }
+    }
+    onChange([...next]);
+  };
+  const selectedNames = ordered.filter((item) => selectedIds.includes(item.id)).map((item) => item.name);
+  return <View style={styles.multiSelect}>
+    <TouchableOpacity style={[styles.multiSelectButton, open && styles.multiSelectButtonOpen]} onPress={() => setOpen((value) => !value)}><Text numberOfLines={1} style={[styles.multiSelectValue, !selectedNames.length && styles.multiSelectPlaceholder]}>{selectedNames.length ? `${selectedNames.length} selectate · ${selectedNames.join(', ')}` : 'Alege categorii si subcategorii'}</Text><ChevronDown size={18} color={Colors.orange} /></TouchableOpacity>
+    {open ? <View style={styles.multiSelectOptions}><View style={styles.dropdownSearch}><Search size={15} color={Colors.orange} /><TextInput value={query} onChangeText={setQuery} placeholder="Cauta in categorii" placeholderTextColor={Colors.textMuted} style={styles.dropdownSearchInput} />{query ? <TouchableOpacity onPress={() => setQuery('')}><X size={15} color={Colors.textSecondary} /></TouchableOpacity> : null}</View>{visible.map((item) => { const selected = selectedIds.includes(item.id); const depth = categoryDepth(items, item.id); return <TouchableOpacity key={item.id} style={[styles.multiSelectOption, { paddingLeft: 10 + depth * 18 }]} onPress={() => toggle(item.id)}><View style={[styles.multiSelectCheck, selected && styles.multiSelectCheckActive]}>{selected ? <Check size={13} color={Colors.white} /> : null}</View><Text style={[styles.multiSelectOptionText, selected && styles.multiSelectOptionTextActive]}>{depth ? '↳ ' : ''}{item.name}</Text></TouchableOpacity>; })}</View> : null}
+  </View>;
+}
+
+function SearchableSingleDropdown({ items, selectedId, onChange, placeholder }: { items: ShopManufacturer[]; selectedId: string | null; onChange: (id: string | null) => void; placeholder: string }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const selected = items.find((item) => item.id === selectedId);
+  const visible = items.filter((item) => item.name.toLocaleLowerCase('ro').includes(query.trim().toLocaleLowerCase('ro')));
+  return <View style={styles.multiSelect}><TouchableOpacity style={[styles.multiSelectButton, open && styles.multiSelectButtonOpen]} onPress={() => setOpen((value) => !value)}><Text style={[styles.multiSelectValue, !selected && styles.multiSelectPlaceholder]}>{selected?.name || placeholder}</Text><ChevronDown size={18} color={Colors.orange} /></TouchableOpacity>{open ? <View style={styles.multiSelectOptions}><View style={styles.dropdownSearch}><Search size={15} color={Colors.orange} /><TextInput value={query} onChangeText={setQuery} placeholder="Cauta producatorul" placeholderTextColor={Colors.textMuted} style={styles.dropdownSearchInput} /></View><TouchableOpacity style={styles.multiSelectOption} onPress={() => { onChange(null); setOpen(false); }}><View style={[styles.multiSelectCheck, !selectedId && styles.multiSelectCheckActive]}>{!selectedId ? <Check size={13} color={Colors.white} /> : null}</View><Text style={styles.multiSelectOptionText}>Fara producator</Text></TouchableOpacity>{visible.map((item) => <TouchableOpacity key={item.id} style={styles.multiSelectOption} onPress={() => { onChange(item.id); setOpen(false); }}><View style={[styles.multiSelectCheck, item.id === selectedId && styles.multiSelectCheckActive]}>{item.id === selectedId ? <Check size={13} color={Colors.white} /> : null}</View><Text style={styles.multiSelectOptionText}>{item.name}</Text></TouchableOpacity>)}</View> : null}</View>;
+}
+
 function MultiSelectDropdown({ items, selectedIds, onChange }: { items: ShopBrand[]; selectedIds: string[]; onChange: (ids: string[]) => void }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const selectedNames = items.filter((item) => selectedIds.includes(item.id)).map((item) => item.name);
   const toggle = (id: string) => onChange(selectedIds.includes(id) ? selectedIds.filter((selectedId) => selectedId !== id) : [...selectedIds, id]);
   return <View style={styles.multiSelect}>
@@ -1031,7 +1109,7 @@ function MultiSelectDropdown({ items, selectedIds, onChange }: { items: ShopBran
       <Text numberOfLines={1} style={[styles.multiSelectValue, !selectedNames.length && styles.multiSelectPlaceholder]}>{selectedNames.length ? selectedNames.join(', ') : items.length ? 'Alege marcile compatibile' : 'Nu exista marci disponibile'}</Text>
       <ChevronDown size={18} color={Colors.orange} style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }} />
     </TouchableOpacity>
-    {open ? <View style={styles.multiSelectOptions}>{items.map((item) => {
+    {open ? <View style={styles.multiSelectOptions}><View style={styles.dropdownSearch}><Search size={15} color={Colors.orange} /><TextInput value={query} onChangeText={setQuery} placeholder="Cauta compatibilitatea" placeholderTextColor={Colors.textMuted} style={styles.dropdownSearchInput} />{query ? <TouchableOpacity onPress={() => setQuery('')}><X size={15} color={Colors.textSecondary} /></TouchableOpacity> : null}</View>{items.filter((item) => item.name.toLocaleLowerCase('ro').includes(query.trim().toLocaleLowerCase('ro'))).map((item) => {
       const selected = selectedIds.includes(item.id);
       return <TouchableOpacity key={item.id} style={styles.multiSelectOption} onPress={() => toggle(item.id)}><View style={[styles.multiSelectCheck, selected && styles.multiSelectCheckActive]}>{selected ? <Check size={13} color={Colors.white} /> : null}</View><Text style={[styles.multiSelectOptionText, selected && styles.multiSelectOptionTextActive]}>{item.name}</Text></TouchableOpacity>;
     })}</View> : null}
@@ -1047,24 +1125,28 @@ function Metric({ label, value, accent, icon }: { label: string; value: string; 
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginTop: 16 },
+  wrap: { flex: 1 },
+  scrollContent: { flexGrow: 1 },
+  pageHeader: { paddingHorizontal: 16 },
+  listContent: { paddingHorizontal: 16 },
   state: { minHeight: 260, alignItems: 'center', justifyContent: 'center', gap: 12, borderRadius: 24, backgroundColor: '#1B1B1F', marginTop: 16 },
   stateText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 11 },
   error: { color: '#FCA5A5', fontFamily: 'Inter-Regular', fontSize: 11, textAlign: 'center', paddingHorizontal: 22 },
   retry: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: Colors.orangeDim }, retryText: { color: Colors.orange, fontFamily: 'Inter-SemiBold', fontSize: 10 },
-  actions: { flexDirection: 'row', gap: 7, marginBottom: 10 },
+  stickyToolbar: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#302C33', backgroundColor: Colors.bg, elevation: 8, shadowColor: '#000', shadowOpacity: 0.24, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
   search: { flex: 1, minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 15, paddingHorizontal: 12, backgroundColor: '#1B1B1F' },
   searchInput: { flex: 1, color: Colors.textPrimary, fontFamily: 'Inter-Regular', fontSize: 11 },
+  clearSearch: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: '#2B282E' },
   refresh: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: '#1B1B1F' },
-  add: { height: 46, flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 15, paddingHorizontal: 13, backgroundColor: Colors.orange }, addText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 10 },
-  summary: { flexDirection: 'row', alignItems: 'baseline', gap: 7, marginVertical: 10, paddingHorizontal: 3 }, summaryLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 1 }, summaryValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 16 },
+  add: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: Colors.orange },
+  summary: { minWidth: 42, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 15, paddingHorizontal: 6, backgroundColor: '#211F24' }, summaryValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 11 },
   productCard: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 7, borderRadius: 19, padding: 10, backgroundColor: '#1B1B1F', marginBottom: 8 },
   productMain: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
   productImage: { width: 66, height: 66, borderRadius: 14, backgroundColor: '#111' }, productImageFallback: { width: 66, height: 66, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#27242A' },
   productCopy: { flex: 1, minWidth: 0 }, productTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 }, productName: { flex: 1, color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 12 }, productMeta: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 4 }, productBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 9 }, productPrice: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 11 }, stock: { color: '#9CD9AE', fontFamily: 'Inter-SemiBold', fontSize: 8 }, stockLow: { color: '#FCA5A5' },
   iconAction: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(56,189,248,0.11)' }, deleteAction: { backgroundColor: 'rgba(239,68,68,0.10)' },
   empty: { minHeight: 230, alignItems: 'center', justifyContent: 'center', borderRadius: 24, backgroundColor: '#1B1B1F' }, emptyTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 15, marginTop: 13 }, emptyText: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, marginTop: 5 },
-  editorSafe: { flex: 1, backgroundColor: Colors.bg }, editorHeader: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#29272B', paddingHorizontal: 12, backgroundColor: '#171513' }, close: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#27242A' }, editorHeaderCopy: { flex: 1 }, editorKicker: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 1 }, editorTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 16, marginTop: 2 }, saveTop: { minWidth: 96, height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 13, backgroundColor: Colors.orange }, saveTopText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 }, disabled: { opacity: 0.55 }, editorLoadingState: { flex: 1, paddingHorizontal: 32, alignItems: 'center', justifyContent: 'center' }, editorLoadingIcon: { width: 68, height: 68, marginBottom: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#70431D', borderRadius: 23, backgroundColor: '#2D1E14' }, editorLoadingTitle: { marginTop: 17, color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 20 }, editorLoadingText: { maxWidth: 330, marginTop: 7, color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 11, lineHeight: 17, textAlign: 'center' },
+  editorSafe: { flex: 1, backgroundColor: Colors.bg }, editorHeader: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#29272B', paddingHorizontal: 12, backgroundColor: '#171513' }, close: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#27242A' }, editorHeaderCopy: { flex: 1, minWidth: 0 }, editorKicker: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 1 }, editorTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 16, marginTop: 2 }, productCodeTop: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 19, lineHeight: 22, marginTop: 1 }, editorProductName: { color: Colors.textMuted, fontFamily: 'Inter-SemiBold', fontSize: 8, marginTop: 2 }, saveTop: { minWidth: 96, height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 13, backgroundColor: Colors.orange }, saveTopText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 9 }, disabled: { opacity: 0.55 }, editorLoadingState: { flex: 1, paddingHorizontal: 32, alignItems: 'center', justifyContent: 'center' }, editorLoadingIcon: { width: 68, height: 68, marginBottom: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#70431D', borderRadius: 23, backgroundColor: '#2D1E14' }, editorLoadingTitle: { marginTop: 17, color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 20 }, editorLoadingText: { maxWidth: 330, marginTop: 7, color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 11, lineHeight: 17, textAlign: 'center' },
   form: { width: '100%', maxWidth: 920, alignSelf: 'center', padding: 16 },
   detailLoading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }, detailContent: { width: '100%', maxWidth: 920, alignSelf: 'center', padding: 16 }, detailGallery: { gap: 10, paddingBottom: 12 }, detailImage: { width: 210, height: 190, overflow: 'hidden', borderRadius: 20, backgroundColor: '#211F24' },
   metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }, metricCard: { width: '48%', minHeight: 72, justifyContent: 'space-between', borderWidth: 1, borderColor: '#343137', borderRadius: 16, padding: 11, backgroundColor: '#1B1B1F' }, metricCardAccent: { borderColor: 'rgba(34,197,94,0.35)', backgroundColor: 'rgba(34,197,94,0.07)' }, metricLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5 }, metricLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.55 }, metricValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 14, marginTop: 6 }, metricValueAccent: { color: '#9CD9AE' },
@@ -1082,6 +1164,7 @@ const styles = StyleSheet.create({
   referenceCard: { minHeight: 112, flexDirection: 'row', alignItems: 'center', gap: 13, borderWidth: 1, borderColor: 'rgba(94,234,212,0.22)', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 14, backgroundColor: '#17211F', marginBottom: 10 }, referenceInactive: { opacity: 0.5 }, referenceIcon: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: 'rgba(94,234,212,0.11)', borderWidth: 1, borderColor: 'rgba(94,234,212,0.18)' }, referenceCopy: { flex: 1, minWidth: 0 }, referenceHeading: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }, referenceSupplier: { flexGrow: 1, minWidth: 120, color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 14, lineHeight: 19 }, referenceDataRow: { marginTop: 5, flexDirection: 'row', alignItems: 'center', gap: 7 }, referenceCodeChip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(45,212,191,0.11)' }, referenceCode: { color: '#5EEAD4', fontFamily: 'Inter-Bold', fontSize: 10 }, referenceMeta: { color: '#AAA4AC', fontFamily: 'Inter-Regular', fontSize: 10.5, lineHeight: 15, marginTop: 2 }, referenceAliases: { color: '#5EEAD4', fontFamily: 'Inter-SemiBold', fontSize: 10, lineHeight: 15, marginTop: 4 }, referenceCost: { color: Colors.textSecondary, fontFamily: 'Inter-SemiBold', fontSize: 10.5, lineHeight: 15, marginTop: 5 }, referenceAction: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#242228', borderWidth: 1, borderColor: '#FFFFFF0D' }, referencePrimary: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5, backgroundColor: 'rgba(34,197,94,0.12)' }, referencePrimaryText: { color: '#8FE3B2', fontFamily: 'Inter-Bold', fontSize: 8, letterSpacing: 0.5 },
   purchaseCard: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#37343B', borderRadius: 16, padding: 12, backgroundColor: '#1B1B1F', marginBottom: 8 }, purchaseNir: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 }, purchaseMeta: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 4 }, purchaseRight: { alignItems: 'flex-end' }, purchaseCost: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 11 },
   multiSelect: { marginBottom: 16 }, multiSelectButton: { minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderWidth: 1, borderColor: '#49454F', borderRadius: 13, paddingHorizontal: 14, backgroundColor: '#161519' }, multiSelectButtonOpen: { borderColor: Colors.orange }, multiSelectValue: { flex: 1, color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 10 }, multiSelectPlaceholder: { color: Colors.textMuted, fontFamily: 'Inter-Regular' }, multiSelectOptions: { marginTop: 6, overflow: 'hidden', borderWidth: 1, borderColor: '#49454F', borderRadius: 14, padding: 6, backgroundColor: '#211F24' }, multiSelectOption: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 10, paddingHorizontal: 10 }, multiSelectCheck: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#57515B', borderRadius: 7, backgroundColor: '#171519' }, multiSelectCheckActive: { borderColor: Colors.orange, backgroundColor: Colors.orange }, multiSelectOptionText: { color: Colors.textSecondary, fontFamily: 'Inter-SemiBold', fontSize: 10 }, multiSelectOptionTextActive: { color: Colors.orange },
+  dropdownSearch: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, paddingHorizontal: 10, marginBottom: 4, backgroundColor: '#171519' }, dropdownSearchInput: { flex: 1, color: Colors.textPrimary, fontFamily: 'Inter-Regular', fontSize: 10 },
   googlePreview: { flexDirection: 'row', gap: 12, borderWidth: 1, borderColor: '#343137', borderRadius: 19, padding: 14, backgroundColor: '#FFF', marginBottom: 18 }, googleImage: { width: 78, height: 78, borderRadius: 10, backgroundColor: '#EEE' }, googleCopy: { flex: 1, minWidth: 0 }, googleSite: { color: '#202124', fontFamily: 'Inter-Regular', fontSize: 9 }, googleTitle: { color: '#1A0DAB', fontFamily: 'Inter-Regular', fontSize: 15, lineHeight: 19, marginTop: 3 }, googleDescription: { color: '#4D5156', fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 14, marginTop: 3 }, googleUrl: { color: '#188038', fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 4 },
   toggleCard: { minHeight: 65, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderRadius: 17, padding: 13, backgroundColor: '#1B1B1F', marginBottom: 9 }, accountingToggleCard: { borderWidth: 1, borderColor: 'rgba(52,211,153,0.22)', backgroundColor: '#17201E' }, toggleCopy: { flex: 1, minWidth: 0 }, toggleTitle: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 11 }, toggleText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 13, marginTop: 3 },
   saveBottom: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 17, backgroundColor: Colors.orange, marginTop: 14 }, saveBottomText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 11 },

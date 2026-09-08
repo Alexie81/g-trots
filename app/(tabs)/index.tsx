@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import useAndroidSearchBack from '@/hooks/useAndroidSearchBack';
 import {
   AppState,
   Alert,
@@ -184,6 +185,7 @@ export default function ClientsScreen() {
   const [loading, setLoading] = useState(!canRestoreSnapshot || savedClientsSnapshot.length === 0);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState(canRestoreSnapshot ? savedClientsSearch : '');
+  useAndroidSearchBack(search, useCallback(() => setSearch(''), []));
   const [selectedProfile, setSelectedProfile] = useState<string>(canRestoreSnapshot ? savedClientsProfile : '');
   const [sortMode, setSortMode] = useState<ClientSortMode>(canRestoreSnapshot ? savedClientsSort : '');
   const [lifecycleFilter, setLifecycleFilter] = useState<ClientLifecycleFilter>(canRestoreSnapshot ? savedClientsLifecycle : '');

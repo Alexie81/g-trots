@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  BackHandler,
   Easing,
   Image,
   KeyboardAvoidingView,
@@ -191,6 +192,7 @@ function preferredDashboardGranularity(period: DashboardPeriod, startDate = '', 
 // Revalidarea sesiunii poate reconstrui layout-ul Expo. Pastram sectiunea
 // SHOP activa, astfel incat utilizatorul sa nu fie trimis inapoi pe Acasa.
 let persistedShopView: ShopView = 'home';
+const persistedShopScrollOffsets: Partial<Record<ShopView, number>> = {};
 type ShopDashboardSnapshot = {
   token: string;
   period: DashboardPeriod;
@@ -480,6 +482,17 @@ export default function ShopModuleScreen() {
     viewRef.current = view;
     void SecureStore.setItemAsync(SHOP_VIEW_STORAGE_KEY, view).catch(() => {});
   }, [view]);
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      const current = viewRef.current;
+      if (current === 'home') return false;
+      const primary: ShopView[] = ['orders', 'products', 'inventory', 'more'];
+      setView(primary.includes(current) ? 'home' : 'more');
+      return true;
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -977,7 +990,21 @@ export default function ShopModuleScreen() {
     );
   }
 
-  if (view === 'orders' || view === 'products' || view === 'inventory' || view === 'more') {
+  if (view === 'products') {
+    const details = primaryTabDetails.products;
+    const ScreenIcon = details.Icon;
+    const productHeader = <View style={[styles.hero, { backgroundColor: `${details.color}12` }]}><View style={[styles.heroIcon, { borderColor: `${details.color}40`, backgroundColor: `${details.color}18` }]}><ScreenIcon size={22} color={details.color} /></View><Text style={[styles.kicker, { color: details.color }]}>{details.eyebrow}</Text><Text style={styles.title}>{details.title}</Text><Text style={styles.subtitle}>{details.description}</Text></View>;
+    return <View style={styles.container}><Header title={details.title} right={notificationButton} /><ShopProductsManager header={productHeader} bottomInset={insets.bottom} onOpenOrder={(orderId) => openOrders('all', orderId)} /><ShopBottomNavigation activeTab="products" onSelect={(tab) => tab === 'orders' ? openOrders() : setView(tab)} bottomInset={insets.bottom} /></View>;
+  }
+
+  if (view === 'inventory') {
+    const details = primaryTabDetails.inventory;
+    const ScreenIcon = details.Icon;
+    const inventoryHeader = <View style={[styles.hero, { backgroundColor: `${details.color}12` }]}><View style={[styles.heroIcon, { borderColor: `${details.color}40`, backgroundColor: `${details.color}18` }]}><ScreenIcon size={22} color={details.color} /></View><Text style={[styles.kicker, { color: details.color }]}>{details.eyebrow}</Text><Text style={styles.title}>{details.title}</Text><Text style={styles.subtitle}>{details.description}</Text></View>;
+    return <View style={styles.container}><Header title={details.title} right={notificationButton} /><ShopInventoryManager header={inventoryHeader} bottomInset={insets.bottom} onOpenNir={openNirFromInventory} /><ShopBottomNavigation activeTab="inventory" onSelect={(tab) => tab === 'orders' ? openOrders() : setView(tab)} bottomInset={insets.bottom} /></View>;
+  }
+
+  if (view === 'orders' || view === 'more') {
     const details = primaryTabDetails[view];
     const ScreenIcon = details.Icon;
     const isMore = view === 'more';
@@ -987,6 +1014,9 @@ export default function ShopModuleScreen() {
         <Header title={details.title} right={notificationButton} />
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: 94 + insets.bottom }]}
+          contentOffset={{ x: 0, y: persistedShopScrollOffsets[view] || 0 }}
+          onScroll={(event) => { persistedShopScrollOffsets[view] = event.nativeEvent.contentOffset.y; }}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}>
           {!isMore ? <View style={[styles.hero, { backgroundColor: `${details.color}12` }]}>
             <View style={[styles.heroIcon, { borderColor: `${details.color}40`, backgroundColor: `${details.color}18` }]}>
@@ -999,10 +1029,6 @@ export default function ShopModuleScreen() {
 
           {view === 'orders' ? (
             <ShopOrdersManager initialStatusFilter={ordersInitialFilter} initialOrderId={initialOrderId} onInitialOrderHandled={() => setInitialOrderId(null)} onOpenInvoice={openInvoiceFromOrder} />
-          ) : view === 'products' ? (
-            <ShopProductsManager onOpenOrder={(orderId) => openOrders('all', orderId)} />
-          ) : view === 'inventory' ? (
-            <ShopInventoryManager onOpenNir={openNirFromInventory} />
           ) : isMore ? (
             <>
               <View style={styles.sectionHeader}>

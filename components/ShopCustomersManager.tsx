@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import useAndroidSearchBack from '@/hooks/useAndroidSearchBack';
 import {
   ActivityIndicator,
   Animated,
@@ -66,6 +67,7 @@ export default function ShopCustomersManager({ onSearchFocus, onOpenOrder }: { o
   const [items, setItems] = useState<ShopCustomerSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
+  useAndroidSearchBack(query, useCallback(() => setQuery(''), []));
   const [page, setPage] = useState(1);
   const [detailPage, setDetailPage] = useState(1);
   const [selected, setSelected] = useState<ShopCustomerDetail | null>(null);

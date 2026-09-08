@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { shopApi, ShopProductSource } from '@/services/shopApi';
 
-export default function ShopProductExportButton({ sources, total }: { sources: ShopProductSource[]; total: number }) {
+export default function ShopProductExportButton({ sources, total, compact = false }: { sources: ShopProductSource[]; total: number; compact?: boolean }) {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
   const [visible, setVisible] = useState(false);
@@ -65,8 +65,8 @@ export default function ShopProductExportButton({ sources, total }: { sources: S
   };
 
   return <>
-    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Exportă produse în XLSX" style={styles.trigger} onPress={open}>
-      <FileSpreadsheet size={20} color="#8BE3B8" /><Text style={styles.triggerText}>Exportă</Text>
+    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Exportă produse în XLSX" style={[styles.trigger, compact && styles.triggerCompact]} onPress={open}>
+      <FileSpreadsheet size={20} color="#8BE3B8" />{compact ? null : <Text style={styles.triggerText}>Exportă</Text>}
     </TouchableOpacity>
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => { if (!busy) setVisible(false); }}>
       <View style={[styles.overlay, { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 18 }]}>
@@ -94,7 +94,7 @@ export default function ShopProductExportButton({ sources, total }: { sources: S
 }
 
 const styles = StyleSheet.create({
-  trigger: { minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 11, borderRadius: 15, borderWidth: 1, borderColor: '#376A50', backgroundColor: '#193328' }, triggerText: { color: '#BAF1D4', fontSize: 11, fontFamily: 'Inter-SemiBold' },
+  trigger: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 11, borderRadius: 15, borderWidth: 1, borderColor: '#376A50', backgroundColor: '#193328' }, triggerCompact: { width: 46, paddingHorizontal: 0 }, triggerText: { color: '#BAF1D4', fontSize: 11, fontFamily: 'Inter-SemiBold' },
   overlay: { flex: 1, backgroundColor: '#000000B8', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 }, panel: { width: '100%', maxWidth: 520, maxHeight: '100%', backgroundColor: '#1C1A1F', borderRadius: 26, padding: 20, borderWidth: 1, borderColor: '#444049' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 15 }, fileIcon: { width: 46, height: 46, borderRadius: 15, backgroundColor: '#233D30', justifyContent: 'center', alignItems: 'center' }, close: { padding: 8, backgroundColor: '#302D34', borderRadius: 13 }, eyebrow: { color: '#FFAB65', fontSize: 9, letterSpacing: 1, fontFamily: 'Inter-Bold', marginBottom: 5 }, title: { color: '#F6F1F7', fontSize: 20, fontFamily: 'Inter-Bold' }, description: { color: '#BBB4BF', fontSize: 12, lineHeight: 19, marginTop: 6, marginBottom: 14 },
   selectAll: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#38343C' }, sources: { maxHeight: 300, flexShrink: 1 }, source: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#302C34' }, sourceTitle: { color: '#F1EBF3', fontSize: 13, fontFamily: 'Inter-SemiBold' }, sourceMeta: { color: '#9F97A4', fontSize: 10, marginTop: 5 }, note: { color: '#9F97A4', fontSize: 10, lineHeight: 16, marginTop: 12 },

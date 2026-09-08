@@ -172,6 +172,10 @@ function shopProductSeoRender(array $product, array $config): string {
         $value = shopProductSeoText($specification['value'] ?? '');
         if ($label !== '' && $value !== '') $properties[] = ['@type' => 'PropertyValue', 'name' => $label, 'value' => $value];
     }
+    $legalWarranty = max(0, (int)($product['legal_warranty_months'] ?? 0));
+    $commercialWarranty = max(0, (int)($product['commercial_warranty_months'] ?? 0));
+    if ($legalWarranty > 0) $properties[] = ['@type' => 'PropertyValue', 'name' => 'Garanție legală', 'value' => $legalWarranty . ' luni'];
+    if ($commercialWarranty > 0) $properties[] = ['@type' => 'PropertyValue', 'name' => 'Garanție comercială', 'value' => $commercialWarranty . ' luni'];
     if ($properties) $productSchema['additionalProperty'] = $properties;
     $breadcrumbSchema = [
         '@context' => 'https://schema.org',

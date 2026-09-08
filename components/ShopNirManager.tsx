@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import useAndroidSearchBack from '@/hooks/useAndroidSearchBack';
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -283,6 +284,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  useAndroidSearchBack(search, useCallback(() => setSearch(''), []));
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
   const [registryEpoch, setRegistryEpoch] = useState(0);

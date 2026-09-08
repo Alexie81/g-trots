@@ -751,6 +751,22 @@
     setText("[data-product-title]", normalized.name);
     setText("[data-product-description]", normalized.description);
     setText("[data-product-price]", normalized.price);
+    let warrantyCard = document.querySelector("[data-product-warranty]");
+    const legalWarranty = Math.max(0, Number(product.legal_warranty_months || 0));
+    const commercialWarranty = Math.max(0, Number(product.commercial_warranty_months || 0));
+    if (legalWarranty > 0 || commercialWarranty > 0) {
+      if (!warrantyCard) {
+        warrantyCard = document.createElement("aside");
+        warrantyCard.className = "product-warranty-card";
+        warrantyCard.dataset.productWarranty = "";
+        document.querySelector("#descriere [data-expand-content]")?.append(warrantyCard);
+      }
+      const title = commercialWarranty > 0 ? `Garanție comercială: ${commercialWarranty} luni` : `Garanție produs: ${legalWarranty} luni`;
+      const detail = legalWarranty > 0 && commercialWarranty > 0 ? `Garanția legală declarată este de ${legalWarranty} luni.` : "Detaliile și condițiile aplicabile sunt disponibile în politica de garanție G-Trots.";
+      warrantyCard.replaceChildren();
+      const shield = document.createElement("span"); shield.className = "product-warranty-card__shield"; shield.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 6v5c0 5.1-3.4 8.4-8 10-4.6-1.6-8-4.9-8-10V6l8-3Z"></path><path d="m8.5 12 2.2 2.2 4.8-5"></path></svg>';
+      const copy = document.createElement("div"); const small = document.createElement("small"); small.textContent = "PROTECȚIE G-TROTS"; const strong = document.createElement("strong"); strong.textContent = title; const paragraph = document.createElement("p"); paragraph.textContent = detail; copy.append(small, strong, paragraph); warrantyCard.append(shield, copy); warrantyCard.hidden = false;
+    } else if (warrantyCard) warrantyCard.hidden = true;
 
     const priceRow = document.querySelector(".product-detail-price-row > div");
     priceRow?.querySelector("del")?.remove();

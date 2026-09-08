@@ -686,6 +686,17 @@ function ensureShopSchema(PDO $db): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_product_categories (
+            product_id CHAR(36) NOT NULL,
+            category_id CHAR(36) NOT NULL,
+            is_primary TINYINT(1) NOT NULL DEFAULT 0,
+            PRIMARY KEY (product_id, category_id),
+            INDEX idx_shop_product_categories_category (category_id, product_id),
+            INDEX idx_shop_product_categories_primary (product_id, is_primary)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec('INSERT IGNORE INTO shop_product_categories (product_id, category_id, is_primary) SELECT id, category_id, 1 FROM shop_products WHERE category_id IS NOT NULL');
+    $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_product_images (
             id CHAR(36) NOT NULL PRIMARY KEY,
             product_id CHAR(36) NOT NULL,
@@ -2765,6 +2776,10 @@ function productRow(PDO $db, array $row, array $config, bool $withDescription = 
     }
     $row['brands'] = $preloadedBrands;
     $row['brand_ids'] = array_map(fn(array $brand): string => (string)$brand['id'], $row['brands']);
+    $categoryIds = $db->prepare('SELECT category_id FROM shop_product_categories WHERE product_id = ? ORDER BY is_primary DESC, category_id ASC');
+    $categoryIds->execute([$productId]);
+    $row['category_ids'] = array_map('strval', $categoryIds->fetchAll(PDO::FETCH_COLUMN));
+    if (!$row['category_ids'] && !empty($row['category_id'])) $row['category_ids'] = [(string)$row['category_id']];
     $decodedSpecifications = json_decode((string)($row['specifications_json'] ?? ''), true);
     $row['specifications'] = is_array($decodedSpecifications) ? array_values($decodedSpecifications) : [];
     $decodedQuestions = json_decode((string)($row['questions_json'] ?? ''), true);
@@ -3302,6 +3317,15 @@ function productPayload(PDO $db, array $body, bool $allowInactiveSource = false)
     $stockQuantity = max(0, (int)($body['stock_quantity'] ?? 0));
     $lowStockThreshold = max(0, (int)($body['low_stock_threshold'] ?? 3));
     $brandIds = array_values(array_unique(array_filter(array_map('strval', is_array($body['brand_ids'] ?? null) ? $body['brand_ids'] : []))));
+    $rawCategoryIds = is_array($body['category_ids'] ?? null) ? $body['category_ids'] : [];
+    if (!$rawCategoryIds && !empty($body['category_id'])) $rawCategoryIds = [$body['category_id']];
+    $categoryIds = [];
+    foreach (array_values(array_unique(array_filter(array_map('strval', $rawCategoryIds)))) as $categoryId) {
+        $categoryIds[] = existingReference($db, 'shop_categories', $categoryId, 'Categoria');
+    }
+    $categoryIds = array_values(array_filter($categoryIds));
+    $primaryCategoryId = existingReference($db, 'shop_categories', $body['category_id'] ?? ($categoryIds[0] ?? null), 'Categoria');
+    if ($primaryCategoryId !== null && !in_array($primaryCategoryId, $categoryIds, true)) array_unshift($categoryIds, $primaryCategoryId);
     foreach ($brandIds as $brandId) existingReference($db, 'shop_brands', $brandId, 'Brandul');
     $images = is_array($body['images'] ?? null) ? array_values($body['images']) : [];
     if (count($images) > 12) throw new InvalidArgumentException('Un produs poate avea maximum 12 imagini.');
@@ -3383,7 +3407,8 @@ function productPayload(PDO $db, array $body, bool $allowInactiveSource = false)
         'source_id' => $sourceId,
         'source_domain' => $sourceDomain,
         'source_url' => ($sourceUrl = mb_substr(trim((string)($body['source_url'] ?? '')), 0, 500)) === '' ? null : $sourceUrl,
-        'category_id' => existingReference($db, 'shop_categories', $body['category_id'] ?? null, 'Categoria'),
+        'category_id' => $primaryCategoryId,
+        'category_ids' => $categoryIds,
         'manufacturer_id' => existingReference($db, 'shop_manufacturers', $body['manufacturer_id'] ?? null, 'Producatorul'),
         'short_description' => mb_substr(trim((string)($body['short_description'] ?? '')), 0, 2000),
         'description_title' => mb_substr(trim((string)($body['description_title'] ?? '')), 0, 220),
@@ -3429,6 +3454,14 @@ function syncProductBrands(PDO $db, string $productId, array $brandIds): void {
     $db->prepare('DELETE FROM shop_product_brands WHERE product_id = ?')->execute([$productId]);
     $insert = $db->prepare('INSERT INTO shop_product_brands (product_id, brand_id) VALUES (?, ?)');
     foreach ($brandIds as $brandId) $insert->execute([$productId, $brandId]);
+}
+
+function syncProductCategories(PDO $db, string $productId, array $categoryIds, ?string $primaryCategoryId): void {
+    $db->prepare('DELETE FROM shop_product_categories WHERE product_id = ?')->execute([$productId]);
+    $insert = $db->prepare('INSERT INTO shop_product_categories (product_id, category_id, is_primary) VALUES (?, ?, ?)');
+    foreach (array_values(array_unique($categoryIds)) as $categoryId) {
+        $insert->execute([$productId, $categoryId, $categoryId === $primaryCategoryId ? 1 : 0]);
+    }
 }
 
 function seoDescriptionWordCount(string $html): int {
@@ -5174,12 +5207,15 @@ try {
             $term = '%' . mb_substr($search, 0, 120) . '%';
             array_push($params, $term, $term, $term);
         }
-        foreach (['category_id' => 'p.category_id', 'manufacturer_id' => 'p.manufacturer_id'] as $queryKey => $column) {
-            $value = trim((string)($_GET[$queryKey] ?? ''));
-            if ($value !== '') {
-                $where[] = $column . ' = ?';
-                $params[] = $value;
-            }
+        $categoryId = trim((string)($_GET['category_id'] ?? ''));
+        if ($categoryId !== '') {
+            $where[] = '(p.category_id = ? OR EXISTS (SELECT 1 FROM shop_product_categories pc WHERE pc.product_id = p.id AND pc.category_id = ?))';
+            array_push($params, $categoryId, $categoryId);
+        }
+        $manufacturerId = trim((string)($_GET['manufacturer_id'] ?? ''));
+        if ($manufacturerId !== '') {
+            $where[] = 'p.manufacturer_id = ?';
+            $params[] = $manufacturerId;
         }
         $brandId = trim((string)($_GET['brand_id'] ?? ''));
         if ($brandId !== '') {
@@ -7029,6 +7065,7 @@ try {
                 $payload['stock_mode'], $payload['stock_quantity'], $payload['is_accounting_stock_tracked'] ? 1 : 0, $payload['low_stock_threshold'], $payload['is_active'] ? 1 : 0, $payload['is_featured'] ? 1 : 0
             ]);
             syncProductBrands($db, $id, $payload['brand_ids']);
+            syncProductCategories($db, $id, $payload['category_ids'], $payload['category_id']);
             syncProductImages($db, $id, $payload['images'], $payload['name']);
             shopNirEnsureBoomagKidotoysReferences($db, $id);
             if ($payload['is_accounting_stock_tracked'] && $payload['stock_mode'] === 'tracked' && $payload['stock_quantity'] !== 0) {
@@ -7121,6 +7158,7 @@ try {
                 $difference->execute([$differenceValue, $id]);
             }
             syncProductBrands($db, $id, $payload['brand_ids']);
+            syncProductCategories($db, $id, $payload['category_ids'], $payload['category_id']);
             syncProductImages($db, $id, $payload['images'], $payload['name']);
             shopNirEnsureBoomagKidotoysReferences($db, $id);
             $oldQuantity = $current['stock_mode'] === 'tracked' ? (int)$current['stock_quantity'] : 0;
@@ -7169,6 +7207,7 @@ try {
         $db->beginTransaction();
         try {
             $db->prepare('DELETE FROM shop_product_brands WHERE product_id = ?')->execute([$id]);
+            $db->prepare('DELETE FROM shop_product_categories WHERE product_id = ?')->execute([$id]);
             $db->prepare('DELETE FROM shop_product_images WHERE product_id = ?')->execute([$id]);
             $db->prepare('DELETE FROM shop_product_reviews WHERE product_id = ?')->execute([$id]);
             $db->prepare('DELETE FROM shop_inventory_movements WHERE product_id = ?')->execute([$id]);

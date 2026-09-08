@@ -13689,6 +13689,9 @@ body::after {
 .shop-brand-options input:checked + span { color: #ff8126; }
 .shop-brand-options input:checked + span i { border-color: #ff6b00; color: #fff; background: #ff6b00; }
 .shop-brand-options p { margin: 0; padding: 10px; color: #777078; font-size: 10px; }
+.shop-tree-options label { padding-left: calc(10px + (var(--tree-depth, 0) * 20px)); }
+.shop-dropdown-search { position: sticky; z-index: 2; top: -7px; padding: 7px 3px; background: #211f24; }
+.shop-dropdown-search input { width: 100%; min-height: 38px; border: 1px solid #49454f; border-radius: 10px; padding: 0 11px; color: #eee9e5; background: #171519; font: inherit; font-size: 10px; }
 .shop-google-preview { min-height: 122px; display: flex; gap: 14px; border-radius: 18px; padding: 15px; background: #fff; margin-bottom: 17px; }
 #shop-google-image { width: 92px; height: 92px; display: block; flex: 0 0 auto; border-radius: 11px; background-color: #eee; background-repeat: no-repeat; }
 .shop-google-preview > div { min-width: 0; display: flex; flex-direction: column; }

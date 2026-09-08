@@ -437,6 +437,7 @@ export type ShopProductReview = {
 export type ShopProduct = {
   id: string;
   category_id: string | null;
+  category_ids: string[];
   category_name: string | null;
   manufacturer_id: string | null;
   manufacturer_name: string | null;
@@ -538,6 +539,7 @@ export type ShopProduct = {
 
 export type ShopProductPayload = {
   category_id: string | null;
+  category_ids: string[];
   manufacturer_id: string | null;
   brand_ids: string[];
   sku?: string;

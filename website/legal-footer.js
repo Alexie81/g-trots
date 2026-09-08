@@ -42,7 +42,7 @@
       onload() { this.media = 'all'; },
     });
   }
-  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260908-social-v1' });
+  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260908-social-icons-v3' });
   if (!document.querySelector('script[src*="google-measurement.js"]')) {
     loadAsset('script', { src: '/google-measurement.js?v=20260907-meta-v9', async: true });
   }
@@ -233,7 +233,6 @@ ${navigationHtml}
         'https://www.tiktok.com/@gtrots.service',
         'https://x.com/servicegtrots',
         'https://www.youtube.com/@g-trots',
-        'https://medium.com/@servicegtrots',
       ],
       hasMerchantReturnPolicy: {
         '@type': 'MerchantReturnPolicy',
@@ -272,22 +271,19 @@ ${navigationHtml}
     return `
       <div class="gt-site-footer__social" role="navigation" aria-label="Urmărește G-Trots pe rețelele sociale">
         <a class="gt-social-link gt-social-link--instagram" href="https://www.instagram.com/gtrots.ro/" target="_blank" rel="noopener noreferrer" aria-label="G-Trots pe Instagram" title="Instagram">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.2" y="3.2" width="17.6" height="17.6" rx="5.1"/><circle cx="12" cy="12" r="4.05"/><circle class="gt-social-detail" cx="17.45" cy="6.65" r="1.05"/></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="gt-instagram-gradient" x1="2" y1="22" x2="22" y2="2" gradientUnits="userSpaceOnUse"><stop stop-color="#ffd600"/><stop offset=".34" stop-color="#ff7a00"/><stop offset=".58" stop-color="#ff0169"/><stop offset=".8" stop-color="#d300c5"/><stop offset="1" stop-color="#7638fa"/></linearGradient></defs><rect x="3.2" y="3.2" width="17.6" height="17.6" rx="5.1"/><circle cx="12" cy="12" r="4.05"/><circle class="gt-social-detail" cx="17.45" cy="6.65" r="1.05"/></svg>
         </a>
         <a class="gt-social-link gt-social-link--facebook" href="https://www.facebook.com/profile.php?id=61590892933228" target="_blank" rel="noopener noreferrer" aria-label="G-Trots pe Facebook" title="Facebook">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.35 8.15h3.05V4.2c-.53-.07-2.34-.2-4.08-.2-3.64 0-6.13 2.2-6.13 6.28v3.5H3.07v4.42H7.2V24h5.06v-5.8h4.16l.66-4.42h-4.82V10.7c0-1.28.35-2.55 2.1-2.55Z"/></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036 26.805 26.805 0 0 0-.733-.009c-.707 0-1.259.096-1.675.309a1.686 1.686 0 0 0-.679.622c-.258.42-.374.995-.374 1.752v1.297h3.919l-.386 2.103-.287 1.564h-3.246v8.245C19.396 23.238 24 18.179 24 12.044c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.628 3.874 10.35 9.101 11.647Z"/></svg>
         </a>
         <a class="gt-social-link gt-social-link--tiktok" href="https://www.tiktok.com/@gtrots.service" target="_blank" rel="noopener noreferrer" aria-label="G-Trots pe TikTok" title="TikTok">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path class="gt-social-tiktok-shadow" d="M14.2 3h3.1c.35 2.08 1.55 3.45 3.7 4.02v3.12a8 8 0 0 1-3.7-1.02v5.57A6.32 6.32 0 1 1 11 8.37v3.18a3.15 3.15 0 1 0 3.2 3.14V3Z"/><path d="M13.35 2.2h3.1c.35 2.08 1.55 3.45 3.7 4.02v3.12a8 8 0 0 1-3.7-1.02v5.57a6.32 6.32 0 1 1-6.3-6.32v3.18a3.15 3.15 0 1 0 3.2 3.14V2.2Z"/></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path class="gt-social-tiktok-cyan" d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/><path class="gt-social-tiktok-red" d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>
         </a>
         <a class="gt-social-link gt-social-link--x" href="https://x.com/servicegtrots" target="_blank" rel="noopener noreferrer" aria-label="G-Trots pe X" title="X">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 3h5.22l4.15 5.57L17.7 3h2.28l-6.16 7.17L21 21h-5.23l-4.58-6.15L5.9 21H3.6l6.54-7.75L3.4 3Zm4.1 1.7 9.13 14.6h1.94L9.43 4.7H7.5Z"/></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z"/></svg>
         </a>
         <a class="gt-social-link gt-social-link--youtube" href="https://www.youtube.com/@g-trots" target="_blank" rel="noopener noreferrer" aria-label="G-Trots pe YouTube" title="YouTube">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23.5 6.2a3.04 3.04 0 0 0-2.14-2.15C19.47 3.54 12 3.54 12 3.54s-7.47 0-9.36.51A3.04 3.04 0 0 0 .5 6.2 31.6 31.6 0 0 0 0 12a31.6 31.6 0 0 0 .5 5.8 3.04 3.04 0 0 0 2.14 2.15c1.89.51 9.36.51 9.36.51s7.47 0 9.36-.51a3.04 3.04 0 0 0 2.14-2.15A31.6 31.6 0 0 0 24 12a31.6 31.6 0 0 0-.5-5.8Z"/><path class="gt-social-detail" d="m9.55 15.65 6.23-3.65-6.23-3.65v7.3Z"/></svg>
-        </a>
-        <a class="gt-social-link gt-social-link--medium" href="https://medium.com/@servicegtrots" target="_blank" rel="noopener noreferrer" aria-label="G-Trots pe Medium" title="Medium">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="6.3" cy="12" rx="5.3" ry="7.15"/><ellipse cx="15.55" cy="12" rx="2.65" ry="7.15"/><ellipse cx="21.15" cy="12" rx="1.35" ry="6.45"/></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
         </a>
       </div>`;
   }
@@ -328,19 +324,26 @@ ${navigationHtml}
           <span><strong>${esc(tradeName)}</strong><small>Service & shop pentru mobilitate electrică</small></span>
         </a>
         <p>Cumpărături clare, piese alese atent și asistență reală înainte și după comandă.</p>
-        <dl class="gt-site-footer__identity">
+        <dl class="gt-site-footer__identity gt-site-footer__identity--desktop">
           <div><dt>Operator</dt><dd>${esc(company.legal_name || 'Necompletat')}</dd></div>
           <div><dt>CUI</dt><dd>${esc(company.cui || 'Necompletat')}</dd></div>
           <div><dt>Sediu social</dt><dd>${esc(address || 'Necompletat')}</dd></div>
         </dl>
-        <div class="gt-site-footer__contact">${company.phone ? `<a href="${phoneHref(company.phone)}">${esc(company.phone)}</a>` : ''}${company.email ? `<a href="mailto:${esc(company.email)}">${esc(company.email)}</a>` : ''}</div>
       </section>
       <div class="gt-site-footer__nav-grid">
         <nav aria-label="Pagini principale G-Trots"><b>Pagini principale</b><div><a href="/magazin">Magazin piese trotinete electrice</a><a href="/service-trotinete-electrice">Service trotinete electrice</a><a href="/despre-g-trots">Despre G-Trots</a><a href="/contact">Contact și date firmă</a><a href="/ghiduri-service-trotinete-electrice">Ghiduri service trotinete electrice</a></div></nav>
-        <nav aria-label="Comenzi, livrare și retururi"><b>Comenzi și retururi</b><div><a href="/urmarire-comanda">Urmărește comanda</a><a href="/livrare-si-plata">Livrare și plată</a><a href="/plata-si-facturare">Plată și facturare</a><a href="/politica-de-retur">Politica de retur</a><a class="gt-withdrawal-link" href="/solicita-retur">Solicită un retur</a><a href="/garantii-si-reclamatii">Garanții și reclamații</a></div></nav>
-        <nav aria-label="Legal și confidențialitate"><b>Legal și confidențialitate</b><div><a href="/termeni-si-conditii">Termeni și condiții</a><a href="/politica-de-confidentialitate">Confidențialitate</a><a href="/politica-cookies">Politica de cookie-uri</a><button type="button" data-cookie-preferences>Preferințe cookie</button><a href="/siguranta-produselor">Siguranța produselor</a><a href="/conditii-b2b">Condiții B2B</a><a href="/accesibilitate">Accesibilitate</a></div></nav>
+        <nav aria-label="Comenzi, livrare și retururi"><b>Comenzi și retururi</b><div><a href="/urmarire-comanda">Urmărește comanda</a><a href="/livrare-si-plata">Livrare și plată</a><a href="/plata-si-facturare">Plată și facturare</a><a href="/politica-de-retur">Politica de retur</a><a class="gt-withdrawal-link" href="/solicita-retur">Solicită un retur</a><a class="gt-mobile-wide-link gt-mobile-wide-link--cross-nav" href="/garantii-si-reclamatii">Garanții și reclamații</a></div></nav>
+        <nav aria-label="Legal și confidențialitate"><b>Legal și confidențialitate</b><div><a href="/termeni-si-conditii">Termeni și condiții</a><a href="/politica-de-confidentialitate">Confidențialitate</a><a href="/politica-cookies">Politica de cookie-uri</a><button type="button" data-cookie-preferences>Preferințe cookie</button><a href="/siguranta-produselor">Siguranța produselor</a><a href="/conditii-b2b">Condiții B2B</a><a class="gt-mobile-wide-link gt-mobile-wide-link--inner-grid" href="/accesibilitate">Accesibilitate</a></div></nav>
       </div>
-      ${socialLinks()}
+      <dl class="gt-site-footer__identity gt-site-footer__identity--mobile" aria-label="Datele firmei G-Trots">
+        <div><dt>Operator</dt><dd>${esc(company.legal_name || 'Necompletat')}</dd></div>
+        <div><dt>CUI</dt><dd>${esc(company.cui || 'Necompletat')}</dd></div>
+        <div><dt>Sediu social</dt><dd>${esc(address || 'Necompletat')}</dd></div>
+      </dl>
+      <div class="gt-site-footer__contact-row">
+        <div class="gt-site-footer__contact">${company.phone ? `<a href="${phoneHref(company.phone)}">${esc(company.phone)}</a>` : ''}${company.email ? `<a href="mailto:${esc(company.email)}">${esc(company.email)}</a>` : ''}</div>
+        ${socialLinks()}
+      </div>
       <section class="gt-site-footer__assurance" aria-label="Plăți și protecția consumatorilor">
         <div class="gt-site-footer__payments"><span><b>Plăți securizate</b><small>Procesate prin Stripe</small></span><div>${paymentMarks()}</div></div>
         <a class="gt-sal-link" href="https://reclamatiisal.anpc.ro" target="_blank" rel="noopener noreferrer"><img src="/assets/anpc-sal.png" width="201" height="50" loading="lazy" decoding="async" alt="ANPC - Soluționarea Alternativă a Litigiilor"></a>

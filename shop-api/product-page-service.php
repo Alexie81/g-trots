@@ -193,6 +193,13 @@ function shopProductSeoRender(array $product, array $config): string {
         'logo' => $websiteBaseUrl . '/assets/logo.png',
         'telephone' => '+40762093915',
         'email' => 'contact@g-trots.ro',
+        'sameAs' => [
+            'https://www.instagram.com/gtrots.ro/',
+            'https://www.facebook.com/profile.php?id=61590892933228',
+            'https://www.tiktok.com/@gtrots.service',
+            'https://x.com/servicegtrots',
+            'https://www.youtube.com/@g-trots',
+        ],
         'address' => [
             '@type' => 'PostalAddress',
             'streetAddress' => 'Str. Humulești nr. 131-135, lot 4',

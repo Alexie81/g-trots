@@ -46,12 +46,13 @@ $categoryDrivenProduct['meta_description'] = 'Trotinetă electrică verificată 
 $categoryDrivenHtml = shopProductSeoRender($categoryDrivenProduct, ['website_base_url' => 'https://g-trots.ro']);
 productPageAssert(str_contains($categoryDrivenHtml, 'https://schema.org/UsedCondition'), 'Categoria tehnică second-hand trebuie să determine UsedCondition chiar dacă titlul nu conține expresia second hand.');
 productPageAssert(str_contains($html, '"@type":"Product"') && str_contains($html, '"@type":"FAQPage"') && str_contains($html, '"@type":"BreadcrumbList"'), 'Datele structurate Product, FAQ și Breadcrumb trebuie generate.');
+productPageAssert(str_contains($html, '"sameAs":["https://www.instagram.com/gtrots.ro/"') && str_contains($html, 'https://www.youtube.com/@g-trots') && !str_contains($html, 'medium.com'), 'Schema Organization a produsului trebuie să declare exclusiv profilurile sociale afișate.');
 productPageAssert(str_contains($html, '"merchantReturnDays":30') && !str_contains($html, '"merchantReturnDays":14'), 'Politica structurată a produsului trebuie să coincidă cu fereastra publică B2C de 30 de zile.');
 productPageAssert(str_contains($html, 'id="gt-product-bootstrap"') && str_contains($html, 'data-gt-static-product'), 'Pagina trebuie să poată porni imediat din conținutul generat și să aibă text semantic în HTML.');
 productPageAssert(str_contains($html, 'data-product-id="trotineta-second-hand-xiaomi-pro-2"'), 'Identificatorul produsului trebuie fixat în pagină.');
 productPageAssert(!str_contains($html, '"sku": "GT-ANV-G10-AT"'), 'Schemele JSON-LD vechi ale șablonului nu trebuie păstrate.');
 productPageAssert(str_contains($html, 'class="site-header"') && str_contains($html, 'class="shell shop-footer"'), 'Orice pagină generată trebuie să păstreze navbarul și footerul global al magazinului.');
-productPageAssert(str_contains($html, 'favorites.js?v=20260908-sitelinks-v1') && str_contains($html, 'legal-footer.js?v=20260908-social-v2'), 'Orice pagină generată trebuie să încarce acțiunile globale și footerul social actual.');
+productPageAssert(str_contains($html, 'favorites.js?v=20260908-sitelinks-v1') && str_contains($html, 'legal-footer.js?v=20260908-social-v4'), 'Orice pagină generată trebuie să încarce acțiunile globale și footerul social actual.');
 productPageAssert(!str_contains($html, 'data-product-safety') && !str_contains($html, 'Siguranță și garanție'), 'Secțiunea Siguranță și garanție nu trebuie să apară pe pagina produsului.');
 
 $unsafe = $product;

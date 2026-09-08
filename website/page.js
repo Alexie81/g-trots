@@ -1,4 +1,4 @@
-if (!document.querySelector('script[src*="legal-footer.js"]')) { const legal = document.createElement('script'); legal.src = '/legal-footer.js?v=20260908-social-v2'; legal.defer = true; document.head.append(legal); }
+if (!document.querySelector('script[src*="legal-footer.js"]')) { const legal = document.createElement('script'); legal.src = '/legal-footer.js?v=20260908-social-v4'; legal.defer = true; document.head.append(legal); }
 function ensureGlobalPromotionBar() {
   if (!document.querySelector('link[href*="promotions.css"]')) {
     const link = document.createElement("link"); link.rel = "stylesheet"; link.href = "/promotions.css?v=20260828-marquee-v5"; document.head.append(link);

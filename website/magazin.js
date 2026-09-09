@@ -227,7 +227,6 @@ const filtersPanel = document.querySelector("#shop-filters");
 const filtersStickyColumn = document.querySelector(".filters-sticky-column");
 const filtersOverlay = document.querySelector(".filters-overlay");
 const filtersClose = document.querySelector(".filters-close");
-const applyMobileFilters = document.querySelector(".apply-mobile-filters");
 const collapsibleFilterGroups = [...document.querySelectorAll("[data-collapsible-filter]")];
 const productPagination = document.querySelector("#product-pagination");
 const productsPerPage = document.querySelector("#products-per-page");
@@ -1727,18 +1726,18 @@ function openFilters() {
   filtersClose?.focus();
 }
 
-function closeFilters() {
+function closeFilters({ restoreFocus = false } = {}) {
   if (!filtersPanel || !filtersOverlay || !mobileFilterButton) return;
   filtersPanel.classList.remove("is-open");
   filtersOverlay.classList.remove("is-open");
   mobileFilterButton.setAttribute("aria-expanded", "false");
   document.body.classList.remove("filters-open");
+  if (restoreFocus) window.setTimeout(() => mobileFilterButton.focus({ preventScroll: true }), 180);
 }
 
 mobileFilterButton?.addEventListener("click", openFilters);
-filtersClose?.addEventListener("click", closeFilters);
-filtersOverlay?.addEventListener("click", closeFilters);
-applyMobileFilters?.addEventListener("click", closeFilters);
+filtersClose?.addEventListener("click", () => closeFilters({ restoreFocus: true }));
+filtersOverlay?.addEventListener("click", () => closeFilters({ restoreFocus: true }));
 
 document.addEventListener("keydown", event => {
   if (event.key === "Escape") {

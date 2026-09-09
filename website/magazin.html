@@ -20,7 +20,7 @@
     <meta property="og:url" content="https://g-trots.ro/magazin">
     <meta property="og:image" content="https://g-trots.ro/assets/vehicle-performance-scooter.png">
     <link rel="stylesheet" href="styles.css?v=20260827-shop-call">
-    <link rel="stylesheet" href="magazin.css?v=20260909-compact-catalog-v2">
+    <link rel="stylesheet" href="magazin.css?v=20260909-filter-help-v1">
     <link rel="stylesheet" href="favorites.css?v=20260828-line-promotions-v1">
     <link rel="stylesheet" href="performance.css?v=20260906-cart-active-v1">
   </head>
@@ -188,14 +188,14 @@
               <div class="price-scale"><span>100 lei</span><span>2.600 lei</span></div>
             </div>
 
-            <div class="filter-group brand-filter compatibility-filter collapsible-filter" role="group" aria-labelledby="brand-filter-title" data-collapsible-filter="compatibility">
-              <button class="filter-collapse-toggle" type="button" aria-expanded="true" aria-controls="compatibility-filter-options">
+            <div class="filter-group brand-filter compatibility-filter collapsible-filter is-collapsed" role="group" aria-labelledby="brand-filter-title" data-collapsible-filter="compatibility">
+              <button class="filter-collapse-toggle" type="button" aria-expanded="false" aria-controls="compatibility-filter-options">
                 <span class="filter-collapse-title" id="brand-filter-title">Mărci compatibile</span>
                 <span class="filter-selected-count" aria-live="polite" hidden>0 selectate</span>
                 <span class="filter-collapse-chevron" aria-hidden="true"></span>
               </button>
-              <div class="filter-collapse-body">
-                <div class="filter-options-scroll" id="compatibility-filter-options" tabindex="0" aria-label="Lista mărcilor compatibile">
+              <div class="filter-collapse-body" aria-hidden="true" inert>
+                <div class="filter-options-scroll" id="compatibility-filter-options" tabindex="-1" aria-label="Lista mărcilor compatibile">
                   <label><input type="checkbox" value="universal"><span>Universal</span></label>
                   <label><input type="checkbox" value="kukirin"><span>KuKirin</span></label>
                   <label><input type="checkbox" value="xiaomi"><span>Xiaomi</span></label>
@@ -212,14 +212,14 @@
               </div>
             </div>
 
-            <div class="filter-group brand-filter manufacturer-filter collapsible-filter" role="group" aria-labelledby="manufacturer-filter-title" data-collapsible-filter="manufacturers">
-              <button class="filter-collapse-toggle" type="button" aria-expanded="true" aria-controls="manufacturer-filter-options">
+            <div class="filter-group brand-filter manufacturer-filter collapsible-filter is-collapsed" role="group" aria-labelledby="manufacturer-filter-title" data-collapsible-filter="manufacturers">
+              <button class="filter-collapse-toggle" type="button" aria-expanded="false" aria-controls="manufacturer-filter-options">
                 <span class="filter-collapse-title" id="manufacturer-filter-title">Producători</span>
                 <span class="filter-selected-count" aria-live="polite" hidden>0 selectate</span>
                 <span class="filter-collapse-chevron" aria-hidden="true"></span>
               </button>
-              <div class="filter-collapse-body">
-                <div class="filter-options-scroll" id="manufacturer-filter-options" tabindex="0" aria-label="Lista producătorilor">
+              <div class="filter-collapse-body" aria-hidden="true" inert>
+                <div class="filter-options-scroll" id="manufacturer-filter-options" tabindex="-1" aria-label="Lista producătorilor">
                   <label><input type="checkbox" value="g-trots"><span>G-Trots</span></label>
                   <label><input type="checkbox" value="kukirin"><span>KuKirin</span></label>
                 </div>
@@ -227,9 +227,13 @@
             </div>
 
             <a class="filter-help-card" href="https://wa.me/40762093915?text=Bun%C4%83%2C%20am%20nevoie%20de%20ajutor%20pentru%20a%20alege%20o%20pies%C4%83%20compatibil%C4%83." target="_blank" rel="noopener nofollow">
-              <span aria-hidden="true">?</span>
-              <div><small>Nu găsești piesa?</small><strong>Îți verificăm noi compatibilitatea.</strong></div>
-              <b aria-hidden="true">↗</b>
+              <div class="filter-help-heading">
+                <span class="filter-help-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13V11a8 8 0 0 1 16 0v6a4 4 0 0 1-4 4h-3"/><rect x="2" y="10" width="5" height="8" rx="2"/><rect x="17" y="10" width="5" height="8" rx="2"/></svg></span>
+                <span>Asistență <b>G-Trots</b></span>
+              </div>
+              <strong class="filter-help-title">Nu găsești piesa?</strong>
+              <p class="filter-help-description">Trimite-ne modelul trotinetei. Verificăm compatibilitatea împreună.</p>
+              <span class="filter-help-cta"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3a12.8 12.8 0 0 0-11 19.3L3.4 29l6.9-1.6A12.9 12.9 0 1 0 16 3Zm0 23.3c-2 0-3.8-.5-5.4-1.5l-.4-.2-4 .9.9-3.9-.3-.4A10.3 10.3 0 1 1 16 26.3Zm5.7-7.7c-.3-.2-1.9-.9-2.2-1s-.5-.2-.7.2-.8 1-1 1.2-.4.2-.7.1a8.5 8.5 0 0 1-2.5-1.6 9.3 9.3 0 0 1-1.7-2.1c-.2-.3 0-.5.1-.7l.5-.6.3-.6c.1-.2 0-.4 0-.6l-1-2.3c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.6.1-.9.4-.3.4-1.2 1.2-1.2 2.9s1.3 3.4 1.5 3.6c.2.2 2.5 3.8 6 5.3 3.6 1.6 3.6 1 4.3.9.6 0 1.9-.8 2.2-1.6.3-.8.3-1.5.2-1.6-.1-.2-.3-.3-.6-.4Z"/></svg><span>Scrie-ne pe WhatsApp</span><b aria-hidden="true">↗</b></span>
             </a>
 
             <button class="apply-mobile-filters" type="button">Vezi produsele <span aria-hidden="true">→</span></button>

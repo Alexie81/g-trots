@@ -109,7 +109,9 @@
         images: row[13] ? [{ url: row[13] }] : [],
         price: row[14], sale_price: row[15], discount_type: row[16], discount_value: row[17], currency: row[18],
         stock_mode: row[19], stock_quantity: row[20], low_stock_threshold: row[21], is_featured: row[22], featured_rank: row[23],
-        promotion_price: row[24], price_before_promotion: row[25], promotion_discount_percent: row[26], active_promotion: promotion
+        promotion_price: row[24], price_before_promotion: row[25], promotion_discount_percent: row[26], active_promotion: promotion,
+        meta_title: row[28] || "", meta_description: row[29] || "",
+        legal_warranty_months: row[30] ?? null, commercial_warranty_months: row[31] ?? null
       };
     });
   }
@@ -757,8 +759,13 @@
     const warrantyBadge = document.querySelector("[data-product-warranty-badge]");
     if (warrantyBadge) {
       const badgeMonths = commercialWarranty > 0 ? commercialWarranty : legalWarranty;
-      warrantyBadge.hidden = badgeMonths <= 0;
-      warrantyBadge.textContent = badgeMonths > 0 ? `Garanție ${badgeMonths} luni` : "";
+      if (badgeMonths > 0) {
+        warrantyBadge.textContent = `Garanție ${badgeMonths} luni`;
+        warrantyBadge.removeAttribute("hidden");
+      } else {
+        warrantyBadge.textContent = "";
+        warrantyBadge.setAttribute("hidden", "");
+      }
     }
     if (legalWarranty > 0 || commercialWarranty > 0) {
       if (!warrantyCard) {
@@ -771,8 +778,11 @@
       const detail = legalWarranty > 0 && commercialWarranty > 0 ? `Garanția legală declarată este de ${legalWarranty} luni.` : "Detaliile și condițiile aplicabile sunt disponibile în politica de garanție G-Trots.";
       warrantyCard.replaceChildren();
       const shield = document.createElement("span"); shield.className = "product-warranty-card__shield"; shield.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 6v5c0 5.1-3.4 8.4-8 10-4.6-1.6-8-4.9-8-10V6l8-3Z"></path><path d="m8.5 12 2.2 2.2 4.8-5"></path></svg>';
-      const copy = document.createElement("div"); const small = document.createElement("small"); small.textContent = "PROTECȚIE G-TROTS"; const strong = document.createElement("strong"); strong.textContent = title; const paragraph = document.createElement("p"); paragraph.textContent = detail; copy.append(small, strong, paragraph); warrantyCard.append(shield, copy); warrantyCard.hidden = false;
-    } else if (warrantyCard) warrantyCard.hidden = true;
+      const copy = document.createElement("div"); const small = document.createElement("small"); small.textContent = "PROTECȚIE G-TROTS"; const strong = document.createElement("strong"); strong.textContent = title; const paragraph = document.createElement("p"); paragraph.textContent = detail; copy.append(small, strong, paragraph); warrantyCard.append(shield, copy); warrantyCard.removeAttribute("hidden");
+    } else if (warrantyCard) {
+      warrantyCard.remove();
+      warrantyCard = null;
+    }
 
     const priceRow = document.querySelector(".product-detail-price-row > div");
     priceRow?.querySelector("del")?.remove();

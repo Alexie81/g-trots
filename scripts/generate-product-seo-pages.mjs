@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -149,7 +149,9 @@ function decodeProduct(row) {
     promotion_discount_percent: row[26],
     active_promotion: promotion,
     meta_title: row[28] || "",
-    meta_description: row[29] || ""
+    meta_description: row[29] || "",
+    legal_warranty_months: row[30] ?? null,
+    commercial_warranty_months: row[31] ?? null
   };
 }
 
@@ -287,6 +289,12 @@ function renderProductPage(template, product) {
   };
   const gtin = validGtin(product.ean);
   if (gtin) productSchema[`gtin${gtin.length}`] = gtin;
+  const legalWarranty = Math.max(0, Number(product.legal_warranty_months || 0));
+  const commercialWarranty = Math.max(0, Number(product.commercial_warranty_months || 0));
+  const warrantyProperties = [];
+  if (legalWarranty > 0) warrantyProperties.push({ "@type": "PropertyValue", name: "Garanție legală", value: `${legalWarranty} luni` });
+  if (commercialWarranty > 0) warrantyProperties.push({ "@type": "PropertyValue", name: "Garanție comercială", value: `${commercialWarranty} luni` });
+  if (warrantyProperties.length) productSchema.additionalProperty = warrantyProperties;
   const breadcrumbSchema = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -328,6 +336,23 @@ function renderProductPage(template, product) {
     .join("\n");
   html = html.replace("</head>", `${structuredData}\n    <script type="application/json" id="gt-product-bootstrap">${safeJson(product)}</script>\n  </head>`);
   html = html.replace(/(<body\b[^>]*\bdata-product-id=")[^"]*(")/i, `$1${escapeHtml(slug)}$2`);
+
+  const displayWarranty = commercialWarranty > 0 ? commercialWarranty : legalWarranty;
+  const warrantyBadge = displayWarranty > 0
+    ? `<span class="product-warranty-badge" data-product-warranty-badge>Garanție ${displayWarranty} luni</span>`
+    : '<span class="product-warranty-badge" data-product-warranty-badge hidden></span>';
+  let warrantyCard = "";
+  if (displayWarranty > 0) {
+    const warrantyTitle = commercialWarranty > 0
+      ? `Garanție comercială: ${commercialWarranty} luni`
+      : `Garanție produs: ${legalWarranty} luni`;
+    const warrantyDetail = legalWarranty > 0 && commercialWarranty > 0
+      ? `Garanția legală declarată este de ${legalWarranty} luni.`
+      : "Detaliile și condițiile aplicabile sunt disponibile în politica de garanție G-Trots.";
+    warrantyCard = `<aside class="product-warranty-card" data-product-warranty><span class="product-warranty-card__shield" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 20 6v5c0 5.1-3.4 8.4-8 10-4.6-1.6-8-4.9-8-10V6l8-3Z"></path><path d="m8.5 12 2.2 2.2 4.8-5"></path></svg></span><div><small>PROTECȚIE G-TROTS</small><strong>${escapeHtml(warrantyTitle)}</strong><p>${escapeHtml(warrantyDetail)}</p></div></aside>`;
+  }
+  html = html.replace(/<span\b[^>]*\bdata-product-warranty-badge\b[^>]*>.*?<\/span>/is, warrantyBadge);
+  html = html.replace(/[ \t]*<aside\b[^>]*\bdata-product-warranty\b[^>]*>.*?<\/aside>\r?\n?/is, warrantyCard ? `              ${warrantyCard}\n` : "");
 
   const staticSpecs = [
     category ? ["Categorie", category] : null,
@@ -373,7 +398,7 @@ async function removeStaleGeneratedPages(previousSlugs, currentSlugs) {
     if (path.dirname(directory) !== path.resolve(PRODUCT_ROOT)) throw new Error("Țintă nesigură detectată la reconcilierea paginilor.");
     await rm(path.join(directory, "index.html"), { force: true });
     try {
-      await rm(directory, { recursive: false });
+      await rmdir(directory);
     } catch (error) {
       if (error?.code !== "ENOENT" && error?.code !== "ENOTEMPTY") throw error;
     }

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-09-07T12:04:16.896Z",
+  "generated_at": "2026-09-09T14:58:13.399Z",
   "publisher": {
     "name": "G-Trots România",
     "legal_name": "CAB IT EXPERT S.R.L.",
@@ -801,7 +801,7 @@
       "category": "Cauciucuri",
       "price": 80,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/6ab6bf6205282baca576065414157cb3.webp"
     },
     {
@@ -866,7 +866,7 @@
       "category": "Aparatori si protectii",
       "price": 50,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/819934ce06f3abe1acc886ff98f935c7.webp"
     },
     {
@@ -1191,7 +1191,7 @@
       "category": "Aparatori si protectii",
       "price": 39,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/7733cd203a14690a5069ca7e144e5ef0.webp"
     },
     {
@@ -1425,7 +1425,7 @@
       "category": "Etrier frana",
       "price": 11,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/b108066affb080121f240b03a28240c4.webp"
     },
     {
@@ -2127,7 +2127,7 @@
       "category": "Sistem antifurt",
       "price": 99,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/1482bb606b5aa1d99f5d0e2cfe1c9383.webp"
     },
     {
@@ -2465,7 +2465,7 @@
       "category": "Genti Transport",
       "price": 79,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/27b78a0aeb41c0bed555109bc5708922.webp"
     },
     {
@@ -2556,7 +2556,7 @@
       "category": "Genti Transport",
       "price": 99,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/e66603b5e854f2c99a5369b0d4f64c14.webp"
     },
     {
@@ -2816,7 +2816,7 @@
       "category": "Butoane si conectori",
       "price": 81,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/d9a73ab93cd1b99c633f3c524c5b45b1.webp"
     },
     {
@@ -2972,7 +2972,7 @@
       "category": "Cabluri si mufe",
       "price": 111,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/07be5dcfd986373d8e4ed97e06f59e6e.webp"
     },
     {
@@ -3310,7 +3310,7 @@
       "category": "Cabluri si mufe",
       "price": 149,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/3467565886424b8b889bc5cf8cdbca5b.webp"
     },
     {
@@ -4467,7 +4467,7 @@
       "category": "Aparatori si protectii",
       "price": 25,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/0010e65e2a4affff847d459f3d10dbeb.webp"
     },
     {
@@ -5134,19 +5134,6 @@
       "image": "https://g-trots.ro/shop-api/uploads/products/493df5f6449c1ca99566493dff0c4a21.webp"
     },
     {
-      "id": "8f97b985-1b9f-578d-ac27-f52c517f73a5",
-      "name": "Cască INTEGRA Sport full face negru-verde",
-      "url": "https://g-trots.ro/magazin/produs/casca-integrala-integra-sport-negru-verde-negru-verde/",
-      "sku": "SE-EWF584",
-      "gtin": "8435764443602",
-      "brand": "eRIDER360",
-      "category": "Casti protectie",
-      "price": 749,
-      "currency": "RON",
-      "availability": "https://schema.org/InStock",
-      "image": "https://g-trots.ro/shop-api/uploads/products/67fc6efbabc6ce245a622467aeecbe0a.webp"
-    },
-    {
       "id": "eb9420f7-43ea-59e1-b2c6-20a687e9036a",
       "name": "Casca protectie cu semnalizare",
       "url": "https://g-trots.ro/magazin/produs/casca-protectie-cu-semnalizare/",
@@ -5234,7 +5221,7 @@
       "category": "Cauciucuri",
       "price": 94,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/ce2836addcc723fcacdb2610e126ca58.webp"
     },
     {
@@ -5585,7 +5572,7 @@
       "category": "Cauciucuri pline",
       "price": 169,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/4dad246a6a34567c02337b6ba8f32e19.webp"
     },
     {
@@ -5598,7 +5585,7 @@
       "category": "Cauciucuri pline",
       "price": 80.33,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/d506ab7da8eb977f89cfa3bd7249aa93.webp"
     },
     {
@@ -6053,7 +6040,7 @@
       "category": "Cauciucuri",
       "price": 99,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/b18895ade898a1da9403761c9e741397.webp"
     },
     {
@@ -6272,9 +6259,9 @@
       "gtin": "7427246040141",
       "brand": "Innova",
       "category": "Cauciucuri tubeless",
-      "price": 151.5,
+      "price": 152,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/4cc9f706cd16c6b3aa6ec3c905107e85.webp"
     },
     {
@@ -6443,7 +6430,7 @@
       "category": "Cauciucuri",
       "price": 109,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/e0811925617781c02bbbdcecb0aa047a.webp"
     },
     {
@@ -6677,7 +6664,7 @@
       "category": "Cauciucuri tubeless",
       "price": 239,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/3bdfd1ba0ca239d5fe5e599800af2026.webp"
     },
     {
@@ -6755,7 +6742,7 @@
       "category": "Cauciucuri tubeless",
       "price": 149,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/f153d074132d23bfd4b5ef2656f350b4.webp"
     },
     {
@@ -7210,7 +7197,7 @@
       "category": "Cauciucuri tubeless",
       "price": 159,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/aa1c99aa8fef8d4790b47c9e56102368.webp"
     },
     {
@@ -7652,7 +7639,7 @@
       "category": "Cabluri si mufe",
       "price": 8,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/be8920a3cc07f1c10097d5e075652103.webp"
     },
     {
@@ -8068,7 +8055,7 @@
       "category": "Controller",
       "price": 399,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/b7f488081c5b92544f580435b42408de.webp"
     },
     {
@@ -8094,7 +8081,7 @@
       "category": "Controller",
       "price": 899,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/6bdf31e398d907429035cef9c9ae41c8.webp"
     },
     {
@@ -8133,7 +8120,7 @@
       "category": "Controller",
       "price": 355,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/917fdafbc9ddc7fb9b997d2c49846c54.webp"
     },
     {
@@ -9771,7 +9758,7 @@
       "category": "Display",
       "price": 249,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/c24d76c5d1bab48f05e6d3c772c32a45.webp"
     },
     {
@@ -9875,7 +9862,7 @@
       "category": "Display",
       "price": 399,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/b0599024f203c3d938a260d90ae84d80.webp"
     },
     {
@@ -9979,7 +9966,7 @@
       "category": "Display",
       "price": 284,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/b07bb25f0938c5d900427298d14e5d29.webp"
     },
     {
@@ -10304,7 +10291,7 @@
       "category": "Display",
       "price": 249,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/5db6e4ce07881cefcac4577f570fa1fc.webp"
     },
     {
@@ -10941,7 +10928,7 @@
       "category": "Claxoane",
       "price": 109,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/7829441ee951e2fb9fab06ff938457e3.webp"
     },
     {
@@ -11006,7 +10993,7 @@
       "category": "Faruri si lumini",
       "price": 39,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/26f101d49e0314b7e8a7f0f92b70be2c.webp"
     },
     {
@@ -11344,7 +11331,7 @@
       "category": "Frane hidraulice",
       "price": 405.71,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/9f18ad26552cec52d359f796e31ee6a1.webp"
     },
     {
@@ -11669,7 +11656,7 @@
       "category": "Furca",
       "price": 289,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/8e24ff83568b39aea8c297ff5246bf67.webp"
     },
     {
@@ -11760,7 +11747,7 @@
       "category": "Furca",
       "price": 132,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/09efa699d027de738a497d09fcf2b4ed.webp"
     },
     {
@@ -12280,7 +12267,7 @@
       "category": "Incarcatoare",
       "price": 299,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/434bef96d3aa3b595ec7a6dd5320b44b.webp"
     },
     {
@@ -12345,7 +12332,7 @@
       "category": "Incarcatoare",
       "price": 265,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/751c6231e2527e75ac7b752ed4d1aef4.webp"
     },
     {
@@ -12878,7 +12865,7 @@
       "category": "Incarcatoare",
       "price": 189,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/53494930049113b570f7d7f665f0eabb.webp"
     },
     {
@@ -13216,7 +13203,7 @@
       "category": "Controller",
       "price": 399,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/42e8c366b05d2e3d3bbc615cfaafe277.webp"
     },
     {
@@ -13229,7 +13216,7 @@
       "category": "Kit controller si display",
       "price": 396,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/042d6959dba2047cdb3a8a897d6f955f.webp"
     },
     {
@@ -13281,7 +13268,7 @@
       "category": "Rulmenti si suruburi",
       "price": 99,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/8ff88b1208fcc245a2c1cd98e8e2d1cd.webp"
     },
     {
@@ -13411,7 +13398,7 @@
       "category": "Kit controller si display",
       "price": 399,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/938292e68f6944ea39b21abeac98fc6f.webp"
     },
     {
@@ -13554,7 +13541,7 @@
       "category": "Kit controller si display",
       "price": 329,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/8ca5429df25a638bae1d7f156bf79a30.webp"
     },
     {
@@ -13695,9 +13682,9 @@
       "gtin": "8480000088765",
       "brand": "LENZOD",
       "category": "Kit controller si display",
-      "price": 429,
+      "price": 459,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/df62f033aed40aa9b1c601e9047017bd.webp"
     },
     {
@@ -13801,7 +13788,7 @@
       "category": "Controller",
       "price": 219,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/b06b9381425a9d947630c1e1602ad97d.webp"
     },
     {
@@ -13892,7 +13879,7 @@
       "category": "Faruri si lumini",
       "price": 99,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/74f50ded1418c60f16753bef23989aff.webp"
     },
     {
@@ -14048,7 +14035,7 @@
       "category": "Manete acceleratie",
       "price": 162,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/a4a265118a606643a5fbc30a00e8fc1d.webp"
     },
     {
@@ -14100,7 +14087,7 @@
       "category": "Manete acceleratie",
       "price": 111,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/e16f52e5ef17a32778e7bc402a458c09.webp"
     },
     {
@@ -14425,7 +14412,7 @@
       "category": "Manete de frana",
       "price": 89,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/61c5f112a403d327c896d19f6e10762e.webp"
     },
     {
@@ -14724,7 +14711,7 @@
       "category": "Mansoane",
       "price": 60,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/dc0094534ddbe94b0c05eb528301863d.webp"
     },
     {
@@ -15114,7 +15101,7 @@
       "category": "Motoare",
       "price": 1199,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/508b81542f0bd7504c53864fce696e44.webp"
     },
     {
@@ -15595,7 +15582,7 @@
       "category": "Cabluri si mufe",
       "price": 26,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/efd80123733099dbcb79db59ac7237b1.webp"
     },
     {
@@ -15740,19 +15727,6 @@
       "currency": "RON",
       "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/9aab60361fe9a07272e7383f004e97b9.webp"
-    },
-    {
-      "id": "243d4c50-609b-577d-a9a6-316a177addab",
-      "name": "Organizator si protectie cabluri spiralat 110 CM - negru – plastic",
-      "url": "https://g-trots.ro/magazin/produs/organizator-si-protectie-cabluri-spiralat-110-cm-negru-negru/",
-      "sku": "SE-67784-05",
-      "gtin": "7427135772658",
-      "brand": "OEM",
-      "category": "Aparatori si protectii",
-      "price": 20,
-      "currency": "RON",
-      "availability": "https://schema.org/InStock",
-      "image": "https://g-trots.ro/shop-api/uploads/products/9781cd2cbb8d6e583ac5594df8dd914c.webp"
     },
     {
       "id": "ac065282-a6f8-5279-a638-d52b21312981",
@@ -16167,7 +16141,7 @@
       "category": "Placute de frana",
       "price": 50,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/f45779473c609de4ef9fa6527ae26b94.webp"
     },
     {
@@ -17142,7 +17116,7 @@
       "category": "Motoare",
       "price": 1599,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/368a5662979a72887110347f5bd5a5bf.webp"
     },
     {
@@ -17324,7 +17298,7 @@
       "category": "Roti",
       "price": 355,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/d335b2305daea9e4b7fbff3e94066390.webp"
     },
     {
@@ -18039,7 +18013,7 @@
       "category": "Faruri si lumini",
       "price": 99,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/004de6e7b9eb3556ca515996e6e1f1b6.webp"
     },
     {
@@ -18052,7 +18026,7 @@
       "category": "Faruri si lumini",
       "price": 99,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/1a9239a95a40207f48c51661cb9f85e5.webp"
     },
     {
@@ -18267,7 +18241,7 @@
       "id": "3fa3dd44-cb6f-5613-baad-304e60f2e1db",
       "name": "Senzor pass DUAL BOOASTER cu 12 magneti si mufa waterproff (3 pini)",
       "url": "https://g-trots.ro/magazin/produs/senzor-pass-dual-booaster-cu-12-magneti-si-mufa-waterproff-3-pini/",
-      "sku": "8343.1",
+      "sku": "C57766",
       "gtin": "",
       "brand": "OEM",
       "category": "Senzori",
@@ -18507,7 +18481,7 @@
       "category": "Acumulatori",
       "price": 79,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/22b6cf9fe66b55c462dd2c4af4b21ddd.webp"
     },
     {
@@ -18832,7 +18806,7 @@
       "category": "Casti protectie",
       "price": 99,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/57bbd5091dcfa666affb595355497e01.webp"
     },
     {
@@ -18936,7 +18910,7 @@
       "category": "Sisteme de pliere",
       "price": 449,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/5aba7eb3e787365b2e06ab1cb16697df.webp"
     },
     {
@@ -19313,7 +19287,7 @@
       "category": "Faruri si lumini",
       "price": 75,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/9fc6d3e8ac73c60ce20b13f696bd2dd4.webp"
     },
     {
@@ -19326,7 +19300,7 @@
       "category": "Faruri si lumini",
       "price": 59,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/8db306868fa58e8c48be8aec47002551.webp"
     },
     {
@@ -20288,7 +20262,7 @@
       "category": "Controller",
       "price": 129,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/efd0bdd4c4222adc1fffc13b5b1e10d5.webp"
     },
     {

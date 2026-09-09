@@ -3053,6 +3053,8 @@ function publicCatalogProductRow(array $row): array {
         'price_before_promotion' => $row['price_before_promotion'] === null ? null : (float)$row['price_before_promotion'],
         'promotion_discount_percent' => (float)($row['promotion_discount_percent'] ?? 0),
         'active_promotion' => $row['active_promotion'] ?? null,
+        'legal_warranty_months' => $row['legal_warranty_months'] === null ? null : (int)$row['legal_warranty_months'],
+        'commercial_warranty_months' => $row['commercial_warranty_months'] === null ? null : (int)$row['commercial_warranty_months'],
     ];
 }
 
@@ -3104,6 +3106,8 @@ function compactPublicCatalogPayload(array $products): array {
                 $promotion,
                 (string)($product['meta_title'] ?? ''),
                 (string)($product['meta_description'] ?? ''),
+                $product['legal_warranty_months'] === null ? null : (int)$product['legal_warranty_months'],
+                $product['commercial_warranty_months'] === null ? null : (int)$product['commercial_warranty_months'],
             ];
         }, $products),
     ];
@@ -3113,6 +3117,7 @@ function publicCatalogProductSelectSql(): string {
     return 'SELECT p.id, p.category_id, p.manufacturer_id, p.source_id,
                    p.sku, p.supplier_external_id, p.supplier_product_code, p.ean,
                    p.name, p.slug, p.short_description, p.meta_title, p.meta_description,
+                   p.legal_warranty_months, p.commercial_warranty_months,
                    p.price, p.supplier_base_price, p.sale_price, p.discount_type, p.discount_value, p.currency,
                    p.stock_mode, p.stock_quantity, p.low_stock_threshold,
                    p.is_featured, p.featured_rank,

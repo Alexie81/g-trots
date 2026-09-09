@@ -19,6 +19,8 @@ $product = [
     'stock_mode' => 'tracked',
     'stock_quantity' => 1,
     'sku' => 'SE-CMM087',
+    'legal_warranty_months' => 24,
+    'commercial_warranty_months' => null,
     'manufacturer_name' => 'Xiaomi',
     'category_system_key' => 'second_hand_scooters',
     'images' => [['url' => 'https://g-trots.ro/shop-api/uploads/products/produs.webp']],
@@ -54,6 +56,15 @@ productPageAssert(!str_contains($html, '"sku": "GT-ANV-G10-AT"'), 'Schemele JSON
 productPageAssert(str_contains($html, 'class="site-header"') && str_contains($html, 'class="shell shop-footer"'), 'Orice pagină generată trebuie să păstreze navbarul și footerul global al magazinului.');
 productPageAssert(str_contains($html, 'favorites.js?v=20260908-nav-v1') && str_contains($html, 'legal-footer.js?v=20260909-nav-v3'), 'Orice pagină generată trebuie să încarce acțiunile globale și navbarul/footerul actual.');
 productPageAssert(!str_contains($html, 'data-product-safety') && !str_contains($html, 'Siguranță și garanție'), 'Secțiunea Siguranță și garanție nu trebuie să apară pe pagina produsului.');
+productPageAssert(str_contains($html, 'data-product-warranty-badge>Garanție 24 luni</span>'), 'Generatorul trebuie să afișeze badge-ul de garanție când valoarea este mai mare decât zero.');
+productPageAssert(str_contains($html, 'data-product-warranty>') && str_contains($html, 'Garanție produs: 24 luni'), 'Generatorul trebuie să afișeze cardul de garanție în descriere când valoarea este mai mare decât zero.');
+
+$withoutWarranty = $product;
+$withoutWarranty['legal_warranty_months'] = 0;
+$withoutWarranty['commercial_warranty_months'] = null;
+$withoutWarrantyHtml = shopProductSeoRender($withoutWarranty, ['website_base_url' => 'https://g-trots.ro']);
+productPageAssert(str_contains($withoutWarrantyHtml, 'data-product-warranty-badge hidden></span>'), 'Badge-ul trebuie să rămână complet ascuns când garanția este zero sau nesetată.');
+productPageAssert(!str_contains($withoutWarrantyHtml, 'data-product-warranty>'), 'Generatorul nu trebuie să emită secțiunea de garanție când valoarea este zero sau nesetată.');
 
 $unsafe = $product;
 $unsafe['name'] = '</script><script>alert("x")</script>';

@@ -257,6 +257,26 @@ function shopProductSeoRender(array $product, array $config): string {
     $html = str_replace('</head>', $headScripts . '  </head>', $html);
     $html = (string)preg_replace_callback('/(<body\b[^>]*\bdata-product-id=")[^"]*(")/i', static fn(array $match): string => $match[1] . htmlspecialchars($slug, ENT_QUOTES | ENT_HTML5, 'UTF-8') . $match[2], $html, 1);
 
+    $displayWarranty = $commercialWarranty > 0 ? $commercialWarranty : $legalWarranty;
+    $warrantyBadge = '<span class="product-warranty-badge" data-product-warranty-badge hidden></span>';
+    $warrantyCard = '';
+    if ($displayWarranty > 0) {
+        $warrantyBadge = '<span class="product-warranty-badge" data-product-warranty-badge>Garanție ' . $displayWarranty . ' luni</span>';
+        $warrantyTitle = $commercialWarranty > 0
+            ? 'Garanție comercială: ' . $commercialWarranty . ' luni'
+            : 'Garanție produs: ' . $legalWarranty . ' luni';
+        $warrantyDetail = $legalWarranty > 0 && $commercialWarranty > 0
+            ? 'Garanția legală declarată este de ' . $legalWarranty . ' luni.'
+            : 'Detaliile și condițiile aplicabile sunt disponibile în politica de garanție G-Trots.';
+        $warrantyCard = '<aside class="product-warranty-card" data-product-warranty>'
+            . '<span class="product-warranty-card__shield" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 20 6v5c0 5.1-3.4 8.4-8 10-4.6-1.6-8-4.9-8-10V6l8-3Z"></path><path d="m8.5 12 2.2 2.2 4.8-5"></path></svg></span>'
+            . '<div><small>PROTECȚIE G-TROTS</small><strong>' . htmlspecialchars($warrantyTitle, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</strong><p>' . htmlspecialchars($warrantyDetail, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</p></div>'
+            . '</aside>';
+    }
+    $html = (string)preg_replace('#<span\b[^>]*\bdata-product-warranty-badge\b[^>]*>.*?</span>#is', $warrantyBadge, $html, 1);
+    $warrantyCardReplacement = $warrantyCard !== '' ? '              ' . $warrantyCard . PHP_EOL : '';
+    $html = (string)preg_replace('#[ \t]*<aside\b[^>]*\bdata-product-warranty\b[^>]*>.*?</aside>\R?#is', $warrantyCardReplacement, $html, 1);
+
     $staticSpecs = '';
     foreach (array_slice($properties, 0, 8) as $property) {
         $staticSpecs .= '<li><strong>' . htmlspecialchars((string)$property['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</strong><span>' . htmlspecialchars((string)$property['value'], ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</span></li>';

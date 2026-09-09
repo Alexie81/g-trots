@@ -52,7 +52,7 @@ productPageAssert(str_contains($html, 'id="gt-product-bootstrap"') && str_contai
 productPageAssert(str_contains($html, 'data-product-id="trotineta-second-hand-xiaomi-pro-2"'), 'Identificatorul produsului trebuie fixat în pagină.');
 productPageAssert(!str_contains($html, '"sku": "GT-ANV-G10-AT"'), 'Schemele JSON-LD vechi ale șablonului nu trebuie păstrate.');
 productPageAssert(str_contains($html, 'class="site-header"') && str_contains($html, 'class="shell shop-footer"'), 'Orice pagină generată trebuie să păstreze navbarul și footerul global al magazinului.');
-productPageAssert(str_contains($html, 'favorites.js?v=20260908-nav-v1') && str_contains($html, 'legal-footer.js?v=20260908-nav-v2'), 'Orice pagină generată trebuie să încarce acțiunile globale și navbarul/footerul actual.');
+productPageAssert(str_contains($html, 'favorites.js?v=20260908-nav-v1') && str_contains($html, 'legal-footer.js?v=20260909-nav-v3'), 'Orice pagină generată trebuie să încarce acțiunile globale și navbarul/footerul actual.');
 productPageAssert(!str_contains($html, 'data-product-safety') && !str_contains($html, 'Siguranță și garanție'), 'Secțiunea Siguranță și garanție nu trebuie să apară pe pagina produsului.');
 
 $unsafe = $product;

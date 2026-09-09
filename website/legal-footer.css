@@ -9,6 +9,7 @@
 /* Navbarul magazinului, folosit și de paginile juridice. */
 .gt-public-header {
   --header-edge-gap: 1rem;
+  box-sizing: border-box;
   position: fixed;
   z-index: 100;
   inset: 0 0 auto;
@@ -217,6 +218,62 @@
 .gt-public-header .mobile-nav-account,
 .gt-public-header .mobile-nav-call,
 .gt-public-header .menu-toggle { display: none; }
+
+.gt-store-shortcut {
+  width: 3.45rem;
+  height: 3.45rem;
+  position: fixed;
+  z-index: 42;
+  top: 52%;
+  right: 0.72rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 151, 42, 0.3);
+  border-radius: 1.15rem;
+  background: rgba(30, 25, 21, 0.78);
+  color: #ff9b2f;
+  box-shadow: 0 0.85rem 2.6rem rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate3d(calc(100% + 1.1rem), -50%, 0) scale(0.92);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  transition: opacity 220ms ease, visibility 220ms ease, transform 380ms cubic-bezier(0.16, 1, 0.3, 1), background 180ms ease, border-color 180ms ease;
+}
+.gt-store-shortcut.is-visible {
+  opacity: 0.82;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translate3d(0, -50%, 0) scale(1);
+}
+.gt-store-shortcut:hover,
+.gt-store-shortcut:focus-visible {
+  border-color: rgba(255, 167, 69, 0.7);
+  background: rgba(65, 39, 20, 0.94);
+  color: #ffad51;
+  opacity: 1;
+  transform: translate3d(0, -50%, 0) scale(1.04);
+}
+.gt-store-shortcut__icon { width: 2.5rem; height: 2.5rem; display: grid; place-items: center; border-radius: 0.84rem; background: rgba(255, 139, 18, 0.08); }
+.gt-store-shortcut__icon svg { width: 1.35rem; height: 1.35rem; overflow: visible; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
+.gt-store-shortcut__label {
+  width: max-content;
+  padding: 0.52rem 0.7rem;
+  position: absolute;
+  right: calc(100% + 0.55rem);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.72rem;
+  background: rgba(20, 18, 16, 0.92);
+  color: #f4eee8;
+  font: 750 0.68rem/1 "Manrope", Arial, sans-serif;
+  opacity: 0;
+  transform: translateX(0.35rem);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+.gt-store-shortcut:hover .gt-store-shortcut__label,
+.gt-store-shortcut:focus-visible .gt-store-shortcut__label { opacity: 1; transform: translateX(0); }
+body.menu-open .gt-store-shortcut { opacity: 0; pointer-events: none; }
 
 @media (min-width: 901px) and (max-width: 1180px) {
   .gt-public-header .header-inner { gap: 1.05rem; }
@@ -610,14 +667,15 @@
   }
 
   .gt-public-header { --header-edge-gap: 0.65rem; padding: 0.65rem; }
-  .gt-public-header .header-inner { min-height: 3.75rem; padding: 0.38rem 0.4rem 0.38rem 1rem; }
+  .gt-public-header .header-inner { min-height: 3.75rem; padding: 0.38rem 0.4rem 0.38rem 1rem; gap: 0.24rem; }
   .gt-public-header .logo { font-size: 1.32rem; }
   .gt-public-header .logo img { width: 2.35rem; height: 2.35rem; margin-right: 0.55rem; flex-basis: 2.35rem; border-radius: 0.7rem; }
   .gt-public-header .header-cta { display: none; }
   .gt-public-header .menu-toggle {
     width: 3rem;
     height: 3rem;
-    margin-left: auto;
+    flex: 0 0 3rem;
+    margin-left: 0;
     padding: 0;
     display: grid;
     place-content: center;
@@ -627,6 +685,11 @@
     background: var(--gt-orange);
     cursor: pointer;
   }
+  .gt-public-header .global-shop-actions { margin-left: auto; gap: 0.22rem; }
+  .gt-public-header .global-shop-actions + .menu-toggle { margin-left: 0; }
+  .gt-store-shortcut { width: 3.15rem; height: 3.15rem; right: 0.55rem; border-radius: 1rem; }
+  .gt-store-shortcut__icon { width: 2.3rem; height: 2.3rem; border-radius: 0.76rem; }
+  .gt-store-shortcut__label { display: none; }
   .gt-public-header .menu-toggle span { width: 1rem; height: 1.5px; display: block; background: #160b06; transition: transform 180ms ease; }
   .gt-public-header .menu-toggle[aria-expanded="true"] { background: #292827; transform: rotate(90deg); }
   .gt-public-header .menu-toggle[aria-expanded="true"] span:first-child { transform: translateY(0.22rem) rotate(45deg); }

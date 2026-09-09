@@ -1,5 +1,5 @@
 (() => {
-  const COMPONENT_VERSION = '20260908-nav-v2';
+  const COMPONENT_VERSION = '20260909-nav-v3';
   if (window.__gtLegalFooterVersion === COMPONENT_VERSION) return;
   window.__gtLegalFooterVersion = COMPONENT_VERSION;
   window.__gtLegalFooter = true;
@@ -44,7 +44,7 @@
       onload() { this.media = 'all'; },
     });
   }
-  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260908-nav-v1' });
+  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260909-nav-v2' });
   if (!document.querySelector('script[src*="google-measurement.js"]')) {
     loadAsset('script', { src: '/google-measurement.js?v=20260907-meta-v9', async: true });
   }
@@ -187,8 +187,16 @@ ${navigationHtml}
       headerInner.append(toggle);
     }
     if (!toggle) return;
+    // Unele pagini statice au încă un handler inline pentru vechiul navbar.
+    // Înlocuirea butonului păstrează aspectul și elimină handler-ele duplicate,
+    // altfel aceeași atingere deschide și închide imediat meniul pe mobil.
+    const cleanToggle = toggle.cloneNode(true);
+    toggle.replaceWith(cleanToggle);
+    toggle = cleanToggle;
     toggle.setAttribute('aria-label', 'Deschide meniul');
     toggle.setAttribute('aria-expanded', 'false');
+    toggle.dataset.gtNavigationBound = 'true';
+    toggle.dataset.favoritesMenuBound = 'true';
     document.dispatchEvent(new CustomEvent('g-trots:customer-changed'));
 
     const syncMobileAccount = () => {
@@ -213,25 +221,67 @@ ${navigationHtml}
       toggle.setAttribute('aria-expanded', String(open));
       toggle.setAttribute('aria-label', open ? 'Închide meniul' : 'Deschide meniul');
     };
-    if (toggle.dataset.gtNavigationBound !== 'true') {
-      toggle.dataset.gtNavigationBound = 'true';
-      toggle.addEventListener('click', () => setOpen(!nav.classList.contains('open')));
-      nav.addEventListener('click', event => { if (event.target.closest('a')) setOpen(false); });
-      addEventListener('keydown', event => { if (event.key === 'Escape') setOpen(false); });
-      addEventListener('storage', event => {
-        if (event.key === 'g-trots-customer-session-v1' || event.key === 'g-trots-customer-profile-v1') syncMobileAccount();
-      });
-    }
+    toggle.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setOpen(!nav.classList.contains('open'));
+    });
+    nav.addEventListener('click', event => { if (event.target.closest('a')) setOpen(false); });
+    document.addEventListener('click', event => {
+      if (nav.classList.contains('open') && !header.contains(event.target)) setOpen(false);
+    }, true);
+    addEventListener('keydown', event => { if (event.key === 'Escape') setOpen(false); });
+    addEventListener('resize', () => { if (innerWidth > 900) setOpen(false); }, { passive: true });
+    addEventListener('storage', event => {
+      if (event.key === 'g-trots-customer-session-v1' || event.key === 'g-trots-customer-profile-v1') syncMobileAccount();
+    });
     syncMobileAccount();
   }
 
   function ensureShopNavigation() {
     if (!document.querySelector('link[href*="favorites.css"]')) {
-      loadAsset('link', { rel: 'stylesheet', href: '/favorites.css?v=20260828-line-promotions-v1' });
+      loadAsset('link', { rel: 'stylesheet', href: '/favorites.css?v=20260909-nav-v2' });
     }
     if (!document.querySelector('script[src*="favorites.js"]')) {
       loadAsset('script', { src: '/favorites.js?v=20260908-nav-v1' });
     }
+  }
+
+  function ensureStaticStoreShortcut() {
+    const currentPath = location.pathname.toLowerCase().replace(/\/+$/, '').replace(/\.html$/, '') || '/';
+    const commercePath = /^\/(?:magazin|cos|checkout|favorite|cont|login|cont-nou|resetare-parola|plata-finalizata|plata-esuata)(?:\/|$)/.test(currentPath)
+      || /(?:anvelopa-g10|display-smart|incarcator-fastcharge|motor-dualhub|baterie-powercore|kit-frana)$/.test(currentPath);
+    if (commercePath || document.body.dataset.productId || document.querySelector('main.product-page, [data-product-detail]')) return;
+    if (document.querySelector('[data-gt-store-shortcut]')) return;
+
+    const shortcut = document.createElement('a');
+    shortcut.className = 'gt-store-shortcut';
+    shortcut.href = '/magazin';
+    shortcut.dataset.gtStoreShortcut = '';
+    shortcut.setAttribute('aria-label', 'Intră în magazinul G-Trots');
+    shortcut.innerHTML = `
+      <span class="gt-store-shortcut__label" aria-hidden="true">Vezi magazinul</span>
+      <span class="gt-store-shortcut__icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M6.8 8.1h10.4l1.15 11H5.65l1.15-11Z"/><path d="M9 9V6.6a3 3 0 0 1 6 0V9"/></svg>
+      </span>`;
+    document.body.append(shortcut);
+
+    const storeCta = Array.from(document.querySelectorAll('a[href="/magazin"], a[href^="/magazin?"]'))
+      .find(link => !link.closest('header, footer, nav') && /magazin|produse/i.test(link.textContent || ''));
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const revealAfter = storeCta
+        ? storeCta.getBoundingClientRect().bottom + scrollY + 20
+        : Math.max(innerHeight * 0.7, 420);
+      shortcut.classList.toggle('is-visible', scrollY > revealAfter);
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    addEventListener('scroll', schedule, { passive: true });
+    addEventListener('resize', schedule, { passive: true });
+    update();
   }
 
   function cachedConfig() {
@@ -408,6 +458,7 @@ ${navigationHtml}
 
   ensureOriginalHeader();
   ensureShopNavigation();
+  ensureStaticStoreShortcut();
   loadConfig()
     .then(data => render({ ...companyFallback, ...(data?.company || {}) }))
     .catch(() => render(companyFallback));

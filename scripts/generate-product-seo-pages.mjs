@@ -417,7 +417,7 @@ function buildCatalogPage(products) {
 <link rel="canonical" href="${WEBSITE_BASE_URL}/catalog-produse">
 <link rel="icon" href="/assets/logo.png" type="image/png">
 <style>html{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0b0b0d;color:#f7f2ed;font:16px/1.55 system-ui,sans-serif}main{width:min(1160px,calc(100% - 32px));margin:auto;padding:56px 0 80px}a{color:#ff8b33}h1{font-size:clamp(2rem,6vw,4.5rem);line-height:1.05;margin:.25em 0}h2{margin:2.2rem 0 .7rem;color:#ffb074}p{max-width:75ch;color:#c9c2bc}ul{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:8px;margin:0;padding:0;list-style:none}li{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border:1px solid #2f2f35;border-radius:14px;background:#17171b}li span{font-size:.85rem;color:#aaa3a0}.back{display:inline-block;margin-bottom:24px}</style></head>
-<body><main><a class="back" href="/magazin">← Magazin</a><h1>Catalog complet G-Trots</h1><p>${products.length} produse publice, fiecare cu pagină canonică și date structurate Product + Offer. Prețul și stocul de pe pagina produsului sunt sursa finală.</p>${sections}</main><script src="/legal-footer.js?v=20260908-nav-v2" defer></script></body></html>\n`;
+<body><main><a class="back" href="/magazin">← Magazin</a><h1>Catalog complet G-Trots</h1><p>${products.length} produse publice, fiecare cu pagină canonică și date structurate Product + Offer. Prețul și stocul de pe pagina produsului sunt sursa finală.</p>${sections}</main><script src="/legal-footer.js?v=20260909-nav-v3" defer></script></body></html>\n`;
 }
 
 function buildAiCatalog(products) {

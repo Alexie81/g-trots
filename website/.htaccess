@@ -13,12 +13,10 @@ AddType application/x-ndjson .jsonl
   RewriteCond %{THE_REQUEST} \s/+index\.html[\s?] [NC]
   RewriteRule ^index\.html$ https://g-trots.ro/ [R=301,L]
 
-  # Aliasurile demonstrative vechi ale produselor merg direct la pagina
-  # canonică, fără un al doilea hop și fără URL public .html.
-  RewriteCond %{THE_REQUEST} \s/+[^?\s]+\.html[\s?] [NC]
-  RewriteRule ^(anvelopa-g10-all-terrain|baterie-powercore-52v-23ah|display-smart-ride-s3|incarcator-fastcharge-54-6v|kit-frana-hydrostop-pro|motor-dualhub-x2-2000w)\.html$ https://g-trots.ro/magazin/produs/$1/ [R=301,L]
-
-  RewriteRule ^(anvelopa-g10-all-terrain|baterie-powercore-52v-23ah|display-smart-ride-s3|incarcator-fastcharge-54-6v|kit-frana-hydrostop-pro|motor-dualhub-x2-2000w)/?$ https://g-trots.ro/magazin/produs/$1/ [R=301,L]
+  # Produsele demonstrative vechi nu mai există și nu trebuie confundate cu
+  # articolele reale din catalog, nici prin URL-urile istorice.
+  RewriteRule ^(anvelopa-g10-all-terrain|baterie-powercore-52v-23ah|display-smart-ride-s3|incarcator-fastcharge-54-6v|kit-frana-hydrostop-pro|motor-dualhub-x2-2000w)(?:\.html)?/?$ - [R=410,L]
+  RewriteRule ^magazin/produs/(anvelopa-g10-all-terrain|baterie-powercore-52v-23ah|display-smart-ride-s3|incarcator-fastcharge-54-6v|kit-frana-hydrostop-pro|motor-dualhub-x2-2000w)/?$ - [R=410,L]
 
   RewriteCond %{THE_REQUEST} \s/+(.+?)\.html[\s?] [NC]
   RewriteRule ^(.+)\.html$ https://g-trots.ro/$1 [R=301,L]

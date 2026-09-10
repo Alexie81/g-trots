@@ -120,7 +120,19 @@ productPageAssert(str_contains($serviceSource, "'roles' => ['magazin online de p
 productPageAssert(str_contains($serviceSource, "'delivery_area' => ['România']") && str_contains($serviceSource, "'service_area' => ['București', 'Ilfov']"), 'Catalogul AI trebuie să separe livrarea națională a magazinului de aria locală a service-ului.');
 productPageAssert(str_contains($serviceSource, "'conversation_intents' => \$conversationContexts") && str_contains($serviceSource, "'compatibility_guidance'") && str_contains($serviceSource, "'service_support'"), 'Catalogul AI trebuie să ofere contexte conversaționale prudente, compatibilitate și suport de service.');
 productPageAssert(str_contains($serviceSource, 'shopProductSeoRebuildOpenAiProductFeed($products, $config)'), 'Reconstruirea catalogului AI trebuie să genereze și feedul OpenAI Product Discovery.');
+productPageAssert(str_contains($serviceSource, 'shopProductSeoRebuildStorePages($products, $config)'), 'Orice actualizare de produs trebuie să reconstruiască și catalogul HTML server-side paginat.');
 productPageAssert(str_contains($serviceSource, "'ai_catalog' => \$aiCatalog"), 'Actualizarea sitemap-ului trebuie să actualizeze și catalogul agenților AI.');
+
+$storeProduct = $product;
+$storeProduct['category_slug'] = 'trotinete-electrice';
+$storeProduct['manufacturer_slug'] = 'xiaomi';
+$storeProduct['sale_price'] = 1299.9;
+$storeTemplate = '<!doctype html><html><head><title>Magazin</title><meta name="description" content=""><meta property="og:title" content=""><meta property="og:description" content=""><meta property="og:url" content=""><link rel="canonical" href="https://g-trots.ro/magazin"></head><body><div id="product-grid" class="products-grid is-catalog-loading" aria-busy="true"><!-- GTROTS:SSR_PRODUCTS_START --><!-- GTROTS:SSR_PRODUCTS_END --></div><strong id="results-count">0 produse</strong><p id="pagination-range">0–0 din 0</p><nav><!-- GTROTS:SSR_PAGINATION_START --><!-- GTROTS:SSR_PAGINATION_END --></nav></body></html>';
+$storeHtml = shopProductSeoRenderStorePage($storeTemplate, [$storeProduct], 1, 1, 'https://g-trots.ro');
+productPageAssert(str_contains($storeHtml, 'Trotinetă electrică Xiaomi Pro 2 second hand') && str_contains($storeHtml, 'data-product-id="trotineta-second-hand-xiaomi-pro-2"'), 'Catalogul server-side trebuie să conțină produsul real și ruta lui, nu carduri demonstrative.');
+productPageAssert(str_contains($storeHtml, '1.299,90 <span>lei</span>'), 'Catalogul server-side trebuie să respecte prețul promoțional sau redus efectiv.');
+productPageAssert(str_contains($storeHtml, '<strong id="results-count">1 produse</strong>') && str_contains($storeHtml, '<p id="pagination-range">1–1 din 1</p>'), 'Catalogul server-side trebuie să publice numărul și intervalul real de produse.');
+productPageAssert(!str_contains($storeHtml, 'is-catalog-loading') && str_contains($storeHtml, 'aria-busy="false"'), 'Catalogul server-side nu trebuie să se prezinte crawlerului ca fiind încărcat exclusiv prin JavaScript.');
 
 $openAiRecord = shopProductSeoOpenAiProductRecord($automaticMeta, 'https://g-trots.ro');
 productPageAssert(is_array($openAiRecord), 'Produsul complet trebuie să fie eligibil pentru feedul OpenAI Product Discovery.');

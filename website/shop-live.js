@@ -1122,7 +1122,7 @@
           if (!productLoaded) {
             document.body.classList.add("has-live-product-error");
             productLoader?.classList.add("has-error");
-            productLoader?.setAttribute("aria-label", "Produsul nu s-a putut încărca");
+            productLoader?.setAttribute("aria-label", "Produs indisponibil momentan");
           }
         } finally {
           document.body.classList.remove("is-live-product-loading");

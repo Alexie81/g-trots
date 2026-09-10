@@ -270,7 +270,7 @@
         <a href="/#intrebari">Întrebări</a>
         <a href="/contact"${contactActive ? ' aria-current="page"' : ""}>Contact</a>
         <a class="mobile-nav-account" href="/login" aria-label="Intră în cont sau creează un cont"><span class="mobile-nav-account-avatar" aria-hidden="true"><i></i></span><span class="mobile-nav-account-copy"><small>CONT CLIENT</small><strong>Login</strong></span><b aria-hidden="true">›</b></a>
-        <a class="mobile-nav-call" href="tel:+40762093915"><span>${phoneIcon}</span><strong>Sună chiar acum</strong><small>+40 0762 093 915</small></a>`;
+        <a class="mobile-nav-call" href="tel:+40762093915"><span>${phoneIcon}</span><strong>Sună chiar acum</strong><small>0762 093 915</small></a>`;
     });
   }
 

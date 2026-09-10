@@ -30,6 +30,7 @@ EXCLUDED_NAMES = {
 }
 EXCLUDED_SUFFIXES = (".tmp", ".bak", ".log", ".pyc")
 PRODUCT_DISCOVERY_FILES = {
+    ".htaccess",
     "agents.md",
     "ai-catalog.json",
     "catalog-produse.html",
@@ -37,13 +38,19 @@ PRODUCT_DISCOVERY_FILES = {
     "llms-full.txt",
     "llms.txt",
     "magazin.html",
+    "magazin.js",
     "openai-products.jsonl",
     "openai-products.jsonl.gz",
     "openai-products-status.json",
     "produs.html",
+    "produs.js",
     "robots.txt",
     "sitemap-index.xml",
+    "sitemaps/sitemap-magazin.xml",
     "sitemaps/sitemap-produse.xml",
+    "shop-live.css",
+    "shop-live.js",
+    "shop-api/product-page-service.php",
 }
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -69,7 +76,10 @@ def iter_public_files(product_discovery_only: bool = False):
             continue
         relative_posix = relative.as_posix()
         if product_discovery_only and relative_posix not in PRODUCT_DISCOVERY_FILES:
-            if not (relative_posix.startswith("magazin/produs/") and relative_posix.endswith("/index.html")):
+            if not (
+                (relative_posix.startswith("magazin/produs/") and relative_posix.endswith("/index.html"))
+                or (relative_posix.startswith("magazin/pagina/") and relative_posix.endswith("/index.html"))
+            ):
                 continue
         yield path, relative
 

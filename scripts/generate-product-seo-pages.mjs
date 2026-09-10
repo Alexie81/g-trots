@@ -11,7 +11,10 @@ const PROJECT_ROOT = path.resolve(SCRIPT_DIR, "..");
 const WEBSITE_ROOT = path.join(PROJECT_ROOT, "website");
 const PRODUCT_ROOT = path.join(WEBSITE_ROOT, "magazin", "produs");
 const TEMPLATE_PATH = path.join(WEBSITE_ROOT, "produs.html");
+const STORE_PAGE_PATH = path.join(WEBSITE_ROOT, "magazin.html");
+const STORE_PAGINATION_ROOT = path.join(WEBSITE_ROOT, "magazin", "pagina");
 const SITEMAP_PATH = path.join(WEBSITE_ROOT, "sitemaps", "sitemap-produse.xml");
+const STORE_SITEMAP_PATH = path.join(WEBSITE_ROOT, "sitemaps", "sitemap-magazin.xml");
 const SITEMAP_INDEX_PATH = path.join(WEBSITE_ROOT, "sitemap-index.xml");
 const CATALOG_PAGE_PATH = path.join(WEBSITE_ROOT, "catalog-produse.html");
 const AI_CATALOG_PATH = path.join(WEBSITE_ROOT, "ai-catalog.json");
@@ -22,7 +25,12 @@ const MANIFEST_PATH = path.join(PRODUCT_ROOT, ".generated-product-pages.json");
 const WEBSITE_BASE_URL = (process.env.GTROTS_WEBSITE_URL || "https://g-trots.ro").replace(/\/$/, "");
 const API_URL = process.env.GTROTS_PUBLIC_API_URL || `${WEBSITE_BASE_URL}/shop-api/api-v2.php`;
 const PAGE_SIZE = 500;
+const STORE_PAGE_SIZE = 24;
 const GENERATED_ON = new Date().toISOString().slice(0, 10);
+const STORE_PRODUCTS_START = "<!-- GTROTS:SSR_PRODUCTS_START -->";
+const STORE_PRODUCTS_END = "<!-- GTROTS:SSR_PRODUCTS_END -->";
+const STORE_PAGINATION_START = "<!-- GTROTS:SSR_PAGINATION_START -->";
+const STORE_PAGINATION_END = "<!-- GTROTS:SSR_PAGINATION_END -->";
 
 function cleanText(value) {
   return String(value ?? "")
@@ -554,6 +562,161 @@ function buildSitemap(products) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${rows.join("\n")}\n</urlset>\n`;
 }
 
+function replaceGeneratedBlock(html, startMarker, endMarker, contents) {
+  const escapePattern = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(${escapePattern(startMarker)})[\\s\\S]*?(${escapePattern(endMarker)})`);
+  if (!pattern.test(html)) throw new Error(`Marker HTML lipsă: ${startMarker}`);
+  return html.replace(pattern, (_match, start, end) => `${start}\n${contents}\n              ${end}`);
+}
+
+function catalogPrice(value) {
+  return new Intl.NumberFormat("ro-RO", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(Number(value) || 0);
+}
+
+function storeStock(product) {
+  if (!isInStock(product)) return { label: "Stoc epuizat", key: "out-of-stock", rank: 2, css: " is-out" };
+  if (product.stock_mode !== "unlimited" && Number(product.stock_quantity || 0) <= Number(product.low_stock_threshold || 3)) {
+    return { label: "Stoc limitat", key: "in-stock", rank: 1, css: " is-low" };
+  }
+  return { label: "În stoc", key: "in-stock", rank: 0, css: "" };
+}
+
+function buildStoreProductCard(product, index) {
+  const slug = safeSlug(product.slug);
+  const route = `/magazin/produs/${encodeURIComponent(slug)}/`;
+  const name = cleanText(product.name) || "Produs G-Trots";
+  const categoryName = cleanText(product.category_name) || "Produs";
+  const categorySlug = cleanText(product.category_slug) || "produse";
+  const manufacturerName = cleanText(product.manufacturer_name);
+  const manufacturerSlug = cleanText(product.manufacturer_slug);
+  const brands = (product.brands || []).map(brand => ({ name: cleanText(brand.name), slug: cleanText(brand.slug) })).filter(brand => brand.name);
+  const brandNames = brands.map(brand => brand.name);
+  const brandSlugs = brands.map(brand => brand.slug).filter(Boolean);
+  const cardLabel = brandNames[0] || manufacturerName || categoryName;
+  const description = cleanText(product.short_description) || `${name} disponibil în magazinul G-Trots.`;
+  const imageUrl = absoluteUrl(product.images?.[0]?.url || product.images?.[0]?.image_path || "") || `${WEBSITE_BASE_URL}/assets/logo.png`;
+  const price = currentPrice(product);
+  const standardPrice = Number(product.promotion_price == null ? product.price : (product.price_before_promotion ?? product.sale_price ?? product.price)) || price;
+  const hasDiscount = price > 0 && standardPrice > price;
+  const discountPercent = hasDiscount ? Math.max(0, Math.round((1 - price / standardPrice) * 100)) : 0;
+  const stock = storeStock(product);
+  const featuredRank = product.is_featured && Number.isFinite(Number(product.featured_rank)) ? String(product.featured_rank) : "";
+  const search = excerpt(`${name} ${categoryName} ${manufacturerName} ${description} ${brandNames.join(" ")} ${cleanText(product.sku)} ${cleanText(product.ean)}`, 900);
+  const brandBadges = brandNames.slice(0, 4).map(brand => `<span>${escapeHtml(brand)}</span>`).join("");
+  const oldPrice = hasDiscount ? `<del>${escapeHtml(catalogPrice(standardPrice))} lei</del>` : "";
+  const discount = discountPercent > 0 ? `<em class="product-discount">-${discountPercent}%</em>` : "";
+  const featured = product.is_featured ? '<span class="product-badge">Recomandat</span>' : "";
+
+  return `              <article class="product-card live-product-card visible" data-product-id="${escapeHtml(slug)}" data-api-product-id="${escapeHtml(product.id)}" data-category="${escapeHtml(categorySlug)}" data-taxonomy="produse ${escapeHtml(categorySlug)}" data-brand="${escapeHtml(brandSlugs.join(" "))}" data-stock="${stock.key}" data-stock-rank="${stock.rank}" data-featured-rank="${escapeHtml(featuredRank)}" data-manufacturer="${escapeHtml(manufacturerSlug)}" data-price="${price}" data-name="${escapeHtml(name)}" data-identifiers="${escapeHtml(`${cleanText(product.sku)} ${cleanText(product.ean)} ${product.id}`)}" data-search="${escapeHtml(search)}" data-route="${route}" data-image="${escapeHtml(imageUrl)}" data-category-name="${escapeHtml(categoryName)}" data-manufacturer-name="${escapeHtml(manufacturerName)}" data-brand-names="${escapeHtml(brandNames.join(", "))}" data-stock-label="${stock.label}" data-short-description="${escapeHtml(description)}" data-index="${index}">
+                <div class="product-stage">
+                  ${featured}
+                  <div class="product-card-actions"><button class="cart-button" type="button" data-add-cart aria-label="Adaugă ${escapeHtml(name)} în coș"><span class="global-cart-icon" aria-hidden="true"><i></i><i></i></span><b aria-hidden="true">+</b></button><button class="favorite-button" type="button" aria-label="Adaugă ${escapeHtml(name)} la favorite" aria-pressed="false">♡</button></div>
+                  <div class="product-image product-image-live" style="background-image:url('${escapeHtml(imageUrl)}')" role="img" aria-label="${escapeHtml(name)}"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(name)}" width="720" height="720" loading="lazy" decoding="async"></div>
+                  <span class="product-quick-note${stock.css}"><i></i>${stock.label}</span>
+                </div>
+                <div class="product-info"><span class="product-category"><i></i>${escapeHtml(cardLabel)}</span><h3>${escapeHtml(name)}</h3><div class="product-summary" tabindex="0" aria-label="Pe scurt: ${escapeHtml(description)}"><span class="product-summary-badge"><i aria-hidden="true"></i>Pe scurt</span><p>${escapeHtml(description)}</p><span class="product-summary-tooltip" aria-hidden="true">${escapeHtml(description)}</span></div>${brandBadges ? `<div class="product-fit" aria-label="Mărci compatibile">${brandBadges}</div>` : ""}</div>
+                <div class="product-bottom"><div class="product-price"><small>${hasDiscount ? "Preț promoțional" : "Preț"}</small><strong>${escapeHtml(catalogPrice(price))} <span>lei</span></strong>${oldPrice}</div><div class="product-bottom-action">${discount}<span class="product-open-hint" aria-hidden="true">›</span></div></div>
+                <a class="product-card-link" href="${route}" aria-label="Deschide pagina produsului ${escapeHtml(name)}"></a>
+              </article>`;
+}
+
+function storePageUrl(page) {
+  return page <= 1 ? `${WEBSITE_BASE_URL}/magazin` : `${WEBSITE_BASE_URL}/magazin/pagina/${page}/`;
+}
+
+function storePaginationSequence(currentPage, totalPages) {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
+  const important = new Set([1, totalPages, currentPage - 1, currentPage, currentPage + 1]);
+  const pages = [...important].filter(page => page >= 1 && page <= totalPages).sort((a, b) => a - b);
+  const sequence = [];
+  pages.forEach((page, index) => {
+    if (index && page - pages[index - 1] > 1) sequence.push("ellipsis");
+    sequence.push(page);
+  });
+  return sequence;
+}
+
+function buildStorePagination(currentPage, totalPages) {
+  const links = storePaginationSequence(currentPage, totalPages).map(page => {
+    if (page === "ellipsis") return '<span class="pagination-ellipsis" aria-hidden="true">…</span>';
+    return `<a class="pagination-button" href="${escapeHtml(storePageUrl(page).replace(WEBSITE_BASE_URL, ""))}" aria-label="Pagina ${page}"${page === currentPage ? ' aria-current="page"' : ""}>${page}</a>`;
+  }).join("\n                ");
+  const previous = currentPage > 1
+    ? `<a class="pagination-button pagination-nav" href="${escapeHtml(storePageUrl(currentPage - 1).replace(WEBSITE_BASE_URL, ""))}" rel="prev" aria-label="Pagina anterioară">‹</a>`
+    : '<span class="pagination-button pagination-nav" aria-disabled="true">‹</span>';
+  const next = currentPage < totalPages
+    ? `<a class="pagination-button pagination-nav" href="${escapeHtml(storePageUrl(currentPage + 1).replace(WEBSITE_BASE_URL, ""))}" rel="next" aria-label="Pagina următoare">›</a>`
+    : '<span class="pagination-button pagination-nav" aria-disabled="true">›</span>';
+  return `                ${previous}\n                ${links}\n                ${next}`;
+}
+
+function renderStorePage(template, products, currentPage, totalPages) {
+  const canonical = storePageUrl(currentPage);
+  const title = currentPage === 1
+    ? "Piese și accesorii trotinete electrice | G-Trots"
+    : `Piese și accesorii trotinete electrice – Pagina ${currentPage} | G-Trots`;
+  const description = currentPage === 1
+    ? "Magazin G-Trots cu piese, accesorii și trotinete electrice: cauciucuri, baterii, motoare, frâne, display-uri și ajutor de service pentru alegerea compatibilă."
+    : `Pagina ${currentPage} din catalogul G-Trots cu piese, accesorii și trotinete electrice, prețuri și disponibilitate actualizate.`;
+  const first = (currentPage - 1) * STORE_PAGE_SIZE;
+  const last = Math.min(first + STORE_PAGE_SIZE, products.length);
+  const cards = products.slice(first, last).map((product, offset) => buildStoreProductCard(product, first + offset)).join("\n");
+  if (!cards) throw new Error(`Pagina ${currentPage} a catalogului nu conține produse.`);
+
+  let html = template.replace(/<title>.*?<\/title>/is, `<title>${escapeHtml(title)}</title>`);
+  html = replaceMeta(html, "name", "description", description);
+  html = replaceMeta(html, "property", "og:title", title);
+  html = replaceMeta(html, "property", "og:description", description);
+  html = replaceMeta(html, "property", "og:url", canonical);
+  html = html.replace(/<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/i, `<link rel="canonical" href="${escapeHtml(canonical)}">`);
+  html = html.replace(/\s*<link\b[^>]*\bdata-gt-catalog-rel\b[^>]*>/gi, "");
+  const relationLinks = [
+    currentPage > 1 ? `<link rel="prev" href="${escapeHtml(storePageUrl(currentPage - 1))}" data-gt-catalog-rel>` : "",
+    currentPage < totalPages ? `<link rel="next" href="${escapeHtml(storePageUrl(currentPage + 1))}" data-gt-catalog-rel>` : ""
+  ].filter(Boolean).join("\n    ");
+  if (relationLinks) html = html.replace("</head>", `    ${relationLinks}\n  </head>`);
+  html = html.replace(/<body\b([^>]*)>/i, (_tag, attributes) => {
+    const cleanAttributes = attributes.replace(/\sdata-catalog-page="[^"]*"/i, "");
+    return `<body${cleanAttributes} data-catalog-page="${currentPage}">`;
+  });
+  html = html.replace(/<div\b[^>]*\bid="product-grid"[^>]*>/i, tag => {
+    let nextTag = tag.replace(/\s+is-catalog-loading\b/, "");
+    nextTag = /\baria-busy="[^"]*"/i.test(nextTag)
+      ? nextTag.replace(/\baria-busy="[^"]*"/i, 'aria-busy="false"')
+      : nextTag.replace(/>$/, ' aria-busy="false">');
+    return nextTag;
+  });
+  html = replaceGeneratedBlock(html, STORE_PRODUCTS_START, STORE_PRODUCTS_END, cards);
+  html = replaceGeneratedBlock(html, STORE_PAGINATION_START, STORE_PAGINATION_END, buildStorePagination(currentPage, totalPages));
+  html = html.replace(/(<strong\b[^>]*\bid="results-count"[^>]*>)[\s\S]*?(<\/strong>)/i, (_match, start, end) => `${start}${products.length} produse${end}`);
+  html = html.replace(/(<p\b[^>]*\bid="pagination-range"[^>]*>)[\s\S]*?(<\/p>)/i, (_match, start, end) => `${start}${first + 1}–${last} din ${products.length}${end}`);
+  return html;
+}
+
+function buildStoreSitemap(totalPages) {
+  const rows = Array.from({ length: totalPages }, (_, index) => `  <url><loc>${escapeXml(storePageUrl(index + 1))}</loc><lastmod>${GENERATED_ON}</lastmod></url>`);
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${rows.join("\n")}\n</urlset>\n`;
+}
+
+async function generateStorePages(template, products) {
+  const resolvedRoot = path.resolve(STORE_PAGINATION_ROOT);
+  const expectedParent = path.resolve(WEBSITE_ROOT, "magazin");
+  if (path.dirname(resolvedRoot) !== expectedParent || path.basename(resolvedRoot) !== "pagina") {
+    throw new Error("Țintă nesigură pentru paginarea catalogului.");
+  }
+  const totalPages = Math.max(1, Math.ceil(products.length / STORE_PAGE_SIZE));
+  await rm(resolvedRoot, { recursive: true, force: true });
+  await atomicWrite(STORE_PAGE_PATH, renderStorePage(template, products, 1, totalPages));
+  for (let page = 2; page <= totalPages; page += 1) {
+    await atomicWrite(path.join(resolvedRoot, String(page), "index.html"), renderStorePage(template, products, page, totalPages));
+  }
+  await atomicWrite(STORE_SITEMAP_PATH, buildStoreSitemap(totalPages));
+  return totalPages;
+}
+
 function buildCatalogPage(products) {
   const groups = new Map();
   for (const product of products) {
@@ -713,18 +876,24 @@ function buildOpenAiProductFeed(products) {
 
 async function updateSitemapIndex() {
   let index = await readFile(SITEMAP_INDEX_PATH, "utf8");
-  const location = `${WEBSITE_BASE_URL}/sitemaps/sitemap-produse.xml`;
-  const entry = `  <sitemap><loc>${escapeXml(location)}</loc><lastmod>${GENERATED_ON}</lastmod></sitemap>`;
-  const escapedLocation = location.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const existing = new RegExp(`\\s*<sitemap><loc>${escapedLocation}<\\/loc><lastmod>[^<]*<\\/lastmod><\\/sitemap>`);
-  index = existing.test(index)
-    ? index.replace(existing, `\n${entry}`)
-    : index.replace("</sitemapindex>", `${entry}\n</sitemapindex>`);
+  const locations = [
+    `${WEBSITE_BASE_URL}/sitemaps/sitemap-produse.xml`,
+    `${WEBSITE_BASE_URL}/sitemaps/sitemap-magazin.xml`
+  ];
+  for (const location of locations) {
+    const entry = `  <sitemap><loc>${escapeXml(location)}</loc><lastmod>${GENERATED_ON}</lastmod></sitemap>`;
+    const escapedLocation = location.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const existing = new RegExp(`\\s*<sitemap><loc>${escapedLocation}<\\/loc><lastmod>[^<]*<\\/lastmod><\\/sitemap>`);
+    index = existing.test(index)
+      ? index.replace(existing, `\n${entry}`)
+      : index.replace("</sitemapindex>", `${entry}\n</sitemapindex>`);
+  }
   await atomicWrite(SITEMAP_INDEX_PATH, index);
 }
 
 async function main() {
   const template = await readFile(TEMPLATE_PATH, "utf8");
+  const storeTemplate = await readFile(STORE_PAGE_PATH, "utf8");
   const previousSlugs = await readManifest();
   const { products, reportedTotal } = await loadPublicProducts();
   if (!products.length) throw new Error("Catalogul public nu conține produse; generarea a fost oprită fără ștergeri.");
@@ -734,6 +903,7 @@ async function main() {
     await atomicWrite(outputPath, renderProductPage(template, product));
   }
   const removed = await removeStaleGeneratedPages(previousSlugs, products.map(product => product.slug));
+  const storePages = await generateStorePages(storeTemplate, products);
   await atomicWrite(SITEMAP_PATH, buildSitemap(products));
   await atomicWrite(CATALOG_PAGE_PATH, buildCatalogPage(products));
   await atomicWrite(AI_CATALOG_PATH, buildAiCatalog(products));
@@ -759,7 +929,7 @@ async function main() {
   const excludedCatalogRows = Math.max(0, reportedTotal - products.length);
   await atomicWrite(MANIFEST_PATH, `${JSON.stringify({ version: 1, generated_at: new Date().toISOString(), source: API_URL, reported_total: reportedTotal, products: products.length, catalog_rows_excluded_by_public_deduplication: excludedCatalogRows, slugs: products.map(product => product.slug) }, null, 2)}\n`);
 
-  process.stdout.write(`${JSON.stringify({ success: true, generated: products.length, reportedTotal, excludedCatalogRows, removed, productRoot: PRODUCT_ROOT, sitemap: SITEMAP_PATH, catalogPage: CATALOG_PAGE_PATH, aiCatalog: AI_CATALOG_PATH, openAiProductFeed: { path: OPENAI_PRODUCT_FEED_PATH, gzipPath: OPENAI_PRODUCT_FEED_GZIP_PATH, statusPath: OPENAI_PRODUCT_FEED_STATUS_PATH, products: openAiProductFeed.products, excluded: openAiProductFeed.excluded, excludedMissingBrand: openAiProductFeed.excludedMissingBrand, excludedOtherInvalid: openAiProductFeed.excludedOtherInvalid } }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ success: true, generated: products.length, reportedTotal, excludedCatalogRows, removed, productRoot: PRODUCT_ROOT, sitemap: SITEMAP_PATH, catalogPage: CATALOG_PAGE_PATH, storePages, storeSitemap: STORE_SITEMAP_PATH, aiCatalog: AI_CATALOG_PATH, openAiProductFeed: { path: OPENAI_PRODUCT_FEED_PATH, gzipPath: OPENAI_PRODUCT_FEED_GZIP_PATH, statusPath: OPENAI_PRODUCT_FEED_STATUS_PATH, products: openAiProductFeed.products, excluded: openAiProductFeed.excluded, excludedMissingBrand: openAiProductFeed.excludedMissingBrand, excludedOtherInvalid: openAiProductFeed.excludedOtherInvalid } }, null, 2)}\n`);
 }
 
 main().catch(error => {

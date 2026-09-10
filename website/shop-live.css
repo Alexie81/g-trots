@@ -12,6 +12,13 @@
   background-size: cover;
 }
 
+.product-card .product-image-live > img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
 .product-price del,
 .product-detail-price-row del {
   color: #8b8b87;

@@ -1,101 +1,47 @@
-const products = {
-  "anvelopa-g10-all-terrain": {
-    name: "Anvelopă G10 All-Terrain",
-    category: "Anvelope · 10 inch",
-    description: "Aderență bună pe asfalt și drum mixt, cu profil anti-alunecare și construcție pregătită pentru utilizare zilnică.",
-    price: "149,00 lei",
-    badge: "Recomandat",
-    stock: "În stoc",
-    image: 1,
-    brands: ["Universal", "KuKirin", "Xiaomi", "Ninebot"],
-    specs: [["Tip", "All-terrain"], ["Diametru", "10 inch"], ["Utilizare", "Asfalt + mixt"]]
-  },
-  "display-smart-ride-s3": {
-    name: "Display Smart Ride S3",
-    category: "Electronică · Display",
-    description: "Ecran clar, lizibilitate ridicată și comenzi intuitive pentru informațiile importante din timpul deplasării.",
-    price: "349,00 lei",
-    badge: "Nou",
-    stock: "În stoc",
-    image: 2,
-    brands: ["KuKirin", "Xiaomi", "Ninebot"],
-    specs: [["Afișaj", "Digital"], ["Control", "Integrat"], ["Montaj", "Verificabil"]]
-  },
-  "incarcator-fastcharge-54-6v": {
-    name: "Încărcător FastCharge 54.6V",
-    category: "Alimentare · 54.6V",
-    description: "Protecție la supratensiune și răcire eficientă pentru o încărcare sigură și constantă.",
-    price: "189,00 lei",
-    badge: "Testat G-Trots",
-    stock: "În stoc",
-    image: 3,
-    brands: ["Universal", "KuKirin", "Xiaomi"],
-    specs: [["Tensiune", "54.6V"], ["Protecție", "Integrată"], ["Răcire", "Eficientă"]]
-  },
-  "motor-dualhub-x2-2000w": {
-    name: "Motor DualHub X2 2000W",
-    category: "Motoare · 2000W",
-    description: "Cuplu ridicat, construcție robustă și răspuns prompt la accelerație pentru configurații compatibile.",
-    price: "1.899,00 lei",
-    badge: "Performance",
-    stock: "Stoc limitat",
-    image: 4,
-    brands: ["KuKirin", "G2 Master"],
-    specs: [["Putere", "2000W"], ["Tip", "Dual hub"], ["Montaj", "În service"]]
-  },
-  "baterie-powercore-52v-23ah": {
-    name: "Baterie PowerCore 52V 23Ah",
-    category: "Alimentare · 52V 23Ah",
-    description: "Celule echilibrate, BMS protejat și autonomie proiectată pentru trasee lungi și utilizare constantă.",
-    price: "2.499,00 lei",
-    badge: "Autonomie+",
-    stock: "În stoc",
-    image: 5,
-    brands: ["KuKirin", "G2 Pro", "G3"],
-    specs: [["Tensiune", "52V"], ["Capacitate", "23Ah"], ["Protecție", "BMS"]]
-  },
-  "kit-frana-hydrostop-pro": {
-    name: "Kit frână HydroStop Pro",
-    category: "Frânare · Hidraulic",
-    description: "Dozaj precis și putere constantă de oprire pentru control mai bun și frânare predictibilă.",
-    price: "399,00 lei",
-    badge: "Siguranță",
-    stock: "În stoc",
-    image: 6,
-    brands: ["Universal", "KuKirin", "Xiaomi", "Ninebot"],
-    specs: [["Sistem", "Hidraulic"], ["Disc", "Inclus"], ["Montaj", "Disponibil"]]
-  }
-};
+// Nu există produse demonstrative în pagina reală. Conținutul inițial vine
+// exclusiv din HTML-ul generat server-side pentru slugul curent.
+const products = {};
 
 const params = new URLSearchParams(window.location.search);
 const pathMatch = window.location.pathname.match(/\/magazin\/produs\/([^/]+)\/?$/i);
-const productId = (pathMatch ? decodeURIComponent(pathMatch[1]) : null) || params.get("slug") || params.get("id") || document.body.dataset.productId || "anvelopa-g10-all-terrain";
+const productId = (pathMatch ? decodeURIComponent(pathMatch[1]) : null) || params.get("slug") || params.get("id") || document.body.dataset.productId || "";
 const staticProduct = products[productId] || null;
-const product = staticProduct || products["anvelopa-g10-all-terrain"];
+const product = staticProduct || {
+  name: document.querySelector("[data-product-title]")?.textContent?.trim() || "Produs G-Trots",
+  category: document.querySelector("[data-product-category]")?.textContent?.trim() || "Catalog G-Trots",
+  description: document.querySelector("[data-product-description]")?.textContent?.trim() || "Informațiile produsului sunt furnizate direct din catalogul G-Trots.",
+  price: document.querySelector("[data-product-price]")?.textContent?.trim() || "—",
+  badge: "",
+  stock: document.querySelector("[data-product-stock]")?.textContent?.trim() || "Indisponibil",
+  image: 0,
+  brands: [],
+  specs: []
+};
 
 const setText = (selector, value) => {
   const element = document.querySelector(selector);
   if (element) element.textContent = value;
 };
 
-setText("[data-product-breadcrumb]", product.name);
+if (staticProduct) setText("[data-product-breadcrumb]", product.name);
 const productDetailBadge = document.querySelector("[data-product-badge]");
-if (productDetailBadge) {
+if (productDetailBadge && staticProduct) {
   const isRecommended = Boolean(staticProduct && product.badge === "Recomandat");
   productDetailBadge.hidden = !isRecommended;
   productDetailBadge.textContent = isRecommended ? "Recomandat" : "";
 }
-setText("[data-product-stock]", product.stock);
-setText("[data-product-category]", product.category);
-setText("[data-product-title]", product.name);
-setText("[data-product-description]", product.description);
-setText("[data-product-price]", product.price);
-
-document.title = `${product.name} | Magazin G-Trots`;
-document.querySelector('meta[name="description"]')?.setAttribute("content", product.description);
+if (staticProduct) {
+  setText("[data-product-stock]", product.stock);
+  setText("[data-product-category]", product.category);
+  setText("[data-product-title]", product.name);
+  setText("[data-product-description]", product.description);
+  setText("[data-product-price]", product.price);
+  document.title = `${product.name} | Magazin G-Trots`;
+  document.querySelector('meta[name="description"]')?.setAttribute("content", product.description);
+}
 
 const image = document.querySelector("[data-product-image]");
-if (image) {
+if (image && staticProduct) {
   image.className = `product-detail-image product-image-${product.image}`;
   image.setAttribute("aria-label", product.name);
 }
@@ -104,12 +50,12 @@ const stock = document.querySelector(".product-detail-stock");
 stock?.classList.toggle("is-low", product.stock === "Stoc limitat");
 
 const brands = document.querySelector("[data-product-brands]");
-if (brands) {
+if (brands && staticProduct) {
   brands.innerHTML = product.brands.map(brand => `<b>${brand}</b>`).join("");
 }
 
 const specs = document.querySelector("[data-product-specs]");
-if (specs) {
+if (specs && staticProduct) {
   specs.innerHTML = product.specs.map(([label, value]) => `<div><small>${label}</small><strong>${value}</strong></div>`).join("");
 }
 
@@ -772,8 +718,18 @@ function renderRelatedProducts() {
 }
 
 function updateRelatedProductsFromLive(liveProducts) {
-  const section = document.querySelector("[data-related-products]");
-  if (!section || !Array.isArray(liveProducts)) return;
+  if (!Array.isArray(liveProducts)) return;
+  let section = document.querySelector("[data-related-products]");
+  if (!section) {
+    section = document.createElement("section");
+    section.className = "related-products-section shell";
+    section.dataset.relatedProducts = "";
+    section.setAttribute("aria-labelledby", "related-products-title");
+    section.innerHTML = '<div class="related-products-heading"><div><span>Recomandări G-Trots</span><h2 id="related-products-title">S-ar putea să îți placă și…</h2></div><a href="/magazin#catalog">Vezi toate produsele <b aria-hidden="true">›</b></a></div><div class="related-products-grid" data-related-track></div><nav class="related-carousel-controls" aria-label="Navigare produse recomandate"><button type="button" data-related-previous aria-label="Produsul recomandat anterior">‹</button><div class="related-carousel-dots" data-related-dots></div><button type="button" data-related-next aria-label="Următorul produs recomandat">›</button></nav>';
+    const questions = document.querySelector("#intrebari");
+    if (questions) questions.insertAdjacentElement("afterend", section);
+    else document.querySelector("main")?.append(section);
+  }
   const rows = liveProducts.map(item => item?.raw || item).filter(item => item && (item.slug || item.id));
   const current = rows.find(item => String(item.slug || item.id) === productId);
   const currentBrands = new Set((current?.brands || []).map(brand => String(brand.id || brand.slug || brand.name || "")).filter(Boolean));

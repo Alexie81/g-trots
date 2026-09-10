@@ -669,6 +669,202 @@ PHP;
     return $path;
 }
 
+function shopProductSeoReplaceGeneratedBlock(string $html, string $start, string $end, string $contents): string {
+    $pattern = '#(' . preg_quote($start, '#') . ')[\s\S]*?(' . preg_quote($end, '#') . ')#';
+    if (!preg_match($pattern, $html)) throw new RuntimeException('Markerul catalogului server-side lipsește din magazin.html.');
+    return (string)preg_replace_callback(
+        $pattern,
+        static fn(array $match): string => $match[1] . PHP_EOL . $contents . PHP_EOL . '              ' . $match[2],
+        $html,
+        1
+    );
+}
+
+function shopProductSeoStorePageUrl(int $page, string $websiteBaseUrl): string {
+    return $page <= 1
+        ? $websiteBaseUrl . '/magazin'
+        : $websiteBaseUrl . '/magazin/pagina/' . $page . '/';
+}
+
+function shopProductSeoStoreStock(array $product): array {
+    $inStock = (string)($product['stock_mode'] ?? 'tracked') === 'unlimited' || (int)($product['stock_quantity'] ?? 0) > 0;
+    if (!$inStock) return ['label' => 'Stoc epuizat', 'key' => 'out-of-stock', 'rank' => 2, 'class' => ' is-out'];
+    if ((string)($product['stock_mode'] ?? 'tracked') !== 'unlimited'
+        && (int)($product['stock_quantity'] ?? 0) <= (int)($product['low_stock_threshold'] ?? 3)) {
+        return ['label' => 'Stoc limitat', 'key' => 'in-stock', 'rank' => 1, 'class' => ' is-low'];
+    }
+    return ['label' => 'În stoc', 'key' => 'in-stock', 'rank' => 0, 'class' => ''];
+}
+
+function shopProductSeoStoreCard(array $product, int $index, string $websiteBaseUrl): string {
+    $escape = static fn(mixed $value): string => htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8');
+    $slug = shopProductSeoSafeSlug((string)($product['slug'] ?? ''));
+    $route = '/magazin/produs/' . rawurlencode($slug) . '/';
+    $name = shopProductSeoText($product['name'] ?? '') ?: 'Produs G-Trots';
+    $categoryName = shopProductSeoText($product['category_name'] ?? '') ?: 'Produs';
+    $categorySlug = shopProductSeoText($product['category_slug'] ?? '') ?: 'produse';
+    $manufacturerName = shopProductSeoText($product['manufacturer_name'] ?? '');
+    $manufacturerSlug = shopProductSeoText($product['manufacturer_slug'] ?? '');
+    $brandNames = [];
+    $brandSlugs = [];
+    foreach ((array)($product['brands'] ?? []) as $brand) {
+        $brandName = shopProductSeoText($brand['name'] ?? '');
+        $brandSlug = shopProductSeoText($brand['slug'] ?? '');
+        if ($brandName !== '') $brandNames[] = $brandName;
+        if ($brandSlug !== '') $brandSlugs[] = $brandSlug;
+    }
+    $cardLabel = $brandNames[0] ?? ($manufacturerName !== '' ? $manufacturerName : $categoryName);
+    $description = shopProductSeoText($product['short_description'] ?? '') ?: $name . ' disponibil în magazinul G-Trots.';
+    $imageUrl = '';
+    if (!empty($product['images'][0]) && is_array($product['images'][0])) {
+        $imageUrl = shopProductSeoAbsoluteUrl((string)($product['images'][0]['url'] ?? $product['images'][0]['image_path'] ?? ''), $websiteBaseUrl);
+    }
+    if ($imageUrl === '') $imageUrl = $websiteBaseUrl . '/assets/logo.png';
+    if (function_exists('stripeEffectiveProductPrice')) {
+        $price = stripeEffectiveProductPrice($product);
+    } else {
+        $basePrice = max(0.0, (float)($product['price'] ?? 0), (float)($product['supplier_base_price'] ?? 0));
+        $salePrice = round((float)($product['sale_price'] ?? 0), 2);
+        $promotionPrice = round((float)($product['promotion_price'] ?? 0), 2);
+        $price = $promotionPrice > 0 ? $promotionPrice : ($salePrice > 0 ? $salePrice : $basePrice);
+    }
+    $stock = shopProductSeoStoreStock($product);
+    $featuredRank = !empty($product['is_featured']) && is_numeric($product['featured_rank'] ?? null) ? (string)$product['featured_rank'] : '';
+    $search = shopProductSeoExcerpt(implode(' ', [$name, $categoryName, $manufacturerName, $description, implode(' ', $brandNames), (string)($product['sku'] ?? ''), (string)($product['ean'] ?? '')]), 900);
+    $brandBadges = '';
+    foreach (array_slice($brandNames, 0, 4) as $brandName) $brandBadges .= '<span>' . $escape($brandName) . '</span>';
+    $brandSection = $brandBadges !== '' ? '<div class="product-fit" aria-label="Mărci compatibile">' . $brandBadges . '</div>' : '';
+    $featured = !empty($product['is_featured']) ? '<span class="product-badge">Recomandat</span>' : '';
+
+    return '              <article class="product-card live-product-card visible" data-product-id="' . $escape($slug) . '" data-api-product-id="' . $escape($product['id'] ?? '') . '" data-category="' . $escape($categorySlug) . '" data-taxonomy="produse ' . $escape($categorySlug) . '" data-brand="' . $escape(implode(' ', $brandSlugs)) . '" data-stock="' . $stock['key'] . '" data-stock-rank="' . $stock['rank'] . '" data-featured-rank="' . $escape($featuredRank) . '" data-manufacturer="' . $escape($manufacturerSlug) . '" data-price="' . $price . '" data-name="' . $escape($name) . '" data-identifiers="' . $escape(trim((string)($product['sku'] ?? '') . ' ' . (string)($product['ean'] ?? '') . ' ' . (string)($product['id'] ?? ''))) . '" data-search="' . $escape($search) . '" data-route="' . $route . '" data-image="' . $escape($imageUrl) . '" data-category-name="' . $escape($categoryName) . '" data-manufacturer-name="' . $escape($manufacturerName) . '" data-brand-names="' . $escape(implode(', ', $brandNames)) . '" data-stock-label="' . $stock['label'] . '" data-short-description="' . $escape($description) . '" data-index="' . $index . '">'
+        . '<div class="product-stage">' . $featured . '<div class="product-image product-image-live" style="background-image:url(\'' . $escape($imageUrl) . '\')" role="img" aria-label="' . $escape($name) . '"><img src="' . $escape($imageUrl) . '" alt="' . $escape($name) . '" width="720" height="720" loading="lazy" decoding="async"></div><span class="product-quick-note' . $stock['class'] . '"><i></i>' . $stock['label'] . '</span></div>'
+        . '<div class="product-info"><span class="product-category"><i></i>' . $escape($cardLabel) . '</span><h3>' . $escape($name) . '</h3><div class="product-summary" tabindex="0" aria-label="Pe scurt: ' . $escape($description) . '"><span class="product-summary-badge"><i aria-hidden="true"></i>Pe scurt</span><p>' . $escape($description) . '</p><span class="product-summary-tooltip" aria-hidden="true">' . $escape($description) . '</span></div>' . $brandSection . '</div>'
+        . '<div class="product-bottom"><div class="product-price"><small>Preț</small><strong>' . number_format(max(0, $price), 2, ',', '.') . ' <span>lei</span></strong></div><div class="product-bottom-action"><span class="product-open-hint" aria-hidden="true">›</span></div></div>'
+        . '<a class="product-card-link" href="' . $route . '" aria-label="Deschide pagina produsului ' . $escape($name) . '"></a></article>';
+}
+
+function shopProductSeoStorePagination(int $currentPage, int $totalPages, string $websiteBaseUrl): string {
+    $important = [1, $totalPages, $currentPage - 1, $currentPage, $currentPage + 1];
+    $pages = array_values(array_unique(array_filter($important, static fn(int $page): bool => $page >= 1 && $page <= $totalPages)));
+    sort($pages);
+    $sequence = [];
+    foreach ($pages as $index => $page) {
+        if ($index > 0 && $page - $pages[$index - 1] > 1) $sequence[] = null;
+        $sequence[] = $page;
+    }
+    $relativeUrl = static function (int $page) use ($websiteBaseUrl): string {
+        return str_replace($websiteBaseUrl, '', shopProductSeoStorePageUrl($page, $websiteBaseUrl));
+    };
+    $parts = [];
+    $parts[] = $currentPage > 1
+        ? '<a class="pagination-button pagination-nav" href="' . $relativeUrl($currentPage - 1) . '" rel="prev" aria-label="Pagina anterioară">‹</a>'
+        : '<span class="pagination-button pagination-nav" aria-disabled="true">‹</span>';
+    foreach ($sequence as $page) {
+        if ($page === null) {
+            $parts[] = '<span class="pagination-ellipsis" aria-hidden="true">…</span>';
+            continue;
+        }
+        $parts[] = '<a class="pagination-button" href="' . $relativeUrl($page) . '" aria-label="Pagina ' . $page . '"' . ($page === $currentPage ? ' aria-current="page"' : '') . '>' . $page . '</a>';
+    }
+    $parts[] = $currentPage < $totalPages
+        ? '<a class="pagination-button pagination-nav" href="' . $relativeUrl($currentPage + 1) . '" rel="next" aria-label="Pagina următoare">›</a>'
+        : '<span class="pagination-button pagination-nav" aria-disabled="true">›</span>';
+    return '                ' . implode(PHP_EOL . '                ', $parts);
+}
+
+function shopProductSeoRenderStorePage(string $template, array $products, int $currentPage, int $totalPages, string $websiteBaseUrl, int $pageSize = 24): string {
+    $canonical = shopProductSeoStorePageUrl($currentPage, $websiteBaseUrl);
+    $title = $currentPage === 1 ? 'Piese și accesorii trotinete electrice | G-Trots' : 'Piese și accesorii trotinete electrice – Pagina ' . $currentPage . ' | G-Trots';
+    $description = $currentPage === 1
+        ? 'Magazin G-Trots cu piese, accesorii și trotinete electrice: cauciucuri, baterii, motoare, frâne, display-uri și ajutor de service pentru alegerea compatibilă.'
+        : 'Pagina ' . $currentPage . ' din catalogul G-Trots cu piese, accesorii și trotinete electrice, prețuri și disponibilitate actualizate.';
+    $first = ($currentPage - 1) * $pageSize;
+    $last = min($first + $pageSize, count($products));
+    $cards = [];
+    foreach (array_slice($products, $first, $pageSize) as $offset => $product) $cards[] = shopProductSeoStoreCard($product, $first + $offset, $websiteBaseUrl);
+    if (!$cards) throw new RuntimeException('Pagina catalogului nu conține produse.');
+    $html = (string)preg_replace('#<title>.*?</title>#is', '<title>' . htmlspecialchars($title, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</title>', $template, 1);
+    $html = shopProductSeoReplaceMeta($html, 'name', 'description', $description);
+    $html = shopProductSeoReplaceMeta($html, 'property', 'og:title', $title);
+    $html = shopProductSeoReplaceMeta($html, 'property', 'og:description', $description);
+    $html = shopProductSeoReplaceMeta($html, 'property', 'og:url', $canonical);
+    $html = (string)preg_replace('#<link\s+rel="canonical"\s+href="[^"]*"\s*/?>#i', '<link rel="canonical" href="' . htmlspecialchars($canonical, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '">', $html, 1);
+    $html = (string)preg_replace('#\s*<link\b[^>]*\bdata-gt-catalog-rel\b[^>]*>#i', '', $html);
+    $relations = [];
+    if ($currentPage > 1) $relations[] = '<link rel="prev" href="' . shopProductSeoStorePageUrl($currentPage - 1, $websiteBaseUrl) . '" data-gt-catalog-rel>';
+    if ($currentPage < $totalPages) $relations[] = '<link rel="next" href="' . shopProductSeoStorePageUrl($currentPage + 1, $websiteBaseUrl) . '" data-gt-catalog-rel>';
+    if ($relations) $html = str_replace('</head>', '    ' . implode(PHP_EOL . '    ', $relations) . PHP_EOL . '  </head>', $html);
+    $html = (string)preg_replace_callback('#<body\b([^>]*)>#i', static function (array $match) use ($currentPage): string {
+        $attributes = (string)preg_replace('/\sdata-catalog-page="[^"]*"/i', '', $match[1]);
+        return '<body' . $attributes . ' data-catalog-page="' . $currentPage . '">';
+    }, $html, 1);
+    $html = (string)preg_replace_callback('#<div\b[^>]*\bid="product-grid"[^>]*>#i', static function (array $match): string {
+        $tag = str_replace(' is-catalog-loading', '', $match[0]);
+        if (preg_match('/\baria-busy="[^"]*"/i', $tag)) return (string)preg_replace('/\baria-busy="[^"]*"/i', 'aria-busy="false"', $tag, 1);
+        return rtrim($tag, '>') . ' aria-busy="false">';
+    }, $html, 1);
+    $html = shopProductSeoReplaceGeneratedBlock($html, '<!-- GTROTS:SSR_PRODUCTS_START -->', '<!-- GTROTS:SSR_PRODUCTS_END -->', implode(PHP_EOL, $cards));
+    $html = shopProductSeoReplaceGeneratedBlock($html, '<!-- GTROTS:SSR_PAGINATION_START -->', '<!-- GTROTS:SSR_PAGINATION_END -->', shopProductSeoStorePagination($currentPage, $totalPages, $websiteBaseUrl));
+    $productCount = count($products);
+    $html = (string)preg_replace_callback(
+        '#(<strong\b[^>]*\bid="results-count"[^>]*>)[\s\S]*?(</strong>)#i',
+        static fn(array $match): string => $match[1] . $productCount . ' produse' . $match[2],
+        $html,
+        1
+    );
+    $range = ($first + 1) . '–' . $last . ' din ' . $productCount;
+    $html = (string)preg_replace_callback(
+        '#(<p\b[^>]*\bid="pagination-range"[^>]*>)[\s\S]*?(</p>)#i',
+        static fn(array $match): string => $match[1] . $range . $match[2],
+        $html,
+        1
+    );
+    return $html;
+}
+
+function shopProductSeoRebuildStorePages(array $products, array $config): array {
+    $root = shopProductSeoWebsiteRoot();
+    $storePath = $root . DIRECTORY_SEPARATOR . 'magazin.html';
+    $template = file_get_contents($storePath);
+    if (!is_string($template) || $template === '') throw new RuntimeException('Pagina magazinului nu poate fi citită pentru randarea server-side.');
+    $websiteBaseUrl = rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/');
+    $pageSize = 24;
+    $totalPages = max(1, (int)ceil(count($products) / $pageSize));
+    $paginationRoot = $root . DIRECTORY_SEPARATOR . 'magazin' . DIRECTORY_SEPARATOR . 'pagina';
+    if (!is_dir($paginationRoot) && !mkdir($paginationRoot, 0775, true) && !is_dir($paginationRoot)) throw new RuntimeException('Directorul paginării magazinului nu poate fi creat.');
+    foreach ((array)glob($paginationRoot . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR) as $directory) {
+        $pageName = basename($directory);
+        if (!ctype_digit($pageName)) continue;
+        foreach (['index.html', 'index.php'] as $fileName) {
+            $file = $directory . DIRECTORY_SEPARATOR . $fileName;
+            if (is_file($file)) @unlink($file);
+        }
+        @rmdir($directory);
+    }
+    if (file_put_contents($storePath, shopProductSeoRenderStorePage($template, $products, 1, $totalPages, $websiteBaseUrl, $pageSize), LOCK_EX) === false) throw new RuntimeException('Pagina principală a magazinului nu poate fi actualizată.');
+    for ($page = 2; $page <= $totalPages; $page++) {
+        $directory = $paginationRoot . DIRECTORY_SEPARATOR . $page;
+        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) throw new RuntimeException('O pagină a catalogului nu poate fi creată.');
+        if (file_put_contents($directory . DIRECTORY_SEPARATOR . 'index.html', shopProductSeoRenderStorePage($template, $products, $page, $totalPages, $websiteBaseUrl, $pageSize), LOCK_EX) === false) throw new RuntimeException('O pagină a catalogului nu poate fi scrisă.');
+    }
+    $sitemapPath = $root . DIRECTORY_SEPARATOR . 'sitemaps' . DIRECTORY_SEPARATOR . 'sitemap-magazin.xml';
+    $xml = '<?xml version="1.0" encoding="UTF-8"?>' . PHP_EOL . '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . PHP_EOL;
+    for ($page = 1; $page <= $totalPages; $page++) $xml .= '  <url><loc>' . htmlspecialchars(shopProductSeoStorePageUrl($page, $websiteBaseUrl), ENT_XML1 | ENT_QUOTES, 'UTF-8') . '</loc><lastmod>' . date('Y-m-d') . '</lastmod></url>' . PHP_EOL;
+    $xml .= '</urlset>' . PHP_EOL;
+    if (file_put_contents($sitemapPath, $xml, LOCK_EX) === false) throw new RuntimeException('Sitemap-ul paginării magazinului nu poate fi scris.');
+    $indexPath = $root . DIRECTORY_SEPARATOR . 'sitemap-index.xml';
+    $indexXml = is_file($indexPath) ? file_get_contents($indexPath) : false;
+    if (is_string($indexXml) && $indexXml !== '') {
+        $location = $websiteBaseUrl . '/sitemaps/sitemap-magazin.xml';
+        $entry = '  <sitemap><loc>' . htmlspecialchars($location, ENT_XML1 | ENT_QUOTES, 'UTF-8') . '</loc><lastmod>' . date('Y-m-d') . '</lastmod></sitemap>';
+        $indexXml = str_contains($indexXml, $location)
+            ? (string)preg_replace('#\s*<sitemap><loc>' . preg_quote($location, '#') . '</loc><lastmod>[^<]*</lastmod></sitemap>#', PHP_EOL . $entry, $indexXml, 1)
+            : str_replace('</sitemapindex>', $entry . PHP_EOL . '</sitemapindex>', $indexXml);
+        if (file_put_contents($indexPath, $indexXml, LOCK_EX) === false) throw new RuntimeException('Indexul sitemap nu poate fi actualizat cu paginarea magazinului.');
+    }
+    return ['success' => true, 'pages' => $totalPages, 'products' => count($products), 'sitemap' => $sitemapPath];
+}
+
 function shopProductSeoRebuildAiCatalog(PDO $db, array $config): array {
     if (!function_exists('productSelectSql') || !function_exists('productRows')) {
         return ['success' => false, 'products' => 0, 'error' => 'Funcțiile catalogului nu sunt disponibile.'];
@@ -806,7 +1002,8 @@ function shopProductSeoRebuildAiCatalog(PDO $db, array $config): array {
         throw new RuntimeException('Catalogul pentru agenți AI nu poate fi actualizat.');
     }
     $openAiProductFeed = shopProductSeoRebuildOpenAiProductFeed($products, $config);
-    return ['success' => true, 'products' => count($catalogProducts), 'path' => $path, 'url' => $websiteBaseUrl . '/ai-catalog.json', 'openai_product_feed' => $openAiProductFeed];
+    $storefront = shopProductSeoRebuildStorePages($products, $config);
+    return ['success' => true, 'products' => count($catalogProducts), 'path' => $path, 'url' => $websiteBaseUrl . '/ai-catalog.json', 'openai_product_feed' => $openAiProductFeed, 'storefront' => $storefront];
 }
 
 function shopProductSeoRebuildSitemap(PDO $db, array $config): array {

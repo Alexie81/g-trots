@@ -477,7 +477,7 @@ function renderLiveProducts(products) {
       updateRangeAppearance();
     }
   }
-  currentPage = 1;
+  currentPage = Math.max(1, Number(document.body.dataset.catalogPage || 1));
   applyFilters();
   if (searchDeck?.classList.contains("is-search-open")) renderSmartSearch();
   productGrid.dataset.catalogSource = "shop-api";
@@ -569,7 +569,7 @@ if (filtersPanel && filtersStickyColumn) {
 
 let activeCategory = "all";
 let activeCategoryScope = new Set();
-let currentPage = 1;
+let currentPage = Math.max(1, Number(document.body.dataset.catalogPage || 1));
 
 function directTreeChild(node, selector) {
   return [...node.children].find(child => child.matches(selector)) || null;

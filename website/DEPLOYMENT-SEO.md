@@ -12,7 +12,7 @@
 1. Adaugă proprietatea `https://g-trots.ro/` în Google Search Console.
 2. Trimite sitemap-ul: `https://g-trots.ro/sitemap.xml`.
 3. Folosește URL Inspection pentru pagina principală și cele șase pagini SEO, apoi solicită indexarea.
-4. Creează sau revendică Google Business Profile și păstrează același nume și telefon: `G-Trots`, `+40 0762 093 915`.
+4. Creează sau revendică Google Business Profile și păstrează același nume și telefon: `G-Trots`, `0762 093 915`.
 5. Completează în Business Profile programul, zonele deservite, serviciile și fotografii reale.
 6. Nu publica pagini aproape identice pentru fiecare sector/localitate. Creează o pagină separată doar când are informații și dovezi locale proprii.
 

@@ -1,6 +1,7 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { brotliCompressSync, constants as zlibConstants, gzipSync } from "node:zlib";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const website = path.join(root, "website");
@@ -13,6 +14,16 @@ async function atomicWrite(file, content) {
   const temporary = `${file}.gtrots-repair-${process.pid}.tmp`;
   await writeFile(temporary, content, "utf8");
   await rename(temporary, file);
+}
+
+async function atomicJsonAssets(file, payload) {
+  const content = `${JSON.stringify(payload)}\n`;
+  const bytes = Buffer.from(content, "utf8");
+  await Promise.all([
+    atomicWrite(file, content),
+    atomicWrite(`${file}.gz`, gzipSync(bytes, { level: 9 })),
+    atomicWrite(`${file}.br`, brotliCompressSync(bytes, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 11 } })),
+  ]);
 }
 
 const pages = [
@@ -50,6 +61,44 @@ const pages = [
       <section><h2>Piese și montaj în același loc</h2><p>Dacă reparația cere o componentă, poți verifica și <a href="/magazin">magazinul G-Trots</a>. Te ajutăm să confirmi compatibilitatea înainte de comandă, iar montajul se poate face în service.</p></section>
     </article>
     <aside class="article-aside"><div class="aside-card"><strong>Programează o verificare</strong><p>Spune-ne modelul și problema observată.</p><a class="button" href="${phoneHref}">Sună ${phoneDisplay}</a></div><div class="aside-card"><strong>Adresă și program</strong><p>${address}<br>Luni–Vineri · 10:00–19:00</p><a href="${whatsappHref}">Scrie pe WhatsApp</a></div></aside>
+  </section>
+</main>`,
+  },
+  {
+    slug: "service-trotinete-electrice-bucuresti",
+    title: "Service trotinete electrice București | G-Trots Sector 5",
+    heading: "Service pentru trotinete electrice în București",
+    description: "Service G-Trots în Sectorul 5, București: diagnostic, reparații, anvelope, frâne, baterii, controllere și revizii. Programări la 0762 093 915.",
+    section: "Service trotinete electrice în București",
+    quick: `Atelierul G-Trots este în ${address}. Programul este luni–vineri, 10:00–19:00. Reparăm trotinete electrice și comunicăm estimarea de cost și termenul după verificare, înainte de începerea lucrării. Pentru programare sună la ${phoneDisplay} sau scrie pe WhatsApp.`,
+    faqs: [
+      ["Unde este service-ul G-Trots din București?", `Atelierul se află în ${address}. Adresa și datele firmei sunt afișate și pe pagina Contact.`],
+      ["Este necesară programarea?", `Recomandăm programarea la ${phoneDisplay} sau pe WhatsApp, ca să confirmăm intervalul și să reducem timpul de așteptare.`],
+      ["Ce tipuri de reparații efectuați?", "Lucrăm la roți și anvelope, frâne, rulmenți, suspensii, sisteme de pliere, baterii și încărcare, controllere, display-uri, accelerații, motoare și cablaje."],
+      ["Cât costă reparația?", "Costul depinde de model, defect, piesele necesare și timpul de lucru. După verificare comunicăm estimarea, iar intervenția începe după acordul clientului."],
+      ["Cât durează reparația?", "Termenul depinde de complexitatea lucrării și de disponibilitatea pieselor. După diagnostic primești un termen realist, nu o estimare generică."],
+      ["Pot cumpăra piesa și solicita montajul în același loc?", "Da. G-Trots are magazin de piese cu livrare în România, iar compatibilitatea și montajul pot fi confirmate în service."],
+    ],
+    main: `
+<main class="seo-page">
+  <section class="shell article-hero">
+    <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">Acasă</a><span>/</span><a href="/service-trotinete-electrice">Service</a><span>/</span><a href="/service-trotinete-electrice-bucuresti">București</a></nav>
+    <p class="eyebrow">ATELIER G-TROTS · SECTOR 5</p>
+    <h1>Service pentru trotinete electrice în București</h1>
+    <p class="lead">Diagnostic, reparații și întreținere într-un atelier specializat. Îți spunem ce am găsit, cât costă și cât durează înainte să începem lucrarea.</p>
+    <g-trots-diagnostic-search data-base-url="/"></g-trots-diagnostic-search>
+  </section>
+  <section class="shell content-layout">
+    <article class="article-body">
+      <section class="quick-answer" aria-labelledby="date-atelier"><p class="eyebrow">INFORMAȚII PENTRU VIZITĂ</p><h2 id="date-atelier">Adresă, program și programare</h2><p>Ne găsești în <strong>${address}</strong>. Programul atelierului este <strong>luni–vineri, 10:00–19:00</strong>. Sună la <a href="${phoneHref}">${phoneDisplay}</a> sau scrie pe <a href="${whatsappHref}">WhatsApp</a> pentru a stabili vizita.</p></section>
+      <section><h2>Cu ce te putem ajuta</h2><ul class="diagnostic-list"><li>schimb de anvelope, camere și valve, inclusiv roți tubeless</li><li>reglaje și reparații pentru frâne, discuri, plăcuțe și etriere</li><li>verificări pentru baterie, încărcare și autonomie scăzută</li><li>controllere, display-uri, accelerații, motoare și cablaje</li><li>rulmenți, suspensii, ghidon și sisteme de pliere</li><li>revizii periodice și verificări generale de siguranță</li></ul></section>
+      <section class="action-plan"><h2>Cum decurge programarea</h2><ol><li><strong>Ne spui marca și modelul</strong><span>Adaugă problema observată și un cod de eroare, dacă există.</span></li><li><strong>Stabilim vizita</strong><span>Confirmăm intervalul în care poți aduce trotineta la atelier.</span></li><li><strong>Primești constatarea</strong><span>După verificare îți comunicăm soluția, costul estimat și termenul înainte de reparație.</span></li></ol></section>
+      <section><h2>Costul și durata reparației</h2><p>O pană, un reglaj de frână și o problemă de baterie nu pot avea același tarif sau același termen. Prețul depinde de model, accesul la componentă, piesele necesare și complexitatea intervenției. După verificare primești o estimare clară și alegi dacă dorești continuarea lucrării.</p></section>
+      <section><h2>Ce informații să trimiți înainte</h2><p>O fotografie cu trotineta, eticheta modelului și o descriere scurtă a problemei ne ajută să pregătim vizita. Pentru roți sunt utile dimensiunile de pe anvelopă, iar pentru probleme electronice este util codul afișat pe display. Nu trebuie să stabilești singur ce piesă este defectă.</p></section>
+      <section><h2>Service în București, piese cu livrare națională</h2><p>Atelierul deservește clienți din toate sectoarele Bucureștiului și din Ilfov. Magazinul online G-Trots livrează piese și accesorii oriunde în România. Dacă ai nevoie și de montaj, putem confirma mai întâi compatibilitatea produsului cu modelul tău.</p><p><a href="/magazin">Vezi magazinul de piese pentru trotinete electrice</a> sau consultă <a href="/service-trotinete-electrice">pagina principală de service</a>.</p></section>
+      <section id="intrebari-frecvente"><h2>Întrebări frecvente</h2>${"__FAQ__"}</section>
+    </article>
+    <aside class="article-aside"><div class="aside-card"><strong>Programează o vizită</strong><p>Trimite marca, modelul și problema observată.</p><a class="button" href="${phoneHref}">Sună ${phoneDisplay}</a></div><div class="aside-card"><strong>Atelier G-Trots</strong><p>${address}<br>Luni–Vineri · 10:00–19:00</p><a href="${whatsappHref}">Scrie pe WhatsApp</a></div></aside>
   </section>
 </main>`,
   },
@@ -138,9 +187,9 @@ async function repairPage(page) {
   html = replaceMeta(html, "property", "og:title", page.title);
   html = replaceMeta(html, "property", "og:description", page.description);
   html = html.replace(/<script\s+type="application\/ld\+json">[\s\S]*?<\/script>/i, `<script type="application/ld+json">${JSON.stringify(schema(page))}</script>`);
-  const main = page.main.replace("__FAQ__", faqHtml(page.faqs));
+  const main = page.main.replace("__FAQ__", faqHtml(page.faqs)).trim();
   if (!/<main class="seo-page">[\s\S]*?<\/main>/i.test(html)) throw new Error(`Structură <main> necunoscută: ${page.slug}`);
-  html = html.replace(/<main class="seo-page">[\s\S]*?<\/main>/i, main);
+  html = html.replace(/(?:\r?\n)*<main class="seo-page">[\s\S]*?<\/main>/i, `\n${main}`);
   html = html.replaceAll("/legal-footer.js?v=20260909-nav-v3", "/legal-footer.js?v=20260910-trust-v1");
   await atomicWrite(file, html);
 }
@@ -151,24 +200,25 @@ async function repairSearchData() {
   for (const page of pages) {
     const doc = docs.find(item => item.slug === page.slug);
     if (!doc) throw new Error(`Lipsește documentul de căutare: ${page.slug}`);
+    const isServicePage = page.slug.startsWith("service-trotinete-electrice");
     doc.title = page.heading;
-    doc.keyword = page.slug === "service-trotinete-electrice" ? "service trotinete electrice București" : "schimb anvelopă trotinetă electrică";
+    doc.keyword = isServicePage ? "service trotinete electrice București" : "schimb anvelopă trotinetă electrică";
     doc.symptom = page.section;
     doc.quick_answer = page.quick;
-    doc.likely_causes = page.slug === "service-trotinete-electrice"
+    doc.likely_causes = isServicePage
       ? ["anvelope și roți", "frâne și elemente mecanice", "baterie, încărcare sau electronică", "motor, rulmenți ori suspensie"]
       : ["anvelopă uzată sau tăiată", "cameră ori valvă deteriorată", "etanșare tubeless necorespunzătoare", "talon sau jantă deteriorată"];
-    doc.safe_checks = page.slug === "service-trotinete-electrice"
+    doc.safe_checks = isServicePage
       ? ["notează modelul complet și codul de eroare", "oprește utilizarea dacă frâna sau accelerația nu sunt sigure", "programează verificarea înainte de a cumpăra o piesă"]
       : ["citește dimensiunea de pe anvelopa veche", "verifică vizual tăieturile și poziția talonului", "nu continua deplasarea cu roata dezumflată"];
-    doc.possible_repairs = page.slug === "service-trotinete-electrice"
+    doc.possible_repairs = isServicePage
       ? ["diagnostic și reglaj", "repararea ansamblului confirmat", "înlocuirea piesei compatibile și test final"]
       : ["înlocuire anvelopă", "înlocuire cameră sau valvă", "refacere etanșare tubeless", "verificare jantă și test de presiune"];
-    doc.clarifying_questions = page.slug === "service-trotinete-electrice"
+    doc.clarifying_questions = isServicePage
       ? ["Care este marca și modelul complet?", "Ce problemă apare și în ce condiții?", "Există un cod de eroare sau o intervenție recentă?"]
       : ["Ce dimensiune este scrisă pe anvelopă?", "Roata este tubeless, cu cameră sau plină?", "Este roată cu motor?"];
   }
-  await atomicWrite(docsPath, `${JSON.stringify(docs)}\n`);
+  await atomicJsonAssets(docsPath, docs);
 
   const corePath = path.join(website, "search", "data", "instant-core.json");
   const core = JSON.parse(await readFile(corePath, "utf8"));
@@ -180,7 +230,7 @@ async function repairSearchData() {
     row[fields.symptom] = page.section;
     row[fields.quick] = page.quick;
   }
-  await atomicWrite(corePath, `${JSON.stringify(core)}\n`);
+  await atomicJsonAssets(corePath, core);
 }
 
 for (const page of pages) await repairPage(page);

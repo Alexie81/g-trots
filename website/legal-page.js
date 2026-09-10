@@ -4,7 +4,7 @@
   const API_URL = /^(localhost|127\.0\.0\.1)$/i.test(location.hostname)
     ? 'https://g-trots.ro/shop-api/api-v2.php'
     : '/shop-api/api-v2.php';
-  const fallback = { legal_name: 'CAB IT EXPERT S.R.L.', trade_name: 'G-Trots România', cui: '49972605', registration_number: 'J40/8303/2024', address: 'Str. Humulești nr. 131-135, lot 4', city: 'București, Sector 5', county: 'București', postal_code: '052262', country: 'România', email: 'contact@g-trots.ro', phone: '0762093915', website: 'https://g-trots.ro', bank_name: '', iban: '', share_capital: '' };
+  const fallback = { legal_name: 'CAB IT EXPERT S.R.L.', trade_name: 'G-Trots', cui: '49972605', registration_number: 'J40/8303/2024', address: 'Str. Humulești nr. 131-135, lot 4', city: 'București, Sector 5', county: 'București', postal_code: '052262', country: 'România', full_address: 'Str. Humulești nr. 131-135, lot 4, 052262, București, Sector 5, România', email: 'contact@g-trots.ro', phone: '0762 093 915', website: 'https://g-trots.ro', bank_name: '', iban: '', share_capital: '' };
 
   function cachedConfig() {
     try {
@@ -27,15 +27,38 @@
     return window.GTrotsPublicConfigPromise;
   }
 
-  function fillCompany(company) {
+  function companyWithFallback(company) {
+    const merged = { ...fallback };
+    Object.entries(company || {}).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && String(value).trim() !== '') merged[key] = value;
+    });
+    return merged;
+  }
+
+  function phoneNumber(value) {
+    let digits = String(value || '').replace(/\D/g, '');
+    if (digits.startsWith('0040')) digits = digits.slice(2);
+    if (digits.startsWith('40')) return `+${digits}`;
+    if (digits.startsWith('0')) return `+40${digits.slice(1)}`;
+    return digits ? `+40${digits}` : '';
+  }
+
+  function phoneDisplay(value) {
+    const international = phoneNumber(value);
+    const local = international.startsWith('+40') ? `0${international.slice(3)}` : international;
+    return /^0\d{9}$/.test(local) ? `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7)}` : String(value || '');
+  }
+
+  function fillCompany(input) {
+    const company = companyWithFallback(input);
     document.querySelectorAll('[data-company]').forEach(node => {
       const key = node.dataset.company;
       const value = key === 'full_address'
-        ? [company.address, company.postal_code, company.city, company.county, company.country].filter(Boolean).join(', ')
+        ? company.full_address
         : String(company[key] || '');
-      node.textContent = value || 'Indisponibil temporar';
+      node.textContent = key === 'phone' ? phoneDisplay(value) : (value || node.textContent || 'Indisponibil temporar');
       if (node.tagName === 'A' && key === 'email') node.href = value ? `mailto:${value}` : '#';
-      if (node.tagName === 'A' && key === 'phone') node.href = value ? `tel:${value.replace(/\s/g, '')}` : '#';
+      if (node.tagName === 'A' && key === 'phone') node.href = value ? `tel:${phoneNumber(value)}` : '#';
     });
   }
 
@@ -59,7 +82,7 @@
 
   loadConfig()
     .then(data => {
-      fillCompany({ ...fallback, ...(data?.company || {}) });
+      fillCompany(data?.company);
       renderShipping(Array.isArray(data?.shipping_methods) ? data.shipping_methods.filter(method => method?.is_active !== false) : []);
     })
     .catch(() => {

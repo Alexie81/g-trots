@@ -28,6 +28,7 @@ FILES = (
     "sitemap.xml",
     "sitemap-index.xml",
     "sitemaps/sitemap-produse.xml",
+    "sitemaps/sitemap-articole-01.xml",
     "catalog-produse.html",
     "ai-catalog.json",
     "openai-products.jsonl",
@@ -81,6 +82,7 @@ FILES = (
     "service-marci-modele-trotinete-electrice.html",
     "service-scutere-electrice-ghiduri.html",
     "service-trotinete-electrice.html",
+    "service-trotinete-electrice-bucuresti.html",
     "service-trotinete-electrice-bucuresti-ilfov.html",
     "service-trotinete-electrice-zone-bucuresti-ilfov.html",
     "siguranta-produselor.html",
@@ -104,6 +106,12 @@ FILES = (
     "urmarire-comanda.html",
     "urmarire-comanda.css",
     "urmarire-comanda.js",
+    "search/data/diagnostic-docs.json",
+    "search/data/diagnostic-docs.json.gz",
+    "search/data/diagnostic-docs.json.br",
+    "search/data/instant-core.json",
+    "search/data/instant-core.json.gz",
+    "search/data/instant-core.json.br",
 )
 
 

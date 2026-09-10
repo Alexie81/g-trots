@@ -1096,6 +1096,7 @@ export type ShopCompanySettings = {
   county: string;
   postal_code: string;
   country: string;
+  physical_address: string;
   email: string;
   phone: string;
   website: string;

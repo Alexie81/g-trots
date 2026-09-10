@@ -34,6 +34,7 @@ socialFooterAssert(!str_contains($footer, 'medium.com') && !str_contains($footer
 socialFooterAssert(str_contains($footer, 'gt-mobile-wide-link--cross-nav') && str_contains($footer, 'gt-mobile-wide-link--inner-grid'), 'Legăturile finale ale coloanelor mobile trebuie marcate pentru aliniere simetrică.');
 socialFooterAssert(str_contains($styles, '.gt-site-footer .gt-mobile-wide-link--cross-nav') && str_contains($styles, '.gt-site-footer .gt-mobile-wide-link--inner-grid'), 'Stilurile mobile trebuie să întindă Garanțiile și Accesibilitatea pe ambele coloane.');
 socialFooterAssert(str_contains($footer, 'gt-site-footer__identity--desktop') && str_contains($footer, 'gt-site-footer__identity--mobile'), 'Datele firmei trebuie să aibă o prezentare mobilă dedicată sub navigație.');
+socialFooterAssert(str_contains($footer, 'companyPublicAddress(company)') && str_contains($footer, '<dt>Adresă</dt>'), 'Footerul trebuie să afișeze adresa publică, separat de sediul social juridic.');
 socialFooterAssert(str_contains($styles, '.gt-site-footer__identity--mobile { order: 4; display: grid; }'), 'Caseta mobilă a firmei trebuie afișată imediat după navigație.');
 socialFooterAssert(str_contains($styles, '@media (prefers-reduced-motion: reduce)') && str_contains($styles, 'animation: none !important'), 'Animațiile trebuie dezactivate pentru utilizatorii care preferă mișcare redusă.');
 socialFooterAssert(str_contains($styles, 'width: 2.8rem') && str_contains($styles, 'height: 2.8rem'), 'Țintele tactile sociale trebuie să aibă minimum 44px pe mobil.');

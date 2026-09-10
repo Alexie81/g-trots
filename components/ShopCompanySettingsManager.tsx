@@ -8,7 +8,7 @@ import { ShopCompanySettings, ShopReceiptLocation, shopApi } from '@/services/sh
 const FieldFocusContext = React.createContext<((target: number) => void) | undefined>(undefined);
 
 const emptyCompany = (): ShopCompanySettings => ({
-  id: 0, legal_name: '', trade_name: 'G-Trots România', cui: '', registration_number: '', address: '', city: '', county: '', postal_code: '', country: 'România', email: '', phone: '', website: 'https://g-trots.ro', bank_name: '', iban: '', share_capital: '', stamp_url: null, is_default: false, vat_payer: false, vat_rate: 19,
+  id: 0, legal_name: '', trade_name: 'G-Trots România', cui: '', registration_number: '', address: '', city: '', county: '', postal_code: '', country: 'România', physical_address: 'București–Ilfov', email: '', phone: '', website: 'https://g-trots.ro', bank_name: '', iban: '', share_capital: '', stamp_url: null, is_default: false, vat_payer: false, vat_rate: 19,
 });
 
 export default function ShopCompanySettingsManager({ onFieldFocus }: { onFieldFocus?: (target: number) => void }) {
@@ -112,12 +112,15 @@ export default function ShopCompanySettingsManager({ onFieldFocus }: { onFieldFo
       <View style={styles.toggle}><View style={styles.defaultCopy}><Text style={styles.toggleTitle}>Plătitoare de TVA</Text><Text style={styles.toggleText}>Societate înregistrată în scopuri de TVA.</Text></View><Switch value={company.vat_payer} onValueChange={(value) => update('vat_payer', value)} trackColor={{ false: '#3B363D', true: '#704319' }} thumbColor={company.vat_payer ? '#FE8C19' : '#8D858E'} /></View>
       {company.vat_payer ? <View style={styles.vatRateCard}><View style={styles.defaultCopy}><Text style={styles.toggleTitle}>Cota TVA aplicată</Text><Text style={styles.toggleText}>Cota este salvată intern pentru raportări și modulele financiare viitoare; clientul vede doar „TVA inclus”.</Text></View><View style={styles.vatRateInput}><TextInput value={String(company.vat_rate ?? 19)} onChangeText={(value) => update('vat_rate', Math.max(0, Math.min(100, Number(value.replace(',', '.')) || 0)))} keyboardType="decimal-pad" selectTextOnFocus style={styles.vatRateText} /><Text style={styles.vatRateSuffix}>%</Text></View></View> : null}
     </Section>
-    <Section Icon={MapPin} title="Sediu și contact" description="Adresa și datele publice de contact.">
-      <Field label="ADRESĂ COMPLETĂ" value={company.address} onChangeText={(value) => update('address', value)} />
+    <Section Icon={MapPin} title="Sediu social și contact" description="Adresa juridică a societății și datele generale de contact.">
+      <Field label="ADRESĂ SEDIU SOCIAL" value={company.address} onChangeText={(value) => update('address', value)} />
       <Row><Field label="LOCALITATE" value={company.city} onChangeText={(value) => update('city', value)} /><Field label="JUDEȚ" value={company.county} onChangeText={(value) => update('county', value)} /></Row>
       <Row><Field label="COD POȘTAL" value={company.postal_code} onChangeText={(value) => update('postal_code', value)} /><Field label="ȚARĂ" value={company.country} onChangeText={(value) => update('country', value)} /></Row>
       <Row><Field label="E-MAIL" value={company.email} onChangeText={(value) => update('email', value)} keyboardType="email-address" autoCapitalize="none" /><Field label="TELEFON" value={company.phone} onChangeText={(value) => update('phone', value)} keyboardType="phone-pad" /></Row>
       <Field label="WEBSITE" value={company.website} onChangeText={(value) => update('website', value)} autoCapitalize="none" />
+    </Section>
+    <Section Icon={MapPin} title="Adresă publică" description="Locația sau zona afișată clienților în footer, Contact și hartă.">
+      <Field label="ADRESĂ FIZICĂ / ZONĂ DESERVITĂ" value={company.physical_address} onChangeText={(value) => update('physical_address', value)} placeholder="București–Ilfov" />
     </Section>
     <Section Icon={MapPin} title="Puncte de recepție" description="Locurile fizice care pot fi selectate pe NIR-uri.">
       <View style={styles.receiptHeader}><View style={styles.defaultCopy}><Text style={styles.toggleTitle}>Locuri disponibile</Text><Text style={styles.toggleText}>Punctul implicit este ales automat pe orice NIR nou.</Text></View><TouchableOpacity style={styles.receiptAdd} onPress={newReceiptLocation}><Plus size={17} color="#1A0B01" /><Text style={styles.receiptAddText}>Adaugă</Text></TouchableOpacity></View>

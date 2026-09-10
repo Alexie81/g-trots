@@ -1,11 +1,11 @@
 (() => {
-  const COMPONENT_VERSION = '20260909-nav-v3';
+  const COMPONENT_VERSION = '20260910-public-address-v1';
   if (window.__gtLegalFooterVersion === COMPONENT_VERSION) return;
   window.__gtLegalFooterVersion = COMPONENT_VERSION;
   window.__gtLegalFooter = true;
   document.documentElement.classList.add('commerce-preview');
 
-  const CACHE_KEY = 'g-trots-public-shop-config-v3';
+  const CACHE_KEY = 'g-trots-public-shop-config-v4';
   const CACHE_TTL = 5 * 60 * 1000;
   const API_URL = /^(localhost|127\.0\.0\.1)$/i.test(location.hostname)
     ? 'https://g-trots.ro/shop-api/api-v2.php'
@@ -23,6 +23,7 @@
     county: 'București',
     postal_code: '052262',
     country: 'România',
+    physical_address: 'București–Ilfov',
     bank_name: '',
     iban: '',
     share_capital: '',
@@ -44,7 +45,7 @@
       onload() { this.media = 'all'; },
     });
   }
-  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260909-nav-v2' });
+  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260910-public-address-v1' });
   if (!document.querySelector('script[src*="google-measurement.js"]')) {
     loadAsset('script', { src: '/google-measurement.js?v=20260907-meta-v9', async: true });
   }
@@ -56,12 +57,19 @@
   }
 
   function phoneHref(phone) {
-    const normalized = String(phone || '').replace(/[^+\d]/g, '');
-    return normalized ? `tel:${normalized}` : '#';
+    let digits = String(phone || '').replace(/\D/g, '');
+    if (digits.startsWith('0040')) digits = digits.slice(2);
+    if (digits.startsWith('40')) return `tel:+${digits}`;
+    if (digits.startsWith('0')) return `tel:+40${digits.slice(1)}`;
+    return digits ? `tel:+40${digits}` : '#';
   }
 
   function companyAddress(company) {
     return [company.address, company.postal_code, company.city, company.county, company.country].filter(Boolean).join(', ');
+  }
+
+  function companyPublicAddress(company) {
+    return String(company.physical_address || '').trim() || 'București–Ilfov';
   }
 
   function renderCompanyProfiles(company) {
@@ -74,6 +82,7 @@
         <div><dt>CUI / CIF</dt><dd>${esc(company.cui || 'Necompletat')}</dd></div>
         <div><dt>Registrul Comerțului</dt><dd>${esc(company.registration_number || 'Necompletat')}</dd></div>
         <div><dt>Sediu social</dt><dd>${esc(address || 'Necompletat')}</dd></div>
+        <div><dt>Adresă publică / zonă</dt><dd>${esc(companyPublicAddress(company))}</dd></div>
         <div><dt>Telefon</dt><dd>${company.phone ? `<a href="${phoneHref(company.phone)}">${esc(company.phone)}</a>` : 'Necompletat'}</dd></div>
         <div><dt>E-mail</dt><dd>${company.email ? `<a href="mailto:${esc(company.email)}">${esc(company.email)}</a>` : 'Necompletat'}</dd></div>
         <div><dt>Website</dt><dd>${company.website ? `<a href="${esc(company.website)}">${esc(company.website)}</a>` : 'Necompletat'}</dd></div>
@@ -405,7 +414,7 @@ ${navigationHtml}
     host.dataset.gtLegalFooter = '';
     host.setAttribute('aria-label', 'Informații despre G-Trots, plăți și politici');
 
-    const address = companyAddress(company);
+    const publicAddress = companyPublicAddress(company);
     const tradeName = company.trade_name || company.legal_name || 'G-Trots';
     const inner = document.createElement('div');
     inner.className = 'gt-site-footer__inner';
@@ -419,7 +428,7 @@ ${navigationHtml}
         <dl class="gt-site-footer__identity gt-site-footer__identity--desktop">
           <div><dt>Operator</dt><dd>${esc(company.legal_name || 'Necompletat')}</dd></div>
           <div><dt>CUI</dt><dd>${esc(company.cui || 'Necompletat')}</dd></div>
-          <div><dt>Sediu social</dt><dd>${esc(address || 'Necompletat')}</dd></div>
+          <div><dt>Adresă</dt><dd>${esc(publicAddress)}</dd></div>
         </dl>
       </section>
       <div class="gt-site-footer__nav-grid">
@@ -430,7 +439,7 @@ ${navigationHtml}
       <dl class="gt-site-footer__identity gt-site-footer__identity--mobile" aria-label="Datele firmei G-Trots">
         <div><dt>Operator</dt><dd>${esc(company.legal_name || 'Necompletat')}</dd></div>
         <div><dt>CUI</dt><dd>${esc(company.cui || 'Necompletat')}</dd></div>
-        <div><dt>Sediu social</dt><dd>${esc(address || 'Necompletat')}</dd></div>
+        <div><dt>Adresă</dt><dd>${esc(publicAddress)}</dd></div>
       </dl>
       <div class="gt-site-footer__contact-row">
         <div class="gt-site-footer__contact">${company.phone ? `<a href="${phoneHref(company.phone)}">${esc(company.phone)}</a>` : ''}${company.email ? `<a href="mailto:${esc(company.email)}">${esc(company.email)}</a>` : ''}</div>

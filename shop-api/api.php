@@ -253,7 +253,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026090701;
+    $schemaVersion = 2026091001;
     // Ruta normala face doar SELECT-ul indexat. Un CREATE TABLE IF NOT EXISTS la
     // fiecare request tot cere verificari de metadata si poate astepta lock-uri.
     try {
@@ -1459,6 +1459,7 @@ function ensureShopSchema(PDO $db): void {
             county VARCHAR(120) NOT NULL DEFAULT '',
             postal_code VARCHAR(30) NOT NULL DEFAULT '',
             country VARCHAR(80) NOT NULL DEFAULT 'România',
+            physical_address VARCHAR(255) NOT NULL DEFAULT 'București–Ilfov',
             email VARCHAR(180) NOT NULL DEFAULT '',
             phone VARCHAR(50) NOT NULL DEFAULT '',
             website VARCHAR(180) NOT NULL DEFAULT 'https://g-trots.ro',
@@ -1483,6 +1484,9 @@ function ensureShopSchema(PDO $db): void {
     }
     if (!$db->query("SHOW COLUMNS FROM shop_company_settings LIKE 'vat_rate'")->fetch()) {
         $db->exec("ALTER TABLE shop_company_settings ADD COLUMN vat_rate DECIMAL(5,2) NOT NULL DEFAULT 19.00 AFTER vat_payer");
+    }
+    if (!$db->query("SHOW COLUMNS FROM shop_company_settings LIKE 'physical_address'")->fetch()) {
+        $db->exec("ALTER TABLE shop_company_settings ADD COLUMN physical_address VARCHAR(255) NOT NULL DEFAULT 'București–Ilfov' AFTER country");
     }
     $db->exec("ALTER TABLE shop_company_settings MODIFY id INT UNSIGNED NOT NULL AUTO_INCREMENT");
     $db->exec("INSERT IGNORE INTO shop_company_settings (id, is_default) VALUES (1, 1)");
@@ -3871,6 +3875,7 @@ function paymentSettings(PDO $db, ?array $config = null): array {
 
 function companySettingsRow(array $row, array $config): array {
     $row['id'] = (int)($row['id'] ?? 0);
+    $row['physical_address'] = trim((string)($row['physical_address'] ?? '')) ?: 'București–Ilfov';
     $row['vat_payer'] = (bool)($row['vat_payer'] ?? false);
     $row['vat_rate'] = (float)($row['vat_rate'] ?? 19);
     $row['is_default'] = (bool)($row['is_default'] ?? false);
@@ -3900,6 +3905,7 @@ function companySettingsPayload(array $body): array {
         'county' => $field('county', 120),
         'postal_code' => $field('postal_code', 30),
         'country' => $field('country', 80),
+        'physical_address' => $field('physical_address', 255) ?: 'București–Ilfov',
         'email' => $email,
         'phone' => $field('phone', 50),
         'website' => $website,
@@ -3910,6 +3916,108 @@ function companySettingsPayload(array $body): array {
         'vat_rate' => $vatRate,
         'is_default' => boolValue($body['is_default'] ?? false),
     ];
+}
+
+function publicCompanyFullAddress(array $company): string {
+    return implode(', ', array_values(array_filter([
+        trim((string)($company['address'] ?? '')),
+        trim((string)($company['postal_code'] ?? '')),
+        trim((string)($company['city'] ?? '')),
+        trim((string)($company['county'] ?? '')),
+        trim((string)($company['country'] ?? '')),
+    ])));
+}
+
+function publicCompanyPhoneNumber(string $value): string {
+    $digits = preg_replace('/\D+/', '', $value) ?: '';
+    if (str_starts_with($digits, '0040')) $digits = substr($digits, 2);
+    if (str_starts_with($digits, '40')) return '+' . $digits;
+    if (str_starts_with($digits, '0')) return '+40' . substr($digits, 1);
+    return $digits !== '' ? '+40' . $digits : '';
+}
+
+function publicCompanyPhoneDisplay(string $value): string {
+    $international = publicCompanyPhoneNumber($value);
+    $local = str_starts_with($international, '+40') ? '0' . substr($international, 3) : $international;
+    return preg_match('/^0\d{9}$/', $local)
+        ? substr($local, 0, 4) . ' ' . substr($local, 4, 3) . ' ' . substr($local, 7)
+        : trim($value);
+}
+
+/**
+ * Keeps the Contact page useful for crawlers that do not execute JavaScript.
+ * The browser still refreshes the same values from publicShopConfig.
+ */
+function syncPublicCompanyContactPage(array $company): void {
+    $root = dirname(__DIR__);
+    $paths = [$root . '/contact.html', $root . '/website/contact.html'];
+    $contactPath = null;
+    foreach ($paths as $candidate) {
+        if (is_file($candidate) && is_readable($candidate)) { $contactPath = $candidate; break; }
+    }
+    if ($contactPath === null) return;
+
+    $html = file_get_contents($contactPath);
+    if (!is_string($html) || $html === '') return;
+    $physicalAddress = trim((string)($company['physical_address'] ?? '')) ?: 'București–Ilfov';
+    $phone = publicCompanyPhoneDisplay((string)($company['phone'] ?? ''));
+    $phoneHref = publicCompanyPhoneNumber((string)($company['phone'] ?? ''));
+    $values = [
+        'legal_name' => (string)($company['legal_name'] ?? ''),
+        'trade_name' => (string)($company['trade_name'] ?? ''),
+        'cui' => (string)($company['cui'] ?? ''),
+        'registration_number' => (string)($company['registration_number'] ?? ''),
+        'full_address' => publicCompanyFullAddress($company),
+        'physical_address' => $physicalAddress,
+        'email' => (string)($company['email'] ?? ''),
+        'phone' => $phone,
+    ];
+    foreach ($values as $key => $value) {
+        $pattern = '~(<(?<tag>[a-z][a-z0-9]*)\b(?=[^>]*\bdata-company="' . preg_quote($key, '~') . '")[^>]*>).*?(</\k<tag>>)~si';
+        $html = preg_replace_callback($pattern, static fn(array $match): string => $match[1] . htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . $match[3], $html) ?? $html;
+    }
+    $emailHref = 'mailto:' . (string)($company['email'] ?? '');
+    $html = preg_replace('~(<a\b(?=[^>]*\bdata-company="email")[^>]*\bhref=")[^"]*(")~i', '$1' . htmlspecialchars($emailHref, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '$2', $html) ?? $html;
+    $html = preg_replace('~(<a\b(?=[^>]*\bdata-company="phone")[^>]*\bhref=")[^"]*(")~i', '$1' . htmlspecialchars('tel:' . $phoneHref, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '$2', $html) ?? $html;
+
+    $schema = [
+        '@context' => 'https://schema.org',
+        '@type' => 'Organization',
+        '@id' => 'https://g-trots.ro/#organization',
+        'name' => trim((string)($company['trade_name'] ?? '')) ?: 'G-Trots',
+        'legalName' => (string)($company['legal_name'] ?? ''),
+        'url' => trim((string)($company['website'] ?? '')) ?: 'https://g-trots.ro/',
+        'telephone' => $phoneHref,
+        'email' => (string)($company['email'] ?? ''),
+        'taxID' => (string)($company['cui'] ?? ''),
+        'address' => [
+            '@type' => 'PostalAddress',
+            'streetAddress' => (string)($company['address'] ?? ''),
+            'postalCode' => (string)($company['postal_code'] ?? ''),
+            'addressLocality' => (string)($company['city'] ?? ''),
+            'addressRegion' => (string)($company['county'] ?? ''),
+            'addressCountry' => (string)($company['country'] ?? 'România'),
+        ],
+        'areaServed' => ['@type' => 'AdministrativeArea', 'name' => $physicalAddress],
+        'contactPoint' => [
+            '@type' => 'ContactPoint',
+            'contactType' => 'customer service',
+            'telephone' => $phoneHref,
+            'email' => (string)($company['email'] ?? ''),
+            'areaServed' => 'RO',
+            'availableLanguage' => ['ro'],
+        ],
+    ];
+    $schemaJson = json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    if (is_string($schemaJson)) {
+        $html = preg_replace('~(<script\b[^>]*\bdata-company-identity-schema[^>]*>).*?(</script>)~si', '$1' . $schemaJson . '$2', $html) ?? $html;
+    }
+
+    $temporary = $contactPath . '.company-' . bin2hex(random_bytes(4)) . '.tmp';
+    if (file_put_contents($temporary, $html, LOCK_EX) === false || !@rename($temporary, $contactPath)) {
+        @unlink($temporary);
+        error_log('G-Trots: pagina Contact nu a putut fi sincronizată server-side.');
+    }
 }
 
 function receiptLocationRow(array $row): array {
@@ -5471,7 +5579,7 @@ try {
 
     if ($action === 'publicShopConfig' && $method === 'GET') {
         $shipping = $db->query('SELECT * FROM shop_shipping_methods WHERE is_active = 1 ORDER BY sort_order ASC, name ASC')->fetchAll();
-        $companyTax = $db->query('SELECT legal_name, trade_name, cui, registration_number, address, city, county, postal_code, country, email, phone, website, bank_name, iban, share_capital, vat_payer, vat_rate FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
+        $companyTax = $db->query('SELECT legal_name, trade_name, cui, registration_number, address, city, county, postal_code, country, physical_address, email, phone, website, bank_name, iban, share_capital, vat_payer, vat_rate FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
         $publicPayments = paymentSettings($db, $config);
         $publicPayments['card_enabled'] = $publicPayments['card_enabled'] && $publicPayments['stripe_configured'];
         unset($publicPayments['stripe_synced_products'], $publicPayments['stripe_sync_errors']);
@@ -5492,6 +5600,7 @@ try {
                 'county' => (string)($companyTax['county'] ?? ''),
                 'postal_code' => (string)($companyTax['postal_code'] ?? ''),
                 'country' => (string)($companyTax['country'] ?? 'România'),
+                'physical_address' => trim((string)($companyTax['physical_address'] ?? '')) ?: 'București–Ilfov',
                 'email' => (string)($companyTax['email'] ?? ''),
                 'phone' => (string)($companyTax['phone'] ?? ''),
                 'website' => (string)($companyTax['website'] ?? ''),
@@ -7916,12 +8025,14 @@ try {
         $company = companySettingsPayload($body);
         $stampPath = !empty($body['stamp_base64']) ? saveShopImage((string)$body['stamp_base64'], 'company') : null;
         if ($company['is_default']) $db->exec('UPDATE shop_company_settings SET is_default = 0');
-        $stmt = $db->prepare('INSERT INTO shop_company_settings (legal_name, trade_name, cui, registration_number, address, city, county, postal_code, country, email, phone, website, bank_name, iban, share_capital, stamp_path, is_default, vat_payer, vat_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([$company['legal_name'], $company['trade_name'], $company['cui'], $company['registration_number'], $company['address'], $company['city'], $company['county'], $company['postal_code'], $company['country'], $company['email'], $company['phone'], $company['website'], $company['bank_name'], $company['iban'], $company['share_capital'], $stampPath, $company['is_default'] ? 1 : 0, $company['vat_payer'] ? 1 : 0, $company['vat_rate']]);
+        $stmt = $db->prepare('INSERT INTO shop_company_settings (legal_name, trade_name, cui, registration_number, address, city, county, postal_code, country, physical_address, email, phone, website, bank_name, iban, share_capital, stamp_path, is_default, vat_payer, vat_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt->execute([$company['legal_name'], $company['trade_name'], $company['cui'], $company['registration_number'], $company['address'], $company['city'], $company['county'], $company['postal_code'], $company['country'], $company['physical_address'], $company['email'], $company['phone'], $company['website'], $company['bank_name'], $company['iban'], $company['share_capital'], $stampPath, $company['is_default'] ? 1 : 0, $company['vat_payer'] ? 1 : 0, $company['vat_rate']]);
         $id = (int)$db->lastInsertId();
         if (!$company['is_default'] && (int)$db->query('SELECT COUNT(*) FROM shop_company_settings WHERE is_default = 1')->fetchColumn() === 0) $db->prepare('UPDATE shop_company_settings SET is_default = 1 WHERE id = ?')->execute([$id]);
         $stmt = $db->prepare('SELECT * FROM shop_company_settings WHERE id = ?'); $stmt->execute([$id]);
-        jsonResponse(companySettingsRow($stmt->fetch(), $config), 201);
+        $savedCompany = companySettingsRow($stmt->fetch(), $config);
+        syncPublicCompanyContactPage($savedCompany);
+        jsonResponse($savedCompany, 201);
     }
 
     if ($action === 'updateCompanySettings' && in_array($method, ['PUT', 'PATCH'], true)) {
@@ -7935,12 +8046,14 @@ try {
         if (boolValue($body['remove_stamp'] ?? false)) { $oldStampPath = $stampPath; $stampPath = ''; }
         if (!empty($body['stamp_base64'])) { $newPath = saveShopImage((string)$body['stamp_base64'], 'company'); $oldStampPath = $stampPath; $stampPath = (string)$newPath; }
         if ($company['is_default']) $db->exec('UPDATE shop_company_settings SET is_default = 0');
-        $stmt = $db->prepare('UPDATE shop_company_settings SET legal_name = ?, trade_name = ?, cui = ?, registration_number = ?, address = ?, city = ?, county = ?, postal_code = ?, country = ?, email = ?, phone = ?, website = ?, bank_name = ?, iban = ?, share_capital = ?, stamp_path = ?, is_default = ?, vat_payer = ?, vat_rate = ? WHERE id = ?');
-        $stmt->execute([$company['legal_name'], $company['trade_name'], $company['cui'], $company['registration_number'], $company['address'], $company['city'], $company['county'], $company['postal_code'], $company['country'], $company['email'], $company['phone'], $company['website'], $company['bank_name'], $company['iban'], $company['share_capital'], $stampPath ?: null, $company['is_default'] ? 1 : 0, $company['vat_payer'] ? 1 : 0, $company['vat_rate'], $id]);
+        $stmt = $db->prepare('UPDATE shop_company_settings SET legal_name = ?, trade_name = ?, cui = ?, registration_number = ?, address = ?, city = ?, county = ?, postal_code = ?, country = ?, physical_address = ?, email = ?, phone = ?, website = ?, bank_name = ?, iban = ?, share_capital = ?, stamp_path = ?, is_default = ?, vat_payer = ?, vat_rate = ? WHERE id = ?');
+        $stmt->execute([$company['legal_name'], $company['trade_name'], $company['cui'], $company['registration_number'], $company['address'], $company['city'], $company['county'], $company['postal_code'], $company['country'], $company['physical_address'], $company['email'], $company['phone'], $company['website'], $company['bank_name'], $company['iban'], $company['share_capital'], $stampPath ?: null, $company['is_default'] ? 1 : 0, $company['vat_payer'] ? 1 : 0, $company['vat_rate'], $id]);
         if (!$company['is_default'] && (int)$db->query('SELECT COUNT(*) FROM shop_company_settings WHERE is_default = 1')->fetchColumn() === 0) $db->prepare('UPDATE shop_company_settings SET is_default = 1 WHERE id = ?')->execute([$id]);
         if ($oldStampPath && $oldStampPath !== $stampPath) removeShopImage($oldStampPath);
         $stmt = $db->prepare('SELECT * FROM shop_company_settings WHERE id = ?'); $stmt->execute([$id]);
-        jsonResponse(companySettingsRow($stmt->fetch(), $config));
+        $savedCompany = companySettingsRow($stmt->fetch(), $config);
+        syncPublicCompanyContactPage($savedCompany);
+        jsonResponse($savedCompany);
     }
 
     if ($action === 'deleteCompanySettings' && $method === 'DELETE') {

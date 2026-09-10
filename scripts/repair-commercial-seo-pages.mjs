@@ -8,7 +8,7 @@ const website = path.join(root, "website");
 const phoneHref = "tel:+40762093915";
 const phoneDisplay = "0762 093 915";
 const whatsappHref = "https://wa.me/40762093915";
-const address = "Str. Humulești nr. 131-135, lot 4, 052262, București, Sector 5";
+const serviceArea = "București–Ilfov";
 
 async function atomicWrite(file, content) {
   const temporary = `${file}.gtrots-repair-${process.pid}.tmp`;
@@ -33,9 +33,9 @@ const pages = [
     heading: "Service trotinete electrice în București",
     description: "Service G-Trots pentru trotinete electrice în București și Ilfov: diagnostic, anvelope, frâne, baterii, controllere, motoare și revizii. Programare la 0762 093 915.",
     section: "Service",
-    quick: `G-Trots este în ${address}. Programul este luni–vineri, 10:00–19:00. Pentru programare sună la ${phoneDisplay} sau trimite modelul trotinetei și problema observată pe WhatsApp. Costul și termenul sunt confirmate înainte de lucrare, după verificarea trotinetei.`,
+    quick: `G-Trots deservește zona ${serviceArea}. Programul este luni–vineri, 10:00–19:00. Pentru programare sună la ${phoneDisplay} sau trimite modelul trotinetei și problema observată pe WhatsApp. Detaliile de predare sunt confirmate la programare, iar costul și termenul sunt comunicate după verificare.`,
     faqs: [
-      ["Unde se află service-ul G-Trots?", `În ${address}. Service-ul deservește clienți din București și Ilfov.`],
+      ["În ce zonă lucrează service-ul G-Trots?", `G-Trots deservește clienți din ${serviceArea}. Momentan nu este publicată o adresă fixă de atelier; detaliile de predare se confirmă la programare.`],
       ["Care este programul service-ului?", "Programul afișat este luni–vineri, între 10:00 și 19:00. Pentru a evita așteptarea, fă o programare înainte de vizită."],
       ["Cât costă reparația unei trotinete electrice?", "Costul depinde de model, defect, piesa necesară și complexitatea montajului. Primești estimarea și îți confirmi acordul înainte de executarea lucrării."],
       ["Ce reparații face G-Trots?", "Diagnostic, schimb de anvelope și camere, frâne, rulmenți, suspensii, baterii și încărcare, controllere, display-uri, accelerații, motoare, cablaje și revizii."],
@@ -52,7 +52,7 @@ const pages = [
   </section>
   <section class="shell content-layout">
     <article class="article-body">
-      <section class="quick-answer" aria-labelledby="informatii-service"><p class="eyebrow">INFORMAȚII ESENȚIALE</p><h2 id="informatii-service">Unde, când și cum vii la service</h2><p>G-Trots se află în <strong>${address}</strong>. Program: <strong>luni–vineri, 10:00–19:00</strong>. Pentru programare, sună la <a href="${phoneHref}">${phoneDisplay}</a> sau trimite modelul și problema pe <a href="${whatsappHref}">WhatsApp</a>.</p></section>
+      <section class="quick-answer" aria-labelledby="informatii-service"><p class="eyebrow">INFORMAȚII ESENȚIALE</p><h2 id="informatii-service">Zonă, program și programare</h2><p>Deservim clienți din <strong>${serviceArea}</strong>, de luni până vineri, între <strong>10:00 și 19:00</strong>. Momentan nu afișăm o adresă fixă de atelier. Sună la <a href="${phoneHref}">${phoneDisplay}</a> sau trimite modelul și problema pe <a href="${whatsappHref}">WhatsApp</a>, iar detaliile de predare le confirmăm la programare.</p></section>
       <section class="action-plan"><h2>Programare în trei pași</h2><ol><li><strong>Spune modelul complet</strong><span>Include marca, modelul și anul sau revizia, dacă le cunoști.</span></li><li><strong>Descrie problema pe scurt</strong><span>Spune ce nu funcționează, când apare și dacă există un cod de eroare.</span></li><li><strong>Confirmă vizita</strong><span>Stabilim când poți veni; după verificare primești costul și termenul înainte de reparație.</span></li></ol></section>
       <section><h2>Ce reparăm</h2><ul class="diagnostic-list"><li>anvelope, camere, valve și pene</li><li>frâne mecanice sau hidraulice, discuri și plăcuțe</li><li>baterii, încărcare și autonomie</li><li>controllere, display-uri, accelerații și cablaje</li><li>motoare, rulmenți, suspensii și sisteme de pliere</li><li>revizii, reglaje și verificări înainte de sezon</li></ul></section>
       <section><h2>Cât costă și cât durează</h2><p>Prețul final depinde de model, de piesa necesară și de complexitatea lucrării. Nu publicăm un tarif generic care poate induce în eroare: după verificare îți comunicăm estimarea de cost și timpul realist, iar intervenția începe după acordul tău. Disponibilitatea pieselor poate influența termenul.</p></section>
@@ -60,19 +60,19 @@ const pages = [
       <section id="intrebari-frecvente"><h2>Întrebări frecvente</h2>${"__FAQ__"}</section>
       <section><h2>Piese și montaj în același loc</h2><p>Dacă reparația cere o componentă, poți verifica și <a href="/magazin">magazinul G-Trots</a>. Te ajutăm să confirmi compatibilitatea înainte de comandă, iar montajul se poate face în service.</p></section>
     </article>
-    <aside class="article-aside"><div class="aside-card"><strong>Programează o verificare</strong><p>Spune-ne modelul și problema observată.</p><a class="button" href="${phoneHref}">Sună ${phoneDisplay}</a></div><div class="aside-card"><strong>Adresă și program</strong><p>${address}<br>Luni–Vineri · 10:00–19:00</p><a href="${whatsappHref}">Scrie pe WhatsApp</a></div></aside>
+    <aside class="article-aside"><div class="aside-card"><strong>Programează o verificare</strong><p>Spune-ne modelul și problema observată.</p><a class="button" href="${phoneHref}">Sună ${phoneDisplay}</a></div><div class="aside-card"><strong>Zonă și program</strong><p>${serviceArea}<br>Luni–Vineri · 10:00–19:00</p><a href="${whatsappHref}">Confirmă detaliile pe WhatsApp</a></div></aside>
   </section>
 </main>`,
   },
   {
     slug: "service-trotinete-electrice-bucuresti",
-    title: "Service trotinete electrice București | G-Trots Sector 5",
+    title: "Service trotinete electrice București | G-Trots",
     heading: "Service pentru trotinete electrice în București",
-    description: "Service G-Trots în Sectorul 5, București: diagnostic, reparații, anvelope, frâne, baterii, controllere și revizii. Programări la 0762 093 915.",
+    description: "Service G-Trots pentru București și Ilfov: reparații, anvelope, frâne, baterii, controllere și revizii. Programări la 0762 093 915.",
     section: "Service trotinete electrice în București",
-    quick: `Atelierul G-Trots este în ${address}. Programul este luni–vineri, 10:00–19:00. Reparăm trotinete electrice și comunicăm estimarea de cost și termenul după verificare, înainte de începerea lucrării. Pentru programare sună la ${phoneDisplay} sau scrie pe WhatsApp.`,
+    quick: `G-Trots deservește zona ${serviceArea}, de luni până vineri, între 10:00 și 19:00. Momentan nu este publicată o adresă fixă de atelier. Pentru programare și detaliile de predare sună la ${phoneDisplay} sau scrie pe WhatsApp. Estimarea de cost și termenul sunt comunicate după verificare.`,
     faqs: [
-      ["Unde este service-ul G-Trots din București?", `Atelierul se află în ${address}. Adresa și datele firmei sunt afișate și pe pagina Contact.`],
+      ["În ce zonă lucrează service-ul G-Trots?", `G-Trots deservește clienți din ${serviceArea}. Momentan nu este publicată o adresă fixă de atelier; detaliile de predare se confirmă la programare.`],
       ["Este necesară programarea?", `Recomandăm programarea la ${phoneDisplay} sau pe WhatsApp, ca să confirmăm intervalul și să reducem timpul de așteptare.`],
       ["Ce tipuri de reparații efectuați?", "Lucrăm la roți și anvelope, frâne, rulmenți, suspensii, sisteme de pliere, baterii și încărcare, controllere, display-uri, accelerații, motoare și cablaje."],
       ["Cât costă reparația?", "Costul depinde de model, defect, piesele necesare și timpul de lucru. După verificare comunicăm estimarea, iar intervenția începe după acordul clientului."],
@@ -83,14 +83,14 @@ const pages = [
 <main class="seo-page">
   <section class="shell article-hero">
     <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">Acasă</a><span>/</span><a href="/service-trotinete-electrice">Service</a><span>/</span><a href="/service-trotinete-electrice-bucuresti">București</a></nav>
-    <p class="eyebrow">ATELIER G-TROTS · SECTOR 5</p>
+    <p class="eyebrow">SERVICE G-TROTS · BUCUREȘTI–ILFOV</p>
     <h1>Service pentru trotinete electrice în București</h1>
     <p class="lead">Diagnostic, reparații și întreținere într-un atelier specializat. Îți spunem ce am găsit, cât costă și cât durează înainte să începem lucrarea.</p>
     <g-trots-diagnostic-search data-base-url="/"></g-trots-diagnostic-search>
   </section>
   <section class="shell content-layout">
     <article class="article-body">
-      <section class="quick-answer" aria-labelledby="date-atelier"><p class="eyebrow">INFORMAȚII PENTRU VIZITĂ</p><h2 id="date-atelier">Adresă, program și programare</h2><p>Ne găsești în <strong>${address}</strong>. Programul atelierului este <strong>luni–vineri, 10:00–19:00</strong>. Sună la <a href="${phoneHref}">${phoneDisplay}</a> sau scrie pe <a href="${whatsappHref}">WhatsApp</a> pentru a stabili vizita.</p></section>
+      <section class="quick-answer" aria-labelledby="date-atelier"><p class="eyebrow">INFORMAȚII PENTRU VIZITĂ</p><h2 id="date-atelier">Zonă, program și programare</h2><p>Deservim zona <strong>${serviceArea}</strong>, de luni până vineri, între <strong>10:00 și 19:00</strong>. Momentan nu este publicată o adresă fixă de atelier. Sună la <a href="${phoneHref}">${phoneDisplay}</a> sau scrie pe <a href="${whatsappHref}">WhatsApp</a>, iar detaliile de predare sunt confirmate la programare.</p></section>
       <section><h2>Cu ce te putem ajuta</h2><ul class="diagnostic-list"><li>schimb de anvelope, camere și valve, inclusiv roți tubeless</li><li>reglaje și reparații pentru frâne, discuri, plăcuțe și etriere</li><li>verificări pentru baterie, încărcare și autonomie scăzută</li><li>controllere, display-uri, accelerații, motoare și cablaje</li><li>rulmenți, suspensii, ghidon și sisteme de pliere</li><li>revizii periodice și verificări generale de siguranță</li></ul></section>
       <section class="action-plan"><h2>Cum decurge programarea</h2><ol><li><strong>Ne spui marca și modelul</strong><span>Adaugă problema observată și un cod de eroare, dacă există.</span></li><li><strong>Stabilim vizita</strong><span>Confirmăm intervalul în care poți aduce trotineta la atelier.</span></li><li><strong>Primești constatarea</strong><span>După verificare îți comunicăm soluția, costul estimat și termenul înainte de reparație.</span></li></ol></section>
       <section><h2>Costul și durata reparației</h2><p>O pană, un reglaj de frână și o problemă de baterie nu pot avea același tarif sau același termen. Prețul depinde de model, accesul la componentă, piesele necesare și complexitatea intervenției. După verificare primești o estimare clară și alegi dacă dorești continuarea lucrării.</p></section>
@@ -98,7 +98,7 @@ const pages = [
       <section><h2>Service în București, piese cu livrare națională</h2><p>Atelierul deservește clienți din toate sectoarele Bucureștiului și din Ilfov. Magazinul online G-Trots livrează piese și accesorii oriunde în România. Dacă ai nevoie și de montaj, putem confirma mai întâi compatibilitatea produsului cu modelul tău.</p><p><a href="/magazin">Vezi magazinul de piese pentru trotinete electrice</a> sau consultă <a href="/service-trotinete-electrice">pagina principală de service</a>.</p></section>
       <section id="intrebari-frecvente"><h2>Întrebări frecvente</h2>${"__FAQ__"}</section>
     </article>
-    <aside class="article-aside"><div class="aside-card"><strong>Programează o vizită</strong><p>Trimite marca, modelul și problema observată.</p><a class="button" href="${phoneHref}">Sună ${phoneDisplay}</a></div><div class="aside-card"><strong>Atelier G-Trots</strong><p>${address}<br>Luni–Vineri · 10:00–19:00</p><a href="${whatsappHref}">Scrie pe WhatsApp</a></div></aside>
+    <aside class="article-aside"><div class="aside-card"><strong>Programează o vizită</strong><p>Trimite marca, modelul și problema observată.</p><a class="button" href="${phoneHref}">Sună ${phoneDisplay}</a></div><div class="aside-card"><strong>Zonă deservită</strong><p>${serviceArea}<br>Luni–Vineri · 10:00–19:00</p><a href="${whatsappHref}">Confirmă detaliile pe WhatsApp</a></div></aside>
   </section>
 </main>`,
   },
@@ -108,7 +108,7 @@ const pages = [
     heading: "Schimb anvelopă pentru trotinetă electrică",
     description: "Schimb anvelopă, cameră sau valvă pentru trotinete electrice în București. Verificăm dimensiunea, tipul roții și compatibilitatea înainte de montaj.",
     section: "Roți și anvelope",
-    quick: `Pentru schimbarea anvelopei verificăm dimensiunea înscrisă pe cauciuc, tipul tubeless sau cu cameră, valva, janta și modelul trotinetei. G-Trots este în ${address}; programarea se face la ${phoneDisplay} sau pe WhatsApp. Costul și termenul sunt confirmate înainte de montaj.`,
+    quick: `Pentru schimbarea anvelopei verificăm dimensiunea înscrisă pe cauciuc, tipul tubeless sau cu cameră, valva, janta și modelul trotinetei. G-Trots deservește zona ${serviceArea}; programarea se face la ${phoneDisplay} sau pe WhatsApp. Costul și termenul sunt confirmate înainte de montaj.`,
     faqs: [
       ["Ce informații sunt necesare pentru alegerea anvelopei?", "Modelul trotinetei, dimensiunea scrisă pe anvelopa veche și dacă roata este tubeless, cu cameră sau plină. O fotografie clară ajută la confirmare."],
       ["Schimbați și camera sau valva?", "Da. La demontare verificăm anvelopa, camera sau etanșarea tubeless, valva și starea jantei, apoi îți comunicăm ce trebuie înlocuit."],
@@ -135,7 +135,7 @@ const pages = [
       <section id="intrebari-frecvente"><h2>Întrebări frecvente</h2>${"__FAQ__"}</section>
       <section><h2>Cumpără anvelopa potrivită</h2><p>Vezi <a href="/magazin">anvelopele și camerele din magazinul G-Trots</a>. Dacă nu ești sigur de compatibilitate, trimite o fotografie pe WhatsApp înainte de comandă.</p></section>
     </article>
-    <aside class="article-aside"><div class="aside-card"><strong>Verifică potrivirea</strong><p>Trimite modelul și fotografia dimensiunii înscrise pe anvelopă.</p><a class="button" href="${whatsappHref}">Întreabă pe WhatsApp</a></div><div class="aside-card"><strong>Service în București</strong><p>${address}<br>Luni–Vineri · 10:00–19:00</p><a href="${phoneHref}">Sună ${phoneDisplay}</a></div></aside>
+    <aside class="article-aside"><div class="aside-card"><strong>Verifică potrivirea</strong><p>Trimite modelul și fotografia dimensiunii înscrise pe anvelopă.</p><a class="button" href="${whatsappHref}">Întreabă pe WhatsApp</a></div><div class="aside-card"><strong>Service în București–Ilfov</strong><p>Detaliile de predare se confirmă la programare.<br>Luni–Vineri · 10:00–19:00</p><a href="${phoneHref}">Sună ${phoneDisplay}</a></div></aside>
   </section>
 </main>`,
   },
@@ -153,7 +153,7 @@ function schema(page) {
     "@context": "https://schema.org",
     "@graph": [
       {
-        "@type": "LocalBusiness",
+        "@type": "Organization",
         "@id": "https://g-trots.ro/#business",
         name: "G-Trots",
         legalName: "CAB IT EXPERT S.R.L.",
@@ -161,7 +161,6 @@ function schema(page) {
         telephone: "+40762093915",
         email: "contact@g-trots.ro",
         image: "https://g-trots.ro/assets/favicon.png",
-        address: { "@type": "PostalAddress", streetAddress: "Str. Humulești nr. 131-135, lot 4", postalCode: "052262", addressLocality: "București", addressRegion: "Sector 5", addressCountry: "RO" },
         openingHoursSpecification: [{ "@type": "OpeningHoursSpecification", dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], opens: "10:00", closes: "19:00" }],
         areaServed: [{ "@type": "AdministrativeArea", name: "București" }, { "@type": "AdministrativeArea", name: "Ilfov" }],
       },
@@ -190,7 +189,7 @@ async function repairPage(page) {
   const main = page.main.replace("__FAQ__", faqHtml(page.faqs)).trim();
   if (!/<main class="seo-page">[\s\S]*?<\/main>/i.test(html)) throw new Error(`Structură <main> necunoscută: ${page.slug}`);
   html = html.replace(/(?:\r?\n)*<main class="seo-page">[\s\S]*?<\/main>/i, `\n${main}`);
-  html = html.replaceAll("/legal-footer.js?v=20260909-nav-v3", "/legal-footer.js?v=20260910-trust-v1");
+  html = html.replace(/\/legal-footer\.js\?v=[^\"']+/g, "/legal-footer.js?v=20260910-public-address-v1");
   await atomicWrite(file, html);
 }
 

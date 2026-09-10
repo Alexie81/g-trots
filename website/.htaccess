@@ -82,6 +82,9 @@ AddType application/x-ndjson .jsonl
   <FilesMatch "\.(?:css|js)$">
     Header set Cache-Control "public, max-age=31536000, immutable"
   </FilesMatch>
+  <FilesMatch "^legal-footer\.js$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
   SetEnvIf Request_URI "^/assets/" GT_STATIC_ASSET=1
   Header set Cache-Control "public, max-age=31536000, immutable" env=GT_STATIC_ASSET
 

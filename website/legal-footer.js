@@ -1,5 +1,5 @@
 (() => {
-  const COMPONENT_VERSION = '20260910-public-address-v1';
+  const COMPONENT_VERSION = '20260910-conversion-v1';
   if (window.__gtLegalFooterVersion === COMPONENT_VERSION) return;
   window.__gtLegalFooterVersion = COMPONENT_VERSION;
   window.__gtLegalFooter = true;
@@ -47,10 +47,10 @@
   }
   loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260910-public-address-v1' });
   if (!document.querySelector('script[src*="google-measurement.js"]')) {
-    loadAsset('script', { src: '/google-measurement.js?v=20260907-meta-v9', async: true });
+    loadAsset('script', { src: '/google-measurement.js?v=20260910-conversion-v1', async: true });
   }
   if (!document.querySelector('script[src*="meta-measurement.js"]')) {
-    loadAsset('script', { src: '/meta-measurement.js?v=20260907-meta-v2', async: true });
+    loadAsset('script', { src: '/meta-measurement.js?v=20260910-conversion-v1', async: true });
   }
   if (!document.querySelector('script[src*="cookie-consent.js"]')) {
     loadAsset('script', { src: '/cookie-consent.js?v=20260907-meta-v6', async: true });
@@ -70,6 +70,13 @@
 
   function companyPublicAddress(company) {
     return String(company.physical_address || '').trim() || 'București–Ilfov';
+  }
+
+  function renderCompanyBindings(company) {
+    const values = { physical_address: companyPublicAddress(company) };
+    Object.entries(values).forEach(([key, value]) => {
+      document.querySelectorAll(`[data-company="${key}"]`).forEach(element => { element.textContent = value; });
+    });
   }
 
   function renderCompanyProfiles(company) {
@@ -113,16 +120,16 @@
 
     const currentPath = location.pathname.toLowerCase().replace(/\/+$/, '').replace(/\.html$/, '') || '/';
     const shopActive = /\/(magazin|produs)(?:\/|$)|anvelopa-g10|display-smart|incarcator-fastcharge|motor-dualhub|baterie-powercore|kit-frana/.test(currentPath);
-    const serviceActive = currentPath === '/service-trotinete-electrice';
+    const servicePage = currentPath === '/service-trotinete-electrice' || currentPath.startsWith('/service-trotinete-electrice-');
     const contactActive = currentPath === '/contact';
-    const guidesActive = !shopActive && !serviceActive && !contactActive && (
+    const guidesActive = !shopActive && !servicePage && !contactActive && (
       currentPath === '/ghiduri-service-trotinete-electrice'
       || currentPath.startsWith('/ghid-')
       || Boolean(document.querySelector('main.seo-page'))
     );
     const navigationHtml = `
           <div class="mobile-nav-heading" aria-hidden="true"><span>Meniu</span><small>G-Trots</small></div>
-          <a href="/service-trotinete-electrice"${serviceActive ? ' aria-current="page"' : ''}>Servicii</a>
+          <a href="/#servicii">Servicii</a>
           <a class="nav-shop-link${shopActive ? ' active' : ''}" href="/magazin"${shopActive ? ' aria-current="page"' : ''}><span class="nav-shop-icon" aria-hidden="true"></span><span>Shop</span></a>
           <a href="/ghiduri-service-trotinete-electrice"${guidesActive ? ' aria-current="page"' : ''}>Ghiduri</a>
           <a href="/#proces">Cum lucrăm</a>
@@ -252,7 +259,7 @@ ${navigationHtml}
       loadAsset('link', { rel: 'stylesheet', href: '/favorites.css?v=20260909-nav-v2' });
     }
     if (!document.querySelector('script[src*="favorites.js"]')) {
-      loadAsset('script', { src: '/favorites.js?v=20260908-nav-v1' });
+      loadAsset('script', { src: '/favorites.js?v=20260910-navbar-v1' });
     }
   }
 
@@ -469,6 +476,13 @@ ${navigationHtml}
   ensureShopNavigation();
   ensureStaticStoreShortcut();
   loadConfig()
-    .then(data => render({ ...companyFallback, ...(data?.company || {}) }))
-    .catch(() => render(companyFallback));
+    .then(data => {
+      const company = { ...companyFallback, ...(data?.company || {}) };
+      renderCompanyBindings(company);
+      render(company);
+    })
+    .catch(() => {
+      renderCompanyBindings(companyFallback);
+      render(companyFallback);
+    });
 })();

@@ -23,11 +23,12 @@ foreach (['componenta globală' => $footer, 'acțiunile magazinului' => $favorit
 }
 
 navigationAssert(!str_contains($footer, '>Despre</a>') && !str_contains($favorites, '>Despre</a>'), 'Navbarul comun nu trebuie să reintroducă vechiul link Despre.');
+navigationAssert(str_contains($footer, '<a href="/#servicii">Servicii</a>') && str_contains($favorites, '<a href="/#servicii">Servicii</a>'), 'Servicii trebuie să ducă în secțiunea #servicii a homepage-ului din orice pagină.');
 navigationAssert(str_contains($footer, "header.classList.add('gt-public-header')"), 'Orice header existent trebuie să primească stilul global.');
 navigationAssert(str_contains($footer, "callButton.className = 'button button-small header-cta call-button'"), 'Butonul desktop trebuie normalizat la Sună acum.');
 navigationAssert(str_contains($footer, "headerInner.insertBefore(callButton, headerInner.querySelector('.global-shop-actions, .menu-toggle'))"), 'Butonul Sună acum trebuie adăugat și paginilor care nu îl au.');
 navigationAssert(str_contains($footer, 'const cleanToggle = toggle.cloneNode(true)') && str_contains($footer, "toggle.dataset.favoritesMenuBound = 'true'") && str_contains($footer, 'event.stopImmediatePropagation()'), 'Navbarul mobil trebuie să elimine handler-ele vechi și să nu lase listener-ele documentului să anuleze aceeași atingere.');
 navigationAssert(str_contains($footer, 'ensureStaticStoreShortcut()') && str_contains($footer, "shortcut.href = '/magazin'"), 'Paginile statice trebuie să ofere intrarea sticky în magazin.');
-navigationAssert(str_contains($productTemplate, 'legal-footer.js?v=20260910-public-address-v1'), 'Produsele viitoare trebuie să încarce versiunea actuală a navbarului global.');
+navigationAssert(str_contains($productTemplate, 'legal-footer.js?v=20260910-conversion-v1'), 'Produsele viitoare trebuie să încarce versiunea actuală a navbarului global.');
 
 echo "global_navigation_contract_test: OK\n";

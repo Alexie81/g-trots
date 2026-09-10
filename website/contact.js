@@ -47,6 +47,12 @@
     if (status) status.textContent = '';
     const lines = ['Salut, echipa G-Trots!', '', `Nume: ${name.value.trim()}`, phone.value.trim() ? `Telefon: ${phone.value.trim()}` : '', `Subiect: ${service.value.trim()}`, `Detalii: ${message.value.trim()}`].filter(Boolean);
     const whatsappUrl = `https://wa.me/${phoneDigits(activeCompany.phone)}?text=${encodeURIComponent(lines.join('\n'))}`;
+    window.GTrotsGoogle?.trackContact?.('whatsapp', {
+      link_url: `https://wa.me/${phoneDigits(activeCompany.phone)}`,
+      link_text: 'Pregătește mesajul pe WhatsApp',
+      interaction_location: 'contact_form',
+      service: String(service.value || '').trim().slice(0, 100)
+    });
     window.location.href = whatsappUrl;
   });
 

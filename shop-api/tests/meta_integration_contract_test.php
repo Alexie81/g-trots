@@ -27,6 +27,7 @@ $assert(str_contains($meta, 'marketingAllowed()') && str_contains($meta, 'consen
 foreach (['ViewContent', 'Search', 'AddToWishlist', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'Purchase', 'Contact'] as $event) {
     $assert(str_contains($meta, '"' . $event . '"'), "Evenimentul Meta {$event} lipsește.");
 }
+$assert(str_contains($meta, 'phone_click: ["Contact"') && str_contains($meta, 'whatsapp_click: ["Contact"'), 'Clickurile de telefon și WhatsApp nu sunt mapate către Meta Contact.');
 $assert(str_contains($api, "if (\$action === 'metaCatalogFeed'"), 'Feedul public Meta lipsește.');
 $assert(str_contains($api, "if (\$action === 'metaConversion'"), 'Endpointul Conversions API lipsește.');
 $assert(str_contains($api, "if (\$action === 'syncProductSeoCatalog'"), 'Regenerarea întregului catalog de pagini lipsește.');

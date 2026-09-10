@@ -272,65 +272,6 @@ if (typewriterHeading && typewriterText) {
   }
 }
 
-const contactTypewriter = document.querySelector(".contact-typewriter");
-const contactTypewriterText = document.querySelector(".contact-typewriter-text");
-
-if (contactTypewriter && contactTypewriterText) {
-  const contactPhrase = "Programează-ți trotineta la o reparație de calitate.";
-  const contactAccent = "reparație de calitate.";
-  const contactAccentStart = contactPhrase.indexOf(contactAccent);
-  let contactCharacterIndex = contactAccentStart;
-  let contactIsDeleting = false;
-  let contactAnimationStarted = false;
-
-  const renderContactTypewriter = () => {
-    const typedText = contactPhrase.slice(0, contactCharacterIndex);
-
-    if (contactAccentStart !== -1 && typedText.length > contactAccentStart) {
-      const regularText = typedText.slice(0, contactAccentStart);
-      const accentText = typedText.slice(contactAccentStart);
-      contactTypewriterText.innerHTML = `${escapeHtml(regularText)}<em>${escapeHtml(accentText)}</em>`;
-      return;
-    }
-
-    contactTypewriterText.textContent = typedText;
-  };
-
-  if (prefersReducedMotion) {
-    contactCharacterIndex = contactPhrase.length;
-    renderContactTypewriter();
-  } else {
-    const runContactTypewriter = () => {
-      renderContactTypewriter();
-
-      if (!contactIsDeleting && contactCharacterIndex === contactPhrase.length) {
-        contactIsDeleting = true;
-        window.setTimeout(runContactTypewriter, 2100);
-        return;
-      }
-
-      if (contactIsDeleting && contactCharacterIndex === 0) {
-        contactIsDeleting = false;
-        window.setTimeout(runContactTypewriter, 700);
-        return;
-      }
-
-      contactCharacterIndex += contactIsDeleting ? -1 : 1;
-      window.setTimeout(runContactTypewriter, contactIsDeleting ? 72 : 105);
-    };
-
-    const contactTypewriterObserver = new IntersectionObserver(entries => {
-      if (!entries.some(entry => entry.isIntersecting) || contactAnimationStarted) return;
-      contactAnimationStarted = true;
-      contactTypewriterObserver.disconnect();
-      window.setTimeout(runContactTypewriter, 300);
-    }, { threshold: 0.35 });
-
-    renderContactTypewriter();
-    contactTypewriterObserver.observe(contactTypewriter);
-  }
-}
-
 const areaLabelTypewriter = document.querySelector(".area-label-typewriter");
 const areaLabelTypewriterText = document.querySelector(".area-label-typewriter-text");
 const areaCityTypewriter = document.querySelector(".area-city-typewriter");
@@ -825,6 +766,12 @@ document.querySelector(".contact-form").addEventListener("submit", event => {
     currency: "RON",
     value: 0,
     lead_source: "formular_programare_whatsapp",
+    service: String(form.get("service") || "nespecificat").slice(0, 100)
+  });
+  window.GTrotsGoogle?.trackContact?.("whatsapp", {
+    link_url: "https://wa.me/40762093915",
+    link_text: "Trimite pe WhatsApp",
+    interaction_location: "homepage_booking_form",
     service: String(form.get("service") || "nespecificat").slice(0, 100)
   });
   window.open(whatsappUrl, "_blank", "noopener");

@@ -10,6 +10,8 @@
   const REFUNDS_KEY = "g-trots-ga4-refunds-v1";
   const AUTH_EVENT_KEY = "g-trots-ga4-auth-pending-v1";
   const SELECT_EVENT_KEY = "g-trots-ga4-select-pending-v1";
+  const ATTRIBUTION_KEY = "g-trots-ga4-session-attribution-v1";
+  const LANDING_EVENT_KEY = "g-trots-ga4-landing-sent-v1";
   const CURRENCY = "RON";
   const once = new Set();
   const transientPurchases = new Set();
@@ -69,6 +71,8 @@
         localStorage.removeItem(REFUNDS_KEY);
         localStorage.removeItem(AUTH_EVENT_KEY);
         sessionStorage.removeItem(SELECT_EVENT_KEY);
+        sessionStorage.removeItem(ATTRIBUTION_KEY);
+        sessionStorage.removeItem(LANDING_EVENT_KEY);
       } catch { /* stocarea poate fi indisponibilă */ }
       expireFirstPartyCookies(["_ga"]);
     }
@@ -149,11 +153,80 @@
   }
 
   function ecommerceValue(items) {
-    return items.reduce((sum, item) => sum + finite(item.price) * finite(item.quantity, 1), 0);
+    const total = items.reduce((sum, item) => sum + finite(item.price) * finite(item.quantity, 1), 0);
+    return Math.round((total + Number.EPSILON) * 100) / 100;
   }
 
   function cleanParams(params) {
     return Object.fromEntries(Object.entries(params || {}).filter(([, value]) => value !== undefined && value !== null && value !== ""));
+  }
+
+  function limited(value, maximum = 100) {
+    return String(value || "").trim().slice(0, maximum);
+  }
+
+  function readSessionJson(key, fallback) {
+    try {
+      const value = JSON.parse(sessionStorage.getItem(key) || "null");
+      return value == null ? fallback : value;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function currentAttribution() {
+    const saved = analyticsStorageAllowed() ? readSessionJson(ATTRIBUTION_KEY, null) : null;
+    if (saved?.landing_page) return saved;
+
+    const query = new URLSearchParams(location.search);
+    let referrerHost = "";
+    try { referrerHost = document.referrer ? new URL(document.referrer).hostname.replace(/^www\./i, "") : ""; }
+    catch { referrerHost = ""; }
+    const gclid = limited(query.get("gclid"), 180);
+    const gbraid = limited(query.get("gbraid"), 180);
+    const wbraid = limited(query.get("wbraid"), 180);
+    const clickId = gclid || gbraid || wbraid;
+    const clickIdType = gclid ? "gclid" : gbraid ? "gbraid" : wbraid ? "wbraid" : "";
+    const explicitSource = limited(query.get("utm_source"));
+    const explicitMedium = limited(query.get("utm_medium"));
+    const source = explicitSource || (clickId ? "google" : referrerHost) || "direct";
+    const searchReferrer = /(^|\.)(google|bing|yahoo|duckduckgo|ecosia)\./i.test(referrerHost);
+    const medium = explicitMedium || (clickId ? "cpc" : source === "direct" ? "none" : searchReferrer ? "organic" : "referral");
+    const paidMedium = /^(?:cpc|ppc|paid|paid_search|paid_social|display|cpm|cpv|affiliate)$/i.test(medium);
+    const trafficChannel = clickId || paidMedium
+      ? "paid"
+      : medium === "organic" || searchReferrer
+        ? "organic"
+        : source === "direct"
+          ? "direct"
+          : "referral";
+    const attribution = cleanParams({
+      landing_page: limited(`${location.pathname}${location.search}`, 100),
+      landing_page_url: limited(location.href, 1000),
+      initial_referrer: limited(document.referrer, 420),
+      traffic_source: source,
+      traffic_medium: medium,
+      traffic_channel: trafficChannel,
+      traffic_campaign: limited(query.get("utm_campaign")),
+      traffic_content: limited(query.get("utm_content")),
+      traffic_term: limited(query.get("utm_term")),
+      traffic_click_id: clickId,
+      traffic_click_id_type: clickIdType
+    });
+    if (analyticsStorageAllowed()) {
+      try { sessionStorage.setItem(ATTRIBUTION_KEY, JSON.stringify(attribution)); } catch { /* fără persistență */ }
+    }
+    return attribution;
+  }
+
+  function interactionLocation(element) {
+    const explicit = element?.closest?.("[data-analytics-location]")?.dataset?.analyticsLocation;
+    if (explicit) return limited(explicit);
+    if (element?.closest?.("header")) return "header";
+    if (element?.closest?.("footer")) return "footer";
+    if (element?.closest?.("form")) return "form";
+    if (element?.closest?.("aside")) return "aside";
+    return "content";
   }
 
   function track(eventName, params = {}, context = {}) {
@@ -163,6 +236,28 @@
     document.dispatchEvent(new CustomEvent("g-trots:analytics-event", {
       detail: { eventName, params: cleanEventParams, context, timestamp: Date.now() }
     }));
+  }
+
+  function trackLandingPage() {
+    if (!analyticsStorageAllowed()) return false;
+    try { if (sessionStorage.getItem(LANDING_EVENT_KEY) === "1") return false; }
+    catch { /* fără persistență */ }
+    track("landing_page_view", currentAttribution());
+    try { sessionStorage.setItem(LANDING_EVENT_KEY, "1"); } catch { /* fără persistență */ }
+    return true;
+  }
+
+  function trackContact(method, params = {}) {
+    const consent = readConsent();
+    if (!consent?.analytics && !consent?.marketing) return false;
+    const normalizedMethod = method === "phone" ? "phone" : "whatsapp";
+    track(normalizedMethod === "phone" ? "phone_click" : "whatsapp_click", {
+      ...currentAttribution(),
+      page_path: limited(`${location.pathname}${location.search}`, 100),
+      contact_method: normalizedMethod,
+      ...cleanParams(params)
+    });
+    return true;
   }
 
   function trackEcommerce(eventName, items, params = {}) {
@@ -276,9 +371,9 @@
       if (link) {
         let url = null;
         try { url = new URL(link.href, location.href); } catch { /* URL invalid */ }
-        if (url?.protocol === "tel:") track("click_to_call", { link_url: url.href, link_text: link.textContent.trim().slice(0, 100) });
+        if (url?.protocol === "tel:") trackContact("phone", { link_url: url.href, link_text: link.textContent.trim().slice(0, 100), interaction_location: interactionLocation(link) });
         if (url && /(?:wa\.me|api\.whatsapp\.com|web\.whatsapp\.com)$/i.test(url.hostname)) {
-          track("click_whatsapp", { link_url: `${url.origin}${url.pathname}`, link_text: link.textContent.trim().slice(0, 100) });
+          trackContact("whatsapp", { link_url: `${url.origin}${url.pathname}`, link_text: link.textContent.trim().slice(0, 100), interaction_location: interactionLocation(link) });
         }
       }
       const searchTrigger = event.target.closest("[data-smart-search-submit],[data-smart-search-all],[data-search-choice]");
@@ -354,16 +449,22 @@
       item_id: String(item.apiId || item.product_id || item.id || ""),
       item_name: String(item.name || item.product_name || "Produs G-Trots"),
       affiliation: "G-Trots",
+      item_brand: String(item.brand || item.manufacturer_name || "G-Trots"),
+      item_category: String(item.category || item.category_name || "Produse"),
+      item_variant: String(item.sku || item.product_sku || ""),
       price: finite(item.discountedUnitPrice ?? item.discounted_unit_price ?? item.unitPrice ?? item.unit_price),
       discount: finite(item.discountTotal ?? item.discount_total) / Math.max(1, finite(item.quantity, 1)),
       quantity: Math.max(1, finite(item.quantity, 1)),
       index
     })).filter(item => item.item_id || item.item_name);
+    const merchandiseValue = ecommerceValue(items);
     track("purchase", {
+      ...currentAttribution(),
       transaction_id: transactionId,
       affiliation: "G-Trots",
       currency: CURRENCY,
-      value: finite(state.total),
+      value: merchandiseValue,
+      order_total: finite(state.total),
       tax: finite(state.vatTotal ?? state.vat_total),
       shipping: finite(state.shippingCost ?? state.shipping_cost),
       coupon: String(state.promotionCode || state.promotion_code || ""),
@@ -450,6 +551,7 @@
   document.addEventListener("g-trots:consent-changed", event => {
     updateConsent(event.detail);
     clearDisallowedMeasurementStorage(event.detail);
+    if (event.detail?.analytics) trackLandingPage();
   });
   document.addEventListener("g-trots:cart-changed", event => handleCartChanged(event.detail));
   document.addEventListener("g-trots:favorites-changed", event => handleFavoritesChanged(event.detail));
@@ -463,6 +565,8 @@
     measurementId: MEASUREMENT_ID,
     containerId: GTM_CONTAINER_ID,
     track,
+    trackContact,
+    trackLandingPage,
     trackEcommerce,
     trackPurchase,
     trackRefund,
@@ -494,6 +598,7 @@
 
   loadGoogleTag();
   bindInteractions();
+  trackLandingPage();
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", schedulePageCommerceTracking, { once: true });
   else schedulePageCommerceTracking();
 })();

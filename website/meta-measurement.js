@@ -106,6 +106,8 @@
       add_payment_info: ["AddPaymentInfo", false, { ...items, payment_type: String(params?.payment_type || "") }],
       form_start: ["FormStart", true, { form_id: String(params?.form_id || "") }],
       form_submit: ["FormSubmit", true, { form_id: String(params?.form_id || "") }],
+      phone_click: ["Contact", false, { contact_method: "phone" }],
+      whatsapp_click: ["Contact", false, { contact_method: "whatsapp" }],
       click_to_call: ["Contact", false, { contact_method: "phone" }],
       click_whatsapp: ["Contact", false, { contact_method: "whatsapp" }],
       sign_up: ["CompleteRegistration", false, { registration_method: String(params?.method || "") }],

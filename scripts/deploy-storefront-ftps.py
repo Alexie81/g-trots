@@ -85,6 +85,8 @@ FILES = (
     "service-marci-modele-trotinete-electrice.html",
     "service-scutere-electrice-ghiduri.html",
     "service-trotinete-electrice.html",
+    "service-products.js",
+    "service-products.css",
     "service-trotinete-electrice-bucuresti.html",
     "service-trotinete-electrice-bucuresti-ilfov.html",
     "service-trotinete-electrice-zone-bucuresti-ilfov.html",

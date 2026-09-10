@@ -4018,6 +4018,68 @@ function syncPublicCompanyContactPage(array $company): void {
         @unlink($temporary);
         error_log('G-Trots: pagina Contact nu a putut fi sincronizată server-side.');
     }
+
+    syncPublicCompanyServicePage($company);
+}
+
+/**
+ * Keeps the public service address synchronized in visible HTML and JSON-LD.
+ * This makes an address saved from either G-Trots app immediately crawlable.
+ */
+function syncPublicCompanyServicePage(array $company): void {
+    $root = dirname(__DIR__);
+    $physicalAddress = trim((string)($company['physical_address'] ?? '')) ?: 'București–Ilfov';
+    $escapedAddress = htmlspecialchars($physicalAddress, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $pageNames = ['service-trotinete-electrice.html', 'service-trotinete-electrice-bucuresti.html'];
+
+    foreach ($pageNames as $pageName) {
+        $servicePath = null;
+        foreach ([$root . '/' . $pageName, $root . '/website/' . $pageName] as $candidate) {
+            if (is_file($candidate) && is_readable($candidate)) { $servicePath = $candidate; break; }
+        }
+        if ($servicePath === null) continue;
+
+        $html = file_get_contents($servicePath);
+        if (!is_string($html) || $html === '') continue;
+        $pattern = '~(<(?<tag>[a-z][a-z0-9]*)\b(?=[^>]*\bdata-company="physical_address")[^>]*>).*?(</\k<tag>>)~si';
+        $html = preg_replace_callback($pattern, static fn(array $match): string => $match[1] . $escapedAddress . $match[3], $html) ?? $html;
+
+        $html = preg_replace_callback(
+            '~(<script\b[^>]*\bdata-company-service-schema[^>]*>)(.*?)(</script>)~si',
+            static function (array $match) use ($physicalAddress): string {
+                $schema = json_decode($match[2], true);
+                if (!is_array($schema) || !isset($schema['@graph']) || !is_array($schema['@graph'])) return $match[0];
+                foreach ($schema['@graph'] as &$entity) {
+                    if (!is_array($entity)) continue;
+                    $type = (string)($entity['@type'] ?? '');
+                    if ($type === 'Organization') {
+                        $entity['location'] = ['@type' => 'Place', 'name' => $physicalAddress];
+                        $entity['areaServed'] = [['@type' => 'AdministrativeArea', 'name' => $physicalAddress]];
+                    } elseif ($type === 'Service') {
+                        $entity['areaServed'] = ['@type' => 'AdministrativeArea', 'name' => $physicalAddress];
+                    } elseif ($type === 'WebPage') {
+                        $entity['dateModified'] = gmdate('Y-m-d');
+                    } elseif ($type === 'FAQPage' && isset($entity['mainEntity'][0]) && is_array($entity['mainEntity'][0])) {
+                        $entity['mainEntity'][0]['name'] = 'Care este adresa service-ului G-Trots?';
+                        $entity['mainEntity'][0]['acceptedAnswer'] = [
+                            '@type' => 'Answer',
+                            'text' => 'Adresa publică sau zona de predare configurată pentru service-ul G-Trots este ' . $physicalAddress . '. Recomandăm confirmarea programării înainte de vizită.',
+                        ];
+                    }
+                }
+                unset($entity);
+                $encoded = json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                return is_string($encoded) ? $match[1] . $encoded . $match[3] : $match[0];
+            },
+            $html
+        ) ?? $html;
+
+        $temporary = $servicePath . '.company-' . bin2hex(random_bytes(4)) . '.tmp';
+        if (file_put_contents($temporary, $html, LOCK_EX) === false || !@rename($temporary, $servicePath)) {
+            @unlink($temporary);
+            error_log('G-Trots: pagina publică de service nu a putut fi sincronizată server-side: ' . $pageName);
+        }
+    }
 }
 
 function receiptLocationRow(array $row): array {

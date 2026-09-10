@@ -27,13 +27,18 @@ foreach ([
     'view_item_list', 'select_item', 'view_item', 'add_to_wishlist', 'remove_from_wishlist', 'add_to_cart',
     'remove_from_cart', 'view_cart', 'begin_checkout', 'add_shipping_info',
     'add_payment_info', 'purchase', 'search', 'view_search_results', 'form_start', 'form_submit',
-    'login', 'sign_up', 'click_to_call', 'click_whatsapp', 'view_promotion',
+    'login', 'sign_up', 'landing_page_view', 'phone_click', 'whatsapp_click', 'view_promotion',
     'select_promotion', 'refund',
 ] as $event) {
     $assert(str_contains($measurement, '"' . $event . '"'), "evenimentul {$event} lipsește");
 }
 $assert(str_contains($measurement, 'transaction_id'), 'purchase nu are transaction_id');
 $assert(str_contains($measurement, 'payment_type'), 'purchase nu transmite metoda de plată');
+$assert(str_contains($measurement, 'item_brand') && str_contains($measurement, 'item_category') && str_contains($measurement, 'item_variant'), 'Produsele măsurate nu păstrează brandul, categoria și SKU-ul.');
+$assert(str_contains($measurement, 'const merchandiseValue = ecommerceValue(items)') && str_contains($measurement, 'order_total: finite(state.total)'), 'Valoarea purchase nu separă venitul din produse de totalul plătit.');
+$assert(str_contains($measurement, 'traffic_source') && str_contains($measurement, 'traffic_medium') && str_contains($measurement, 'traffic_channel'), 'Atribuirea paid/organic/direct/referral este incompletă.');
+$assert(str_contains($measurement, 'gclid') && str_contains($measurement, 'gbraid') && str_contains($measurement, 'wbraid'), 'Identificatorii Google Ads nu sunt păstrați în atribuirea sesiunii.');
+$assert(str_contains($measurement, '...currentAttribution()'), 'Purchase și contactele nu includ atribuirea sesiunii.');
 $assert(str_contains($measurement, 'tax:'), 'purchase nu transmite TVA-ul');
 $assert(str_contains($measurement, 'PURCHASES_KEY'), 'purchase nu are protecție de deduplicare');
 $assert(str_contains($measurement, 'ad_user_data') && str_contains($measurement, 'ad_personalization'), 'Consent Mode v2 este incomplet');
@@ -46,5 +51,6 @@ $assert(str_contains($account, 'trackRefundedOrders'), 'contul clientului nu pub
 $assert(str_contains($site, '"generate_lead"'), 'formularul real de programare nu publică generate_lead');
 $assert(!str_contains($measurement, 'track("generate_lead"'), 'un simplu submit de formular ar produce un lead fals');
 $assert(str_contains($status, 'GTrotsPendingPurchase'), 'purchase nu este păstrat până la încărcarea componentei Google');
+$assert(str_contains($checkout, 'sku: String(product.sku') && str_contains($status, 'sku: String(item.sku'), 'SKU-ul nu este păstrat până la purchase.');
 
 echo "google_measurement_contract_test: OK\n";

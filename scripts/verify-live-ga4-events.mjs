@@ -235,9 +235,9 @@ try {
   await checkpoint("service_leads", async () => {
     await page.waitFor("document.querySelector('a[href^=\"tel:\"]') && document.querySelector('a[href*=\"wa.me\"]')", 12000);
     await page.evaluate(`(() => { document.addEventListener('click', event => event.preventDefault(), {capture:true, once:true}); document.querySelector('a[href^="tel:"]').click(); return true; })()`);
-    await waitForEvent("click_to_call");
+    await waitForEvent("phone_click");
     await page.evaluate(`(() => { document.addEventListener('click', event => event.preventDefault(), {capture:true, once:true}); document.querySelector('a[href*="wa.me"]').click(); return true; })()`);
-    await waitForEvent("click_whatsapp");
+    await waitForEvent("whatsapp_click");
   });
 
   const purchasePayloads = await page.evaluate(`(() => {
@@ -255,7 +255,7 @@ try {
     "view_item_list", "view_item", "select_item", "search", "view_search_results",
     "add_to_wishlist", "remove_from_wishlist", "add_to_cart", "remove_from_cart",
     "view_cart", "begin_checkout", "add_shipping_info", "add_payment_info",
-    "form_start", "form_submit", "click_to_call", "click_whatsapp",
+    "form_start", "form_submit", "phone_click", "whatsapp_click",
   ];
   const observed = new Set(hits.map(hit => hit.event));
   const result = {

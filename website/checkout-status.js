@@ -184,7 +184,11 @@
       const unitPrice = Number(product.priceValue ?? parsePrice(product.price));
       return {
         id: String(item.id || ""),
+        apiId: String(product.apiId || product.raw?.id || ""),
+        sku: String(product.sku || product.raw?.sku || ""),
         name: String(product.name || "Produs G-Trots"),
+        brand: String(product.brand || product.raw?.manufacturer_name || "G-Trots"),
+        category: String(product.category || product.raw?.category_name || "Produse"),
         quantity,
         unitPrice,
         lineTotal: unitPrice * quantity,
@@ -204,7 +208,11 @@
       const discountTotal = Math.max(0, Number(item.discountTotal ?? item.discount_total ?? 0));
       return {
         id: String(item.id || ""),
+        apiId: String(item.apiId || item.product_id || ""),
+        sku: String(item.sku || item.product_sku || ""),
         name: String(item.name || item.product_name || "Produs G-Trots"),
+        brand: String(item.brand || item.manufacturer_name || "G-Trots"),
+        category: String(item.category || item.category_name || "Produse"),
         quantity,
         unitPrice,
         lineTotal,
@@ -230,6 +238,9 @@
         const normalized = {
           apiId: String(product.id || ""),
           slug: String(product.slug || ""),
+          sku: String(product.sku || ""),
+          brand: String(product.manufacturer_name || "G-Trots"),
+          category: String(product.category_name || "Produse"),
           imageUrl: safeUrl(image?.url),
           image: Number(image?.sprite_index || 0),
           url: `/magazin/produs/${encodeURIComponent(String(product.slug || product.id || ""))}/`
@@ -241,6 +252,10 @@
         const product = byKey.get(item.id) || byKey.get(decodeURIComponent(urlSlug)) || {};
         return {
           ...item,
+          apiId: item.apiId || product.apiId || "",
+          sku: item.sku || product.sku || "",
+          brand: item.brand || product.brand || "G-Trots",
+          category: item.category || product.category || "Produse",
           imageUrl: item.imageUrl || product.imageUrl || "",
           image: item.image || product.image || 0,
           url: item.url || product.url || "/magazin"

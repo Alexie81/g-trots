@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, rm, rmdir, writeFile } from "node:fs/promises"
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(SCRIPT_DIR, "..");
@@ -14,6 +15,9 @@ const SITEMAP_PATH = path.join(WEBSITE_ROOT, "sitemaps", "sitemap-produse.xml");
 const SITEMAP_INDEX_PATH = path.join(WEBSITE_ROOT, "sitemap-index.xml");
 const CATALOG_PAGE_PATH = path.join(WEBSITE_ROOT, "catalog-produse.html");
 const AI_CATALOG_PATH = path.join(WEBSITE_ROOT, "ai-catalog.json");
+const OPENAI_PRODUCT_FEED_PATH = path.join(WEBSITE_ROOT, "openai-products.jsonl");
+const OPENAI_PRODUCT_FEED_GZIP_PATH = path.join(WEBSITE_ROOT, "openai-products.jsonl.gz");
+const OPENAI_PRODUCT_FEED_STATUS_PATH = path.join(WEBSITE_ROOT, "openai-products-status.json");
 const MANIFEST_PATH = path.join(PRODUCT_ROOT, ".generated-product-pages.json");
 const WEBSITE_BASE_URL = (process.env.GTROTS_WEBSITE_URL || "https://g-trots.ro").replace(/\/$/, "");
 const API_URL = process.env.GTROTS_PUBLIC_API_URL || `${WEBSITE_BASE_URL}/shop-api/api-v2.php`;
@@ -111,6 +115,114 @@ function isInStock(product) {
   return product.stock_mode === "unlimited" || Number(product.stock_quantity || 0) > 0;
 }
 
+function intentKey(value) {
+  return cleanText(value).toLocaleLowerCase("ro-RO").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function conversationEnrichmentEnabled(product) {
+  return product.discovery_enrichment_enabled === true;
+}
+
+function isBoomagProduct(product) {
+  return product.is_boomag_source === true;
+}
+
+function isBoomagAccessory(product) {
+  return isBoomagProduct(product) && product.is_accessory_category === true;
+}
+
+function conversationContexts(product) {
+  if (!conversationEnrichmentEnabled(product)) return [];
+  const category = intentKey(product.category_name);
+  const name = intentKey(product.name);
+  const haystack = category || name;
+  const contains = (...needles) => needles.some(needle => haystack.includes(needle));
+  if (name.includes("cablu") || name.includes("mufa") || name.includes("conector") || contains("cabluri si mufe", "butoane si conectori")) return [
+    "Este o opțiune utilă pentru refacerea unei conexiuni deteriorate sau a unui contact care funcționează intermitent.",
+    "Înainte de alegere, compară numărul și poziția pinilor, tensiunea, lungimea și traseul cablului; forma asemănătoare a mufei nu garantează compatibilitatea."
+  ];
+  if (contains("cauciuc", "anvelop", "camera", "valv", "roti", "roata")) return [
+    "Este o opțiune pentru înlocuirea unei anvelope, camere, valve sau roți sparte, tăiate ori uzate.",
+    "Înainte de alegere, verifică dimensiunea inscripționată pe piesa veche, tipul jantei și versiunea exactă a trotinetei."
+  ];
+  if (contains("placute de frana", "etrier", "disc de frana", "manete de frana", "cablu de frana", "frane ", "frana ")) return [
+    "Poate fi potrivit când frânarea a devenit slabă sau zgomotoasă ori când o componentă a sistemului de frânare este uzată.",
+    "Compară tipul etrierului, forma, prinderile și dimensiunile înainte de comandă; o problemă de frânare trebuie verificată înainte de utilizarea trotinetei."
+  ];
+  if (contains("display")) return [
+    "Poate fi o soluție când display-ul nu pornește, nu afișează corect sau nu mai comunică normal cu trotineta.",
+    "Verifică versiunea, protocolul și conectorii înainte de comandă, deoarece display-urile asemănătoare vizual nu sunt întotdeauna interschimbabile."
+  ];
+  if (contains("acceleratie", "accelerator")) return [
+    "Poate fi potrivit când accelerația nu răspunde, răspunde intermitent sau maneta este deteriorată.",
+    "Compară conectorul, tensiunea și poziția pinilor, apoi confirmă compatibilitatea electronică înainte de comandă."
+  ];
+  if (contains("motor")) return [
+    "Poate fi o opțiune când motorul nu mai trage, funcționează neregulat sau prezintă zgomote și joc mecanic.",
+    "Aceleași simptome pot proveni și din controller, baterie, senzori ori cablaj, așa că diagnosticul trebuie confirmat înainte de comandă."
+  ];
+  if (contains("acumulator", "baterie", "bms")) return [
+    "Poate fi o opțiune când trotineta nu mai pornește, autonomia a scăzut sau bateria nu se mai încarcă normal.",
+    "Verifică tensiunea, capacitatea, dimensiunile și conectorii, iar înainte de înlocuire confirmă diagnosticul sistemului de alimentare."
+  ];
+  if (contains("incarcator")) return [
+    "Poate înlocui un încărcător lipsă sau deteriorat atunci când specificațiile corespund trotinetei și bateriei.",
+    "Confirmă tensiunea de ieșire, curentul, mufa și polaritatea înainte de conectare."
+  ];
+  if (contains("buton", "senzor", "convertor")) return [
+    "Poate fi util când o comandă sau o funcție electrică răspunde intermitent ori nu mai funcționează.",
+    "Confirmă tensiunea, conectorii, poziția pinilor și rolul exact al componentei înainte de comandă."
+  ];
+  if (contains("far", "lumini", "led", "claxon", "sonerie")) return [
+    "Poate fi potrivit când iluminarea, semnalizarea sau avertizarea sonoră nu mai funcționează corect.",
+    "Compară tensiunea, conectorul și prinderea, apoi confirmă compatibilitatea cu instalația electrică."
+  ];
+  if (contains("suspensie", "furca")) return [
+    "Poate fi potrivit când suspensia sau furca prezintă joc, zgomote, deformări ori funcționare neuniformă.",
+    "Compară dimensiunile, prinderile și configurația exactă a trotinetei înainte de comandă."
+  ];
+  if (contains("pliere")) return [
+    "Poate fi potrivit când mecanismul de pliere are joc, nu se mai blochează corect sau o componentă este uzată.",
+    "Compară versiunea mecanismului, forma și dimensiunile piesei înainte de comandă."
+  ];
+  if (contains("rulment", "surub")) return [
+    "Poate fi util pentru eliminarea jocului mecanic, a zgomotelor sau pentru înlocuirea elementelor de fixare uzate.",
+    "Diametrul, lungimea, pasul și poziția de montaj trebuie confirmate înainte de comandă."
+  ];
+  if (contains("controller", "controler", "kit controller")) return [
+    "Este o variantă de luat în calcul când trotineta nu mai accelerează ori motorul nu mai trage, dar aceste simptome nu confirmă singure defectarea controllerului.",
+    "Compară tensiunea, conectorii și versiunea exactă a trotinetei sau cere o verificare tehnică înainte de comandă."
+  ];
+  return [];
+}
+
+function discoveryDescription(product) {
+  const name = cleanText(product.name);
+  const withConversationEnrichment = conversationEnrichmentEnabled(product);
+  const boomagAccessory = isBoomagAccessory(product);
+  const category = cleanText(product.category_name);
+  const base = boomagAccessory
+    ? `${name}${category ? `, disponibil în categoria ${category}` : ""} din magazinul G-Trots.`
+    : (cleanText(product.description_html) || cleanText(product.meta_description) || cleanText(product.short_description) || name);
+  let lead = excerpt(base, 3200);
+  if (lead && !/[.!?…]$/u.test(lead)) lead += ".";
+  const parts = [lead];
+  const compatibility = (product.brands || []).map(brand => cleanText(brand.name)).filter(Boolean);
+  if (withConversationEnrichment && compatibility.length) parts.push(`Compatibilitatea indicată este: ${compatibility.slice(0, 12).join(", ")}.`);
+  const specifications = (product.specifications || []).slice(0, 12).map(specification => {
+    const label = cleanText(specification.label || specification.name);
+    const value = cleanText(specification.value);
+    return label && value ? `${label}: ${value}` : "";
+  }).filter(Boolean);
+  if (withConversationEnrichment && specifications.length) parts.push(`Detalii utile: ${specifications.join("; ")}.`);
+  if (withConversationEnrichment) parts.push(...conversationContexts(product));
+  parts.push("Comanda poate fi livrată oriunde în România.");
+  if (withConversationEnrichment) {
+    parts.push("Dacă vrei să eviți alegerea greșită, G-Trots poate verifica piesa după codul produsului, model, an, fotografii și specificații; pentru piesele potrivite există și montaj la service-ul din București, cu disponibilitatea și costul confirmate separat.");
+  }
+  return excerpt(parts.filter(Boolean).join(" "), 5000);
+}
+
 function decodeProduct(row) {
   const promotion = Array.isArray(row[27]) ? {
     id: row[27][0],
@@ -151,7 +263,12 @@ function decodeProduct(row) {
     meta_title: row[28] || "",
     meta_description: row[29] || "",
     legal_warranty_months: row[30] ?? null,
-    commercial_warranty_months: row[31] ?? null
+    commercial_warranty_months: row[31] ?? null,
+    // Dacă serverul nu transmite clasificarea explicită, generatorul nu
+    // inventează contexte conversaționale și nu presupune sursa produsului.
+    discovery_enrichment_enabled: row[32] === undefined ? false : Boolean(row[32]),
+    is_boomag_source: row[33] === undefined ? false : Boolean(row[33]),
+    is_accessory_category: row[34] === undefined ? false : Boolean(row[34])
   };
 }
 
@@ -218,15 +335,19 @@ function renderProductPage(template, product) {
   const category = cleanText(product.category_name);
   const manufacturer = cleanText(product.manufacturer_name);
   const brands = (product.brands || []).map(brand => cleanText(brand.name)).filter(Boolean);
-  const customDescription = cleanText(product.meta_description);
-  const descriptionSource = customDescription || cleanText(product.short_description)
-    || `${name} disponibil la G-Trots, cu informații clare despre preț, compatibilitate, livrare și service pentru trotinete electrice.`;
+  const withConversationEnrichment = conversationEnrichmentEnabled(product);
+  const boomagAccessory = isBoomagAccessory(product);
+  const customDescription = boomagAccessory ? "" : cleanText(product.meta_description);
+  const descriptionSource = boomagAccessory
+    ? `${name}${category ? `, disponibil în categoria ${category}` : ""} din magazinul G-Trots.`
+    : (customDescription || cleanText(product.short_description)
+      || `${name} disponibil la G-Trots, cu prețul și disponibilitatea afișate pe pagina produsului.`);
   const primaryCompatibility = brands[0] || "";
   const descriptionContext = [];
-  if (primaryCompatibility && !descriptionSource.toLocaleLowerCase("ro-RO").includes(primaryCompatibility.toLocaleLowerCase("ro-RO"))) {
+  if (withConversationEnrichment && primaryCompatibility && !descriptionSource.toLocaleLowerCase("ro-RO").includes(primaryCompatibility.toLocaleLowerCase("ro-RO"))) {
     descriptionContext.push(`Compatibilitate: ${excerpt(brands.slice(0, 4).join(", "), 70)}.`);
   }
-  if (category && !descriptionSource.toLocaleLowerCase("ro-RO").includes(category.toLocaleLowerCase("ro-RO"))) {
+  if (withConversationEnrichment && category && !descriptionSource.toLocaleLowerCase("ro-RO").includes(category.toLocaleLowerCase("ro-RO"))) {
     descriptionContext.push(`Categorie: ${excerpt(category, 48)}.`);
   }
   const context = descriptionContext.join(" ");
@@ -235,7 +356,7 @@ function renderProductPage(template, product) {
     : excerpt(descriptionSource, 160);
   const description = customDescription || fallbackDescription;
   let fallbackTitle = name;
-  if (primaryCompatibility && !name.toLocaleLowerCase("ro-RO").includes(primaryCompatibility.toLocaleLowerCase("ro-RO"))) {
+  if (withConversationEnrichment && primaryCompatibility && !name.toLocaleLowerCase("ro-RO").includes(primaryCompatibility.toLocaleLowerCase("ro-RO"))) {
     const compatibilityForTitle = excerpt(primaryCompatibility, 22);
     fallbackTitle = `${excerpt(name, Math.max(24, 55 - ` pentru ${compatibilityForTitle}`.length))} pentru ${compatibilityForTitle}`;
   }
@@ -376,8 +497,8 @@ function renderProductPage(template, product) {
     cleanText(product.sku) ? ["Cod produs", cleanText(product.sku)] : null,
     gtin ? ["EAN", gtin] : null
   ].filter(Boolean).map(([label, value]) => `<li><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></li>`).join("");
-  const compatibilityCopy = brands.length ? ` Compatibilitate declarată: ${brands.slice(0, 6).join(", ")}.` : "";
-  const intentCopy = `Acest produs este disponibil pentru cumpărare online.${compatibilityCopy} G-Trots oferă asistență pentru alegerea produsului potrivit și, atunci când este aplicabil, service sau montaj separat în București și Ilfov.`;
+  const compatibilityCopy = withConversationEnrichment && brands.length ? ` Compatibilitate declarată: ${brands.slice(0, 6).join(", ")}.` : "";
+  const intentCopy = `Acest produs este disponibil pentru cumpărare online.${compatibilityCopy}${withConversationEnrichment ? " G-Trots oferă asistență pentru alegerea piesei potrivite și, atunci când este aplicabil, service sau montaj separat în București și Ilfov." : ""}`;
   const staticArticle = `<article class="product-static-seo shell" data-gt-static-product aria-labelledby="gt-static-product-title"><div><p class="product-static-seo__eyebrow">Produs G-Trots</p><h1 id="gt-static-product-title">${escapeHtml(name)}</h1><p>${escapeHtml(description)}</p><p class="product-static-seo__intent">${escapeHtml(intentCopy)}</p><strong class="product-static-seo__price">${escapeHtml(`${priceText} ${currency}`)}</strong><span class="product-static-seo__stock">${inStock ? "În stoc" : "Stoc epuizat"}</span>${staticSpecs ? `<ul>${staticSpecs}</ul>` : ""}</div><img src="${escapeHtml(images[0])}" alt="${escapeHtml(name)}" width="720" height="720" fetchpriority="high"></article>`;
   html = html.replace(/(<main\b[^>]*id="product-detail"[^>]*>)/i, `$1\n      ${staticArticle}`);
   return html;
@@ -464,7 +585,7 @@ function buildCatalogPage(products) {
 
 function buildAiCatalog(products) {
   const payload = {
-    schema_version: 3,
+    schema_version: 4,
     generated_at: new Date().toISOString(),
     publisher: {
       name: "G-Trots România",
@@ -506,6 +627,7 @@ function buildAiCatalog(products) {
       })).filter(specification => specification.name && specification.value);
       const legalWarranty = Math.max(0, Number(product.legal_warranty_months || 0));
       const commercialWarranty = Math.max(0, Number(product.commercial_warranty_months || 0));
+      const withConversationEnrichment = conversationEnrichmentEnabled(product);
       return {
         id: String(product.id ?? ""),
         name,
@@ -521,6 +643,14 @@ function buildAiCatalog(products) {
         category: cleanText(product.category_name),
         compatibility: (product.brands || []).map(brand => cleanText(brand.name)).filter(Boolean),
         specifications,
+        conversation_intents: conversationContexts(product),
+        compatibility_guidance: withConversationEnrichment
+          ? "Confirmă modelul, anul sau versiunea și specificațiile relevante înainte de comandă; piesele asemănătoare vizual nu sunt întotdeauna interschimbabile."
+          : null,
+        delivery: "Livrare disponibilă în toată România.",
+        service_support: withConversationEnrichment
+          ? "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă."
+          : null,
         warranty: legalWarranty > 0 || commercialWarranty > 0
           ? { legal_months: legalWarranty, commercial_months: commercialWarranty }
           : null,
@@ -532,6 +662,53 @@ function buildAiCatalog(products) {
     })
   };
   return `${JSON.stringify(payload, null, 2)}\n`;
+}
+
+function buildOpenAiProductFeed(products) {
+  const lines = [];
+  let excludedMissingBrand = 0;
+  let excludedOtherInvalid = 0;
+  for (const product of products) {
+    const itemId = String(product.id || "").trim();
+    const title = cleanText(product.name);
+    const brand = cleanText(product.manufacturer_name);
+    const imageUrl = absoluteUrl(product.images?.[0]?.url || product.images?.[0]?.image_path || "");
+    const currency = (cleanText(product.currency) || "RON").toUpperCase();
+    const price = currentPrice(product);
+    if (!itemId || !product.slug || !title || !brand || !imageUrl || price <= 0 || !/^[A-Z]{3}$/.test(currency)) {
+      if (!brand) excludedMissingBrand += 1;
+      else excludedOtherInvalid += 1;
+      continue;
+    }
+    const canonical = `${WEBSITE_BASE_URL}/magazin/produs/${encodeURIComponent(product.slug)}/`;
+    const record = {
+      item_id: itemId,
+      title: excerpt(title, 150),
+      description: discoveryDescription(product),
+      url: `${canonical}?utm_source=chatgpt.com&utm_medium=feed&utm_campaign=product_discovery`,
+      brand,
+      seller_name: "G-Trots",
+      image_url: imageUrl,
+      availability: isInStock(product) ? "in_stock" : "out_of_stock",
+      price: `${price.toFixed(2)} ${currency}`,
+      is_eligible_search: true,
+      seller_url: `${WEBSITE_BASE_URL}/magazin`
+    };
+    const category = cleanText(product.category_name);
+    if (category) record.product_category = category;
+    const mpn = cleanText(product.sku);
+    if (mpn) record.mpn = mpn;
+    const gtin = validGtin(product.ean);
+    if (gtin) record.gtin = gtin;
+    lines.push(JSON.stringify(record));
+  }
+  return {
+    contents: lines.length ? `${lines.join("\n")}\n` : "",
+    products: lines.length,
+    excluded: products.length - lines.length,
+    excludedMissingBrand,
+    excludedOtherInvalid
+  };
 }
 
 async function updateSitemapIndex() {
@@ -560,11 +737,29 @@ async function main() {
   await atomicWrite(SITEMAP_PATH, buildSitemap(products));
   await atomicWrite(CATALOG_PAGE_PATH, buildCatalogPage(products));
   await atomicWrite(AI_CATALOG_PATH, buildAiCatalog(products));
+  const openAiProductFeed = buildOpenAiProductFeed(products);
+  await atomicWrite(OPENAI_PRODUCT_FEED_PATH, openAiProductFeed.contents);
+  await atomicWrite(OPENAI_PRODUCT_FEED_GZIP_PATH, gzipSync(Buffer.from(openAiProductFeed.contents, "utf8"), { level: 9 }));
+  await atomicWrite(OPENAI_PRODUCT_FEED_STATUS_PATH, `${JSON.stringify({
+    schema: "OpenAI Product Discovery Stable",
+    generated_at: new Date().toISOString(),
+    encoding: "UTF-8",
+    required_fields: ["item_id", "title", "description", "url", "brand", "seller_name", "image_url", "availability", "price"],
+    products: openAiProductFeed.products,
+    excluded: openAiProductFeed.excluded,
+    excluded_missing_brand: openAiProductFeed.excludedMissingBrand,
+    excluded_other_invalid: openAiProductFeed.excludedOtherInvalid,
+    conversation_enrichment_scope: "Piesele Boomag din lista fixată la 2026-09-10; accesoriile și produsele adăugate ulterior sunt excluse.",
+    condition_policy: "Câmpul condition nu este generat automat.",
+    feed_url: `${WEBSITE_BASE_URL}/openai-products.jsonl`,
+    gzip_url: `${WEBSITE_BASE_URL}/openai-products.jsonl.gz`,
+    sftp_delivery: "pending_openai_onboarding"
+  }, null, 2)}\n`);
   await updateSitemapIndex();
   const excludedCatalogRows = Math.max(0, reportedTotal - products.length);
   await atomicWrite(MANIFEST_PATH, `${JSON.stringify({ version: 1, generated_at: new Date().toISOString(), source: API_URL, reported_total: reportedTotal, products: products.length, catalog_rows_excluded_by_public_deduplication: excludedCatalogRows, slugs: products.map(product => product.slug) }, null, 2)}\n`);
 
-  process.stdout.write(`${JSON.stringify({ success: true, generated: products.length, reportedTotal, excludedCatalogRows, removed, productRoot: PRODUCT_ROOT, sitemap: SITEMAP_PATH, catalogPage: CATALOG_PAGE_PATH, aiCatalog: AI_CATALOG_PATH }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ success: true, generated: products.length, reportedTotal, excludedCatalogRows, removed, productRoot: PRODUCT_ROOT, sitemap: SITEMAP_PATH, catalogPage: CATALOG_PAGE_PATH, aiCatalog: AI_CATALOG_PATH, openAiProductFeed: { path: OPENAI_PRODUCT_FEED_PATH, gzipPath: OPENAI_PRODUCT_FEED_GZIP_PATH, statusPath: OPENAI_PRODUCT_FEED_STATUS_PATH, products: openAiProductFeed.products, excluded: openAiProductFeed.excluded, excludedMissingBrand: openAiProductFeed.excludedMissingBrand, excludedOtherInvalid: openAiProductFeed.excludedOtherInvalid } }, null, 2)}\n`);
 }
 
 main().catch(error => {

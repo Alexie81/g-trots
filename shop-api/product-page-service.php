@@ -76,6 +76,268 @@ function shopProductSeoValidGtin(string $value): ?string {
     return $expected === (int)$gtin[$length - 1] ? $gtin : null;
 }
 
+function shopProductSeoIntentKey(mixed $value): string {
+    $text = mb_strtolower(shopProductSeoText($value), 'UTF-8');
+    return strtr($text, [
+        'ă' => 'a', 'â' => 'a', 'î' => 'i', 'ș' => 's', 'ş' => 's', 'ț' => 't', 'ţ' => 't',
+    ]);
+}
+
+function shopProductSeoConversationEnrichmentEnabled(array $product): bool {
+    return array_key_exists('discovery_enrichment_enabled', $product)
+        && (bool)$product['discovery_enrichment_enabled'];
+}
+
+function shopProductSeoIsBoomagProduct(array $product): bool {
+    return mb_strtolower(trim((string)($product['source_domain'] ?? '')), 'UTF-8') === 'boomag.ro';
+}
+
+function shopProductSeoIsBoomagAccessory(array $product): bool {
+    if (!shopProductSeoIsBoomagProduct($product)) return false;
+    if (array_key_exists('is_accessory_category', $product)) return (bool)$product['is_accessory_category'];
+    if (array_key_exists('catalog_section', $product)) return (string)$product['catalog_section'] === 'accessories';
+    $category = shopProductSeoIntentKey(($product['category_slug'] ?? '') . ' ' . ($product['category_name'] ?? ''));
+    return str_contains($category, 'accesor');
+}
+
+function shopProductSeoConversationContexts(array $product): array {
+    if (!shopProductSeoConversationEnrichmentEnabled($product)) return [];
+    $category = shopProductSeoIntentKey($product['category_name'] ?? '');
+    $name = shopProductSeoIntentKey($product['name'] ?? '');
+    $categoryOrName = $category !== '' ? $category : $name;
+    $contains = static fn(array $needles): bool => array_reduce(
+        $needles,
+        static fn(bool $found, string $needle): bool => $found || str_contains($categoryOrName, $needle),
+        false
+    );
+
+    if (str_contains($name, 'cablu') || str_contains($name, 'mufa') || str_contains($name, 'conector') || $contains(['cabluri si mufe', 'butoane si conectori'])) {
+        return [
+            'Este o opțiune utilă pentru refacerea unei conexiuni deteriorate sau a unui contact care funcționează intermitent.',
+            'Înainte de alegere, compară numărul și poziția pinilor, tensiunea, lungimea și traseul cablului; forma asemănătoare a mufei nu garantează compatibilitatea.',
+        ];
+    }
+    if ($contains(['cauciuc', 'anvelop', 'camera', 'valv', 'roti', 'roata'])) {
+        return [
+            'Este o opțiune pentru înlocuirea unei anvelope, camere, valve sau roți sparte, tăiate ori uzate.',
+            'Înainte de alegere, verifică dimensiunea inscripționată pe piesa veche, tipul jantei și versiunea exactă a trotinetei.',
+        ];
+    }
+    if ($contains(['placute de frana', 'etrier', 'disc de frana', 'manete de frana', 'cablu de frana', 'frane ', 'frana '])) {
+        return [
+            'Poate fi potrivit când frânarea a devenit slabă sau zgomotoasă ori când o componentă a sistemului de frânare este uzată.',
+            'Compară tipul etrierului, forma, prinderile și dimensiunile înainte de comandă; o problemă de frânare trebuie verificată înainte de utilizarea trotinetei.',
+        ];
+    }
+    if ($contains(['display'])) {
+        return [
+            'Poate fi o soluție când display-ul nu pornește, nu afișează corect sau nu mai comunică normal cu trotineta.',
+            'Verifică versiunea, protocolul și conectorii înainte de comandă, deoarece display-urile asemănătoare vizual nu sunt întotdeauna interschimbabile.',
+        ];
+    }
+    if ($contains(['acceleratie', 'accelerator'])) {
+        return [
+            'Poate fi potrivit când accelerația nu răspunde, răspunde intermitent sau maneta este deteriorată.',
+            'Compară conectorul, tensiunea și poziția pinilor, apoi confirmă compatibilitatea electronică înainte de comandă.',
+        ];
+    }
+    if ($contains(['motor'])) {
+        return [
+            'Poate fi o opțiune când motorul nu mai trage, funcționează neregulat sau prezintă zgomote și joc mecanic.',
+            'Aceleași simptome pot proveni și din controller, baterie, senzori ori cablaj, așa că diagnosticul trebuie confirmat înainte de comandă.',
+        ];
+    }
+    if ($contains(['acumulator', 'baterie', 'bms'])) {
+        return [
+            'Poate fi o opțiune când trotineta nu mai pornește, autonomia a scăzut sau bateria nu se mai încarcă normal.',
+            'Verifică tensiunea, capacitatea, dimensiunile și conectorii, iar înainte de înlocuire confirmă diagnosticul sistemului de alimentare.',
+        ];
+    }
+    if ($contains(['incarcator'])) {
+        return [
+            'Poate înlocui un încărcător lipsă sau deteriorat atunci când specificațiile corespund trotinetei și bateriei.',
+            'Confirmă tensiunea de ieșire, curentul, mufa și polaritatea înainte de conectare.',
+        ];
+    }
+    if ($contains(['buton', 'senzor', 'convertor'])) {
+        return [
+            'Poate fi util când o comandă sau o funcție electrică răspunde intermitent ori nu mai funcționează.',
+            'Confirmă tensiunea, conectorii, poziția pinilor și rolul exact al componentei înainte de comandă.',
+        ];
+    }
+    if ($contains(['far', 'lumini', 'led', 'claxon', 'sonerie'])) {
+        return [
+            'Poate fi potrivit când iluminarea, semnalizarea sau avertizarea sonoră nu mai funcționează corect.',
+            'Compară tensiunea, conectorul și prinderea, apoi confirmă compatibilitatea cu instalația electrică.',
+        ];
+    }
+    if ($contains(['suspensie', 'furca'])) {
+        return [
+            'Poate fi potrivit când suspensia sau furca prezintă joc, zgomote, deformări ori funcționare neuniformă.',
+            'Compară dimensiunile, prinderile și configurația exactă a trotinetei înainte de comandă.',
+        ];
+    }
+    if ($contains(['pliere'])) {
+        return [
+            'Poate fi potrivit când mecanismul de pliere are joc, nu se mai blochează corect sau o componentă este uzată.',
+            'Compară versiunea mecanismului, forma și dimensiunile piesei înainte de comandă.',
+        ];
+    }
+    if ($contains(['rulment', 'surub'])) {
+        return [
+            'Poate fi util pentru eliminarea jocului mecanic, a zgomotelor sau pentru înlocuirea elementelor de fixare uzate.',
+            'Diametrul, lungimea, pasul și poziția de montaj trebuie confirmate înainte de comandă.',
+        ];
+    }
+    if ($contains(['controller', 'controler', 'kit controller'])) {
+        return [
+            'Este o variantă de luat în calcul când trotineta nu mai accelerează ori motorul nu mai trage, dar aceste simptome nu confirmă singure defectarea controllerului.',
+            'Compară tensiunea, conectorii și versiunea exactă a trotinetei sau cere o verificare tehnică înainte de comandă.',
+        ];
+    }
+    return [];
+}
+
+function shopProductSeoDiscoveryDescription(array $product): string {
+    $name = shopProductSeoText($product['name'] ?? '');
+    $withConversationEnrichment = shopProductSeoConversationEnrichmentEnabled($product);
+    $isBoomagAccessory = shopProductSeoIsBoomagAccessory($product);
+    $description = '';
+    if ($isBoomagAccessory) {
+        $category = shopProductSeoText($product['category_name'] ?? '');
+        $description = $name . ($category !== '' ? ', disponibil în categoria ' . $category : '') . ' din magazinul G-Trots.';
+    } else {
+        $description = shopProductSeoText($product['description_html'] ?? '');
+        if ($description === '') $description = shopProductSeoText($product['meta_description'] ?? '');
+        if ($description === '') $description = shopProductSeoText($product['short_description'] ?? '');
+    }
+    if ($description === '') $description = $name;
+    $lead = shopProductSeoExcerpt($description, 3200);
+    if ($lead !== '' && !preg_match('/[.!?…]$/u', $lead)) $lead .= '.';
+    $parts = [$lead];
+
+    $compatibility = [];
+    foreach ((array)($product['brands'] ?? []) as $brand) {
+        $brandName = shopProductSeoText($brand['name'] ?? '');
+        if ($brandName !== '' && !in_array($brandName, $compatibility, true)) $compatibility[] = $brandName;
+    }
+    if ($withConversationEnrichment && $compatibility) $parts[] = 'Compatibilitatea indicată este: ' . implode(', ', array_slice($compatibility, 0, 12)) . '.';
+
+    $specifications = [];
+    foreach (array_slice((array)($product['specifications'] ?? []), 0, 12) as $specification) {
+        $label = shopProductSeoText($specification['label'] ?? $specification['name'] ?? '');
+        $value = shopProductSeoText($specification['value'] ?? '');
+        if ($label !== '' && $value !== '') $specifications[] = $label . ': ' . $value;
+    }
+    if ($withConversationEnrichment && $specifications) $parts[] = 'Detalii utile: ' . implode('; ', $specifications) . '.';
+    if ($withConversationEnrichment) {
+        foreach (shopProductSeoConversationContexts($product) as $context) $parts[] = $context;
+    }
+
+    $parts[] = 'Comanda poate fi livrată oriunde în România.';
+    if ($withConversationEnrichment) {
+        $parts[] = 'Dacă vrei să eviți alegerea greșită, G-Trots poate verifica piesa după codul produsului, model, an, fotografii și specificații; pentru piesele potrivite există și montaj la service-ul din București, cu disponibilitatea și costul confirmate separat.';
+    }
+    return shopProductSeoExcerpt(implode(' ', array_values(array_filter($parts))), 5000);
+}
+
+function shopProductSeoOpenAiProductRecord(array $product, string $websiteBaseUrl): ?array {
+    $websiteBaseUrl = rtrim($websiteBaseUrl, '/');
+    $id = trim((string)($product['id'] ?? ''));
+    $slug = trim((string)($product['slug'] ?? ''));
+    $name = shopProductSeoText($product['name'] ?? '');
+    $brand = shopProductSeoText($product['manufacturer_name'] ?? '');
+    $currency = strtoupper(trim((string)($product['currency'] ?? 'RON')) ?: 'RON');
+    $price = function_exists('stripeEffectiveProductPrice')
+        ? stripeEffectiveProductPrice($product)
+        : max(0.0, (float)($product['promotion_price'] ?? 0), (float)($product['sale_price'] ?? 0), (float)($product['price'] ?? 0), (float)($product['supplier_base_price'] ?? 0));
+    $imageUrls = [];
+    foreach ((array)($product['images'] ?? []) as $image) {
+        $imageUrl = shopProductSeoAbsoluteUrl((string)($image['url'] ?? $image['image_path'] ?? ''), $websiteBaseUrl);
+        if ($imageUrl !== '' && !in_array($imageUrl, $imageUrls, true)) $imageUrls[] = $imageUrl;
+    }
+    if ($id === '' || $slug === '' || $name === '' || $brand === '' || !$imageUrls || $price <= 0 || !preg_match('/^[A-Z]{3}$/', $currency)) return null;
+
+    $canonical = $websiteBaseUrl . '/magazin/produs/' . rawurlencode(shopProductSeoSafeSlug($slug)) . '/';
+    $record = [
+        'item_id' => $id,
+        'title' => shopProductSeoExcerpt($name, 150),
+        'description' => shopProductSeoDiscoveryDescription($product),
+        'url' => $canonical . '?utm_source=chatgpt.com&utm_medium=feed&utm_campaign=product_discovery',
+        'brand' => $brand,
+        'seller_name' => 'G-Trots',
+        'image_url' => $imageUrls[0],
+        'availability' => ((string)($product['stock_mode'] ?? 'tracked') === 'unlimited' || (int)($product['stock_quantity'] ?? 0) > 0) ? 'in_stock' : 'out_of_stock',
+        'price' => number_format($price, 2, '.', '') . ' ' . $currency,
+        'is_eligible_search' => true,
+        'seller_url' => $websiteBaseUrl . '/magazin',
+    ];
+    $category = shopProductSeoText($product['category_name'] ?? '');
+    if ($category !== '') $record['product_category'] = $category;
+    $mpn = shopProductSeoText($product['sku'] ?? '');
+    if ($mpn !== '') $record['mpn'] = $mpn;
+    $gtin = shopProductSeoValidGtin((string)($product['gtin'] ?? $product['ean'] ?? ''));
+    if ($gtin !== null) $record['gtin'] = $gtin;
+    if (count($imageUrls) > 1) $record['additional_image_urls'] = array_slice($imageUrls, 1, 10);
+    return $record;
+}
+
+function shopProductSeoRebuildOpenAiProductFeed(array $products, array $config): array {
+    $websiteBaseUrl = rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/');
+    $lines = [];
+    $missingBrand = 0;
+    $otherInvalid = 0;
+    foreach ($products as $product) {
+        $record = shopProductSeoOpenAiProductRecord($product, $websiteBaseUrl);
+        if ($record === null) {
+            if (shopProductSeoText($product['manufacturer_name'] ?? '') === '') $missingBrand++;
+            else $otherInvalid++;
+            continue;
+        }
+        $lines[] = json_encode($record, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    }
+    $path = shopProductSeoWebsiteRoot() . DIRECTORY_SEPARATOR . 'openai-products.jsonl';
+    $gzipPath = shopProductSeoWebsiteRoot() . DIRECTORY_SEPARATOR . 'openai-products.jsonl.gz';
+    $statusPath = shopProductSeoWebsiteRoot() . DIRECTORY_SEPARATOR . 'openai-products-status.json';
+    $contents = $lines ? implode(PHP_EOL, $lines) . PHP_EOL : '';
+    if (file_put_contents($path, $contents, LOCK_EX) === false) throw new RuntimeException('Feedul OpenAI Product Discovery nu poate fi actualizat.');
+    $compressed = gzencode($contents, 9, ZLIB_ENCODING_GZIP);
+    if ($compressed === false || file_put_contents($gzipPath, $compressed, LOCK_EX) === false) {
+        throw new RuntimeException('Feedul OpenAI Product Discovery comprimat nu poate fi actualizat.');
+    }
+    $status = [
+        'schema' => 'OpenAI Product Discovery Stable',
+        'generated_at' => date(DATE_ATOM),
+        'encoding' => 'UTF-8',
+        'required_fields' => ['item_id', 'title', 'description', 'url', 'brand', 'seller_name', 'image_url', 'availability', 'price'],
+        'products' => count($lines),
+        'excluded' => count($products) - count($lines),
+        'excluded_missing_brand' => $missingBrand,
+        'excluded_other_invalid' => $otherInvalid,
+        'conversation_enrichment_scope' => 'Piesele Boomag din lista fixată la 2026-09-10; accesoriile și produsele adăugate ulterior sunt excluse.',
+        'condition_policy' => 'Câmpul condition nu este generat automat.',
+        'feed_url' => $websiteBaseUrl . '/openai-products.jsonl',
+        'gzip_url' => $websiteBaseUrl . '/openai-products.jsonl.gz',
+        'sftp_delivery' => 'pending_openai_onboarding',
+    ];
+    if (file_put_contents($statusPath, json_encode($status, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL, LOCK_EX) === false) {
+        throw new RuntimeException('Diagnosticul feedului OpenAI Product Discovery nu poate fi actualizat.');
+    }
+    return [
+        'success' => true,
+        'products' => count($lines),
+        'excluded' => count($products) - count($lines),
+        'excluded_missing_brand' => $missingBrand,
+        'excluded_other_invalid' => $otherInvalid,
+        'path' => $path,
+        'url' => $websiteBaseUrl . '/openai-products.jsonl',
+        'gzip_path' => $gzipPath,
+        'gzip_url' => $websiteBaseUrl . '/openai-products.jsonl.gz',
+        'status_path' => $statusPath,
+        'status_url' => $websiteBaseUrl . '/openai-products-status.json',
+    ];
+}
+
 function shopProductSeoRender(array $product, array $config): string {
     $root = shopProductSeoWebsiteRoot();
     $templatePath = $root . DIRECTORY_SEPARATOR . 'produs.html';
@@ -95,9 +357,11 @@ function shopProductSeoRender(array $product, array $config): string {
         if ($compatibilityName !== '' && !in_array($compatibilityName, $compatibilityNames, true)) $compatibilityNames[] = $compatibilityName;
     }
     $primaryCompatibility = $compatibilityNames[0] ?? '';
+    $withConversationEnrichment = shopProductSeoConversationEnrichmentEnabled($product);
+    $isBoomagAccessory = shopProductSeoIsBoomagAccessory($product);
     $titleSource = shopProductSeoText($product['meta_title'] ?? '');
     $fallbackTitle = $name;
-    if ($primaryCompatibility !== '' && mb_stripos($fallbackTitle, $primaryCompatibility, 0, 'UTF-8') === false) {
+    if ($withConversationEnrichment && $primaryCompatibility !== '' && mb_stripos($fallbackTitle, $primaryCompatibility, 0, 'UTF-8') === false) {
         $compatibilityForTitle = shopProductSeoExcerpt($primaryCompatibility, 22);
         $nameLimit = max(24, 55 - mb_strlen(' pentru ' . $compatibilityForTitle, 'UTF-8'));
         $fallbackTitle = shopProductSeoExcerpt($name, $nameLimit) . ' pentru ' . $compatibilityForTitle;
@@ -105,19 +369,22 @@ function shopProductSeoRender(array $product, array $config): string {
     $title = $titleSource !== ''
         ? $titleSource
         : shopProductSeoExcerpt($fallbackTitle, 55) . ' | G-Trots';
-    $customDescription = shopProductSeoText($product['meta_description'] ?? '');
+    $customDescription = $isBoomagAccessory ? '' : shopProductSeoText($product['meta_description'] ?? '');
     $descriptionSource = $customDescription;
+    if ($descriptionSource === '' && $isBoomagAccessory) {
+        $descriptionSource = $name . ($category !== '' ? ', disponibil în categoria ' . $category : '') . ' din magazinul G-Trots.';
+    }
     if ($descriptionSource === '') $descriptionSource = shopProductSeoText($product['short_description'] ?? '');
     if ($descriptionSource === '') $descriptionSource = shopProductSeoText($product['description_html'] ?? '');
-    if ($descriptionSource === '') $descriptionSource = $name . ' disponibil la G-Trots, cu informații clare despre preț, compatibilitate, livrare și service pentru trotinete electrice.';
+    if ($descriptionSource === '') $descriptionSource = $name . ' disponibil la G-Trots, cu prețul și disponibilitatea afișate pe pagina produsului.';
     if ($customDescription !== '') {
         $description = $customDescription;
     } else {
         $contextParts = [];
-        if ($primaryCompatibility !== '' && mb_stripos($descriptionSource, $primaryCompatibility, 0, 'UTF-8') === false) {
+        if ($withConversationEnrichment && $primaryCompatibility !== '' && mb_stripos($descriptionSource, $primaryCompatibility, 0, 'UTF-8') === false) {
             $contextParts[] = 'Compatibilitate: ' . shopProductSeoExcerpt(implode(', ', array_slice($compatibilityNames, 0, 4)), 70) . '.';
         }
-        if ($category !== '' && mb_stripos($descriptionSource, $category, 0, 'UTF-8') === false) {
+        if ($withConversationEnrichment && $category !== '' && mb_stripos($descriptionSource, $category, 0, 'UTF-8') === false) {
             $contextParts[] = 'Categorie: ' . shopProductSeoExcerpt($category, 48) . '.';
         }
         $context = implode(' ', $contextParts);
@@ -199,10 +466,13 @@ function shopProductSeoRender(array $product, array $config): string {
     if ($legalWarranty > 0) $properties[] = ['@type' => 'PropertyValue', 'name' => 'Garanție legală', 'value' => $legalWarranty . ' luni'];
     if ($commercialWarranty > 0) $properties[] = ['@type' => 'PropertyValue', 'name' => 'Garanție comercială', 'value' => $commercialWarranty . ' luni'];
     if ($properties) $productSchema['additionalProperty'] = $properties;
-    $compatibilityCopy = $compatibilityNames
+    $compatibilityCopy = $withConversationEnrichment && $compatibilityNames
         ? ' Compatibilitate declarată: ' . implode(', ', array_slice($compatibilityNames, 0, 6)) . '.'
         : '';
-    $intentCopy = 'Acest produs este disponibil pentru cumpărare online.' . $compatibilityCopy . ' G-Trots oferă asistență pentru alegerea produsului potrivit și, atunci când este aplicabil, service sau montaj separat în București și Ilfov.';
+    $intentCopy = 'Acest produs este disponibil pentru cumpărare online.' . $compatibilityCopy;
+    if ($withConversationEnrichment) {
+        $intentCopy .= ' G-Trots oferă asistență pentru alegerea piesei potrivite și, atunci când este aplicabil, service sau montaj separat în București și Ilfov.';
+    }
     $breadcrumbSchema = [
         '@context' => 'https://schema.org',
         '@type' => 'BreadcrumbList',
@@ -461,6 +731,8 @@ function shopProductSeoRebuildAiCatalog(PDO $db, array $config): array {
         }
         $isPurchasable = (bool)($product['is_purchasable'] ?? $product['is_active'] ?? true);
         $isInStock = $isPurchasable && ((string)($product['stock_mode'] ?? 'tracked') === 'unlimited' || (int)($product['stock_quantity'] ?? 0) > 0);
+        $withConversationEnrichment = shopProductSeoConversationEnrichmentEnabled($product);
+        $conversationContexts = shopProductSeoConversationContexts($product);
         $catalogProducts[] = [
             'id' => (string)($product['id'] ?? ''),
             'name' => $productName,
@@ -476,6 +748,14 @@ function shopProductSeoRebuildAiCatalog(PDO $db, array $config): array {
             'category' => shopProductSeoText($product['category_name'] ?? ''),
             'compatibility' => $compatibility,
             'specifications' => $catalogSpecifications,
+            'conversation_intents' => $conversationContexts,
+            'compatibility_guidance' => $withConversationEnrichment
+                ? 'Confirmă modelul, anul sau versiunea și specificațiile relevante înainte de comandă; piesele asemănătoare vizual nu sunt întotdeauna interschimbabile.'
+                : null,
+            'delivery' => 'Livrare disponibilă în toată România.',
+            'service_support' => $withConversationEnrichment
+                ? 'Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.'
+                : null,
             'warranty' => $catalogWarranty,
             'price' => round(max(0, $price), 2),
             'currency' => trim((string)($product['currency'] ?? 'RON')) ?: 'RON',
@@ -486,7 +766,7 @@ function shopProductSeoRebuildAiCatalog(PDO $db, array $config): array {
         ];
     }
     $payload = [
-        'schema_version' => 3,
+        'schema_version' => 4,
         'generated_at' => date(DATE_ATOM),
         'publisher' => [
             'name' => 'G-Trots România',
@@ -525,7 +805,8 @@ function shopProductSeoRebuildAiCatalog(PDO $db, array $config): array {
     if (file_put_contents($path, $json, LOCK_EX) === false) {
         throw new RuntimeException('Catalogul pentru agenți AI nu poate fi actualizat.');
     }
-    return ['success' => true, 'products' => count($catalogProducts), 'path' => $path, 'url' => $websiteBaseUrl . '/ai-catalog.json'];
+    $openAiProductFeed = shopProductSeoRebuildOpenAiProductFeed($products, $config);
+    return ['success' => true, 'products' => count($catalogProducts), 'path' => $path, 'url' => $websiteBaseUrl . '/ai-catalog.json', 'openai_product_feed' => $openAiProductFeed];
 }
 
 function shopProductSeoRebuildSitemap(PDO $db, array $config): array {

@@ -5,6 +5,7 @@ ErrorDocument 404 /404.html
 AddType text/plain .txt
 AddType text/markdown .md
 AddType application/ld+json .jsonld
+AddType application/x-ndjson .jsonl
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
@@ -71,6 +72,10 @@ AddType application/ld+json .jsonld
   Header always set X-Frame-Options "SAMEORIGIN"
 
   <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+
+  <FilesMatch "^(?:ai-catalog\.json|openai-products(?:-status)?\.json|openai-products\.jsonl(?:\.gz)?)$">
     Header set Cache-Control "no-cache, must-revalidate"
   </FilesMatch>
 

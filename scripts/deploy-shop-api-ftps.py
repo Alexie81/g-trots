@@ -24,6 +24,7 @@ FILES = (
     "api.php",
     "api-v2.php",
     "product-page-service.php",
+    "openai-discovery-scope.json",
     "gomag.php",
     "order-emails.php",
     "order-cancellation.php",

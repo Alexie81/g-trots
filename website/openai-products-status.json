@@ -1,0 +1,25 @@
+{
+  "schema": "OpenAI Product Discovery Stable",
+  "generated_at": "2026-09-10T14:11:33.390Z",
+  "encoding": "UTF-8",
+  "required_fields": [
+    "item_id",
+    "title",
+    "description",
+    "url",
+    "brand",
+    "seller_name",
+    "image_url",
+    "availability",
+    "price"
+  ],
+  "products": 1515,
+  "excluded": 87,
+  "excluded_missing_brand": 87,
+  "excluded_other_invalid": 0,
+  "conversation_enrichment_scope": "Piesele Boomag din lista fixată la 2026-09-10; accesoriile și produsele adăugate ulterior sunt excluse.",
+  "condition_policy": "Câmpul condition nu este generat automat.",
+  "feed_url": "https://g-trots.ro/openai-products.jsonl",
+  "gzip_url": "https://g-trots.ro/openai-products.jsonl.gz",
+  "sftp_delivery": "pending_openai_onboarding"
+}

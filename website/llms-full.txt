@@ -20,7 +20,7 @@ G-Trots operează un magazin online de piese și accesorii pentru trotinete și 
 
 ## Catalog și produse
 
-Catalogul oficial este disponibil la https://g-trots.ro/magazin. O listă HTML cu legături directe către toate produsele publice este la https://g-trots.ro/catalog-produse, iar reprezentarea structurată compactă este la https://g-trots.ro/ai-catalog.json. Catalogul JSON oferă titlul și descrierile concise, identificatorii, taxonomia, compatibilitățile, specificațiile esențiale, garanția, prețul și disponibilitatea; pagina canonică a produsului rămâne sursa integrală și finală.
+Catalogul oficial este disponibil la https://g-trots.ro/magazin. O listă HTML cu legături directe către toate produsele publice este la https://g-trots.ro/catalog-produse, iar reprezentarea structurată compactă este la https://g-trots.ro/ai-catalog.json. Catalogul JSON oferă titlul și descrierile concise, identificatorii, taxonomia, compatibilitățile, specificațiile esențiale, garanția, prețul și disponibilitatea; numai piesele actuale provenite din Boomag primesc contexte conversaționale suplimentare, nu accesoriile și nu produsele introduse manual ulterior. Pagina canonică a produsului rămâne sursa integrală și finală. Snapshotul JSONL UTF-8 pregătit pentru OpenAI Product Discovery/ACP este la https://g-trots.ro/openai-products.jsonl, iar varianta pentru livrare SFTP este la https://g-trots.ro/openai-products.jsonl.gz; existența lor nu trebuie confundată cu aprobarea onboardingului de partener.
 
 Paginile produselor folosesc URL-uri canonice de forma:
 

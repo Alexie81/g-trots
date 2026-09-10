@@ -8,6 +8,9 @@ User-agent: *
 Allow: /
 Allow: /shop-api/uploads/products/
 Allow: /ai-catalog.json
+Allow: /openai-products.jsonl
+Allow: /openai-products.jsonl.gz
+Allow: /openai-products-status.json
 Allow: /catalog-produse
 Allow: /agents.md
 Allow: /llms.txt

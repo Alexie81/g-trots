@@ -44,6 +44,7 @@ Acest rezumat nu dovedește că orice piesă este compatibilă cu orice vehicul 
 - Magazin și căutare: https://g-trots.ro/magazin
 - Catalog HTML crawlable: https://g-trots.ro/catalog-produse
 - Catalog compact JSON: https://g-trots.ro/ai-catalog.json (titlu și descrieri concise, identificatori, taxonomie, compatibilități, specificații, garanție, preț și disponibilitate; pagina canonică rămâne sursa integrală)
+- Feed OpenAI Product Discovery/ACP: https://g-trots.ro/openai-products.jsonl și snapshotul comprimat https://g-trots.ro/openai-products.jsonl.gz (câmpurile Stable obligatorii, cod MPN când există, UTF-8; contextul conversațional suplimentar este limitat la piesele actuale Boomag, fără accesorii sau produse manuale viitoare; publicarea feedului nu afirmă aprobarea OpenAI)
 - Sitemap index: https://g-trots.ro/sitemap-index.xml
 - Sitemap produse: https://g-trots.ro/sitemaps/sitemap-produse.xml
 - Reguli pentru roboți: https://g-trots.ro/robots.txt

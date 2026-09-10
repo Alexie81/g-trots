@@ -29,6 +29,22 @@ EXCLUDED_NAMES = {
     ".DS_Store",
 }
 EXCLUDED_SUFFIXES = (".tmp", ".bak", ".log", ".pyc")
+PRODUCT_DISCOVERY_FILES = {
+    "agents.md",
+    "ai-catalog.json",
+    "catalog-produse.html",
+    "index.html",
+    "llms-full.txt",
+    "llms.txt",
+    "magazin.html",
+    "openai-products.jsonl",
+    "openai-products.jsonl.gz",
+    "openai-products-status.json",
+    "produs.html",
+    "robots.txt",
+    "sitemap-index.xml",
+    "sitemaps/sitemap-produse.xml",
+}
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -38,10 +54,11 @@ def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Publică întregul website G-Trots prin FTPS și extracție ZIP protejată.")
     parser.add_argument("--package-only", action="store_true", help="Construiește și verifică arhiva, fără publicare.")
     parser.add_argument("--keep-package", action="store_true", help="Păstrează arhiva în reports după finalizare.")
+    parser.add_argument("--product-discovery-only", action="store_true", help="Publică paginile de produs și fișierele de Product Discovery, fără activele neschimbate ale site-ului.")
     return parser.parse_args()
 
 
-def iter_public_files():
+def iter_public_files(product_discovery_only: bool = False):
     for path in WEBSITE_ROOT.rglob("*"):
         if not path.is_file() or path.is_symlink():
             continue
@@ -50,11 +67,15 @@ def iter_public_files():
             continue
         if path.name in EXCLUDED_NAMES or path.name.endswith(EXCLUDED_SUFFIXES):
             continue
+        relative_posix = relative.as_posix()
+        if product_discovery_only and relative_posix not in PRODUCT_DISCOVERY_FILES:
+            if not (relative_posix.startswith("magazin/produs/") and relative_posix.endswith("/index.html")):
+                continue
         yield path, relative
 
 
-def build_archive(target: Path) -> dict:
-    files = sorted(iter_public_files(), key=lambda item: item[1].as_posix())
+def build_archive(target: Path, product_discovery_only: bool = False) -> dict:
+    files = sorted(iter_public_files(product_discovery_only), key=lambda item: item[1].as_posix())
     if not files:
         raise RuntimeError("Website-ul local nu conține fișiere publicabile.")
     total_bytes = 0
@@ -167,7 +188,7 @@ def main() -> None:
     reports.mkdir(exist_ok=True)
     with TemporaryDirectory(prefix="g-trots-release-") as temporary:
         archive = Path(temporary) / "site-release.zip"
-        stats = build_archive(archive)
+        stats = build_archive(archive, options.product_discovery_only)
         print(json.dumps({"package": stats}, ensure_ascii=False), flush=True)
         if options.keep_package:
             kept = reports / "g-trots-site-release.zip"

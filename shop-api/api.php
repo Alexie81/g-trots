@@ -2920,6 +2920,8 @@ function productRows(PDO $db, array $rows, array $config, bool $withDescription 
         $row['_preloaded_images'] = $imagesByProduct[$productId] ?? [];
         $row['_preloaded_brands'] = $brandsByProduct[$productId] ?? [];
         $row['_preloaded_category_ids'] = $categoriesByProduct[$productId] ?? [];
+        $row['catalog_section'] = productCatalogSection($db, $row['_preloaded_category_ids']);
+        $row['discovery_enrichment_enabled'] = productDiscoveryEnrichmentEnabled($db, $row, $row['_preloaded_category_ids']);
         return productRow($db, $row, $config, $withDescription, $includeInternal);
     }, $rows);
 }
@@ -3013,6 +3015,60 @@ function catalogRepresentativeProductIds(PDO $db): array {
     return $cache[$cacheKey] = $ids;
 }
 
+function productCatalogSection(PDO $db, array $categoryIds): string {
+    static $categoryMaps = [];
+    $cacheKey = spl_object_id($db);
+    if (!isset($categoryMaps[$cacheKey])) {
+        $rows = $db->query('SELECT id, parent_id, slug FROM shop_categories')->fetchAll();
+        $categoryMaps[$cacheKey] = [];
+        foreach ($rows as $row) {
+            $categoryMaps[$cacheKey][(string)$row['id']] = [
+                'parent_id' => empty($row['parent_id']) ? null : (string)$row['parent_id'],
+                'slug' => mb_strtolower(trim((string)($row['slug'] ?? '')), 'UTF-8'),
+            ];
+        }
+    }
+
+    $categories = $categoryMaps[$cacheKey];
+    $belongsToParts = false;
+    $belongsToAccessories = false;
+    foreach (array_values(array_unique(array_filter(array_map('strval', $categoryIds)))) as $categoryId) {
+        $visited = [];
+        $currentId = $categoryId;
+        while ($currentId !== '' && isset($categories[$currentId]) && !isset($visited[$currentId])) {
+            $visited[$currentId] = true;
+            $slug = $categories[$currentId]['slug'];
+            if ($slug === 'accesorii' || $slug === 'accesorii-trotinete-electrice') $belongsToAccessories = true;
+            if ($slug === 'piese-trotinete-electrice') $belongsToParts = true;
+            $currentId = (string)($categories[$currentId]['parent_id'] ?? '');
+        }
+    }
+    if ($belongsToAccessories) return 'accessories';
+    return $belongsToParts ? 'parts' : 'other';
+}
+
+function productDiscoveryCurrentPartIds(): array {
+    static $ids = null;
+    if (is_array($ids)) return $ids;
+    $path = __DIR__ . DIRECTORY_SEPARATOR . 'openai-discovery-scope.json';
+    $payload = is_file($path) ? json_decode((string)file_get_contents($path), true) : null;
+    $ids = [];
+    foreach ((array)($payload['product_ids'] ?? []) as $productId) {
+        $productId = trim((string)$productId);
+        if ($productId !== '') $ids[$productId] = true;
+    }
+    return $ids;
+}
+
+function productDiscoveryEnrichmentEnabled(PDO $db, array $row, array $categoryIds): bool {
+    $productId = trim((string)($row['id'] ?? ''));
+    $eligibleIds = productDiscoveryCurrentPartIds();
+    return $productId !== ''
+        && isset($eligibleIds[$productId])
+        && mb_strtolower(trim((string)($row['source_domain'] ?? '')), 'UTF-8') === 'boomag.ro'
+        && productCatalogSection($db, $categoryIds) === 'parts';
+}
+
 function publicCatalogProductRow(array $row): array {
     $images = is_array($row['images'] ?? null) ? array_slice($row['images'], 0, 1) : [];
     $brands = is_array($row['brands'] ?? null) ? array_map(static fn(array $brand): array => [
@@ -3055,6 +3111,9 @@ function publicCatalogProductRow(array $row): array {
         'active_promotion' => $row['active_promotion'] ?? null,
         'legal_warranty_months' => $row['legal_warranty_months'] === null ? null : (int)$row['legal_warranty_months'],
         'commercial_warranty_months' => $row['commercial_warranty_months'] === null ? null : (int)$row['commercial_warranty_months'],
+        'discovery_enrichment_enabled' => (bool)($row['discovery_enrichment_enabled'] ?? false),
+        'is_boomag_source' => mb_strtolower(trim((string)($row['source_domain'] ?? '')), 'UTF-8') === 'boomag.ro',
+        'is_accessory_category' => (string)($row['catalog_section'] ?? '') === 'accessories',
     ];
 }
 
@@ -3108,6 +3167,9 @@ function compactPublicCatalogPayload(array $products): array {
                 (string)($product['meta_description'] ?? ''),
                 $product['legal_warranty_months'] === null ? null : (int)$product['legal_warranty_months'],
                 $product['commercial_warranty_months'] === null ? null : (int)$product['commercial_warranty_months'],
+                (bool)($product['discovery_enrichment_enabled'] ?? false),
+                (bool)($product['is_boomag_source'] ?? false),
+                (bool)($product['is_accessory_category'] ?? false),
             ];
         }, $products),
     ];
@@ -3115,7 +3177,7 @@ function compactPublicCatalogPayload(array $products): array {
 
 function publicCatalogProductSelectSql(): string {
     return 'SELECT p.id, p.category_id, p.manufacturer_id, p.source_id,
-                   p.sku, p.supplier_external_id, p.supplier_product_code, p.ean,
+                   p.sku, p.supplier_external_id, p.supplier_product_code, p.ean, p.source_domain,
                    p.name, p.slug, p.short_description, p.meta_title, p.meta_description,
                    p.legal_warranty_months, p.commercial_warranty_months,
                    p.price, p.supplier_base_price, p.sale_price, p.discount_type, p.discount_value, p.currency,
@@ -3176,7 +3238,19 @@ function publicCatalogRows(PDO $db, array $rows, array $config): array {
         $brandsByProduct[$productId][] = $brand;
     }
 
-    $result = array_map(static function (array $row) use ($config, $imagesByProduct, $brandsByProduct): array {
+    $categoriesByProduct = [];
+    $categoryStmt = $db->prepare(
+        "SELECT product_id, category_id
+         FROM shop_product_categories
+         WHERE product_id IN ({$placeholders})
+         ORDER BY product_id ASC, is_primary DESC, category_id ASC"
+    );
+    $categoryStmt->execute($ids);
+    foreach ($categoryStmt->fetchAll() as $category) {
+        $categoriesByProduct[(string)$category['product_id']][] = (string)$category['category_id'];
+    }
+
+    $result = array_map(static function (array $row) use ($db, $config, $imagesByProduct, $brandsByProduct, $categoriesByProduct): array {
         $productId = (string)$row['id'];
         $row['images'] = $imagesByProduct[$productId] ?? [];
         if (!$row['images']) {
@@ -3192,6 +3266,10 @@ function publicCatalogRows(PDO $db, array $rows, array $config): array {
             }
         }
         $row['brands'] = $brandsByProduct[$productId] ?? [];
+        $categoryIds = $categoriesByProduct[$productId] ?? [];
+        if (!$categoryIds && !empty($row['category_id'])) $categoryIds = [(string)$row['category_id']];
+        $row['catalog_section'] = productCatalogSection($db, $categoryIds);
+        $row['discovery_enrichment_enabled'] = productDiscoveryEnrichmentEnabled($db, $row, $categoryIds);
         return $row;
     }, $rows);
     $GLOBALS['shopPublicCatalogHydrationTiming'] = [

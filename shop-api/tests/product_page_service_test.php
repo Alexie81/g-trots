@@ -19,6 +19,7 @@ $product = [
     'stock_mode' => 'tracked',
     'stock_quantity' => 1,
     'sku' => 'SE-CMM087',
+    'source_domain' => 'g-trots.ro',
     'legal_warranty_months' => 24,
     'commercial_warranty_months' => null,
     'manufacturer_name' => 'Xiaomi',
@@ -95,11 +96,15 @@ $automaticMeta['short_description'] = 'Cauciuc pentru trotinetă electrică, pre
 $automaticMeta['meta_title'] = '';
 $automaticMeta['meta_description'] = '';
 $automaticMeta['category_name'] = 'Cauciucuri tubeless';
+$automaticMeta['category_system_key'] = null;
+$automaticMeta['category_slug'] = 'cauciucuri-tubeless';
 $automaticMeta['manufacturer_name'] = 'EWheel';
+$automaticMeta['source_domain'] = 'boomag.ro';
+$automaticMeta['discovery_enrichment_enabled'] = true;
 $automaticMeta['brands'] = [['id' => 'brand-kukirin-g2', 'name' => 'KuKirin G2', 'slug' => 'kukirin-g2']];
 $automaticMetaHtml = shopProductSeoRender($automaticMeta, ['website_base_url' => 'https://g-trots.ro']);
-productPageAssert(str_contains($automaticMetaHtml, '<title>Cauciuc tubeless 10 × 2.75 pentru KuKirin G2 | G-Trots</title>'), 'Un produs manual fără meta titlu trebuie să primească automat numele și compatibilitatea.');
-productPageAssert(str_contains($automaticMetaHtml, 'Compatibilitate: KuKirin G2.'), 'Un produs manual fără meta descriere trebuie să primească automat contextul de compatibilitate.');
+productPageAssert(str_contains($automaticMetaHtml, '<title>Cauciuc tubeless 10 × 2.75 pentru KuKirin G2 | G-Trots</title>'), 'O piesă Boomag actuală fără meta titlu trebuie să primească automat numele și compatibilitatea.');
+productPageAssert(str_contains($automaticMetaHtml, 'Compatibilitate: KuKirin G2.'), 'O piesă Boomag actuală fără meta descriere trebuie să primească automat contextul de compatibilitate.');
 productPageAssert(str_contains($automaticMetaHtml, 'Acest produs este disponibil pentru cumpărare online.') && str_contains($automaticMetaHtml, 'service sau montaj separat în București și Ilfov'), 'Conținutul comercial trebuie acopere cumpărarea și asistența fără să inventeze tipul sau starea produsului.');
 
 $withoutManufacturer = $automaticMeta;
@@ -110,10 +115,46 @@ productPageAssert(!str_contains($withoutManufacturerHtml, '"brand":{"@type":"Bra
 $serviceSource = (string)file_get_contents(__DIR__ . '/../product-page-service.php');
 productPageAssert(str_contains($serviceSource, 'function shopProductSeoRebuildAiCatalog') && str_contains($serviceSource, "'compatibility' => \$compatibility"), 'Catalogul pentru agenți AI trebuie regenerat cu compatibilitățile produselor.');
 productPageAssert(str_contains($serviceSource, "'meta_title' => \$effectiveMetaTitle") && str_contains($serviceSource, "'description_excerpt' => \$descriptionExcerpt") && str_contains($serviceSource, "'specifications' => \$catalogSpecifications"), 'Catalogul AI trebuie să includă titlul SEO, descrierile și specificațiile utile recomandării.');
-productPageAssert(str_contains($serviceSource, "'warranty' => \$catalogWarranty") && str_contains($serviceSource, "'schema_version' => 3"), 'Catalogul AI trebuie să publice garanția și versiunea nouă a schemei.');
+productPageAssert(str_contains($serviceSource, "'warranty' => \$catalogWarranty") && str_contains($serviceSource, "'schema_version' => 4"), 'Catalogul AI trebuie să publice garanția și versiunea conversațională a schemei.');
 productPageAssert(str_contains($serviceSource, "'roles' => ['magazin online de piese și accesorii pentru trotinete electrice', 'service de trotinete și scutere electrice']") && str_contains($serviceSource, "'service_types' => ['diagnosticare'"), 'Catalogul AI trebuie să descrie explicit G-Trots ca magazin și service, nu doar ca listă de produse.');
 productPageAssert(str_contains($serviceSource, "'delivery_area' => ['România']") && str_contains($serviceSource, "'service_area' => ['București', 'Ilfov']"), 'Catalogul AI trebuie să separe livrarea națională a magazinului de aria locală a service-ului.');
+productPageAssert(str_contains($serviceSource, "'conversation_intents' => \$conversationContexts") && str_contains($serviceSource, "'compatibility_guidance'") && str_contains($serviceSource, "'service_support'"), 'Catalogul AI trebuie să ofere contexte conversaționale prudente, compatibilitate și suport de service.');
+productPageAssert(str_contains($serviceSource, 'shopProductSeoRebuildOpenAiProductFeed($products, $config)'), 'Reconstruirea catalogului AI trebuie să genereze și feedul OpenAI Product Discovery.');
 productPageAssert(str_contains($serviceSource, "'ai_catalog' => \$aiCatalog"), 'Actualizarea sitemap-ului trebuie să actualizeze și catalogul agenților AI.');
+
+$openAiRecord = shopProductSeoOpenAiProductRecord($automaticMeta, 'https://g-trots.ro');
+productPageAssert(is_array($openAiRecord), 'Produsul complet trebuie să fie eligibil pentru feedul OpenAI Product Discovery.');
+productPageAssert(($openAiRecord['item_id'] ?? '') === 'product-seo-test' && ($openAiRecord['seller_name'] ?? '') === 'G-Trots', 'Feedul ACP trebuie să folosească identificatorul stabil și comerciantul real.');
+productPageAssert(($openAiRecord['price'] ?? '') === '1499.90 RON' && ($openAiRecord['availability'] ?? '') === 'in_stock', 'Feedul ACP trebuie să publice prețul și stocul în formatul oficial.');
+productPageAssert(str_contains((string)($openAiRecord['description'] ?? ''), 'Compatibilitatea indicată este: KuKirin G2.') && str_contains((string)$openAiRecord['description'], 'oriunde în România') && str_contains((string)$openAiRecord['description'], 'service-ul din București'), 'Descrierea Product Discovery trebuie să lege o piesă Boomag actuală de compatibilitate, livrare și service.');
+productPageAssert(str_contains((string)($openAiRecord['url'] ?? ''), 'utm_source=chatgpt.com') && ($openAiRecord['is_eligible_search'] ?? false) === true, 'Feedul ACP trebuie să activeze descoperirea și măsurarea traficului ChatGPT.');
+productPageAssert(($openAiRecord['mpn'] ?? '') === 'SE-CMM087' && ($openAiRecord['product_category'] ?? '') === 'Cauciucuri tubeless', 'Feedul ACP trebuie să publice codul produsului și categoria factuală fără a presupune că orice produs este piesă.');
+productPageAssert(!array_key_exists('condition', $openAiRecord), 'Feedul ACP nu trebuie să inventeze automat starea produsului.');
+$openAiWithoutManufacturer = $product;
+$openAiWithoutManufacturer['manufacturer_name'] = '';
+productPageAssert(shopProductSeoOpenAiProductRecord($openAiWithoutManufacturer, 'https://g-trots.ro') === null, 'Un produs fără producător real nu trebuie publicat cu un brand inventat în feedul ACP.');
+$controllerProduct = $automaticMeta;
+$controllerProduct['name'] = 'Controller original pentru KuKirin G2 2025';
+$controllerProduct['category_name'] = 'Controller';
+$controllerDescription = shopProductSeoDiscoveryDescription($controllerProduct);
+productPageAssert(str_contains($controllerDescription, 'motorul nu mai trage') && str_contains($controllerDescription, 'nu confirmă singure defectarea controllerului'), 'Controllerul trebuie să poată răspunde căutărilor după simptome fără a afirma un diagnostic sigur.');
+
+$futureManualProduct = $automaticMeta;
+$futureManualProduct['id'] = 'future-manual-product';
+$futureManualProduct['source_domain'] = 'g-trots.ro';
+$futureManualProduct['discovery_enrichment_enabled'] = false;
+$futureManualDescription = shopProductSeoDiscoveryDescription($futureManualProduct);
+productPageAssert(!str_contains($futureManualDescription, 'Compatibilitatea indicată') && !str_contains($futureManualDescription, 'înlocuirea') && !str_contains($futureManualDescription, 'service-ul din București'), 'Un produs viitor introdus manual trebuie să folosească descrierea comerciantului fără scenarii automate despre simptome, înlocuire sau compatibilitate.');
+productPageAssert(str_contains($futureManualDescription, 'oriunde în România'), 'Produsul manual poate păstra informația factuală despre livrarea națională.');
+$futureManualHtml = shopProductSeoRender($futureManualProduct, ['website_base_url' => 'https://g-trots.ro']);
+productPageAssert(str_contains($futureManualHtml, '<title>Cauciuc tubeless 10 × 2.75 | G-Trots</title>') && !str_contains($futureManualHtml, 'Compatibilitate: KuKirin G2.'), 'Generatorul paginii viitoare manuale nu trebuie să extindă automat titlul sau meta descrierea cu compatibilități.');
+
+$boomagAccessory = $automaticMeta;
+$boomagAccessory['category_name'] = 'Suport telefon';
+$boomagAccessory['discovery_enrichment_enabled'] = false;
+$boomagAccessory['is_accessory_category'] = true;
+$boomagAccessoryDescription = shopProductSeoDiscoveryDescription($boomagAccessory);
+productPageAssert(!str_contains($boomagAccessoryDescription, 'Compatibilitatea indicată') && !str_contains($boomagAccessoryDescription, 'înlocuirea'), 'Accesoriile Boomag actuale trebuie excluse din îmbogățirea conversațională rezervată pieselor.');
 $apiSource = (string)file_get_contents(__DIR__ . '/../api.php');
 $deleteStart = strpos($apiSource, "if (\$action === 'deleteProduct'");
 $deleteBlock = $deleteStart === false ? '' : substr($apiSource, $deleteStart, 6500);

@@ -4536,6 +4536,7 @@ body.smart-search-closing .smart-search-overlay {
     cursor: pointer;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24);
     transition: background 180ms ease, transform 180ms ease;
+    scroll-margin-top: calc(env(safe-area-inset-top) + 5.7rem);
   }
 
   .mobile-filter-button > span {
@@ -4571,6 +4572,34 @@ body.smart-search-closing .smart-search-overlay {
     font-size: 0.76rem;
     font-weight: 850;
     letter-spacing: -0.015em;
+  }
+
+  .mobile-filter-button > b {
+    min-width: 1.75rem;
+    height: 1.75rem;
+    margin-left: auto;
+    padding: 0 0.48rem;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 1px solid rgba(60, 42, 24, 0.12);
+    border-radius: 999px;
+    background: #3c2a18;
+    color: #fff8ed;
+    font-size: 0.68rem;
+    font-weight: 900;
+    line-height: 1;
+    box-shadow: 0 0.35rem 0.9rem rgba(60, 42, 24, 0.16);
+    animation: mobile-filter-badge-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .mobile-filter-button > b[hidden] {
+    display: none;
+  }
+
+  @keyframes mobile-filter-badge-in {
+    from { opacity: 0; transform: scale(0.72); }
+    to { opacity: 1; transform: scale(1); }
   }
 
   .mobile-filter-button:hover {
@@ -4765,6 +4794,35 @@ body.smart-search-closing .smart-search-overlay {
     padding: 0.28rem 0.55rem 0.28rem 0.28rem;
     gap: 0.55rem;
     font-size: 0.7rem;
+  }
+
+  .filters-panel .category-filter.active {
+    border-color: rgba(240, 127, 0, 0.72);
+    background: linear-gradient(100deg, rgba(240, 127, 0, 0.24), rgba(240, 127, 0, 0.075));
+    color: #fff9f2;
+    box-shadow: inset 0.2rem 0 0 var(--orange), 0 0.5rem 1.25rem rgba(0, 0, 0, 0.18);
+  }
+
+  .filters-panel .category-filter.active > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+  }
+
+  .filters-panel .category-filter.active > span::after {
+    content: "✓";
+    width: 1.15rem;
+    height: 1.15rem;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 1.15rem;
+    border-radius: 50%;
+    background: var(--orange);
+    color: #17100a;
+    font-size: 0.68rem;
+    font-weight: 950;
+    line-height: 1;
+    box-shadow: 0 0 0 0.2rem rgba(240, 127, 0, 0.12);
   }
 
   .filters-panel .filter-categories .filter-options-scroll {

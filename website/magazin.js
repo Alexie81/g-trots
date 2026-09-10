@@ -222,7 +222,7 @@ const noResults = document.querySelector("#no-results");
 const clearButtons = [...document.querySelectorAll(".clear-filters")];
 const viewButtons = [...document.querySelectorAll(".view-switch button")];
 const mobileFilterButton = document.querySelector(".mobile-filter-button");
-const mobileFilterCount = document.querySelector(".mobile-filter-button b");
+const mobileFilterCount = document.querySelector("[data-mobile-filter-count]");
 const filtersPanel = document.querySelector("#shop-filters");
 const filtersStickyColumn = document.querySelector(".filters-sticky-column");
 const filtersOverlay = document.querySelector(".filters-overlay");
@@ -1203,7 +1203,21 @@ function updateMobileFilterCount() {
   const manufacturerCount = getSelectedManufacturers().length;
   const categoryCount = activeCategory === "all" ? 0 : 1;
   const priceCount = priceRange && priceRange.value !== priceRange.max ? 1 : 0;
-  mobileFilterCount.textContent = String(brandCount + stockCount + manufacturerCount + categoryCount + priceCount);
+  const activeCount = brandCount + stockCount + manufacturerCount + categoryCount + priceCount;
+  mobileFilterCount.textContent = String(activeCount);
+  mobileFilterCount.hidden = activeCount === 0;
+  mobileFilterCount.setAttribute("aria-label", `${activeCount} ${activeCount === 1 ? "filtru activ" : "filtre active"}`);
+}
+
+function finishMobileCategorySelection() {
+  if (!window.matchMedia("(max-width: 1000px)").matches || !filtersPanel?.classList.contains("is-open")) return;
+  closeFilters();
+  window.setTimeout(() => {
+    mobileFilterButton?.scrollIntoView({
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+      block: "start"
+    });
+  }, prefersReducedMotion ? 0 : 190);
 }
 
 function sortCards(cards) {
@@ -1385,6 +1399,7 @@ function bindFilterControls() {
         else item.removeAttribute("aria-current");
       });
       applyFilters();
+      finishMobileCategorySelection();
     });
   });
 

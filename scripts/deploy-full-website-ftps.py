@@ -29,6 +29,15 @@ EXCLUDED_NAMES = {
     ".DS_Store",
 }
 EXCLUDED_SUFFIXES = (".tmp", ".bak", ".log", ".pyc")
+EXCLUDED_TOP_LEVEL_DIRS = {
+    "download",
+    "download-app",
+    "fact",
+    "fs",
+    "shop-api",
+    "trotty-api",
+    "desktop-update-server",
+}
 PRODUCT_DISCOVERY_FILES = {
     ".htaccess",
     "agents.md",
@@ -50,7 +59,6 @@ PRODUCT_DISCOVERY_FILES = {
     "sitemaps/sitemap-produse.xml",
     "shop-live.css",
     "shop-live.js",
-    "shop-api/product-page-service.php",
 }
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -70,6 +78,8 @@ def iter_public_files(product_discovery_only: bool = False):
         if not path.is_file() or path.is_symlink():
             continue
         relative = path.relative_to(WEBSITE_ROOT)
+        if relative.parts and relative.parts[0].lower() in EXCLUDED_TOP_LEVEL_DIRS:
+            continue
         if any(part.startswith(".codex-") for part in relative.parts):
             continue
         if path.name in EXCLUDED_NAMES or path.name.endswith(EXCLUDED_SUFFIXES):
@@ -169,7 +179,7 @@ for ($i = 0; $i < $zip->numFiles; $i++) {{
     if ($normalized === '' || str_starts_with($normalized, '/') || preg_match('#(^|/)\\.\\.(/|$)#', $normalized)) {{
         $zip->close(); http_response_code(409); echo json_encode(['ok' => false, 'error' => 'unsafe_archive_entry']); exit;
     }}
-    foreach (['shop-api/', 'trotty-api/', 'desktop-update-server/'] as $protected) {{
+    foreach (['download/', 'download-app/', 'fact/', 'fs/', 'shop-api/', 'trotty-api/', 'desktop-update-server/'] as $protected) {{
         if (str_starts_with($normalized, $protected)) {{ $zip->close(); http_response_code(409); echo json_encode(['ok' => false, 'error' => 'protected_path_in_archive']); exit; }}
     }}
 }}

@@ -1,6 +1,17 @@
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
 User-agent: *
 Allow: /
 Allow: /shop-api/uploads/products/
+Allow: /ai-catalog.json
+Allow: /catalog-produse
+Allow: /agents.md
+Allow: /llms.txt
+Allow: /llms-full.txt
 Disallow: /shop-api/
 Disallow: /trotty-api/
 Disallow: /desktop-update-server/

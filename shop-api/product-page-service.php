@@ -86,16 +86,49 @@ function shopProductSeoRender(array $product, array $config): string {
     $slug = shopProductSeoSafeSlug((string)($product['slug'] ?? ''));
     $canonical = $websiteBaseUrl . '/magazin/produs/' . rawurlencode($slug) . '/';
     $name = shopProductSeoText($product['name'] ?? 'Produs G-Trots');
+    $sku = shopProductSeoText($product['sku'] ?? '');
+    $category = shopProductSeoText($product['category_name'] ?? '');
+    $manufacturer = shopProductSeoText($product['manufacturer_name'] ?? '');
+    $compatibilityNames = [];
+    foreach ((array)($product['brands'] ?? []) as $compatibility) {
+        $compatibilityName = shopProductSeoText($compatibility['name'] ?? '');
+        if ($compatibilityName !== '' && !in_array($compatibilityName, $compatibilityNames, true)) $compatibilityNames[] = $compatibilityName;
+    }
+    $primaryCompatibility = $compatibilityNames[0] ?? '';
     $titleSource = shopProductSeoText($product['meta_title'] ?? '');
+    $fallbackTitle = $name;
+    if ($primaryCompatibility !== '' && mb_stripos($fallbackTitle, $primaryCompatibility, 0, 'UTF-8') === false) {
+        $compatibilityForTitle = shopProductSeoExcerpt($primaryCompatibility, 22);
+        $nameLimit = max(24, 55 - mb_strlen(' pentru ' . $compatibilityForTitle, 'UTF-8'));
+        $fallbackTitle = shopProductSeoExcerpt($name, $nameLimit) . ' pentru ' . $compatibilityForTitle;
+    }
     $title = $titleSource !== ''
         ? $titleSource
-        : shopProductSeoExcerpt($name, 55) . ' | G-Trots';
+        : shopProductSeoExcerpt($fallbackTitle, 55) . ' | G-Trots';
     $customDescription = shopProductSeoText($product['meta_description'] ?? '');
     $descriptionSource = $customDescription;
     if ($descriptionSource === '') $descriptionSource = shopProductSeoText($product['short_description'] ?? '');
     if ($descriptionSource === '') $descriptionSource = shopProductSeoText($product['description_html'] ?? '');
     if ($descriptionSource === '') $descriptionSource = $name . ' disponibil la G-Trots, cu informații clare despre preț, compatibilitate, livrare și service pentru trotinete electrice.';
-    $description = $customDescription !== '' ? $customDescription : shopProductSeoExcerpt($descriptionSource, 160);
+    if ($customDescription !== '') {
+        $description = $customDescription;
+    } else {
+        $contextParts = [];
+        if ($primaryCompatibility !== '' && mb_stripos($descriptionSource, $primaryCompatibility, 0, 'UTF-8') === false) {
+            $contextParts[] = 'Compatibilitate: ' . shopProductSeoExcerpt(implode(', ', array_slice($compatibilityNames, 0, 4)), 70) . '.';
+        }
+        if ($category !== '' && mb_stripos($descriptionSource, $category, 0, 'UTF-8') === false) {
+            $contextParts[] = 'Categorie: ' . shopProductSeoExcerpt($category, 48) . '.';
+        }
+        $context = implode(' ', $contextParts);
+        if ($context === '') {
+            $description = shopProductSeoExcerpt($descriptionSource, 160);
+        } else {
+            $leadLimit = max(55, 159 - mb_strlen($context, 'UTF-8'));
+            $description = shopProductSeoExcerpt($descriptionSource, $leadLimit) . ' ' . $context;
+            $description = shopProductSeoExcerpt($description, 160);
+        }
+    }
     $currency = trim((string)($product['currency'] ?? 'RON')) ?: 'RON';
     $price = function_exists('stripeEffectiveProductPrice')
         ? stripeEffectiveProductPrice($product)
@@ -107,23 +140,12 @@ function shopProductSeoRender(array $product, array $config): string {
     $inStock = $purchasable && ((string)($product['stock_mode'] ?? 'tracked') === 'unlimited' || (int)($product['stock_quantity'] ?? 0) > 0);
     $availabilityText = $inStock ? 'in stock' : 'out of stock';
     $availabilitySchema = $inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock';
-    $conditionSearch = mb_strtolower($name . ' ' . $description, 'UTF-8');
-    $isSecondHand = (string)($product['category_system_key'] ?? '') === (defined('SHOP_CATEGORY_SECOND_HAND_KEY') ? SHOP_CATEGORY_SECOND_HAND_KEY : 'second_hand_scooters')
-        || (string)($product['category_id'] ?? '') === (defined('SHOP_CATEGORY_SECOND_HAND_ID') ? SHOP_CATEGORY_SECOND_HAND_ID : '')
-        || preg_match('/second[\s-]*hand|recondiționat|reconditionat|refurbished|folosit/u', $conditionSearch) === 1;
-    $itemCondition = $isSecondHand
-        ? 'https://schema.org/UsedCondition'
-        : 'https://schema.org/NewCondition';
     $images = [];
     foreach ((array)($product['images'] ?? []) as $image) {
         $url = shopProductSeoAbsoluteUrl((string)($image['url'] ?? $image['image_path'] ?? ''), $websiteBaseUrl);
         if ($url !== '' && !in_array($url, $images, true)) $images[] = $url;
     }
     if (!$images) $images[] = $websiteBaseUrl . '/assets/magazin-produse-v1.png';
-    $brand = shopProductSeoText($product['manufacturer_name'] ?? '');
-    if ($brand === '' && !empty($product['brands'][0]['name'])) $brand = shopProductSeoText($product['brands'][0]['name']);
-    if ($brand === '') $brand = 'G-Trots';
-
     $productSchema = [
         '@context' => 'https://schema.org',
         '@type' => 'Product',
@@ -132,17 +154,16 @@ function shopProductSeoRender(array $product, array $config): string {
         'description' => $description,
         'image' => $images,
         'url' => $canonical,
-        'sku' => trim((string)($product['sku'] ?? '')) ?: null,
+        'sku' => $sku ?: null,
         'mpn' => trim((string)($product['supplier_product_code'] ?? $product['sku'] ?? '')) ?: null,
-        'category' => trim((string)($product['category_name'] ?? '')) ?: null,
-        'brand' => ['@type' => 'Brand', 'name' => $brand],
+        'category' => $category ?: null,
+        'brand' => $manufacturer !== '' ? ['@type' => 'Brand', 'name' => $manufacturer] : null,
         'offers' => [
             '@type' => 'Offer',
             'url' => $canonical,
             'priceCurrency' => $currency,
             'price' => $priceText,
             'availability' => $availabilitySchema,
-            'itemCondition' => $itemCondition,
             'seller' => ['@id' => $websiteBaseUrl . '/#organization'],
             'hasMerchantReturnPolicy' => [
                 '@type' => 'MerchantReturnPolicy',
@@ -167,8 +188,9 @@ function shopProductSeoRender(array $product, array $config): string {
         ];
     }
     $properties = [];
+    if ($compatibilityNames) $properties[] = ['@type' => 'PropertyValue', 'name' => 'Compatibilitate', 'value' => implode(', ', array_slice($compatibilityNames, 0, 8))];
     foreach (array_slice((array)($product['specifications'] ?? []), 0, 40) as $specification) {
-        $label = shopProductSeoText($specification['label'] ?? '');
+        $label = shopProductSeoText($specification['label'] ?? $specification['name'] ?? '');
         $value = shopProductSeoText($specification['value'] ?? '');
         if ($label !== '' && $value !== '') $properties[] = ['@type' => 'PropertyValue', 'name' => $label, 'value' => $value];
     }
@@ -177,6 +199,10 @@ function shopProductSeoRender(array $product, array $config): string {
     if ($legalWarranty > 0) $properties[] = ['@type' => 'PropertyValue', 'name' => 'Garanție legală', 'value' => $legalWarranty . ' luni'];
     if ($commercialWarranty > 0) $properties[] = ['@type' => 'PropertyValue', 'name' => 'Garanție comercială', 'value' => $commercialWarranty . ' luni'];
     if ($properties) $productSchema['additionalProperty'] = $properties;
+    $compatibilityCopy = $compatibilityNames
+        ? ' Compatibilitate declarată: ' . implode(', ', array_slice($compatibilityNames, 0, 6)) . '.'
+        : '';
+    $intentCopy = 'Acest produs este disponibil pentru cumpărare online.' . $compatibilityCopy . ' G-Trots oferă asistență pentru alegerea produsului potrivit și, atunci când este aplicabil, service sau montaj separat în București și Ilfov.';
     $breadcrumbSchema = [
         '@context' => 'https://schema.org',
         '@type' => 'BreadcrumbList',
@@ -255,7 +281,11 @@ function shopProductSeoRender(array $product, array $config): string {
     }
     $headScripts .= '    <script type="application/json" id="gt-product-bootstrap">' . shopProductSeoJson($product) . '</script>' . PHP_EOL;
     $html = str_replace('</head>', $headScripts . '  </head>', $html);
+    $html = str_replace(' is-live-product-loading', '', $html);
+    $html = (string)preg_replace('#\s*<section\b[^>]*\bclass="[^"]*\bproduct-page-loading\b[^"]*"[^>]*>.*?</section>\s*(?=<div\b[^>]*\bclass="product-detail-breadcrumb)#is', PHP_EOL . '      ', $html, 1);
     $html = (string)preg_replace_callback('/(<body\b[^>]*\bdata-product-id=")[^"]*(")/i', static fn(array $match): string => $match[1] . htmlspecialchars($slug, ENT_QUOTES | ENT_HTML5, 'UTF-8') . $match[2], $html, 1);
+    $skuEscaped = htmlspecialchars($sku !== '' ? $sku : '—', ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8');
+    $html = (string)preg_replace('#(<b\b[^>]*\bdata-product-sku\b[^>]*>).*?(</b>)#is', '$1' . $skuEscaped . '$2', $html, 1);
 
     $displayWarranty = $commercialWarranty > 0 ? $commercialWarranty : $legalWarranty;
     $warrantyBadge = '<span class="product-warranty-badge" data-product-warranty-badge hidden></span>';
@@ -277,13 +307,28 @@ function shopProductSeoRender(array $product, array $config): string {
     $warrantyCardReplacement = $warrantyCard !== '' ? '              ' . $warrantyCard . PHP_EOL : '';
     $html = (string)preg_replace('#[ \t]*<aside\b[^>]*\bdata-product-warranty\b[^>]*>.*?</aside>\R?#is', $warrantyCardReplacement, $html, 1);
 
+    $staticProperties = [];
+    $appendStaticProperty = static function (string $label, string $value) use (&$staticProperties): void {
+        if ($label === '' || $value === '') return;
+        $key = mb_strtolower($label . "\0" . $value, 'UTF-8');
+        foreach ($staticProperties as $property) {
+            if (mb_strtolower((string)$property['name'] . "\0" . (string)$property['value'], 'UTF-8') === $key) return;
+        }
+        $staticProperties[] = ['name' => $label, 'value' => $value];
+    };
+    $appendStaticProperty('Categorie', $category);
+    $appendStaticProperty('Producător', $manufacturer);
+    $appendStaticProperty('Compatibilitate', implode(', ', array_slice($compatibilityNames, 0, 8)));
+    $appendStaticProperty('Cod produs', $sku);
+    if ($gtin !== null) $appendStaticProperty('EAN', $gtin);
+    foreach ($properties as $property) $appendStaticProperty((string)$property['name'], (string)$property['value']);
     $staticSpecs = '';
-    foreach (array_slice($properties, 0, 8) as $property) {
+    foreach (array_slice($staticProperties, 0, 12) as $property) {
         $staticSpecs .= '<li><strong>' . htmlspecialchars((string)$property['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</strong><span>' . htmlspecialchars((string)$property['value'], ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</span></li>';
     }
     $staticArticle = '<article class="product-static-seo shell' . ($purchasable ? '' : ' is-unavailable') . '" data-gt-static-product aria-labelledby="gt-static-product-title">'
         . '<div><p class="product-static-seo__eyebrow">' . ($purchasable ? 'Produs G-Trots' : 'Temporar indisponibil') . '</p><h1 id="gt-static-product-title">' . htmlspecialchars($name, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</h1>'
-        . '<p>' . htmlspecialchars($description, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</p><strong class="product-static-seo__price">' . htmlspecialchars($priceText . ' ' . $currency, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</strong>'
+        . '<p>' . htmlspecialchars($description, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</p><p class="product-static-seo__intent">' . htmlspecialchars($intentCopy, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</p><strong class="product-static-seo__price">' . htmlspecialchars($priceText . ' ' . $currency, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</strong>'
         . '<span class="product-static-seo__stock">' . ($purchasable ? ($inStock ? 'În stoc' : 'Stoc epuizat') : 'Produs indisponibil momentan') . '</span>' . ($staticSpecs !== '' ? '<ul>' . $staticSpecs . '</ul>' : '') . '</div>'
         . '<img src="' . htmlspecialchars($images[0], ENT_QUOTES | ENT_HTML5, 'UTF-8') . '" alt="' . htmlspecialchars($name, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '" width="720" height="720" fetchpriority="high">'
         . '</article>' . PHP_EOL;
@@ -354,6 +399,135 @@ PHP;
     return $path;
 }
 
+function shopProductSeoRebuildAiCatalog(PDO $db, array $config): array {
+    if (!function_exists('productSelectSql') || !function_exists('productRows')) {
+        return ['success' => false, 'products' => 0, 'error' => 'Funcțiile catalogului nu sunt disponibile.'];
+    }
+    $websiteBaseUrl = rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/');
+    $rows = $db->query(
+        productSelectSql()
+        . ' WHERE p.is_active = 1'
+        . ' AND (p.source_id IS NULL OR COALESCE(s.is_active, 1) = 1)'
+        . ' AND (p.category_id IS NULL OR COALESCE(c.is_active, 0) = 1)'
+        . ' AND (p.manufacturer_id IS NULL OR COALESCE(m.is_active, 0) = 1)'
+        . ' AND NOT EXISTS (SELECT 1 FROM shop_product_brands pbx INNER JOIN shop_brands bx ON bx.id = pbx.brand_id WHERE pbx.product_id = p.id AND bx.is_active = 0)'
+        . ' ORDER BY p.slug ASC'
+    )->fetchAll();
+    $products = productRows($db, $rows, $config, true, true);
+    if (function_exists('catalogRepresentativeProductIds')) {
+        $representatives = catalogRepresentativeProductIds($db);
+        $products = array_values(array_filter($products, static fn(array $product): bool => !empty($representatives[(string)($product['id'] ?? '')])));
+    }
+    if (function_exists('applyCatalogPromotionPrices')) $products = applyCatalogPromotionPrices($db, $products, null, '');
+
+    $catalogProducts = [];
+    foreach ($products as $product) {
+        $slug = trim((string)($product['slug'] ?? ''));
+        if ($slug === '') continue;
+        $price = function_exists('stripeEffectiveProductPrice')
+            ? stripeEffectiveProductPrice($product)
+            : max(0.0, (float)($product['promotion_price'] ?? 0), (float)($product['sale_price'] ?? 0), (float)($product['price'] ?? 0), (float)($product['supplier_base_price'] ?? 0));
+        $compatibility = [];
+        foreach ((array)($product['brands'] ?? []) as $brand) {
+            $brandName = shopProductSeoText($brand['name'] ?? '');
+            if ($brandName !== '' && !in_array($brandName, $compatibility, true)) $compatibility[] = $brandName;
+        }
+        $image = '';
+        if (!empty($product['images'][0]) && is_array($product['images'][0])) {
+            $image = shopProductSeoAbsoluteUrl((string)($product['images'][0]['url'] ?? $product['images'][0]['image_path'] ?? ''), $websiteBaseUrl);
+        }
+        $gtin = shopProductSeoValidGtin((string)($product['gtin'] ?? $product['ean'] ?? ''));
+        $productName = shopProductSeoText($product['name'] ?? '');
+        $savedMetaTitle = shopProductSeoText($product['meta_title'] ?? '');
+        $savedMetaDescription = shopProductSeoText($product['meta_description'] ?? '');
+        $shortDescription = shopProductSeoExcerpt(shopProductSeoText($product['short_description'] ?? ''), 320);
+        $descriptionExcerpt = shopProductSeoExcerpt(shopProductSeoText($product['description_html'] ?? ''), 650);
+        if ($descriptionExcerpt === '') $descriptionExcerpt = $shortDescription;
+        $effectiveMetaTitle = $savedMetaTitle !== '' ? $savedMetaTitle : shopProductSeoExcerpt($productName, 55) . ' | G-Trots';
+        $catalogDescription = $savedMetaDescription !== '' ? $savedMetaDescription : ($shortDescription !== '' ? $shortDescription : $descriptionExcerpt);
+        $catalogSpecifications = [];
+        foreach (array_slice((array)($product['specifications'] ?? []), 0, 16) as $specification) {
+            $specificationName = shopProductSeoText($specification['label'] ?? $specification['name'] ?? '');
+            $specificationValue = shopProductSeoText($specification['value'] ?? '');
+            if ($specificationName !== '' && $specificationValue !== '') {
+                $catalogSpecifications[] = ['name' => $specificationName, 'value' => $specificationValue];
+            }
+        }
+        $legalWarranty = max(0, (int)($product['legal_warranty_months'] ?? 0));
+        $commercialWarranty = max(0, (int)($product['commercial_warranty_months'] ?? 0));
+        $catalogWarranty = null;
+        if ($legalWarranty > 0 || $commercialWarranty > 0) {
+            $catalogWarranty = ['legal_months' => $legalWarranty, 'commercial_months' => $commercialWarranty];
+        }
+        $isPurchasable = (bool)($product['is_purchasable'] ?? $product['is_active'] ?? true);
+        $isInStock = $isPurchasable && ((string)($product['stock_mode'] ?? 'tracked') === 'unlimited' || (int)($product['stock_quantity'] ?? 0) > 0);
+        $catalogProducts[] = [
+            'id' => (string)($product['id'] ?? ''),
+            'name' => $productName,
+            'meta_title' => $effectiveMetaTitle,
+            'meta_description' => $savedMetaDescription,
+            'short_description' => $shortDescription,
+            'description_excerpt' => $descriptionExcerpt,
+            'description' => $catalogDescription,
+            'url' => $websiteBaseUrl . '/magazin/produs/' . rawurlencode($slug) . '/',
+            'sku' => shopProductSeoText($product['sku'] ?? ''),
+            'gtin' => $gtin ?? '',
+            'manufacturer' => shopProductSeoText($product['manufacturer_name'] ?? ''),
+            'category' => shopProductSeoText($product['category_name'] ?? ''),
+            'compatibility' => $compatibility,
+            'specifications' => $catalogSpecifications,
+            'warranty' => $catalogWarranty,
+            'price' => round(max(0, $price), 2),
+            'currency' => trim((string)($product['currency'] ?? 'RON')) ?: 'RON',
+            'availability' => $isInStock
+                ? 'https://schema.org/InStock'
+                : 'https://schema.org/OutOfStock',
+            'image' => $image,
+        ];
+    }
+    $payload = [
+        'schema_version' => 3,
+        'generated_at' => date(DATE_ATOM),
+        'publisher' => [
+            'name' => 'G-Trots România',
+            'legal_name' => 'CAB IT EXPERT S.R.L.',
+            'url' => $websiteBaseUrl . '/',
+            'currency' => 'RON',
+            'market' => 'RO',
+            'language' => 'ro-RO',
+        ],
+        'business' => [
+            'roles' => ['magazin online de piese și accesorii pentru trotinete electrice', 'service de trotinete și scutere electrice'],
+            'summary' => 'G-Trots comercializează piese și accesorii pentru trotinete electrice și oferă diagnosticare, reparații și montaj în București și Ilfov.',
+            'shop_url' => $websiteBaseUrl . '/magazin',
+            'service_url' => $websiteBaseUrl . '/service-trotinete-electrice',
+            'contact_url' => $websiteBaseUrl . '/contact',
+            'telephone' => '+40762093915',
+            'email' => 'contact@g-trots.ro',
+            'shopping_market' => 'România',
+            'delivery_area' => ['România'],
+            'service_area' => ['București', 'Ilfov'],
+        ],
+        'services' => [
+            [
+                'name' => 'Service și reparații trotinete electrice',
+                'url' => $websiteBaseUrl . '/service-trotinete-electrice',
+                'area_served' => ['București', 'Ilfov'],
+                'service_types' => ['diagnosticare', 'frâne', 'anvelope și camere', 'baterii și încărcare', 'controller și electronică', 'motor', 'cablaje', 'suspensii', 'revizii', 'montaj piese'],
+                'confirmation' => 'Disponibilitatea, diagnosticul și costul se confirmă direct cu G-Trots.',
+            ],
+        ],
+        'source_of_truth' => 'Pagina canonică a produsului stabilește prețul și disponibilitatea curentă.',
+        'products' => $catalogProducts,
+    ];
+    $path = shopProductSeoWebsiteRoot() . DIRECTORY_SEPARATOR . 'ai-catalog.json';
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
+    if (file_put_contents($path, $json, LOCK_EX) === false) {
+        throw new RuntimeException('Catalogul pentru agenți AI nu poate fi actualizat.');
+    }
+    return ['success' => true, 'products' => count($catalogProducts), 'path' => $path, 'url' => $websiteBaseUrl . '/ai-catalog.json'];
+}
+
 function shopProductSeoRebuildSitemap(PDO $db, array $config): array {
     $root = shopProductSeoWebsiteRoot();
     $directory = $root . DIRECTORY_SEPARATOR . 'sitemaps';
@@ -399,7 +573,8 @@ function shopProductSeoRebuildSitemap(PDO $db, array $config): array {
         }
         if (file_put_contents($indexPath, $indexXml, LOCK_EX) === false) throw new RuntimeException('Indexul sitemap nu poate fi actualizat.');
     }
-    return ['success' => true, 'products' => count($rows), 'path' => $path, 'url' => $websiteBaseUrl . '/sitemaps/sitemap-produse.xml'];
+    $aiCatalog = shopProductSeoRebuildAiCatalog($db, $config);
+    return ['success' => true, 'products' => count($rows), 'path' => $path, 'url' => $websiteBaseUrl . '/sitemaps/sitemap-produse.xml', 'ai_catalog' => $aiCatalog];
 }
 
 function shopProductSeoNotifyIndexNow(array $urls, array $config): array {

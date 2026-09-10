@@ -9,6 +9,7 @@
     <meta name="theme-color" content="#080808">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://g-trots.ro/">
+    <link rel="alternate" type="application/json" title="Catalog produse G-Trots" href="https://g-trots.ro/ai-catalog.json">
     <link rel="alternate" hreflang="ro-RO" href="https://g-trots.ro/">
     <link rel="icon" href="assets/favicon.png" type="image/png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -34,12 +35,14 @@
         "@context": "https://schema.org",
         "@graph": [
           {
-            "@type": "Organization",
+            "@type": ["Organization", "OnlineStore"],
             "@id": "https://g-trots.ro/#organization",
             "name": "G-Trots România",
             "legalName": "CAB IT EXPERT S.R.L.",
             "taxID": "49972605",
             "url": "https://g-trots.ro/",
+            "description": "G-Trots este magazin online de piese și accesorii pentru trotinete electrice și service de trotinete și scutere electrice în București și Ilfov.",
+            "areaServed": {"@type": "Country", "name": "România"},
             "logo": {
               "@type": "ImageObject",
               "url": "https://g-trots.ro/assets/logo.png",
@@ -54,6 +57,23 @@
               "availableLanguage": "Romanian"
             },
             "email": "contact@g-trots.ro",
+            "sameAs": [
+              "https://www.instagram.com/gtrots.ro/",
+              "https://www.facebook.com/profile.php?id=61590892933228",
+              "https://www.tiktok.com/@gtrots.service",
+              "https://x.com/servicegtrots",
+              "https://www.youtube.com/@g-trots"
+            ],
+            "hasOfferCatalog": {
+              "@type": "OfferCatalog",
+              "name": "Catalog G-Trots pentru trotinete electrice",
+              "url": "https://g-trots.ro/magazin",
+              "itemListElement": [
+                {"@type": "OfferCatalog", "name": "Piese pentru trotinete electrice", "url": "https://g-trots.ro/magazin"},
+                {"@type": "OfferCatalog", "name": "Accesorii pentru trotinete electrice", "url": "https://g-trots.ro/magazin"},
+                {"@type": "OfferCatalog", "name": "Trotinete electrice disponibile", "url": "https://g-trots.ro/magazin"}
+              ]
+            },
             "address": {
               "@type": "PostalAddress",
               "streetAddress": "Str. Humulești nr. 131-135, lot 4",

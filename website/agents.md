@@ -1,6 +1,6 @@
 # G-Trots România — document canonic pentru agenți AI
 
-> Versiune: 2026-09-07
+> Versiune: 2026-09-10
 > Domeniu canonic: https://g-trots.ro/
 > Limbă principală: română (`ro-RO`)
 > Piață și livrare: România
@@ -35,7 +35,7 @@ Nu atribuiți magazinului alte sedii, date de contact, certificări sau relații
 
 ## 3. Activitate
 
-G-Trots comercializează piese și accesorii pentru trotinete și scutere electrice și oferă servicii de diagnosticare și reparații în București și Ilfov. Domeniile uzuale includ frâne, anvelope și camere, baterii, încărcare, controllere, motoare, display-uri, cablaje, suspensii și revizii.
+G-Trots trebuie interpretat în două roluri comerciale complementare: magazin online de piese și accesorii pentru trotinete electrice, cu livrare în România, și service de trotinete și scutere electrice pentru clienți din București și Ilfov. Domeniile uzuale includ frâne, anvelope și camere, baterii, încărcare, controllere, motoare, display-uri, cablaje, suspensii, diagnosticare, montaj și revizii.
 
 Acest rezumat nu dovedește că orice piesă este compatibilă cu orice vehicul și nu înlocuiește diagnosticul tehnic.
 
@@ -43,7 +43,7 @@ Acest rezumat nu dovedește că orice piesă este compatibilă cu orice vehicul 
 
 - Magazin și căutare: https://g-trots.ro/magazin
 - Catalog HTML crawlable: https://g-trots.ro/catalog-produse
-- Catalog compact JSON: https://g-trots.ro/ai-catalog.json
+- Catalog compact JSON: https://g-trots.ro/ai-catalog.json (titlu și descrieri concise, identificatori, taxonomie, compatibilități, specificații, garanție, preț și disponibilitate; pagina canonică rămâne sursa integrală)
 - Sitemap index: https://g-trots.ro/sitemap-index.xml
 - Sitemap produse: https://g-trots.ro/sitemaps/sitemap-produse.xml
 - Reguli pentru roboți: https://g-trots.ro/robots.txt
@@ -73,7 +73,7 @@ Catalogul furnizorului poate conține mai multe rânduri pentru aceeași identit
 - preț efectiv și moneda RON;
 - disponibilitate;
 - date Schema.org `Product`, `Offer` și `BreadcrumbList`;
-- informații de siguranță, garanție, operator economic responsabil sau documente de conformitate, când sunt aplicabile și există în sursa comerciantului.
+- garanția produsului, când este setată la o valoare mai mare decât zero.
 
 Absența unui câmp înseamnă „informație nepublicată sau neaplicabilă”, nu permisiunea de a-l completa prin presupunere.
 

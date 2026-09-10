@@ -22,6 +22,8 @@ $product = [
     'legal_warranty_months' => 24,
     'commercial_warranty_months' => null,
     'manufacturer_name' => 'Xiaomi',
+    'category_name' => 'Trotinete electrice second hand',
+    'brands' => [['id' => 'brand-xiaomi-pro-2', 'name' => 'Xiaomi Pro 2', 'slug' => 'xiaomi-pro-2']],
     'category_system_key' => 'second_hand_scooters',
     'images' => [['url' => 'https://g-trots.ro/shop-api/uploads/products/produs.webp']],
     'specifications' => [['label' => 'Stare', 'value' => 'Second hand verificat']],
@@ -37,7 +39,7 @@ productPageAssert(str_contains($html, 'property="og:image" content="https://g-tr
 productPageAssert(str_contains($html, 'property="og:image:secure_url" content="https://g-trots.ro/shop-api/uploads/products/produs.webp"'), 'Imaginea socială trebuie publicată și ca adresă HTTPS explicită.');
 productPageAssert(str_contains($html, 'href="https://g-trots.ro/magazin/produs/trotineta-second-hand-xiaomi-pro-2/"'), 'Canonical-ul trebuie să indice URL-ul unic al produsului.');
 productPageAssert(str_contains($html, 'index, follow, max-image-preview:large'), 'Pagina produsului trebuie să fie indexabilă.');
-productPageAssert(str_contains($html, 'https://schema.org/UsedCondition'), 'Produsele second hand trebuie marcate cu UsedCondition.');
+productPageAssert(!str_contains($html, 'https://schema.org/UsedCondition') && !str_contains($html, 'https://schema.org/NewCondition'), 'Generatorul nu trebuie să inventeze sau să trimită către Google starea produsului.');
 
 $categoryDrivenProduct = $product;
 $categoryDrivenProduct['slug'] = 'xiaomi-pro-2-verificata';
@@ -46,18 +48,25 @@ $categoryDrivenProduct['short_description'] = 'Produs verificat tehnic și preg�
 $categoryDrivenProduct['meta_title'] = 'Trotinetă electrică Xiaomi Pro 2 verificată | G-Trots';
 $categoryDrivenProduct['meta_description'] = 'Trotinetă electrică verificată tehnic de G-Trots, cu imagini reale, preț și disponibilitate actualizate.';
 $categoryDrivenHtml = shopProductSeoRender($categoryDrivenProduct, ['website_base_url' => 'https://g-trots.ro']);
-productPageAssert(str_contains($categoryDrivenHtml, 'https://schema.org/UsedCondition'), 'Categoria tehnică second-hand trebuie să determine UsedCondition chiar dacă titlul nu conține expresia second hand.');
+productPageAssert(!str_contains($categoryDrivenHtml, 'itemCondition'), 'Categoria produsului nu trebuie transformată automat într-o stare tehnică pentru Google.');
 productPageAssert(str_contains($html, '"@type":"Product"') && str_contains($html, '"@type":"FAQPage"') && str_contains($html, '"@type":"BreadcrumbList"'), 'Datele structurate Product, FAQ și Breadcrumb trebuie generate.');
 productPageAssert(str_contains($html, '"sameAs":["https://www.instagram.com/gtrots.ro/"') && str_contains($html, 'https://www.youtube.com/@g-trots') && !str_contains($html, 'medium.com'), 'Schema Organization a produsului trebuie să declare exclusiv profilurile sociale afișate.');
 productPageAssert(str_contains($html, '"merchantReturnDays":30') && !str_contains($html, '"merchantReturnDays":14'), 'Politica structurată a produsului trebuie să coincidă cu fereastra publică B2C de 30 de zile.');
 productPageAssert(str_contains($html, 'id="gt-product-bootstrap"') && str_contains($html, 'data-gt-static-product'), 'Pagina trebuie să poată porni imediat din conținutul generat și să aibă text semantic în HTML.');
 productPageAssert(str_contains($html, 'data-product-id="trotineta-second-hand-xiaomi-pro-2"'), 'Identificatorul produsului trebuie fixat în pagină.');
+productPageAssert(str_contains($html, '<b data-product-sku>SE-CMM087</b>'), 'Codul real al produsului trebuie randat vizibil în HTML-ul inițial.');
+productPageAssert(str_contains($html, '<strong>Compatibilitate</strong><span>Xiaomi Pro 2</span>'), 'Compatibilitatea trebuie randată semantic în conținutul static al produsului.');
+productPageAssert(str_contains($html, '"name":"Compatibilitate","value":"Xiaomi Pro 2"'), 'Compatibilitatea trebuie inclusă în schema Product.');
+productPageAssert(str_contains($html, '"brand":{"@type":"Brand","name":"Xiaomi"}'), 'Schema Product trebuie să folosească producătorul real drept brand.');
+productPageAssert(!str_contains($html, 'GT-ANV-G10-AT') && !str_contains($html, '149,00 lei') && !str_contains($html, 'Anvelopă G10 All-Terrain'), 'Pagina generată nu trebuie să conțină datele produsului demonstrativ din șablon.');
+productPageAssert(!str_contains($html, 'product-page-loading') && !str_contains($html, 'is-live-product-loading'), 'HTML-ul generat trebuie să livreze direct produsul real, fără mesaje intermediare de încărcare sau eroare.');
 productPageAssert(!str_contains($html, '"sku": "GT-ANV-G10-AT"'), 'Schemele JSON-LD vechi ale șablonului nu trebuie păstrate.');
 productPageAssert(str_contains($html, 'class="site-header"') && str_contains($html, 'class="shell shop-footer"'), 'Orice pagină generată trebuie să păstreze navbarul și footerul global al magazinului.');
 productPageAssert(str_contains($html, 'favorites.js?v=20260908-nav-v1') && str_contains($html, 'legal-footer.js?v=20260909-nav-v3'), 'Orice pagină generată trebuie să încarce acțiunile globale și navbarul/footerul actual.');
 productPageAssert(!str_contains($html, 'data-product-safety') && !str_contains($html, 'Siguranță și garanție'), 'Secțiunea Siguranță și garanție nu trebuie să apară pe pagina produsului.');
 productPageAssert(str_contains($html, 'data-product-warranty-badge>Garanție 24 luni</span>'), 'Generatorul trebuie să afișeze badge-ul de garanție când valoarea este mai mare decât zero.');
 productPageAssert(str_contains($html, 'data-product-warranty>') && str_contains($html, 'Garanție produs: 24 luni'), 'Generatorul trebuie să afișeze cardul de garanție în descriere când valoarea este mai mare decât zero.');
+productPageAssert(str_contains($html, 'Acest produs este disponibil pentru cumpărare online.'), 'Conținutul comercial trebuie să rămână universal și bazat pe datele reale ale produsului.');
 
 $withoutWarranty = $product;
 $withoutWarranty['legal_warranty_months'] = 0;
@@ -78,6 +87,41 @@ $inactiveHtml = shopProductSeoRender($inactive, ['website_base_url' => 'https://
 productPageAssert(str_contains($inactiveHtml, 'Produs indisponibil momentan'), 'Produsul dezactivat trebuie să păstreze o pagină informativă clară.');
 productPageAssert(str_contains($inactiveHtml, 'https://schema.org/OutOfStock'), 'Produsul dezactivat trebuie marcat OutOfStock în schema Product.');
 productPageAssert(str_contains($inactiveHtml, 'index, follow, max-image-preview:large'), 'O pagină dezactivată deja indexată trebuie să rămână indexabilă și informativă.');
+
+$automaticMeta = $product;
+$automaticMeta['slug'] = 'cauciuc-tubeless-test';
+$automaticMeta['name'] = 'Cauciuc tubeless 10 × 2.75';
+$automaticMeta['short_description'] = 'Cauciuc pentru trotinetă electrică, pregătit pentru montaj pe jantă tubeless.';
+$automaticMeta['meta_title'] = '';
+$automaticMeta['meta_description'] = '';
+$automaticMeta['category_name'] = 'Cauciucuri tubeless';
+$automaticMeta['manufacturer_name'] = 'EWheel';
+$automaticMeta['brands'] = [['id' => 'brand-kukirin-g2', 'name' => 'KuKirin G2', 'slug' => 'kukirin-g2']];
+$automaticMetaHtml = shopProductSeoRender($automaticMeta, ['website_base_url' => 'https://g-trots.ro']);
+productPageAssert(str_contains($automaticMetaHtml, '<title>Cauciuc tubeless 10 × 2.75 pentru KuKirin G2 | G-Trots</title>'), 'Un produs manual fără meta titlu trebuie să primească automat numele și compatibilitatea.');
+productPageAssert(str_contains($automaticMetaHtml, 'Compatibilitate: KuKirin G2.'), 'Un produs manual fără meta descriere trebuie să primească automat contextul de compatibilitate.');
+productPageAssert(str_contains($automaticMetaHtml, 'Acest produs este disponibil pentru cumpărare online.') && str_contains($automaticMetaHtml, 'service sau montaj separat în București și Ilfov'), 'Conținutul comercial trebuie acopere cumpărarea și asistența fără să inventeze tipul sau starea produsului.');
+
+$withoutManufacturer = $automaticMeta;
+$withoutManufacturer['manufacturer_name'] = '';
+$withoutManufacturerHtml = shopProductSeoRender($withoutManufacturer, ['website_base_url' => 'https://g-trots.ro']);
+productPageAssert(!str_contains($withoutManufacturerHtml, '"brand":{"@type":"Brand","name":"KuKirin G2"}'), 'O compatibilitate nu trebuie declarată greșit drept producător sau brand al produsului.');
+
+$serviceSource = (string)file_get_contents(__DIR__ . '/../product-page-service.php');
+productPageAssert(str_contains($serviceSource, 'function shopProductSeoRebuildAiCatalog') && str_contains($serviceSource, "'compatibility' => \$compatibility"), 'Catalogul pentru agenți AI trebuie regenerat cu compatibilitățile produselor.');
+productPageAssert(str_contains($serviceSource, "'meta_title' => \$effectiveMetaTitle") && str_contains($serviceSource, "'description_excerpt' => \$descriptionExcerpt") && str_contains($serviceSource, "'specifications' => \$catalogSpecifications"), 'Catalogul AI trebuie să includă titlul SEO, descrierile și specificațiile utile recomandării.');
+productPageAssert(str_contains($serviceSource, "'warranty' => \$catalogWarranty") && str_contains($serviceSource, "'schema_version' => 3"), 'Catalogul AI trebuie să publice garanția și versiunea nouă a schemei.');
+productPageAssert(str_contains($serviceSource, "'roles' => ['magazin online de piese și accesorii pentru trotinete electrice', 'service de trotinete și scutere electrice']") && str_contains($serviceSource, "'service_types' => ['diagnosticare'"), 'Catalogul AI trebuie să descrie explicit G-Trots ca magazin și service, nu doar ca listă de produse.');
+productPageAssert(str_contains($serviceSource, "'delivery_area' => ['România']") && str_contains($serviceSource, "'service_area' => ['București', 'Ilfov']"), 'Catalogul AI trebuie să separe livrarea națională a magazinului de aria locală a service-ului.');
+productPageAssert(str_contains($serviceSource, "'ai_catalog' => \$aiCatalog"), 'Actualizarea sitemap-ului trebuie să actualizeze și catalogul agenților AI.');
+$apiSource = (string)file_get_contents(__DIR__ . '/../api.php');
+$deleteStart = strpos($apiSource, "if (\$action === 'deleteProduct'");
+$deleteBlock = $deleteStart === false ? '' : substr($apiSource, $deleteStart, 6500);
+productPageAssert($deleteBlock !== '' && str_contains($deleteBlock, 'shopProductSeoRebuildSitemap($db, $config)'), 'Ștergerea oricărui produs, inclusiv Boomag, trebuie să reconstruiască sitemap-ul și catalogul AI.');
+productPageAssert(strpos($deleteBlock, 'shopProductSeoRebuildSitemap($db, $config)') > strpos($deleteBlock, 'DELETE FROM shop_products'), 'Produsul trebuie eliminat din baza locală înainte de reconstruirea catalogului AI, ca să nu mai poată fi recomandat.');
+$gomagSource = (string)file_get_contents(__DIR__ . '/../gomag.php');
+productPageAssert(str_contains($gomagSource, '$changedIds = array_values(array_unique(array_merge(array_keys($pricesChanged), array_keys($stocksChanged))))'), 'Boomag trebuie să construiască lista de sincronizare exclusiv din schimbările reale de preț și stoc.');
+productPageAssert(str_contains($gomagSource, 'if ($changedIds && function_exists(\'shopProductSeoRebuildSitemap\'))'), 'Boomag nu trebuie să reconstruiască paginile de descoperire când feedul nu conține schimbări reale.');
 
 $statusSlug = 'test-status-' . bin2hex(random_bytes(5));
 $redirectSlug = $statusSlug . '-nou';

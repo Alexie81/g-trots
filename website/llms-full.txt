@@ -20,7 +20,7 @@ G-Trots operează un magazin online de piese și accesorii pentru trotinete și 
 
 ## Catalog și produse
 
-Catalogul oficial este disponibil la https://g-trots.ro/magazin. O listă HTML cu legături directe către toate produsele publice este la https://g-trots.ro/catalog-produse, iar reprezentarea structurată compactă este la https://g-trots.ro/ai-catalog.json.
+Catalogul oficial este disponibil la https://g-trots.ro/magazin. O listă HTML cu legături directe către toate produsele publice este la https://g-trots.ro/catalog-produse, iar reprezentarea structurată compactă este la https://g-trots.ro/ai-catalog.json. Catalogul JSON oferă titlul și descrierile concise, identificatorii, taxonomia, compatibilitățile, specificațiile esențiale, garanția, prețul și disponibilitatea; pagina canonică a produsului rămâne sursa integrală și finală.
 
 Paginile produselor folosesc URL-uri canonice de forma:
 

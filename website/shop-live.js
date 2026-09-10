@@ -529,9 +529,9 @@
     if (featureGrid) {
       const features = [
         ["01", "Informații complete", product.short_description || "Detaliile esențiale ale produsului sunt prezentate clar înainte de comandă."],
-        ["02", "Selectat de G-Trots", "Verificat pentru prezentare clară și disponibilitate actualizată în magazin."],
-        ["03", "Compatibilitate", `Potrivit pentru ${compatibility}. Verificăm configurația exactă înainte de expediere.`],
-        ["04", "Suport tehnic", "Primești ajutor pentru identificarea piesei, compatibilitate și opțiunile de montaj în service."]
+        ["02", "Selectat de G-Trots", "Prețul și disponibilitatea sunt actualizate direct din catalog."],
+        ["03", "Compatibilitate", `Compatibilitate declarată: ${compatibility}. Verificăm detaliile exacte înainte de expediere atunci când este necesar.`],
+        ["04", "Suport tehnic", "Primești ajutor pentru alegerea produsului potrivit și, când este aplicabil, opțiunile de service sau montaj."]
       ];
       featureGrid.innerHTML = features.map(([number, title, copy]) => `<article><b>${number}</b><h3>${escapeHtml(title)}</h3><p>${escapeHtml(copy)}</p></article>`).join("");
     }
@@ -576,7 +576,7 @@
     const specificationIntro = document.querySelector("#specificatii .product-section-heading p");
     if (specificationIntro && hasSpecifications) specificationIntro.textContent = `Specificațiile pentru ${normalized.name} sunt administrate direct din catalogul G-Trots.`;
 
-    const metaSku = document.querySelector(".product-detail-meta small b");
+    const metaSku = document.querySelector("[data-product-sku]") || document.querySelector(".product-detail-meta small b");
     if (metaSku) metaSku.textContent = product.sku || "—";
 
     const savedQuestions = Array.isArray(product.questions) ? product.questions.filter(item => item?.question && item?.answer).map(item => [item.question, item.answer]) : [];
@@ -753,6 +753,7 @@
     setText("[data-product-title]", normalized.name);
     setText("[data-product-description]", normalized.description);
     setText("[data-product-price]", normalized.price);
+    setText("[data-product-sku]", product.sku || "—");
     let warrantyCard = document.querySelector("[data-product-warranty]");
     const legalWarranty = Math.max(0, Number(product.legal_warranty_months || 0));
     const commercialWarranty = Math.max(0, Number(product.commercial_warranty_months || 0));
@@ -857,10 +858,6 @@
     const productSchema = document.createElement("script");
     productSchema.type = "application/ld+json";
     const activePrice = Number(product.promotion_price ?? product.sale_price ?? product.price ?? 0);
-    const conditionText = `${normalized.name} ${metaDescription}`.toLocaleLowerCase("ro-RO");
-    const itemCondition = /second[\s-]*hand|recondiționat|reconditionat|refurbished|folosit/u.test(conditionText)
-      ? "https://schema.org/UsedCondition"
-      : "https://schema.org/NewCondition";
     const shippingDetails = (liveShopConfig?.shipping_methods || []).map(method => {
       const days = String(method.eta_label || method.description || "").match(/\d+/g)?.map(Number).filter(Number.isFinite) || [];
       if (!days.length) return null;
@@ -897,7 +894,6 @@
         "@type": "Offer",
         priceCurrency: product.currency || "RON",
         price: activePrice.toFixed(2),
-        itemCondition,
         availability: normalized.stock === "Stoc epuizat" || !purchasable ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
         url: canonicalUrl,
         seller: { "@type": "Organization", name: liveShopConfig?.company?.trade_name || liveShopConfig?.company?.legal_name || "G-Trots" },
@@ -908,6 +904,17 @@
     const gtin = String(product.gtin || "").trim();
     if ([8, 12, 13, 14].includes(gtin.length) && /^\d+$/.test(gtin)) schema[`gtin${gtin.length}`] = gtin;
     if (Number(product.review_count || 0) > 0 && Number(product.review_average || 0) > 0) schema.aggregateRating = { "@type": "AggregateRating", ratingValue: Number(product.review_average).toFixed(2), reviewCount: Number(product.review_count) };
+    const compatibilityNames = Array.isArray(product.brands) ? product.brands.map(brand => String(brand?.name || "").trim()).filter(Boolean) : [];
+    const additionalProperties = [];
+    if (compatibilityNames.length) additionalProperties.push({ "@type": "PropertyValue", name: "Compatibilitate", value: compatibilityNames.slice(0, 8).join(", ") });
+    (Array.isArray(product.specifications) ? product.specifications : []).slice(0, 40).forEach(item => {
+      const name = String(item?.label || "").trim();
+      const value = String(item?.value || "").trim();
+      if (name && value) additionalProperties.push({ "@type": "PropertyValue", name, value });
+    });
+    if (legalWarranty > 0) additionalProperties.push({ "@type": "PropertyValue", name: "Garanție legală", value: `${legalWarranty} luni` });
+    if (commercialWarranty > 0) additionalProperties.push({ "@type": "PropertyValue", name: "Garanție comercială", value: `${commercialWarranty} luni` });
+    if (additionalProperties.length) schema.additionalProperty = additionalProperties;
     productSchema.textContent = JSON.stringify(schema);
     document.head.append(productSchema);
     const faqQuestions = Array.isArray(product.questions)
@@ -928,6 +935,7 @@
       document.head.append(faqSchema);
     }
     document.querySelector('meta[name="robots"]')?.setAttribute("content", "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1");
+    document.querySelectorAll("[data-gt-live-product]").forEach(element => element.removeAttribute("hidden"));
     document.querySelector("[data-gt-static-product]")?.remove();
     applyProductImages(product, normalized);
     ensureProductCommerce(product, normalized);

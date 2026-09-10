@@ -218,21 +218,33 @@ function renderProductPage(template, product) {
   const category = cleanText(product.category_name);
   const manufacturer = cleanText(product.manufacturer_name);
   const brands = (product.brands || []).map(brand => cleanText(brand.name)).filter(Boolean);
-  const brand = manufacturer || brands[0] || "G-Trots";
   const customDescription = cleanText(product.meta_description);
   const descriptionSource = customDescription || cleanText(product.short_description)
     || `${name} disponibil la G-Trots, cu informații clare despre preț, compatibilitate, livrare și service pentru trotinete electrice.`;
-  const description = customDescription || excerpt(descriptionSource, 160);
-  const title = cleanText(product.meta_title) || seoTitle(name);
+  const primaryCompatibility = brands[0] || "";
+  const descriptionContext = [];
+  if (primaryCompatibility && !descriptionSource.toLocaleLowerCase("ro-RO").includes(primaryCompatibility.toLocaleLowerCase("ro-RO"))) {
+    descriptionContext.push(`Compatibilitate: ${excerpt(brands.slice(0, 4).join(", "), 70)}.`);
+  }
+  if (category && !descriptionSource.toLocaleLowerCase("ro-RO").includes(category.toLocaleLowerCase("ro-RO"))) {
+    descriptionContext.push(`Categorie: ${excerpt(category, 48)}.`);
+  }
+  const context = descriptionContext.join(" ");
+  const fallbackDescription = context
+    ? excerpt(`${excerpt(descriptionSource, Math.max(55, 159 - context.length))} ${context}`, 160)
+    : excerpt(descriptionSource, 160);
+  const description = customDescription || fallbackDescription;
+  let fallbackTitle = name;
+  if (primaryCompatibility && !name.toLocaleLowerCase("ro-RO").includes(primaryCompatibility.toLocaleLowerCase("ro-RO"))) {
+    const compatibilityForTitle = excerpt(primaryCompatibility, 22);
+    fallbackTitle = `${excerpt(name, Math.max(24, 55 - ` pentru ${compatibilityForTitle}`.length))} pentru ${compatibilityForTitle}`;
+  }
+  const title = cleanText(product.meta_title) || seoTitle(fallbackTitle);
   const currency = cleanText(product.currency) || "RON";
   const priceText = currentPrice(product).toFixed(2);
   const inStock = isInStock(product);
   const availabilityText = inStock ? "in stock" : "out of stock";
   const availabilitySchema = inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock";
-  const conditionText = `${name} ${description}`.toLocaleLowerCase("ro-RO");
-  const itemCondition = /second[\s-]*hand|recondiționat|reconditionat|refurbished|folosit/u.test(conditionText)
-    ? "https://schema.org/UsedCondition"
-    : "https://schema.org/NewCondition";
   const images = (product.images || []).map(image => absoluteUrl(image.url || image.image_path)).filter(Boolean);
   if (!images.length) images.push(`${WEBSITE_BASE_URL}/assets/magazin-produse-v1.png`);
 
@@ -246,14 +258,13 @@ function renderProductPage(template, product) {
     url: canonical,
     ...(cleanText(product.sku) ? { sku: cleanText(product.sku), mpn: cleanText(product.sku) } : {}),
     ...(category ? { category } : {}),
-    brand: { "@type": "Brand", name: brand },
+    ...(manufacturer ? { brand: { "@type": "Brand", name: manufacturer } } : {}),
     offers: {
       "@type": "Offer",
       url: canonical,
       priceCurrency: currency,
       price: priceText,
       availability: availabilitySchema,
-      itemCondition,
       seller: { "@id": `${WEBSITE_BASE_URL}/#organization` },
       hasMerchantReturnPolicy: {
         "@type": "MerchantReturnPolicy",
@@ -291,10 +302,11 @@ function renderProductPage(template, product) {
   if (gtin) productSchema[`gtin${gtin.length}`] = gtin;
   const legalWarranty = Math.max(0, Number(product.legal_warranty_months || 0));
   const commercialWarranty = Math.max(0, Number(product.commercial_warranty_months || 0));
-  const warrantyProperties = [];
-  if (legalWarranty > 0) warrantyProperties.push({ "@type": "PropertyValue", name: "Garanție legală", value: `${legalWarranty} luni` });
-  if (commercialWarranty > 0) warrantyProperties.push({ "@type": "PropertyValue", name: "Garanție comercială", value: `${commercialWarranty} luni` });
-  if (warrantyProperties.length) productSchema.additionalProperty = warrantyProperties;
+  const additionalProperties = [];
+  if (brands.length) additionalProperties.push({ "@type": "PropertyValue", name: "Compatibilitate", value: brands.slice(0, 8).join(", ") });
+  if (legalWarranty > 0) additionalProperties.push({ "@type": "PropertyValue", name: "Garanție legală", value: `${legalWarranty} luni` });
+  if (commercialWarranty > 0) additionalProperties.push({ "@type": "PropertyValue", name: "Garanție comercială", value: `${commercialWarranty} luni` });
+  if (additionalProperties.length) productSchema.additionalProperty = additionalProperties;
   const breadcrumbSchema = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -335,7 +347,10 @@ function renderProductPage(template, product) {
     })
     .join("\n");
   html = html.replace("</head>", `${structuredData}\n    <script type="application/json" id="gt-product-bootstrap">${safeJson(product)}</script>\n  </head>`);
+  html = html.replace(" is-live-product-loading", "");
+  html = html.replace(/\s*<section\b[^>]*\bclass="[^"]*\bproduct-page-loading\b[^"]*"[^>]*>.*?<\/section>\s*(?=<div\b[^>]*\bclass="product-detail-breadcrumb)/is, "\n      ");
   html = html.replace(/(<body\b[^>]*\bdata-product-id=")[^"]*(")/i, `$1${escapeHtml(slug)}$2`);
+  html = html.replace(/(<b\b[^>]*\bdata-product-sku\b[^>]*>).*?(<\/b>)/is, `$1${escapeHtml(cleanText(product.sku) || "—")}$2`);
 
   const displayWarranty = commercialWarranty > 0 ? commercialWarranty : legalWarranty;
   const warrantyBadge = displayWarranty > 0
@@ -361,7 +376,9 @@ function renderProductPage(template, product) {
     cleanText(product.sku) ? ["Cod produs", cleanText(product.sku)] : null,
     gtin ? ["EAN", gtin] : null
   ].filter(Boolean).map(([label, value]) => `<li><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></li>`).join("");
-  const staticArticle = `<article class="product-static-seo shell" data-gt-static-product aria-labelledby="gt-static-product-title"><div><p class="product-static-seo__eyebrow">Produs G-Trots</p><h1 id="gt-static-product-title">${escapeHtml(name)}</h1><p>${escapeHtml(description)}</p><strong class="product-static-seo__price">${escapeHtml(`${priceText} ${currency}`)}</strong><span class="product-static-seo__stock">${inStock ? "În stoc" : "Stoc epuizat"}</span>${staticSpecs ? `<ul>${staticSpecs}</ul>` : ""}</div><img src="${escapeHtml(images[0])}" alt="${escapeHtml(name)}" width="720" height="720" fetchpriority="high"></article>`;
+  const compatibilityCopy = brands.length ? ` Compatibilitate declarată: ${brands.slice(0, 6).join(", ")}.` : "";
+  const intentCopy = `Acest produs este disponibil pentru cumpărare online.${compatibilityCopy} G-Trots oferă asistență pentru alegerea produsului potrivit și, atunci când este aplicabil, service sau montaj separat în București și Ilfov.`;
+  const staticArticle = `<article class="product-static-seo shell" data-gt-static-product aria-labelledby="gt-static-product-title"><div><p class="product-static-seo__eyebrow">Produs G-Trots</p><h1 id="gt-static-product-title">${escapeHtml(name)}</h1><p>${escapeHtml(description)}</p><p class="product-static-seo__intent">${escapeHtml(intentCopy)}</p><strong class="product-static-seo__price">${escapeHtml(`${priceText} ${currency}`)}</strong><span class="product-static-seo__stock">${inStock ? "În stoc" : "Stoc epuizat"}</span>${staticSpecs ? `<ul>${staticSpecs}</ul>` : ""}</div><img src="${escapeHtml(images[0])}" alt="${escapeHtml(name)}" width="720" height="720" fetchpriority="high"></article>`;
   html = html.replace(/(<main\b[^>]*id="product-detail"[^>]*>)/i, `$1\n      ${staticArticle}`);
   return html;
 }
@@ -447,7 +464,7 @@ function buildCatalogPage(products) {
 
 function buildAiCatalog(products) {
   const payload = {
-    schema_version: 1,
+    schema_version: 3,
     generated_at: new Date().toISOString(),
     publisher: {
       name: "G-Trots România",
@@ -457,20 +474,62 @@ function buildAiCatalog(products) {
       market: "RO",
       language: "ro-RO"
     },
+    business: {
+      roles: ["magazin online de piese și accesorii pentru trotinete electrice", "service de trotinete și scutere electrice"],
+      summary: "G-Trots comercializează piese și accesorii pentru trotinete electrice și oferă diagnosticare, reparații și montaj în București și Ilfov.",
+      shop_url: `${WEBSITE_BASE_URL}/magazin`,
+      service_url: `${WEBSITE_BASE_URL}/service-trotinete-electrice`,
+      contact_url: `${WEBSITE_BASE_URL}/contact`,
+      telephone: "+40762093915",
+      email: "contact@g-trots.ro",
+      shopping_market: "România",
+      delivery_area: ["România"],
+      service_area: ["București", "Ilfov"]
+    },
+    services: [{
+      name: "Service și reparații trotinete electrice",
+      url: `${WEBSITE_BASE_URL}/service-trotinete-electrice`,
+      area_served: ["București", "Ilfov"],
+      service_types: ["diagnosticare", "frâne", "anvelope și camere", "baterii și încărcare", "controller și electronică", "motor", "cablaje", "suspensii", "revizii", "montaj piese"],
+      confirmation: "Disponibilitatea, diagnosticul și costul se confirmă direct cu G-Trots."
+    }],
     source_of_truth: "Pagina canonică a produsului stabilește prețul și disponibilitatea curentă.",
-    products: products.map(product => ({
-      id: String(product.id ?? ""),
-      name: cleanText(product.name),
-      url: `${WEBSITE_BASE_URL}/magazin/produs/${encodeURIComponent(product.slug)}/`,
-      sku: cleanText(product.sku),
-      gtin: validGtin(product.ean),
-      brand: cleanText(product.manufacturer_name) || cleanText(product.brands?.[0]?.name) || "G-Trots",
-      category: cleanText(product.category_name),
-      price: Number(currentPrice(product).toFixed(2)),
-      currency: cleanText(product.currency) || "RON",
-      availability: isInStock(product) ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-      image: absoluteUrl(product.images?.[0]?.url || product.images?.[0]?.image_path || "")
-    }))
+    products: products.map(product => {
+      const name = cleanText(product.name);
+      const savedMetaTitle = cleanText(product.meta_title);
+      const savedMetaDescription = cleanText(product.meta_description);
+      const shortDescription = excerpt(product.short_description, 320);
+      const descriptionExcerpt = excerpt(product.description_html || product.short_description, 650);
+      const specifications = (product.specifications || []).slice(0, 16).map(specification => ({
+        name: cleanText(specification.label || specification.name),
+        value: cleanText(specification.value)
+      })).filter(specification => specification.name && specification.value);
+      const legalWarranty = Math.max(0, Number(product.legal_warranty_months || 0));
+      const commercialWarranty = Math.max(0, Number(product.commercial_warranty_months || 0));
+      return {
+        id: String(product.id ?? ""),
+        name,
+        meta_title: savedMetaTitle || `${excerpt(name, 55)} | G-Trots`,
+        meta_description: savedMetaDescription,
+        short_description: shortDescription,
+        description_excerpt: descriptionExcerpt,
+        description: savedMetaDescription || shortDescription || descriptionExcerpt,
+        url: `${WEBSITE_BASE_URL}/magazin/produs/${encodeURIComponent(product.slug)}/`,
+        sku: cleanText(product.sku),
+        gtin: validGtin(product.ean),
+        manufacturer: cleanText(product.manufacturer_name),
+        category: cleanText(product.category_name),
+        compatibility: (product.brands || []).map(brand => cleanText(brand.name)).filter(Boolean),
+        specifications,
+        warranty: legalWarranty > 0 || commercialWarranty > 0
+          ? { legal_months: legalWarranty, commercial_months: commercialWarranty }
+          : null,
+        price: Number(currentPrice(product).toFixed(2)),
+        currency: cleanText(product.currency) || "RON",
+        availability: isInStock(product) ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+        image: absoluteUrl(product.images?.[0]?.url || product.images?.[0]?.image_path || "")
+      };
+    })
   };
   return `${JSON.stringify(payload, null, 2)}\n`;
 }

@@ -9,7 +9,7 @@ G-Trots România este marca comercială a CAB IT EXPERT S.R.L. (CUI 49972605, J4
 - [Document canonic pentru agenți AI](https://g-trots.ro/agents.md): identitate, catalog, reguli de interpretare și politici oficiale.
 - [Magazin și căutare produse](https://g-trots.ro/magazin): catalogul vizibil pentru cumpărători.
 - [Catalog HTML complet](https://g-trots.ro/catalog-produse): legături crawlable către toate produsele publice.
-- [Catalog produse JSON](https://g-trots.ro/ai-catalog.json): nume, URL, cod, marcă, categorie, preț efectiv și disponibilitate.
+- [Catalog produse JSON](https://g-trots.ro/ai-catalog.json): titlu, descrieri concise, URL canonic, cod, producător, categorie, compatibilități, specificații, garanție, preț efectiv și disponibilitate.
 - [Sitemap index](https://g-trots.ro/sitemap-index.xml): toate sitemap-urile editoriale și de produse.
 - [Sitemap produse](https://g-trots.ro/sitemaps/sitemap-produse.xml): URL-urile canonice ale produselor.
 - [Context extins pentru agenți AI](https://g-trots.ro/llms-full.txt): identitate, servicii, politici și reguli de interpretare.

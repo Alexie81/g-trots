@@ -14,6 +14,7 @@ WEBSITE_ROOT = PROJECT_ROOT / "website"
 REMOTE_ROOT = "/g-trots.ro"
 FILES = (
     ".htaccess",
+    "robots.txt",
     "agents.md",
     "llms.txt",
     "llms-full.txt",
@@ -25,6 +26,10 @@ FILES = (
     "styles.css",
     "styles.min.css",
     "sitemap.xml",
+    "sitemap-index.xml",
+    "sitemaps/sitemap-produse.xml",
+    "catalog-produse.html",
+    "ai-catalog.json",
     "favorites.js",
     "favorites.css",
     "magazin.html",

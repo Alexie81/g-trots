@@ -51,6 +51,11 @@ def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Sincronizeaza catalogul Google Merchant prin API-ul protejat.")
     parser.add_argument("--diagnose-only", action="store_true", help="Citeste starea si erorile existente fara a trimite produse.")
     parser.add_argument("--repair-images", action="store_true", help="Reface imaginile Boomag lipsa si resincronizeaza produsele afectate.")
+    parser.add_argument(
+        "--resync-disapproved-images",
+        action="store_true",
+        help="Resincronizeaza numai produsele blocate de procesarea imaginilor si realiniaza sursa Merchant.",
+    )
     return parser.parse_args()
 
 
@@ -103,6 +108,7 @@ try {{
         $issueSummary = [];
         $issueSamples = [];
         $issueSamplesByCode = [];
+        $issueOfferIdsByKey = [];
         $merchantOfferIds = [];
         do {{
             $url = 'https://merchantapi.googleapis.com/products/v1/' . $account . '/products?pageSize=1000';
@@ -133,6 +139,7 @@ try {{
                         (string)($issue['code'] ?? 'unknown'),
                     ]);
                     $issueSummary[$key] = ($issueSummary[$key] ?? 0) + 1;
+                    if ($offerId !== '') $issueOfferIdsByKey[$key][$offerId] = true;
                     if (count($issueSamples) < 12) {{
                         $issueSamples[] = [
                             'offer_id' => (string)($product['offerId'] ?? ''),
@@ -162,6 +169,10 @@ try {{
         }} while ($pageToken !== '' && $pages < 20);
         ksort($destinationSummary);
         arsort($issueSummary);
+        foreach ($issueOfferIdsByKey as $key => $offerIds) {{
+            $issueOfferIdsByKey[$key] = array_keys($offerIds);
+        }}
+        ksort($issueOfferIdsByKey);
         $databaseOfferIds = function_exists('catalogRepresentativeProductIds')
             ? catalogRepresentativeProductIds($db)
             : array_fill_keys(array_map('strval', $db->query('SELECT id FROM shop_products')->fetchAll(PDO::FETCH_COLUMN)), true);
@@ -177,6 +188,7 @@ try {{
             'missing_offer_ids' => $missingOfferIds,
             'destination_summary' => $destinationSummary,
             'issue_summary' => $issueSummary,
+            'issue_offer_ids_by_key' => $issueOfferIdsByKey,
             'issue_samples' => $issueSamples,
             'issue_samples_by_code' => $issueSamplesByCode,
             'pages' => $pages,
@@ -308,6 +320,65 @@ try {{
                     totals[key].extend(stats.get(key) or [])
             print(json.dumps({"phase": "repair-images-complete", "total": total, "result": totals}, ensure_ascii=False, indent=2), flush=True)
             if any(totals[key] for key in list_keys):
+                raise SystemExit(1)
+            return
+        if options.resync_disapproved_images:
+            diagnosis = request_json(base + "&mode=merchant-products", timeout=180)
+            issue_ids_by_key = diagnosis.get("issue_offer_ids_by_key", {})
+            blocked_keys = (
+                "DISAPPROVED|FREE_LISTINGS|image_link_internal_error",
+                "DISAPPROVED|FREE_LISTINGS|image_link_pending_crawl",
+            )
+            image_issue_ids = sorted({
+                str(product_id)
+                for key in blocked_keys
+                for product_id in issue_ids_by_key.get(key, [])
+                if str(product_id)
+            })
+            missing_ids = sorted({str(value) for value in diagnosis.get("missing_offer_ids", []) if str(value)})
+            unexpected_ids = sorted({str(value) for value in diagnosis.get("unexpected_offer_ids", []) if str(value)})
+            sync_ids = sorted(set(image_issue_ids) | set(missing_ids))
+            jobs = [("sync", group) for group in chunks(sync_ids, 5)] + [
+                ("delete", group) for group in chunks(unexpected_ids, 5)
+            ]
+            print(json.dumps({
+                "phase": "targeted-plan",
+                "disapproved_or_pending_images": len(image_issue_ids),
+                "missing_from_merchant": len(missing_ids),
+                "unexpected_in_merchant": len(unexpected_ids),
+                "sync_total": len(sync_ids),
+                "delete_total": len(unexpected_ids),
+            }, ensure_ascii=False), flush=True)
+
+            totals = {"synced": 0, "deleted": 0, "already_absent": 0, "errors": []}
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                pending = {
+                    executor.submit(request_json, base + "&" + urlencode({"mode": mode, "ids": ",".join(group)})): (mode, group)
+                    for mode, group in jobs
+                }
+                for future in as_completed(pending):
+                    mode, group = pending[future]
+                    try:
+                        payload = future.result()
+                        for result in payload.get("results", []):
+                            status = str(result.get("status", ""))
+                            if status in ("synced", "deleted", "already_absent"):
+                                totals[status] += 1
+                            else:
+                                totals["errors"].append(result)
+                    except Exception as error:
+                        totals["errors"].append({"mode": mode, "product_ids": group, "error": str(error)})
+
+            verification = request_json(base + "&mode=merchant-products", timeout=180)
+            print(json.dumps({
+                "phase": "targeted-complete",
+                "result": totals,
+                "destination_summary": verification.get("destination_summary", {}),
+                "issue_summary": verification.get("issue_summary", {}),
+                "missing_offer_ids": verification.get("missing_offer_ids", []),
+                "unexpected_offer_ids": verification.get("unexpected_offer_ids", []),
+            }, ensure_ascii=False, indent=2), flush=True)
+            if totals["errors"]:
                 raise SystemExit(1)
             return
         state = request_json(base + "&mode=stats")

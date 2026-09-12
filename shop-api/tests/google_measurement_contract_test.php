@@ -28,7 +28,7 @@ foreach ([
     'remove_from_cart', 'view_cart', 'begin_checkout', 'add_shipping_info',
     'add_payment_info', 'purchase', 'search', 'view_search_results', 'form_start', 'form_submit',
     'login', 'sign_up', 'landing_page_view', 'phone_click', 'whatsapp_click', 'view_promotion',
-    'select_promotion', 'refund',
+    'select_promotion', 'refund', 'payment_failed', 'payment_cancelled',
 ] as $event) {
     $assert(str_contains($measurement, '"' . $event . '"'), "evenimentul {$event} lipsește");
 }
@@ -51,6 +51,10 @@ $assert(str_contains($account, 'trackRefundedOrders'), 'contul clientului nu pub
 $assert(str_contains($site, '"generate_lead"'), 'formularul real de programare nu publică generate_lead');
 $assert(!str_contains($measurement, 'track("generate_lead"'), 'un simplu submit de formular ar produce un lead fals');
 $assert(str_contains($status, 'GTrotsPendingPurchase'), 'purchase nu este păstrat până la încărcarea componentei Google');
+$assert(str_contains($measurement, 'PAYMENT_OUTCOMES_KEY') && str_contains($measurement, 'trackPaymentOutcome'), 'Rezultatele plății nu au deduplicare și funcție dedicată.');
+$assert(str_contains($status, 'g-trots:payment-outcome-ready') && str_contains($status, 'GTrotsPendingPaymentOutcome'), 'Pagina de eșec nu publică rezultatul plății inclusiv când Google se încarcă târziu.');
+$assert(str_contains($status, 'status === "cancelled" ? "payment_cancelled" : "payment_failed"'), 'Anularea și eșecul plății nu sunt măsurate separat.');
+$assert(str_contains($status, 'stripeCheckoutStatus') && str_contains($status, 'payment_status') && str_contains($status, 'status === "paid"'), 'Purchase cu cardul nu este condiționat de confirmarea Stripe.');
 $assert(str_contains($checkout, 'sku: String(product.sku') && str_contains($status, 'sku: String(item.sku'), 'SKU-ul nu este păstrat până la purchase.');
 
 echo "google_measurement_contract_test: OK\n";

@@ -79,6 +79,26 @@ try {{
         SUM(CASE WHEN p.shopify_sync_error IS NOT NULL THEN 1 ELSE 0 END) AS shopify_errors
         FROM shop_products p');
 
+    $invoiceAutomation = GtrotsInvoiceAutomation::settings($db);
+    $testOrders = $db->query('SELECT o.id, o.order_number, o.customer_name, o.customer_email, o.status, o.payment_status, o.payment_method, o.subtotal, o.shipping_cost, o.total,
+        o.created_at, o.cancellation_invoice_action,
+        (SELECT COUNT(*) FROM shop_invoices i WHERE i.order_id = o.id) AS invoices
+        FROM shop_orders o
+        WHERE UPPER(o.customer_name) LIKE "TEST%ANALYTICS G-TROTS"
+        ORDER BY o.created_at DESC LIMIT 10')->fetchAll();
+
+    $testOrderRelations = [];
+    if ($testOrders !== []) {{
+        $orderIds = array_values(array_map(static fn(array $row): string => (string)$row['id'], $testOrders));
+        $quotedIds = implode(',', array_map(static fn(string $id): string => $db->quote($id), $orderIds));
+        $relationTables = $db->query("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME = 'order_id' ORDER BY TABLE_NAME")->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($relationTables as $tableName) {{
+            if (!preg_match('/^[a-zA-Z0-9_]+$/', (string)$tableName)) continue;
+            $count = (int)$db->query('SELECT COUNT(*) FROM `' . $tableName . '` WHERE order_id IN (' . $quotedIds . ')')->fetchColumn();
+            if ($count > 0) $testOrderRelations[(string)$tableName] = $count;
+        }}
+    }}
+
     $secondHand = $aggregate($db, 'SELECT
         c.id, c.name, c.slug, c.system_key, c.is_active AS category_active,
         COUNT(p.id) AS products,
@@ -126,6 +146,9 @@ try {{
             'merchant_sync_enabled' => merchantSyncIsEnabled($config),
             'shopify_sync_enabled' => shopifySyncIsEnabled($config),
         ],
+        'invoice_automation' => $invoiceAutomation,
+        'analytics_test_orders' => $testOrders,
+        'analytics_test_order_relations' => $testOrderRelations,
         'second_hand' => $secondHand,
         'default_manual_source' => is_array($defaultSource) ? $defaultSource : null,
         'sample_se_cmm087' => is_array($sample) ? $sample : null,

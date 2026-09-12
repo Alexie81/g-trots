@@ -24,7 +24,7 @@ $assert(str_contains($footer, 'meta-measurement.js'), 'Meta Pixel nu este încă
 $assert(str_contains($google, 'g-trots:analytics-event'), 'Evenimentele GA4 nu sunt oglindite către stratul Meta.');
 $assert(str_contains($meta, 'eventID: id') && str_contains($meta, 'event_id: id'), 'Pixel și CAPI nu folosesc același event_id pentru deduplicare.');
 $assert(str_contains($meta, 'marketingAllowed()') && str_contains($meta, 'consent", "revoke'), 'Pixelul nu respectă acordul pentru marketing.');
-foreach (['ViewContent', 'Search', 'AddToWishlist', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'Purchase', 'Contact'] as $event) {
+foreach (['ViewContent', 'Search', 'AddToWishlist', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'Purchase', 'PaymentFailed', 'PaymentCancelled', 'Contact'] as $event) {
     $assert(str_contains($meta, '"' . $event . '"'), "Evenimentul Meta {$event} lipsește.");
 }
 $assert(str_contains($meta, 'phone_click: ["Contact"') && str_contains($meta, 'whatsapp_click: ["Contact"'), 'Clickurile de telefon și WhatsApp nu sunt mapate către Meta Contact.');

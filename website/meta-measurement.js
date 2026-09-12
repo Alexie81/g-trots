@@ -114,6 +114,8 @@
       login: ["Login", true, { login_method: String(params?.method || "") }],
       purchase: ["Purchase", false, { ...items, order_id: String(params?.transaction_id || ""), payment_type: String(params?.payment_type || "") }],
       refund: ["Refund", true, { ...items, order_id: String(params?.transaction_id || "") }],
+      payment_failed: ["PaymentFailed", true, { ...items, order_id: String(params?.transaction_id || ""), payment_type: String(params?.payment_type || ""), failure_reason: String(params?.failure_reason || "") }],
+      payment_cancelled: ["PaymentCancelled", true, { ...items, order_id: String(params?.transaction_id || ""), payment_type: String(params?.payment_type || "") }],
       view_promotion: ["ViewPromotion", true, items],
       select_promotion: ["SelectPromotion", true, items]
     };

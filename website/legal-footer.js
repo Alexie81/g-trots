@@ -47,10 +47,10 @@
   }
   loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260910-public-address-v1' });
   if (!document.querySelector('script[src*="google-measurement.js"]')) {
-    loadAsset('script', { src: '/google-measurement.js?v=20260910-conversion-v1', async: true });
+    loadAsset('script', { src: '/google-measurement.js?v=20260912-payment-outcomes-v1', async: true });
   }
   if (!document.querySelector('script[src*="meta-measurement.js"]')) {
-    loadAsset('script', { src: '/meta-measurement.js?v=20260910-conversion-v1', async: true });
+    loadAsset('script', { src: '/meta-measurement.js?v=20260912-payment-outcomes-v1', async: true });
   }
   if (!document.querySelector('script[src*="cookie-consent.js"]')) {
     loadAsset('script', { src: '/cookie-consent.js?v=20260907-meta-v6', async: true });

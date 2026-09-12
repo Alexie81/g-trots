@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ftplib import FTP_TLS
+from getpass import getpass
 from io import BytesIO
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -23,9 +24,9 @@ def connect() -> FTP_TLS:
     ftp = FTP_TLS(context=context, timeout=90)
     host = os.environ.get("GT_FTP_HOST", "ftp.cab-it.ro")
     username = os.environ.get("GT_FTP_USER", "").strip()
-    password = os.environ.get("GT_FTP_PASS", "")
-    if not username or not password:
-        raise RuntimeError("Lipsesc credentialele FTPS GT_FTP_USER/GT_FTP_PASS.")
+    password = os.environ.get("GT_FTP_PASS", "") or getpass("Parola FTPS: ")
+    if not username:
+        raise RuntimeError("Lipseste credentialul FTPS GT_FTP_USER.")
     ftp.connect(host, int(os.environ.get("GT_FTP_PORT", "21")))
     ftp.login(username, password)
     ftp.prot_p()

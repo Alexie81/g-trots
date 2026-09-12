@@ -8,6 +8,7 @@
   const FAVORITES_KEY = "g-trots-favorite-products-v1";
   const PURCHASES_KEY = "g-trots-ga4-purchases-v1";
   const REFUNDS_KEY = "g-trots-ga4-refunds-v1";
+  const PAYMENT_OUTCOMES_KEY = "g-trots-ga4-payment-outcomes-v1";
   const AUTH_EVENT_KEY = "g-trots-ga4-auth-pending-v1";
   const SELECT_EVENT_KEY = "g-trots-ga4-select-pending-v1";
   const ATTRIBUTION_KEY = "g-trots-ga4-session-attribution-v1";
@@ -16,6 +17,7 @@
   const once = new Set();
   const transientPurchases = new Set();
   const transientRefunds = new Set();
+  const transientPaymentOutcomes = new Set();
 
   window.dataLayer = window.dataLayer || [];
   window.gtag = window.gtag || function gtag() { window.dataLayer.push(arguments); };
@@ -69,6 +71,7 @@
       try {
         localStorage.removeItem(PURCHASES_KEY);
         localStorage.removeItem(REFUNDS_KEY);
+        localStorage.removeItem(PAYMENT_OUTCOMES_KEY);
         localStorage.removeItem(AUTH_EVENT_KEY);
         sessionStorage.removeItem(SELECT_EVENT_KEY);
         sessionStorage.removeItem(ATTRIBUTION_KEY);
@@ -437,15 +440,8 @@
     });
   }
 
-  function trackPurchase(state) {
-    const transactionId = String(state?.orderNumber || state?.order_number || state?.orderId || state?.order_id || "").trim();
-    if (!transactionId) return false;
-    const sent = new Set([
-      ...(analyticsStorageAllowed() ? readJson(PURCHASES_KEY, []).map(String) : []),
-      ...transientPurchases,
-    ]);
-    if (sent.has(transactionId)) return false;
-    const items = (Array.isArray(state?.items) ? state.items : []).map((item, index) => ({
+  function orderItems(state) {
+    return (Array.isArray(state?.items) ? state.items : []).map((item, index) => ({
       item_id: String(item.apiId || item.product_id || item.id || ""),
       item_name: String(item.name || item.product_name || "Produs G-Trots"),
       affiliation: "G-Trots",
@@ -457,6 +453,17 @@
       quantity: Math.max(1, finite(item.quantity, 1)),
       index
     })).filter(item => item.item_id || item.item_name);
+  }
+
+  function trackPurchase(state) {
+    const transactionId = String(state?.orderNumber || state?.order_number || state?.orderId || state?.order_id || "").trim();
+    if (!transactionId) return false;
+    const sent = new Set([
+      ...(analyticsStorageAllowed() ? readJson(PURCHASES_KEY, []).map(String) : []),
+      ...transientPurchases,
+    ]);
+    if (sent.has(transactionId)) return false;
+    const items = orderItems(state);
     const merchandiseValue = ecommerceValue(items);
     track("purchase", {
       ...currentAttribution(),
@@ -487,6 +494,40 @@
     transientPurchases.add(transactionId);
     if (analyticsStorageAllowed()) {
       try { localStorage.setItem(PURCHASES_KEY, JSON.stringify([...sent].slice(-500))); } catch { /* fără persistență */ }
+    }
+    return true;
+  }
+
+  function trackPaymentOutcome(eventName, state) {
+    const normalizedEvent = eventName === "payment_cancelled" ? "payment_cancelled" : eventName === "payment_failed" ? "payment_failed" : "";
+    const transactionId = String(state?.orderNumber || state?.order_number || state?.orderId || state?.order_id || "").trim();
+    if (!normalizedEvent || !transactionId) return false;
+    const eventKey = `${normalizedEvent}:${transactionId}`;
+    const sent = new Set([
+      ...(analyticsStorageAllowed() ? readJson(PAYMENT_OUTCOMES_KEY, []).map(String) : []),
+      ...transientPaymentOutcomes,
+    ]);
+    if (sent.has(eventKey)) return false;
+    const items = orderItems(state);
+    track(normalizedEvent, {
+      ...currentAttribution(),
+      transaction_id: transactionId,
+      affiliation: "G-Trots",
+      currency: CURRENCY,
+      value: ecommerceValue(items),
+      order_total: finite(state.total),
+      tax: finite(state.vatTotal ?? state.vat_total),
+      shipping: finite(state.shippingCost ?? state.shipping_cost),
+      coupon: String(state.promotionCode || state.promotion_code || ""),
+      payment_type: String(state.paymentMethod || state.payment_method || "card"),
+      payment_status: normalizedEvent === "payment_cancelled" ? "cancelled" : "failed",
+      failure_reason: limited(state.failureReason || state.failure_reason, 180),
+      items
+    });
+    sent.add(eventKey);
+    transientPaymentOutcomes.add(eventKey);
+    if (analyticsStorageAllowed()) {
+      try { localStorage.setItem(PAYMENT_OUTCOMES_KEY, JSON.stringify([...sent].slice(-500))); } catch { /* fără persistență */ }
     }
     return true;
   }
@@ -534,6 +575,7 @@
       currency: CURRENCY,
       value: finite(order.return_refund_amount ?? order.refund_amount ?? order.total),
       coupon: String(order.promotion_code || ""),
+      debug_mode: order.debugMode || order.debug_mode ? true : undefined,
       items
     });
     sent.add(transactionId);
@@ -557,6 +599,7 @@
   document.addEventListener("g-trots:favorites-changed", event => handleFavoritesChanged(event.detail));
   document.addEventListener("g-trots:live-products", schedulePageCommerceTracking);
   document.addEventListener("g-trots:purchase-ready", event => trackPurchase(event.detail));
+  document.addEventListener("g-trots:payment-outcome-ready", event => trackPaymentOutcome(event.detail?.eventName, event.detail?.state));
   document.addEventListener("g-trots:promotions-viewed", event => trackPromotion("view_promotion", event.detail));
   document.addEventListener("g-trots:promotion-selected", event => trackPromotion("select_promotion", event.detail));
   document.addEventListener("g-trots:refund-ready", event => trackRefund(event.detail));
@@ -569,6 +612,7 @@
     trackLandingPage,
     trackEcommerce,
     trackPurchase,
+    trackPaymentOutcome,
     trackRefund,
     trackRefundedOrders,
     trackPromotion,
@@ -586,6 +630,10 @@
   if (window.GTrotsPendingPurchase) {
     trackPurchase(window.GTrotsPendingPurchase);
     delete window.GTrotsPendingPurchase;
+  }
+  if (window.GTrotsPendingPaymentOutcome) {
+    trackPaymentOutcome(window.GTrotsPendingPaymentOutcome.eventName, window.GTrotsPendingPaymentOutcome.state);
+    delete window.GTrotsPendingPaymentOutcome;
   }
   if (analyticsStorageAllowed()) {
     try {

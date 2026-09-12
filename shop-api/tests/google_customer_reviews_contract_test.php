@@ -25,7 +25,7 @@ $assert(str_contains($status, 'status === "paid" || status === "cod"'), 'Invita�
 $assert(str_contains($checkout, 'gtin: String(product.gtin || product.ean') && str_contains($status, 'gtin: String(item.gtin || item.ean'), 'GTIN-ul nu este păstrat complet de la catalog până la confirmarea comenzii.');
 $assert(str_contains($checkout, 'estimatedDeliveryDate') && str_contains($checkout, ': 7)'), 'Checkout-ul trebuie să calculeze o dată estimată de livrare inclusiv când eticheta curierului nu are un număr.');
 $assert(str_contains($stripe, "'estimatedDeliveryDate' => \$estimatedDeliveryDate") && str_contains($stripe, "'customerEmail' =>"), 'Confirmarea Stripe nu livrează datele necesare invitației Google.');
-$assert(str_contains($successPage, 'checkout-status.js?v=20260912-google-reviews-v1'), 'Pagina de succes nu folosește versiunea nouă a integrării.');
+$assert(str_contains($successPage, 'checkout-status.js?v=20260912-payment-outcomes-v1'), 'Pagina de succes nu folosește versiunea nouă a integrării.');
 
 $assert(!str_contains($api, "unset(\$item['product_slug'])"), 'Slugul produsului este eliminat înainte de construirea invitației la recenzie.');
 $assert(substr_count($api, 'shopProductSeoSync($db, $config') >= 3, 'Crearea, răspunsul și ștergerea unei recenzii trebuie să regenereze pagina server-side.');

@@ -503,6 +503,20 @@
         : "Coșul tău rămâne disponibil");
       const reason = String(params.get("motiv") || "").trim();
       if (reason) setTextAll("[data-failure-reason]", reason);
+      const eventName = status === "cancelled" ? "payment_cancelled" : "payment_failed";
+      const outcome = {
+        ...state,
+        orderNumber,
+        paymentMethod: method || "card",
+        paymentStatus: status || "failed",
+        failureReason: reason || (status === "cancelled" ? "checkout_cancelled" : "payment_not_confirmed")
+      };
+      window.GTrotsPendingPaymentOutcome = { eventName, state: outcome };
+      document.dispatchEvent(new CustomEvent("g-trots:payment-outcome-ready", { detail: window.GTrotsPendingPaymentOutcome }));
+      if (window.GTrotsGoogle) {
+        window.GTrotsGoogle.trackPaymentOutcome?.(eventName, outcome);
+        delete window.GTrotsPendingPaymentOutcome;
+      }
       return;
     }
 

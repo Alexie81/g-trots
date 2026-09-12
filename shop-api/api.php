@@ -3115,6 +3115,8 @@ function publicCatalogProductRow(array $row): array {
         'active_promotion' => $row['active_promotion'] ?? null,
         'legal_warranty_months' => $row['legal_warranty_months'] === null ? null : (int)$row['legal_warranty_months'],
         'commercial_warranty_months' => $row['commercial_warranty_months'] === null ? null : (int)$row['commercial_warranty_months'],
+        'review_count' => max(0, (int)($row['review_count'] ?? 0)),
+        'review_average' => $row['review_average'] === null ? null : round((float)$row['review_average'], 2),
         'discovery_enrichment_enabled' => (bool)($row['discovery_enrichment_enabled'] ?? false),
         'is_boomag_source' => mb_strtolower(trim((string)($row['source_domain'] ?? '')), 'UTF-8') === 'boomag.ro',
         'is_accessory_category' => (string)($row['catalog_section'] ?? '') === 'accessories',
@@ -3174,6 +3176,8 @@ function compactPublicCatalogPayload(array $products): array {
                 (bool)($product['discovery_enrichment_enabled'] ?? false),
                 (bool)($product['is_boomag_source'] ?? false),
                 (bool)($product['is_accessory_category'] ?? false),
+                (int)($product['review_count'] ?? 0),
+                $product['review_average'] === null ? null : (float)$product['review_average'],
             ];
         }, $products),
     ];
@@ -3254,7 +3258,19 @@ function publicCatalogRows(PDO $db, array $rows, array $config): array {
         $categoriesByProduct[(string)$category['product_id']][] = (string)$category['category_id'];
     }
 
-    $result = array_map(static function (array $row) use ($db, $config, $imagesByProduct, $brandsByProduct, $categoriesByProduct): array {
+    $reviewStatsByProduct = [];
+    $reviewStmt = $db->prepare(
+        "SELECT product_id, COUNT(*) AS review_count, AVG(rating) AS review_average
+         FROM shop_product_reviews
+         WHERE product_id IN ({$placeholders})
+         GROUP BY product_id"
+    );
+    $reviewStmt->execute($ids);
+    foreach ($reviewStmt->fetchAll() as $reviewStats) {
+        $reviewStatsByProduct[(string)$reviewStats['product_id']] = $reviewStats;
+    }
+
+    $result = array_map(static function (array $row) use ($db, $config, $imagesByProduct, $brandsByProduct, $categoriesByProduct, $reviewStatsByProduct): array {
         $productId = (string)$row['id'];
         $row['images'] = $imagesByProduct[$productId] ?? [];
         if (!$row['images']) {
@@ -3270,6 +3286,8 @@ function publicCatalogRows(PDO $db, array $rows, array $config): array {
             }
         }
         $row['brands'] = $brandsByProduct[$productId] ?? [];
+        $row['review_count'] = (int)($reviewStatsByProduct[$productId]['review_count'] ?? 0);
+        $row['review_average'] = isset($reviewStatsByProduct[$productId]) ? (float)$reviewStatsByProduct[$productId]['review_average'] : null;
         $categoryIds = $categoriesByProduct[$productId] ?? [];
         if (!$categoryIds && !empty($row['category_id'])) $categoryIds = [(string)$row['category_id']];
         $row['catalog_section'] = productCatalogSection($db, $categoryIds);
@@ -4677,7 +4695,6 @@ function orderRow(PDO $db, array $row, ?array $config = null, bool $withHistory 
                 ? (preg_match('#^https?://#i', $imagePath) ? $imagePath : rtrim((string)$config['public_base_url'], '/') . '/' . ltrim($imagePath, '/'))
                 : ($config ? legacyProductImageUrl(['slug' => (string)($item['product_slug'] ?? '')], $config) : '');
             unset($item['image_path']);
-            unset($item['product_slug']);
             return $item;
         }, $items->fetchAll());
     } else {
@@ -5636,7 +5653,9 @@ try {
         $stmt->execute([$id, $product['id'], $orderId, $customerName, $rating, $message, 'Comanda verificata G-Trots']);
         $stmt = $db->prepare('SELECT r.*, p.name AS product_name, p.slug AS product_slug FROM shop_product_reviews r INNER JOIN shop_products p ON p.id = r.product_id WHERE r.id = ?');
         $stmt->execute([$id]);
-        jsonResponse(reviewRow($stmt->fetch()), 201);
+        $createdReview = reviewRow($stmt->fetch());
+        if (function_exists('shopProductSeoSync')) shopProductSeoSync($db, $config, (string)$product['id'], null, false, true);
+        jsonResponse($createdReview, 201);
     }
 
     if ($action === 'publicShopConfig' && $method === 'GET') {
@@ -6624,14 +6643,20 @@ try {
         }
         $stmt = $db->prepare('SELECT r.*, p.name AS product_name, p.slug AS product_slug FROM shop_product_reviews r INNER JOIN shop_products p ON p.id = r.product_id WHERE r.id = ?');
         $stmt->execute([$id]);
-        jsonResponse(reviewRow($stmt->fetch()));
+        $updatedReview = reviewRow($stmt->fetch());
+        if (function_exists('shopProductSeoSync')) shopProductSeoSync($db, $config, (string)$updatedReview['product_id'], null, false, true);
+        jsonResponse($updatedReview);
     }
 
     if ($action === 'deleteProductReview' && $method === 'DELETE') {
         $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
+        $reviewProduct = $db->prepare('SELECT product_id FROM shop_product_reviews WHERE id = ? LIMIT 1');
+        $reviewProduct->execute([$id]);
+        $reviewProductId = (string)($reviewProduct->fetchColumn() ?: '');
         $stmt = $db->prepare('DELETE FROM shop_product_reviews WHERE id = ?');
         $stmt->execute([$id]);
         if ($stmt->rowCount() === 0) jsonResponse(['error' => 'Recenzia nu exista.'], 404);
+        if ($reviewProductId !== '' && function_exists('shopProductSeoSync')) shopProductSeoSync($db, $config, $reviewProductId, null, false, true);
         jsonResponse(['success' => true]);
     }
 

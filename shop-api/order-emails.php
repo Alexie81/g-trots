@@ -284,6 +284,22 @@ function gtBuildOrderEmail(array $order, array $config, string $status): array {
     $returnDecisionSummary = in_array($status, ['return_refused', 'return_confirmed', 'refunded'], true)
         ? gtEmailReturnDecisionSummary($order)
         : '';
+    $reviewRequestHtml = '';
+    if ($status === 'completed') {
+        $websiteBaseUrl = rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/');
+        $reviewLinks = [];
+        foreach (($order['items'] ?? []) as $item) {
+            if (!is_array($item)) continue;
+            $slug = trim((string)($item['product_slug'] ?? ''));
+            if ($slug === '' || isset($reviewLinks[$slug])) continue;
+            $reviewUrl = gtEmailEscape($websiteBaseUrl . '/magazin/produs/' . rawurlencode($slug) . '/#recenzii');
+            $productName = gtEmailEscape((string)($item['product_name'] ?? 'Produs G-Trots'));
+            $reviewLinks[$slug] = '<a href="' . $reviewUrl . '" style="display:block;margin-top:9px;padding:12px 14px;border:1px solid #5a4937;border-radius:15px;background:#2b2118;color:#ffb77a;text-decoration:none;font-size:12px;font-weight:900">Evaluează ' . $productName . '&nbsp;&nbsp;→</a>';
+        }
+        if ($reviewLinks) {
+            $reviewRequestHtml = '<div style="margin-top:20px;padding:20px;border:1px solid #5a4937;border-radius:24px;background:#211a15"><span style="display:block;color:#ff9a32;font-size:9px;font-weight:900;letter-spacing:.12em">RECENZIE VERIFICATĂ</span><strong style="display:block;margin-top:7px;color:#fff8f3;font-size:15px">Cum ți s-au părut produsele?</strong><p style="margin:7px 0 0;color:#aaa2ac;font-size:11px;line-height:1.55">Experiența ta îi ajută pe ceilalți clienți să aleagă mai ușor. Numărul comenzii și e-mailul sunt folosite numai pentru verificarea achiziției.</p>' . implode('', $reviewLinks) . '</div>';
+        }
+    }
     $customerActionFooter = '';
     if (in_array($status, ['new', 'confirmed', 'processing'], true)) {
         $safeCancellationUrl = gtEmailEscape(gtEmailCancellationUrl($order, $config));
@@ -312,6 +328,7 @@ function gtBuildOrderEmail(array $order, array $config, string $status): array {
 {$returnDecisionSummary}
 <div style="margin-top:20px;padding:20px;border:1px solid #403b43;border-radius:24px;background:#1a181d"><span style="display:block;margin-bottom:10px;color:#a49ca6;font-size:9px;font-weight:900;letter-spacing:.12em">DATE CLIENT ȘI FACTURARE</span><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:11px">{$customerDataRows}</table></div>
 <div class="gt-timeline" style="margin-top:20px;padding:20px;border:1px solid #403b43;border-radius:28px;background:#211f24"><span style="display:block;margin-bottom:13px;color:#a49ca6;font-size:9px;font-weight:900;letter-spacing:.12em">EVOLUȚIA COMENZII</span>{$timeline}</div>
+{$reviewRequestHtml}
 <div style="padding:22px 0 6px;text-align:center"><a class="gt-action" href="{$safeTrackingUrl}" style="display:inline-block;padding:17px 30px;border-radius:20px;background:#ff8a00;color:#ffffff;text-decoration:none;font-size:14px;font-weight:900;box-shadow:0 13px 32px rgba(255,138,0,.25)">Urmărește comanda&nbsp;&nbsp;→</a></div>
 <div style="margin-top:15px;padding:15px 17px;border:1px solid #4a4035;border-radius:20px;background:#272018;color:#a9a1a9;font-size:11px;line-height:1.55"><strong style="display:block;margin-bottom:4px;color:#fff8f3">Acces direct și securizat</strong>Butonul deschide direct comanda, fără formular. Dacă intri manual pe pagina de urmărire, folosește codul <strong style="color:#ffb77a">{$orderNumber}</strong> și adresa de e-mail din comandă.</div>
 {$customerActionFooter}

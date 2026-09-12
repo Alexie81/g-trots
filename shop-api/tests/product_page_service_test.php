@@ -69,6 +69,24 @@ productPageAssert(str_contains($html, 'data-product-warranty-badge>Garanție 24 
 productPageAssert(str_contains($html, 'data-product-warranty>') && str_contains($html, 'Garanție produs: 24 luni'), 'Generatorul trebuie să afișeze cardul de garanție în descriere când valoarea este mai mare decât zero.');
 productPageAssert(str_contains($html, 'Acest produs este disponibil pentru cumpărare online.'), 'Conținutul comercial trebuie să rămână universal și bazat pe datele reale ale produsului.');
 
+$reviewedProduct = $product;
+$reviewedProduct['review_count'] = 1;
+$reviewedProduct['review_average'] = 5;
+$reviewedProduct['reviews'] = [[
+    'customer_name' => 'Andrei',
+    'rating' => 5,
+    'message' => 'Produsul s-a potrivit și a ajuns în stare foarte bună.',
+    'verified_purchase' => true,
+    'review_source' => 'Comanda verificata G-Trots',
+    'admin_reply' => 'Mulțumim pentru feedback!',
+    'created_at' => '2026-09-12 10:00:00',
+]];
+$reviewedHtml = shopProductSeoRender($reviewedProduct, ['website_base_url' => 'https://g-trots.ro']);
+productPageAssert(str_contains($reviewedHtml, '"aggregateRating":{"@type":"AggregateRating","ratingValue":"5.00","reviewCount":1}'), 'Schema Product trebuie să publice media reală numai când există recenzii.');
+productPageAssert(str_contains($reviewedHtml, '"review":[{"@type":"Review"') && str_contains($reviewedHtml, '"datePublished":"2026-09-12"'), 'Recenzia reală trebuie publicată individual în schema Product.');
+productPageAssert(str_contains($reviewedHtml, '✓ Achiziție verificată') && str_contains($reviewedHtml, 'Produsul s-a potrivit și a ajuns în stare foarte bună.'), 'Crawlerul trebuie să primească recenzia reală și verificarea direct în HTML.');
+productPageAssert(str_contains($reviewedHtml, 'data-reviews-empty hidden') && str_contains($reviewedHtml, 'data-review-count>(1)</span>'), 'Rezumatul server-side al recenziilor trebuie să coincidă cu datele produsului.');
+
 $withoutWarranty = $product;
 $withoutWarranty['legal_warranty_months'] = 0;
 $withoutWarranty['commercial_warranty_months'] = null;
@@ -113,6 +131,7 @@ $withoutManufacturerHtml = shopProductSeoRender($withoutManufacturer, ['website_
 productPageAssert(!str_contains($withoutManufacturerHtml, '"brand":{"@type":"Brand","name":"KuKirin G2"}'), 'O compatibilitate nu trebuie declarată greșit drept producător sau brand al produsului.');
 
 $serviceSource = (string)file_get_contents(__DIR__ . '/../product-page-service.php');
+productPageAssert(str_contains($serviceSource, "FROM shop_product_reviews WHERE product_id = ? ORDER BY created_at DESC LIMIT 300"), 'Generatorul trebuie să citească recenziile reale înainte de a scrie HTML-ul produsului.');
 productPageAssert(str_contains($serviceSource, 'function shopProductSeoRebuildAiCatalog') && str_contains($serviceSource, "'compatibility' => \$compatibility"), 'Catalogul pentru agenți AI trebuie regenerat cu compatibilitățile produselor.');
 productPageAssert(str_contains($serviceSource, "'meta_title' => \$effectiveMetaTitle") && str_contains($serviceSource, "'description_excerpt' => \$descriptionExcerpt") && str_contains($serviceSource, "'specifications' => \$catalogSpecifications"), 'Catalogul AI trebuie să includă titlul SEO, descrierile și specificațiile utile recomandării.');
 productPageAssert(str_contains($serviceSource, "'warranty' => \$catalogWarranty") && str_contains($serviceSource, "'schema_version' => 4"), 'Catalogul AI trebuie să publice garanția și versiunea conversațională a schemei.');

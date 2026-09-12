@@ -595,11 +595,13 @@ function stripePublicOrderReceipt(PDO $db, array $config, array $order): array {
     $receiptItems = [];
     foreach ($items->fetchAll() as $item) {
         $imageUrl = '';
+        $gtin = '';
         $url = rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/') . '/magazin.html';
         if (!empty($item['product_id'])) {
             try {
                 $product = findProduct($db, (string)$item['product_id'], $config, false);
                 $imageUrl = (string)($product['images'][0]['url'] ?? '');
+                $gtin = preg_replace('/\D+/', '', (string)($product['gtin'] ?? $product['ean'] ?? '')) ?: '';
                 $url = rtrim((string)($config['website_base_url'] ?? 'https://g-trots.ro'), '/') . '/magazin/produs/' . rawurlencode((string)$product['slug']) . '/';
             } catch (Throwable $ignored) {
                 // Comenzile istorice raman afisabile chiar daca produsul a fost sters.
@@ -607,6 +609,7 @@ function stripePublicOrderReceipt(PDO $db, array $config, array $order): array {
         }
         $receiptItems[] = [
             'id' => (string)($item['product_id'] ?? ''),
+            'gtin' => $gtin,
             'name' => (string)$item['product_name'],
             'quantity' => (int)$item['quantity'],
             'unitPrice' => (float)$item['unit_price'],
@@ -618,8 +621,23 @@ function stripePublicOrderReceipt(PDO $db, array $config, array $order): array {
             'url' => $url,
         ];
     }
+    $estimatedDeliveryDate = '';
+    if (!empty($order['shipping_method_id'])) {
+        $shipping = $db->prepare('SELECT eta_label, description FROM shop_shipping_methods WHERE id = ? LIMIT 1');
+        $shipping->execute([(string)$order['shipping_method_id']]);
+        $shippingRow = $shipping->fetch() ?: [];
+        $eta = trim((string)($shippingRow['eta_label'] ?? $shippingRow['description'] ?? ''));
+        preg_match_all('/\d+/', $eta, $etaMatches);
+        $etaDays = array_values(array_filter(array_map('intval', $etaMatches[0] ?? []), static fn(int $days): bool => $days > 0));
+        $createdAt = new DateTimeImmutable((string)($order['created_at'] ?? 'now'));
+        $estimatedDeliveryDate = $createdAt->modify('+' . ($etaDays ? max($etaDays) : 7) . ' days')->format('Y-m-d');
+    }
+    if ($estimatedDeliveryDate === '') $estimatedDeliveryDate = (new DateTimeImmutable((string)($order['created_at'] ?? 'now')))->modify('+7 days')->format('Y-m-d');
     return [
         'orderNumber' => (string)$order['order_number'],
+        'customerEmail' => (string)($order['customer_email'] ?? ''),
+        'deliveryCountry' => 'RO',
+        'estimatedDeliveryDate' => $estimatedDeliveryDate,
         'paymentMethod' => (string)$order['payment_method'],
         'paymentStatus' => (string)$order['payment_status'],
         'paymentLabel' => $order['payment_method'] === 'card' ? 'Card online · Stripe' : 'Ramburs la curier',

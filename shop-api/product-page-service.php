@@ -447,13 +447,38 @@ function shopProductSeoRender(array $product, array $config): string {
     foreach ($productSchema as $key => $value) if ($value === null || $value === '') unset($productSchema[$key]);
     $gtin = shopProductSeoValidGtin((string)($product['gtin'] ?? $product['ean'] ?? ''));
     if ($gtin !== null) $productSchema['gtin' . strlen($gtin)] = $gtin;
-    if ((int)($product['review_count'] ?? 0) > 0 && (float)($product['review_average'] ?? 0) > 0) {
+    $reviewCount = max(0, (int)($product['review_count'] ?? 0));
+    $reviewAverage = max(0.0, min(5.0, (float)($product['review_average'] ?? 0)));
+    $publicReviews = array_slice(array_values(array_filter((array)($product['reviews'] ?? []), static fn($review): bool => is_array($review))), 0, 20);
+    if ($reviewCount > 0 && $reviewAverage > 0) {
         $productSchema['aggregateRating'] = [
             '@type' => 'AggregateRating',
-            'ratingValue' => number_format((float)$product['review_average'], 2, '.', ''),
-            'reviewCount' => (int)$product['review_count'],
+            'ratingValue' => number_format($reviewAverage, 2, '.', ''),
+            'reviewCount' => $reviewCount,
         ];
     }
+    $structuredReviews = [];
+    foreach ($publicReviews as $review) {
+        $reviewer = shopProductSeoText($review['customer_name'] ?? 'Client G-Trots');
+        $reviewBody = shopProductSeoText($review['message'] ?? '');
+        $rating = (int)($review['rating'] ?? 0);
+        if ($reviewBody === '' || $rating < 1 || $rating > 5) continue;
+        $structuredReview = [
+            '@type' => 'Review',
+            'author' => ['@type' => 'Person', 'name' => $reviewer !== '' ? $reviewer : 'Client G-Trots'],
+            'reviewBody' => $reviewBody,
+            'reviewRating' => [
+                '@type' => 'Rating',
+                'ratingValue' => $rating,
+                'bestRating' => 5,
+                'worstRating' => 1,
+            ],
+        ];
+        $createdAt = trim((string)($review['created_at'] ?? ''));
+        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $createdAt, $dateMatch)) $structuredReview['datePublished'] = $dateMatch[0];
+        $structuredReviews[] = $structuredReview;
+    }
+    if ($structuredReviews) $productSchema['review'] = $structuredReviews;
     $properties = [];
     if ($compatibilityNames) $properties[] = ['@type' => 'PropertyValue', 'name' => 'Compatibilitate', 'value' => implode(', ', array_slice($compatibilityNames, 0, 8))];
     foreach (array_slice((array)($product['specifications'] ?? []), 0, 40) as $specification) {
@@ -576,6 +601,44 @@ function shopProductSeoRender(array $product, array $config): string {
     $html = (string)preg_replace('#<span\b[^>]*\bdata-product-warranty-badge\b[^>]*>.*?</span>#is', $warrantyBadge, $html, 1);
     $warrantyCardReplacement = $warrantyCard !== '' ? '              ' . $warrantyCard . PHP_EOL : '';
     $html = (string)preg_replace('#[ \t]*<aside\b[^>]*\bdata-product-warranty\b[^>]*>.*?</aside>\R?#is', $warrantyCardReplacement, $html, 1);
+
+    $staticReviewList = '';
+    foreach ($publicReviews as $review) {
+        $reviewer = shopProductSeoText($review['customer_name'] ?? 'Client G-Trots');
+        $message = shopProductSeoText($review['message'] ?? '');
+        $rating = (int)($review['rating'] ?? 0);
+        if ($message === '' || $rating < 1 || $rating > 5) continue;
+        $verified = !empty($review['verified_purchase'])
+            ? '<em class="review-verified-badge">✓ Achiziție verificată</em>'
+            : '';
+        if ($verified === '' && trim((string)($review['review_source'] ?? 'g-trots.ro')) !== 'g-trots.ro') {
+            $verified = '<em class="review-source-badge">Sursa: ' . htmlspecialchars((string)$review['review_source'], ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</em>';
+        }
+        $createdAt = trim((string)($review['created_at'] ?? ''));
+        $dateText = preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $createdAt, $dateMatch)
+            ? $dateMatch[3] . '.' . $dateMatch[2] . '.' . $dateMatch[1]
+            : 'Recenzie client';
+        $reply = shopProductSeoText($review['admin_reply'] ?? '');
+        $replyHtml = $reply !== ''
+            ? '<div class="review-admin-reply"><strong>Răspuns G-Trots</strong><p>' . htmlspecialchars($reply, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '</p></div>'
+            : '';
+        $staticReviewList .= '<article class="review-item"><header><div><strong>'
+            . htmlspecialchars($reviewer !== '' ? $reviewer : 'Client G-Trots', ENT_QUOTES | ENT_HTML5, 'UTF-8')
+            . '</strong>' . $verified . '</div><span>' . str_repeat('★', $rating) . str_repeat('☆', 5 - $rating)
+            . '</span></header><p>' . htmlspecialchars($message, ENT_QUOTES | ENT_HTML5, 'UTF-8')
+            . '</p><small>' . $dateText . '</small>' . $replyHtml . '</article>';
+    }
+    if ($staticReviewList !== '') {
+        $html = (string)preg_replace('#<div class="review-list" data-review-list>.*?</div>#is', '<div class="review-list" data-review-list>' . $staticReviewList . '</div>', $html, 1);
+        $html = (string)preg_replace('#<div class="reviews-empty" data-reviews-empty>#i', '<div class="reviews-empty" data-reviews-empty hidden>', $html, 1);
+        $averageText = htmlspecialchars(number_format($reviewAverage, 1, ',', ''), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $summaryText = $reviewCount === 1 ? '1 recenzie' : $reviewCount . ' recenzii';
+        $html = (string)preg_replace('#(<strong\b[^>]*\bdata-review-average\b[^>]*>).*?(</strong>)#is', '$1' . $averageText . '$2', $html, 1);
+        $html = (string)preg_replace('#(<small\b[^>]*\bdata-review-summary-text\b[^>]*>).*?(</small>)#is', '$1' . $summaryText . '$2', $html, 1);
+        $html = (string)preg_replace('#(<span\b[^>]*\bdata-review-count\b[^>]*>).*?(</span>)#is', '$1(' . $reviewCount . ')$2', $html, 1);
+        $html = (string)preg_replace('#(<strong\b[^>]*\bdata-review-link-text\b[^>]*>).*?(</strong>)#is', '$1' . $summaryText . '$2', $html, 1);
+        $html = (string)preg_replace('#(<a\b[^>]*\bdata-review-meta\b)(?:\s+hidden)?([^>]*>)#i', '$1$2', $html, 1);
+    }
 
     $staticProperties = [];
     $appendStaticProperty = static function (string $label, string $value) use (&$staticProperties): void {
@@ -1128,6 +1191,9 @@ function shopProductSeoSync(PDO $db, array $config, string $productId, ?string $
             $priced = applyCatalogPromotionPrices($db, [$product], null, '');
             if (isset($priced[0]) && is_array($priced[0])) $product = $priced[0];
         }
+        $reviewStmt = $db->prepare('SELECT id, customer_name, rating, message, verified_purchase, review_source, admin_reply, created_at FROM shop_product_reviews WHERE product_id = ? ORDER BY created_at DESC LIMIT 300');
+        $reviewStmt->execute([$productId]);
+        $product['reviews'] = $reviewStmt->fetchAll();
         $product['is_purchasable'] = !empty($product['is_purchasable']) && (bool)$state['is_active'] && (bool)$state['source_is_active'];
         $directory = shopProductSeoEnsureDirectory($slug);
         $dynamicPage = $directory . DIRECTORY_SEPARATOR . 'index.php';

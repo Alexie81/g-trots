@@ -276,7 +276,10 @@ function decodeProduct(row) {
     // inventează contexte conversaționale și nu presupune sursa produsului.
     discovery_enrichment_enabled: row[32] === undefined ? false : Boolean(row[32]),
     is_boomag_source: row[33] === undefined ? false : Boolean(row[33]),
-    is_accessory_category: row[34] === undefined ? false : Boolean(row[34])
+    is_accessory_category: row[34] === undefined ? false : Boolean(row[34]),
+    review_count: Math.max(0, Number(row[35] || 0)),
+    review_average: row[36] == null ? null : Number(row[36]),
+    reviews: []
   };
 }
 
@@ -318,6 +321,20 @@ async function loadPublicProducts() {
     }
   }
   return { products: [...products.values()].sort((a, b) => a.slug.localeCompare(b.slug, "ro")), reportedTotal: total };
+}
+
+async function loadPublicReviews(products) {
+  const queue = products.filter(product => Number(product.review_count || 0) > 0);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(8, queue.length) }, async () => {
+    while (cursor < queue.length) {
+      const product = queue[cursor++];
+      const reviews = await fetchJson(`${API_URL}?action=publicProductReviews&id=${encodeURIComponent(product.id)}`);
+      if (!Array.isArray(reviews)) throw new Error(`Recenziile produsului ${product.sku || product.id} au un format necunoscut.`);
+      product.reviews = reviews.slice(0, 20);
+    }
+  });
+  await Promise.all(workers);
 }
 
 function replaceMeta(html, attribute, key, value) {
@@ -429,6 +446,30 @@ function renderProductPage(template, product) {
   };
   const gtin = validGtin(product.ean);
   if (gtin) productSchema[`gtin${gtin.length}`] = gtin;
+  const reviewCount = Math.max(0, Number(product.review_count || 0));
+  const reviewAverage = Math.max(0, Math.min(5, Number(product.review_average || 0)));
+  const publicReviews = Array.isArray(product.reviews) ? product.reviews.slice(0, 20) : [];
+  if (reviewCount > 0 && reviewAverage > 0) {
+    productSchema.aggregateRating = {
+      "@type": "AggregateRating",
+      ratingValue: reviewAverage.toFixed(2),
+      reviewCount
+    };
+  }
+  const structuredReviews = publicReviews.flatMap(review => {
+    const reviewBody = cleanText(review?.message);
+    const rating = Number(review?.rating || 0);
+    if (!reviewBody || !Number.isInteger(rating) || rating < 1 || rating > 5) return [];
+    const dateMatch = String(review?.created_at || "").match(/^\d{4}-\d{2}-\d{2}/);
+    return [{
+      "@type": "Review",
+      author: { "@type": "Person", name: cleanText(review?.customer_name) || "Client G-Trots" },
+      reviewBody,
+      reviewRating: { "@type": "Rating", ratingValue: rating, bestRating: 5, worstRating: 1 },
+      ...(dateMatch ? { datePublished: dateMatch[0] } : {})
+    }];
+  });
+  if (structuredReviews.length) productSchema.review = structuredReviews;
   const legalWarranty = Math.max(0, Number(product.legal_warranty_months || 0));
   const commercialWarranty = Math.max(0, Number(product.commercial_warranty_months || 0));
   const additionalProperties = [];
@@ -497,6 +538,32 @@ function renderProductPage(template, product) {
   }
   html = html.replace(/<span\b[^>]*\bdata-product-warranty-badge\b[^>]*>.*?<\/span>/is, warrantyBadge);
   html = html.replace(/[ \t]*<aside\b[^>]*\bdata-product-warranty\b[^>]*>.*?<\/aside>\r?\n?/is, warrantyCard ? `              ${warrantyCard}\n` : "");
+
+  const staticReviews = publicReviews.flatMap(review => {
+    const reviewer = cleanText(review?.customer_name) || "Client G-Trots";
+    const message = cleanText(review?.message);
+    const rating = Number(review?.rating || 0);
+    if (!message || !Number.isInteger(rating) || rating < 1 || rating > 5) return [];
+    const verified = review?.verified_purchase
+      ? '<em class="review-verified-badge">✓ Achiziție verificată</em>'
+      : (review?.review_source && review.review_source !== "g-trots.ro"
+        ? `<em class="review-source-badge">Sursa: ${escapeHtml(review.review_source)}</em>`
+        : "");
+    const dateMatch = String(review?.created_at || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+    const dateText = dateMatch ? `${dateMatch[3]}.${dateMatch[2]}.${dateMatch[1]}` : "Recenzie client";
+    const reply = cleanText(review?.admin_reply);
+    const replyHtml = reply ? `<div class="review-admin-reply"><strong>Răspuns G-Trots</strong><p>${escapeHtml(reply)}</p></div>` : "";
+    return [`<article class="review-item"><header><div><strong>${escapeHtml(reviewer)}</strong>${verified}</div><span>${"★".repeat(rating)}${"☆".repeat(5 - rating)}</span></header><p>${escapeHtml(message)}</p><small>${dateText}</small>${replyHtml}</article>`];
+  }).join("");
+  if (staticReviews) {
+    html = html.replace(/<div class="review-list" data-review-list>.*?<\/div>/is, `<div class="review-list" data-review-list>${staticReviews}</div>`);
+    html = html.replace('<div class="reviews-empty" data-reviews-empty>', '<div class="reviews-empty" data-reviews-empty hidden>');
+    html = html.replace(/(<strong\b[^>]*\bdata-review-average\b[^>]*>).*?(<\/strong>)/is, `$1${escapeHtml(reviewAverage.toFixed(1).replace(".", ","))}$2`);
+    html = html.replace(/(<small\b[^>]*\bdata-review-summary-text\b[^>]*>).*?(<\/small>)/is, `$1${reviewCount === 1 ? "1 recenzie" : `${reviewCount} recenzii`}$2`);
+    html = html.replace(/(<span\b[^>]*\bdata-review-count\b[^>]*>).*?(<\/span>)/is, `$1(${reviewCount})$2`);
+    html = html.replace(/(<strong\b[^>]*\bdata-review-link-text\b[^>]*>).*?(<\/strong>)/is, `$1${reviewCount === 1 ? "1 recenzie" : `${reviewCount} recenzii`}$2`);
+    html = html.replace(/(<a\b[^>]*\bdata-review-meta\b)(?:\s+hidden)?([^>]*>)/i, "$1$2");
+  }
 
   const staticSpecs = [
     category ? ["Categorie", category] : null,
@@ -897,6 +964,7 @@ async function main() {
   const previousSlugs = await readManifest();
   const { products, reportedTotal } = await loadPublicProducts();
   if (!products.length) throw new Error("Catalogul public nu conține produse; generarea a fost oprită fără ștergeri.");
+  await loadPublicReviews(products);
 
   for (const product of products) {
     const outputPath = path.join(PRODUCT_ROOT, product.slug, "index.html");

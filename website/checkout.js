@@ -240,6 +240,7 @@
       slug,
       apiId: String(product.id || ""),
       sku: String(product.sku || ""),
+      gtin: String(product.gtin || product.ean || "").replace(/\D/g, ""),
       name: String(product.name || "Produs G-Trots"),
       category: String(product.category_name || "Produs G-Trots"),
       brand: String(product.manufacturer_name || "G-Trots"),
@@ -252,6 +253,18 @@
       imageUrl: image?.sprite_index ? "" : safeUrl(image?.url),
       url: `/magazin/produs/${encodeURIComponent(slug)}/`
     };
+  }
+
+  function estimatedDeliveryDate(etaLabel, createdAt = new Date()) {
+    const days = String(etaLabel || "").match(/\d+/g)?.map(Number).filter(Number.isFinite) || [];
+    const date = new Date(createdAt);
+    if (Number.isNaN(date.getTime())) return "";
+    date.setHours(12, 0, 0, 0);
+    date.setDate(date.getDate() + (days.length ? Math.max(1, ...days) : 7));
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
 
   function checkoutProducts() {
@@ -686,6 +699,7 @@
               id: String(item.id || ""),
               apiId: String(product.apiId || apiItem.product_id || ""),
               sku: String(apiItem.product_sku || product.sku || ""),
+              gtin: String(product.gtin || "").replace(/\D/g, ""),
               name: String(apiItem.product_name || product.name || "Produs G-Trots"),
               brand: String(product.brand || "G-Trots"),
               category: String(product.category || "Produse"),
@@ -722,6 +736,8 @@
               customerDisplayName: String(order.customer_display_name || (fields.customer_type === "company" ? fields.company_name : fields.customer_name) || ""),
               customerPhone: String(order.customer_phone || fields.customer_phone || ""),
               customerEmail: String(order.customer_email || fields.customer_email || ""),
+              deliveryCountry: "RO",
+              estimatedDeliveryDate: estimatedDeliveryDate(shipping?.eta_label || shipping?.description || ""),
               customerType: String(order.customer_type || fields.customer_type || "individual"),
               companyName: String(order.company_name || fields.company_name || ""),
               companyCui: String(order.company_cui || fields.company_cui || ""),

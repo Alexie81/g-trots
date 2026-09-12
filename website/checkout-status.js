@@ -2,6 +2,7 @@
   const API_URL = "https://g-trots.ro/shop-api/api-v2.php";
   const ORDER_STATE_KEY = "g-trots-last-checkout-v1";
   const SHOP_DEVICE_KEY = "g-trots-shop-device-v1";
+  const GOOGLE_CUSTOMER_REVIEWS_MERCHANT_ID = 5849183182;
 
   function shopDeviceToken() {
     try {
@@ -186,6 +187,7 @@
         id: String(item.id || ""),
         apiId: String(product.apiId || product.raw?.id || ""),
         sku: String(product.sku || product.raw?.sku || ""),
+        gtin: String(product.gtin || product.raw?.gtin || product.raw?.ean || "").replace(/\D/g, ""),
         name: String(product.name || "Produs G-Trots"),
         brand: String(product.brand || product.raw?.manufacturer_name || "G-Trots"),
         category: String(product.category || product.raw?.category_name || "Produse"),
@@ -210,6 +212,7 @@
         id: String(item.id || ""),
         apiId: String(item.apiId || item.product_id || ""),
         sku: String(item.sku || item.product_sku || ""),
+        gtin: String(item.gtin || item.ean || "").replace(/\D/g, ""),
         name: String(item.name || item.product_name || "Produs G-Trots"),
         brand: String(item.brand || item.manufacturer_name || "G-Trots"),
         category: String(item.category || item.category_name || "Produse"),
@@ -239,6 +242,7 @@
           apiId: String(product.id || ""),
           slug: String(product.slug || ""),
           sku: String(product.sku || ""),
+          gtin: String(product.gtin || product.ean || "").replace(/\D/g, ""),
           brand: String(product.manufacturer_name || "G-Trots"),
           category: String(product.category_name || "Produse"),
           imageUrl: safeUrl(image?.url),
@@ -254,6 +258,7 @@
           ...item,
           apiId: item.apiId || product.apiId || "",
           sku: item.sku || product.sku || "",
+          gtin: item.gtin || product.gtin || "",
           brand: item.brand || product.brand || "G-Trots",
           category: item.category || product.category || "Produse",
           imageUrl: item.imageUrl || product.imageUrl || "",
@@ -265,6 +270,44 @@
     } catch {
       return state;
     }
+  }
+
+  function setupGoogleCustomerReviews(state, orderNumber) {
+    const email = String(state.customerEmail || state.customer_email || "").trim();
+    const estimatedDeliveryDate = String(state.estimatedDeliveryDate || state.estimated_delivery_date || "").trim();
+    if (!orderNumber || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !/^\d{4}-\d{2}-\d{2}$/.test(estimatedDeliveryDate)) return;
+    if (document.documentElement.dataset.googleCustomerReviews === orderNumber) return;
+    document.documentElement.dataset.googleCustomerReviews = orderNumber;
+
+    const gtins = [...new Set(normalizedItems(state)
+      .map(item => String(item.gtin || "").replace(/\D/g, ""))
+      .filter(gtin => [8, 12, 13, 14].includes(gtin.length)))];
+    const payload = {
+      merchant_id: GOOGLE_CUSTOMER_REVIEWS_MERCHANT_ID,
+      order_id: orderNumber,
+      email,
+      delivery_country: String(state.deliveryCountry || state.delivery_country || "RO").toUpperCase(),
+      estimated_delivery_date: estimatedDeliveryDate,
+      opt_in_style: "CENTER_DIALOG",
+      ...(gtins.length ? { products: gtins.map(gtin => ({ gtin })) } : {})
+    };
+
+    const render = () => {
+      if (!window.gapi?.load) return;
+      window.gapi.load("surveyoptin", () => window.gapi?.surveyoptin?.render?.(payload));
+    };
+    if (window.gapi?.load) {
+      render();
+      return;
+    }
+    window.renderGTrotsGoogleCustomerReviews = render;
+    if (document.querySelector('script[data-google-customer-reviews]')) return;
+    const script = document.createElement("script");
+    script.src = "https://apis.google.com/js/platform.js?onload=renderGTrotsGoogleCustomerReviews";
+    script.async = true;
+    script.defer = true;
+    script.dataset.googleCustomerReviews = "";
+    document.body.append(script);
   }
 
   function renderReceipt(state, method) {
@@ -487,6 +530,7 @@
     saveState(state);
     renderReceipt(state, method);
     if (status === "paid" || status === "cod") {
+      setupGoogleCustomerReviews(state, orderNumber);
       window.GTrotsPendingPurchase = state;
       document.dispatchEvent(new CustomEvent("g-trots:purchase-ready", { detail: state }));
       if (window.GTrotsGoogle) {

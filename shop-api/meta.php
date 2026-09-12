@@ -152,7 +152,7 @@ function metaConversionEvent(array $input): array {
     $custom = [
         'ViewCategory', 'SelectItem', 'RemoveFromWishlist', 'RemoveFromCart',
         'ViewCart', 'AddShippingInfo', 'FormStart', 'FormSubmit', 'Refund',
-        'Login', 'ViewPromotion', 'SelectPromotion',
+        'Login', 'ViewPromotion', 'SelectPromotion', 'PaymentFailed', 'PaymentCancelled',
     ];
     $eventName = trim((string)($input['event_name'] ?? ''));
     if (!in_array($eventName, [...$standard, ...$custom], true)) throw new InvalidArgumentException('Evenimentul Meta nu este permis.');

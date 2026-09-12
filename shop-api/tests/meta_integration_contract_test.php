@@ -27,6 +27,36 @@ $assert(str_contains($meta, 'marketingAllowed()') && str_contains($meta, 'consen
 foreach (['ViewContent', 'Search', 'AddToWishlist', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'Purchase', 'PaymentFailed', 'PaymentCancelled', 'Contact'] as $event) {
     $assert(str_contains($meta, '"' . $event . '"'), "Evenimentul Meta {$event} lipsește.");
 }
+$purchase = metaConversionEvent([
+    'event_name' => 'Purchase',
+    'event_id' => 'gt_purchase_contract_123',
+    'event_time' => time(),
+    'event_source_url' => 'https://g-trots.ro/comanda-confirmata',
+    'user_data' => ['email' => 'client@example.com', 'phone' => '0762093915'],
+    'custom_data' => [
+        'value' => 129,
+        'currency' => 'RON',
+        'order_id' => 'GT-TEST-123',
+        'content_ids' => ['SE-CMM087'],
+        'contents' => [['id' => 'SE-CMM087', 'quantity' => 1, 'item_price' => 129]],
+        'num_items' => 1,
+    ],
+]);
+$assert($purchase['event_name'] === 'Purchase', 'Purchase nu este acceptat ca eveniment standard Meta.');
+$assert(($purchase['custom_data']['value'] ?? null) === 129.0 && ($purchase['custom_data']['currency'] ?? '') === 'RON', 'Purchase pierde valoarea sau moneda.');
+$assert(($purchase['custom_data']['order_id'] ?? '') === 'GT-TEST-123', 'Purchase pierde ID-ul comenzii.');
+$assert(($purchase['custom_data']['content_ids'] ?? []) === ['SE-CMM087'], 'Purchase pierde ID-urile produselor.');
+$assert(($purchase['custom_data']['contents'][0]['item_price'] ?? null) === 129.0, 'Purchase pierde prețul produsului.');
+foreach (['PaymentFailed', 'PaymentCancelled'] as $event) {
+    $normalized = metaConversionEvent([
+        'event_name' => $event,
+        'event_id' => 'gt_payment_contract_' . strtolower($event),
+        'event_time' => time(),
+        'event_source_url' => 'https://g-trots.ro/checkout',
+        'custom_data' => ['currency' => 'RON', 'order_id' => 'GT-TEST-123'],
+    ]);
+    $assert($normalized['event_name'] === $event, "Evenimentul Meta {$event} este respins de Conversions API.");
+}
 $assert(str_contains($meta, 'phone_click: ["Contact"') && str_contains($meta, 'whatsapp_click: ["Contact"'), 'Clickurile de telefon și WhatsApp nu sunt mapate către Meta Contact.');
 $assert(str_contains($api, "if (\$action === 'metaCatalogFeed'"), 'Feedul public Meta lipsește.');
 $assert(str_contains($api, "if (\$action === 'metaConversion'"), 'Endpointul Conversions API lipsește.');

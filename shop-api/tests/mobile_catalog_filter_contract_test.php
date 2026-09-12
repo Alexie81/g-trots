@@ -8,6 +8,7 @@ function mobileCatalogFilterAssert(bool $condition, string $message): void {
 $root = dirname(__DIR__, 2);
 $html = file_get_contents($root . '/website/magazin.html');
 $script = file_get_contents($root . '/website/magazin.js');
+$liveShop = file_get_contents($root . '/website/shop-live.js');
 $styles = file_get_contents($root . '/website/magazin.css');
 
 mobileCatalogFilterAssert(is_string($html) && str_contains($html, 'data-mobile-filter-count hidden'), 'Butonul mobil de filtre trebuie să includă badge-ul filtrelor active.');
@@ -15,5 +16,16 @@ mobileCatalogFilterAssert(is_string($script) && str_contains($script, 'finishMob
 mobileCatalogFilterAssert(str_contains($script, 'filtersPanel?.classList.contains("is-open")'), 'Închiderea automată trebuie limitată la panoul mobil deschis.');
 mobileCatalogFilterAssert(str_contains($script, 'mobileFilterCount.hidden = activeCount === 0'), 'Badge-ul trebuie ascuns când nu există filtre active.');
 mobileCatalogFilterAssert(is_string($styles) && str_contains($styles, '.filters-panel .category-filter.active > span::after'), 'Categoria selectată trebuie evidențiată vizual pe mobil și tabletă.');
+mobileCatalogFilterAssert(
+    is_string($liveShop)
+    && str_contains($liveShop, 'publicProductsPage')
+    && str_contains($liveShop, 'renderLiveProducts?.(uniqueProducts)'),
+    'Produsele noi din API trebuie încărcate automat în catalogul și căutarea magazinului.'
+);
+mobileCatalogFilterAssert(
+    str_contains($script, 'article.dataset.search = `${product.name || ""} ${categoryName} ${manufacturerName} ${shortDescription} ${brandNames.join(" ")} ${product.sku || ""} ${product.ean || ""} ${specificationText}`')
+    && str_contains($script, 'if (searchDeck?.classList.contains("is-search-open")) renderSmartSearch();'),
+    'Căutarea inteligentă trebuie să reindexeze produsele noi după nume, taxonomie, descriere, compatibilitate, coduri și specificații.'
+);
 
 echo "mobile_catalog_filter_contract_test: OK\n";

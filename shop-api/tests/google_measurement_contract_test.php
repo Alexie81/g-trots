@@ -6,6 +6,8 @@ $measurement = file_get_contents($root . '/website/google-measurement.js');
 $footer = file_get_contents($root . '/website/legal-footer.js');
 $consent = file_get_contents($root . '/website/cookie-consent.js');
 $status = file_get_contents($root . '/website/checkout-status.js');
+$productTemplate = file_get_contents($root . '/website/produs.html');
+$productGenerator = file_get_contents($root . '/scripts/generate-product-seo-pages.mjs');
 $promotions = file_get_contents($root . '/website/promotions.js');
 $checkout = file_get_contents($root . '/website/checkout.js');
 $account = file_get_contents($root . '/website/cont.js');
@@ -19,6 +21,8 @@ $assert = static function (bool $condition, string $message): void {
 };
 
 $assert(str_contains($footer, 'google-measurement.js'), 'componenta globală nu este încărcată de footer');
+$assert(str_contains($productTemplate, 'legal-footer.js?v=20260912-payment-outcomes-v1'), 'șablonul produselor viitoare nu încarcă versiunea actuală de măsurare');
+$assert(str_contains($productGenerator, 'gt-product-bootstrap') && str_contains($productGenerator, 'legal-footer.js?v=20260912-payment-outcomes-v1'), 'generatorul produselor nu păstrează datele produsului și măsurarea globală actuală');
 $assert(str_contains($measurement, 'G-6EWM36QSDY'), 'ID-ul GA4 lipsește');
 $assert(str_contains($measurement, 'GTM-K2N32ZFD'), 'ID-ul GTM lipsește');
 $assert(str_contains($measurement, 'send_to: MEASUREMENT_ID'), 'evenimentele nu au destinația GA4 explicită');

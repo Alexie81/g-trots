@@ -63,7 +63,7 @@ productPageAssert(!str_contains($html, 'GT-ANV-G10-AT') && !str_contains($html, 
 productPageAssert(!str_contains($html, 'product-page-loading') && !str_contains($html, 'is-live-product-loading'), 'HTML-ul generat trebuie să livreze direct produsul real, fără mesaje intermediare de încărcare sau eroare.');
 productPageAssert(!str_contains($html, '"sku": "GT-ANV-G10-AT"'), 'Schemele JSON-LD vechi ale șablonului nu trebuie păstrate.');
 productPageAssert(str_contains($html, 'class="site-header"') && str_contains($html, 'class="shell shop-footer"'), 'Orice pagină generată trebuie să păstreze navbarul și footerul global al magazinului.');
-productPageAssert(str_contains($html, 'favorites.js?v=20260910-navbar-v1') && str_contains($html, 'legal-footer.js?v=20260910-conversion-v1'), 'Orice pagină generată trebuie să încarce acțiunile globale, măsurarea și navbarul/footerul actual.');
+productPageAssert(str_contains($html, 'favorites.js?v=20260910-navbar-v1') && str_contains($html, 'legal-footer.js?v=20260912-payment-outcomes-v1'), 'Orice pagină generată trebuie să încarce acțiunile globale, măsurarea și navbarul/footerul actual.');
 productPageAssert(!str_contains($html, 'data-product-safety') && !str_contains($html, 'Siguranță și garanție'), 'Secțiunea Siguranță și garanție nu trebuie să apară pe pagina produsului.');
 productPageAssert(str_contains($html, 'data-product-warranty-badge>Garanție 24 luni</span>'), 'Generatorul trebuie să afișeze badge-ul de garanție când valoarea este mai mare decât zero.');
 productPageAssert(str_contains($html, 'data-product-warranty>') && str_contains($html, 'Garanție produs: 24 luni'), 'Generatorul trebuie să afișeze cardul de garanție în descriere când valoarea este mai mare decât zero.');

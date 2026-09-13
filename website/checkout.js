@@ -468,7 +468,7 @@
     const label = submit?.querySelector("strong");
     if (!label || submit.disabled) return;
     const paymentMethod = form?.querySelector('input[name="payment_method"]:checked')?.value || "";
-    label.textContent = paymentMethod === "card" ? "Comandă și plătește" : "Plasează comanda cu obligație de plată";
+    label.textContent = paymentMethod === "card" ? "Comandă și plătește" : "Comandă cu plata la livrare";
   }
 
   function updateTotals(cart, config) {

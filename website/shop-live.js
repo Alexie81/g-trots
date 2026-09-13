@@ -1007,7 +1007,7 @@
         <fieldset><legend>Plată</legend>${paymentOptions}</fieldset>
         <label class="live-checkout-consent"><input type="checkbox" name="accept_terms" required><span>Accept <a href="/termeni-si-conditii" target="_blank" rel="noopener">Termenii și condițiile</a> și <a href="/politica-de-retur" target="_blank" rel="noopener">Politica de retur</a>.</span></label>
         <label class="live-checkout-consent"><input type="checkbox" name="newsletter_opt_in" value="1"><span>Vreau noutăți și oferte G-Trots (opțional).</span></label>
-        <div class="live-checkout-final"><div><span>Total comandă</span><strong data-checkout-total>—</strong></div><button type="submit"><span data-submit-label>Plasează comanda cu obligație de plată</span> <b aria-hidden="true">›</b></button></div>
+        <div class="live-checkout-final"><div><span>Total comandă</span><strong data-checkout-total>—</strong></div><button type="submit"><span data-submit-label>Comandă cu plata la livrare</span> <b aria-hidden="true">›</b></button></div>
         <p class="live-checkout-message" data-checkout-message aria-live="polite"></p>
       </form>`;
 
@@ -1047,7 +1047,7 @@
       updateTotals();
       const method = form.elements.payment_method?.value;
       const label = form.querySelector('[data-submit-label]');
-      if (label) label.textContent = method === 'card' ? 'Comandă și plătește' : 'Plasează comanda cu obligație de plată';
+      if (label) label.textContent = method === 'card' ? 'Comandă și plătește' : 'Comandă cu plata la livrare';
     });
     document.addEventListener("g-trots:cart-changed", () => window.setTimeout(updateTotals));
 

@@ -281,9 +281,6 @@ export default function ServiceSheetDetailsScreen() {
       return {
         ...current,
         payment_status: status,
-        finalized_at: status === 'incasati' && !current.finalized_at
-          ? nowDateTimeInput()
-          : current.finalized_at,
       };
     });
   };

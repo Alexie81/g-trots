@@ -1254,10 +1254,7 @@
       paymentPreview.amountDue,
       paymentPreview.total
     );
-    let finalizedAt = fromDateTimeDisplay(editorValue('ss-finalized-at')) || null;
-    if (paymentStatus === 'incasati' && !finalizedAt) {
-      finalizedAt = fromDateTimeDisplay(currentDateTimeDisplay()) || null;
-    }
+    const finalizedAt = fromDateTimeDisplay(editorValue('ss-finalized-at')) || null;
     return {
       client_id: editorValue('ss-client-id') || null,
       qr_code: editorValue('ss-qr-code'),
@@ -1366,12 +1363,6 @@
     if (!totalOnlyPayment && payment.amountDue <= 0.00001 && payment.total > 0) {
       const paidRadio = document.getElementById('ss-payment-paid');
       if (paidRadio) paidRadio.checked = true;
-    }
-    if (paymentStatus === 'incasati') {
-      const finalizedAtInput = document.getElementById('ss-finalized-at');
-      if (finalizedAtInput && !finalizedAtInput.value.trim()) {
-        finalizedAtInput.value = currentDateTimeDisplay();
-      }
     }
     const nullableCost = (id) => {
       const input = document.getElementById(id);

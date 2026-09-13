@@ -3425,11 +3425,13 @@ function serviceSheetPayload(PDO $db, array $body, array $current = [], ?array $
             : nullableDateTimeValue($read('client_signed_at', $current['client_signed_at'] ?? date('Y-m-d H:i:s'))))
         : null;
     $requestedFinalizedAt = nullableDateTimeValue($read('finalized_at', $current['finalized_at'] ?? null));
-    if ($paymentStatus === 'incasati' && empty($requestedFinalizedAt)) {
+    if (!$current && $client && effectiveClientIsFinalized($db, $client) && empty($requestedFinalizedAt)) {
         $requestedFinalizedAt = date('Y-m-d H:i:s');
     }
-    $isFinalized = $paymentStatus === 'incasati' && !empty($requestedFinalizedAt) && !empty($clientSignature);
-    $finalizedAt = $paymentStatus === 'incasati' && !empty($requestedFinalizedAt) ? $requestedFinalizedAt : null;
+    // Data de incheiere controleaza explicit finalizarea fisei. Plata si
+    // semnatura raman informatii independente si nu completeaza automat data.
+    $isFinalized = !empty($requestedFinalizedAt);
+    $finalizedAt = $requestedFinalizedAt;
 
     $payload = [
         'client_id' => nullableTextValue($read('client_id', $client['id'] ?? null), 36),
@@ -3619,6 +3621,77 @@ function invalidateServiceSheetPdf(PDO $db, array $sheet): void {
              service_pdf_generated_at = NULL
          WHERE id = ?'
     )->execute([$sheet['id']]);
+}
+
+function finalizeServiceSheetsForClient(
+    PDO $db,
+    string $clientId,
+    ?array $authUser = null,
+    ?string $completedAt = null
+): int {
+    if ($clientId === '' || !tableExists($db, 'service_sheets')) {
+        return 0;
+    }
+    $completedAt = nullableDateTimeValue($completedAt) ?: date('Y-m-d H:i:s');
+    $stmt = $db->prepare(
+        'SELECT *
+         FROM service_sheets
+         WHERE client_id = ?
+           AND (COALESCE(is_finalized, 0) = 0 OR finalized_at IS NULL)'
+    );
+    $stmt->execute([$clientId]);
+    $sheets = $stmt->fetchAll();
+    if (!$sheets) {
+        return 0;
+    }
+
+    $update = $db->prepare(
+        'UPDATE service_sheets
+         SET is_finalized = 1,
+             finalized_at = COALESCE(finalized_at, ?),
+             updated_by = COALESCE(?, updated_by),
+             updated_at = NOW()
+         WHERE id = ?'
+    );
+    foreach ($sheets as $sheet) {
+        invalidateServiceSheetPdf($db, $sheet);
+        $update->execute([$completedAt, $authUser['id'] ?? null, $sheet['id']]);
+    }
+    return count($sheets);
+}
+
+function backfillFinalizedClientServiceSheets(PDO $db): void {
+    if (!tableExists($db, 'clients') || !tableExists($db, 'service_sheets')) {
+        return;
+    }
+    $migrationId = '20260913_finalize_sheets_for_completed_clients';
+    $migrationStmt = $db->prepare('SELECT 1 FROM app_migrations WHERE id = ? LIMIT 1');
+    $migrationStmt->execute([$migrationId]);
+    if ($migrationStmt->fetchColumn()) {
+        return;
+    }
+
+    $hasActivity = tableExists($db, 'client_activity_logs');
+    $activitySelect = $hasActivity
+        ? ", (SELECT MAX(cal.created_at)
+              FROM client_activity_logs cal
+              WHERE cal.client_id = c.id AND cal.action = 'finalized') AS activity_finalized_at"
+        : ', NULL AS activity_finalized_at';
+    $stmt = $db->query(
+        "SELECT c.id, c.updated_at{$activitySelect}
+         FROM clients c
+         WHERE COALESCE(c.is_finalized, 0) = 1
+           AND c.finalization_source = 'manual'"
+    );
+    foreach ($stmt->fetchAll() as $client) {
+        finalizeServiceSheetsForClient(
+            $db,
+            (string)$client['id'],
+            null,
+            $client['activity_finalized_at'] ?: ($client['updated_at'] ?? null)
+        );
+    }
+    $db->prepare('INSERT IGNORE INTO app_migrations (id) VALUES (?)')->execute([$migrationId]);
 }
 
 function syncExistingServiceSheetsFromClient(
@@ -3898,15 +3971,7 @@ function buildServiceSheet(array $row): array {
     $row['final_price'] = $sheetFinancials['total'];
     $row['amount_due'] = $sheetFinancials['amount_due'];
     $row['gtrots_remaining'] = max($row['final_price'] - $row['internal_total_cost'], 0);
-    try {
-        $hasClientSignature = !empty(normalizedClientSignature($row['client_signature'] ?? null));
-    } catch (Throwable $error) {
-        $hasClientSignature = false;
-    }
-    $row['is_finalized'] = $row['payment_status'] === 'incasati'
-        && !empty($row['finalized_at'])
-        && !empty($row['client_signed_at'])
-        && $hasClientSignature
+    $row['is_finalized'] = !empty($row['finalized_at'])
         && (bool)($row['is_finalized'] ?? false);
     return $row;
 }
@@ -5082,7 +5147,7 @@ function ensureRuntimeSchema(PDO $db): void {
     // Se modifica acest id numai cand apare o migratie noua. Cererile normale
     // fac astfel un singur lookup indexat, nu DDL si zeci de verificari
     // INFORMATION_SCHEMA.
-    $runtimeSchemaId = '20260904_runtime_schema_ready_v3';
+    $runtimeSchemaId = '20260913_runtime_schema_ready_v4';
     try {
         $migrationStmt = $db->prepare('SELECT 1 FROM app_migrations WHERE id = ? LIMIT 1');
         $migrationStmt->execute([$runtimeSchemaId]);
@@ -5111,6 +5176,7 @@ function ensureRuntimeSchema(PDO $db): void {
         ensurePushNotificationTables($db);
         ensureWhatsAppPredefinedMessagesTable($db);
         ensureServiceSheetsTable($db);
+        backfillFinalizedClientServiceSheets($db);
         ensureChatTables($db);
         $db->prepare('INSERT IGNORE INTO app_migrations (id) VALUES (?)')->execute([$runtimeSchemaId]);
     }
@@ -6781,6 +6847,9 @@ try {
             $totalStmt->execute([$manoperaTotal, $id]);
         }
         syncExistingServiceSheetsFromClient($db, $id, $authUser);
+        if (!$currentEffectiveFinalized && $newIsFinalized) {
+            finalizeServiceSheetsForClient($db, $id, $authUser);
+        }
         logClientActivity($db, $id, $authUser, 'updated', 'Client editat', [
             'changes' => $changes,
         ]);
@@ -6810,6 +6879,7 @@ try {
         }
 
         if (effectiveClientIsFinalized($db, $current)) {
+            finalizeServiceSheetsForClient($db, $id, $authUser, $current['updated_at'] ?? null);
             $stmt2 = $db->prepare($clientJoin . ' WHERE c.id = ?');
             $stmt2->execute([$id]);
             echo json_encode(clientResponseForUser(buildClient($stmt2->fetch()), $authUser));
@@ -6924,6 +6994,7 @@ try {
             $totalStmt->execute([$manoperaTotal, $id]);
         }
         syncExistingServiceSheetsFromClient($db, $id, $authUser);
+        finalizeServiceSheetsForClient($db, $id, $authUser);
         logClientActivity($db, $id, $authUser, 'finalized', 'Client finalizat', [
             'price' => $finalPrice,
             'predefined_price' => $finalPredefinedPrice,

@@ -6,12 +6,12 @@
   const DASHBOARD_GRANULARITY_VALUES = new Set(['hour', 'day', 'week', 'month']);
   const dashboardPreferences = readDashboardPreferences();
   const state = {
-    products: [], orders: [], invoices: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], promotions: [], companies: [], receiptLocations: [], nirs: [], nirPermissions: [], nirWarehouses: [], nirReceiptLocations: [], invoiceThemeSettings: null, invoiceAutomationSettings: null, invoiceAutomationSaving: false, selectedInvoiceTheme: 'orange', invoiceSettingsDraft: { invoice_series: 'GT', next_number: 1, due_days: 7, default_notes: '' }, invoiceThemeSaving: false, invoiceQuery: '', invoiceStatusFilter: 'all', invoiceBusy: '', spvConnection: null, spvDraft: null, spvBusy: '', spvWaitingForOAuth: false, spvDiagnostics: null,
+    products: [], orders: [], invoices: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], newsletterSubscribers: [], promotions: [], companies: [], receiptLocations: [], nirs: [], nirPermissions: [], nirWarehouses: [], nirReceiptLocations: [], invoiceThemeSettings: null, invoiceAutomationSettings: null, invoiceAutomationSaving: false, selectedInvoiceTheme: 'orange', invoiceSettingsDraft: { invoice_series: 'GT', next_number: 1, due_days: 7, default_notes: '' }, invoiceThemeSaving: false, invoiceQuery: '', invoiceStatusFilter: 'all', invoiceBusy: '', spvConnection: null, spvDraft: null, spvBusy: '', spvWaitingForOAuth: false, spvDiagnostics: null,
     editingProduct: null, editingOrder: null, invoiceIssueOrder: null, invoiceDetail: null, editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, editingReceiptLocation: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
     productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, productTotal: 0, productSearchTimer: null, productLoadRequestId: 0, slugTouched: false, productQuery: '', orderQuery: '', orderSearchTimer: null, orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
-    customerQuery: '', inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirStornoDocument: null, nirSupplierReturnContext: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false, nirBundleDownloading: '', nirRegistryDownloadPeriod: 'current_month', nirRegistryDownloadContent: 'complete', nirRegistryDownloading: false, nirExportProgressTimer: null,
-    pages: { products: 1, orders: 1, invoices: 1, inventory: 1, stockFlow: 1, stockMovements: 1, productSales: 1, productReviews: 1, productPurchases: 1, customers: 1, customerOrders: 1, nirs: 1 },
-    pageSizes: { products: 10, orders: 10, invoices: 10, inventory: 10, stockFlow: 5, stockMovements: 5, productSales: 5, productReviews: 5, productPurchases: 5, customers: 10, customerOrders: 5, nirs: 15 },
+    customerQuery: '', newsletterQuery: '', newsletterStatus: 'all', productSaveProgressTimer: null, inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirStornoDocument: null, nirSupplierReturnContext: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false, nirBundleDownloading: '', nirRegistryDownloadPeriod: 'current_month', nirRegistryDownloadContent: 'complete', nirRegistryDownloading: false, nirExportProgressTimer: null,
+    pages: { products: 1, orders: 1, invoices: 1, inventory: 1, stockFlow: 1, stockMovements: 1, productSales: 1, productReviews: 1, productPurchases: 1, customers: 1, newsletter: 1, customerOrders: 1, nirs: 1 },
+    pageSizes: { products: 10, orders: 10, invoices: 10, inventory: 10, stockFlow: 5, stockMovements: 5, productSales: 5, productReviews: 5, productPurchases: 5, customers: 10, newsletter: 12, customerOrders: 5, nirs: 15 },
     dashboardPeriod: dashboardPreferences.period, dashboardStartDate: dashboardPreferences.startDate, dashboardEndDate: dashboardPreferences.endDate, dashboardGranularity: dashboardPreferences.granularity, dashboardRequestId: 0, dashboardSeries: new Set(['revenue', 'returns', 'orders', 'acquisitions', 'profit']),
   };
   const PAGE_SIZE_OPTIONS = [10, 25, 50];
@@ -40,6 +40,7 @@
     'shop-automations': 'shop-automations-content',
     'shop-shipping': 'shop-shipping-content',
     'shop-customers': 'shop-customers-content',
+    'shop-newsletter': 'shop-newsletter-content',
     'shop-discounts': 'shop-discounts-content',
     'shop-company': 'shop-company-content',
     'shop-invoice-configurator': 'shop-invoice-configurator-content',
@@ -208,6 +209,7 @@
       <div class="tab-panel shop-tab-panel" id="tab-shop-automations">${commercePage('Automatizări', 'Emitere și expediere automată a facturilor după plată și starea comenzii.', 'shop-automations-content')}</div>
       <div class="tab-panel shop-tab-panel" id="tab-shop-shipping">${commercePage('Livrari', 'Costuri, transport gratuit si termene estimate.', 'shop-shipping-content', true)}</div>
       <div class="tab-panel shop-tab-panel" id="tab-shop-customers">${commercePage('Clienti', 'Conturi, comenzi, valoare totala si controlul accesului.', 'shop-customers-content')}</div>
+      <div class="tab-panel shop-tab-panel" id="tab-shop-newsletter">${commercePage('Abonați newsletter', 'Consimțăminte, dezabonări și livrarea noutăților despre produse.', 'shop-newsletter-content')}</div>
       <div class="tab-panel shop-tab-panel" id="tab-shop-discounts">${commercePage('Reduceri', 'Campanii detaliate, clienti eligibili si rezultate masurate pentru fiecare reducere.', 'shop-discounts-content', true)}</div>
       <div class="tab-panel shop-tab-panel" id="tab-shop-company">${commercePage('Datele firmei', 'Societatea, datele bancare si stampila folosite in fluxurile SHOP.', 'shop-company-content', true)}</div>
     `);
@@ -218,20 +220,21 @@
       ${dashboardCard('shop-payments', 'purple', 'CHECKOUT', 'Metode de plata', 'Card online si ramburs la curier.')}
       ${dashboardCard('shop-shipping', 'green', 'LOGISTICA', 'Livrari', 'Costuri si praguri de gratuitate.')}
       ${dashboardCard('shop-customers', 'blue', 'RELATII CLIENTI', 'Clienti', 'Conturi, comenzi si acces la magazin.')}
+      ${dashboardCard('shop-newsletter', 'green', 'COMUNICARE', 'Abonați newsletter', 'Consimțăminte active, dezabonări și notificări trimise.')}
       ${dashboardCard('shop-discounts', 'amber', 'PROMOTII', 'Reduceri', 'Campanii, cupoane si anunturi pe site.')}
       ${dashboardCard('shop-company', 'purple', 'IDENTITATE', 'Datele firmei', 'Societati, conturi bancare si stampila.')}
       ${dashboardCard('shop-invoice-configurator', 'amber', 'DOCUMENTE', 'Configurator factură', 'Patru teme și alegerea aspectului pentru facturile viitoare.')}
       ${dashboardCard('shop-automations', 'amber', 'FLUXURI', 'Automatizări', 'Emitere și trimitere automată a facturilor.')}
       ${dashboardCard('shop-spv', 'blue', 'ANAF', 'SPV - RO e-Factura', 'Conectarea și transmiterea facturilor vor fi configurate aici.')}
     `);
-    document.body.insertAdjacentHTML('beforeend', productModal() + productDetailModal() + orderModal() + invoiceIssueModal() + invoiceDetailModal() + stockModal() + sourceModal() + supplierModal() + nirModal() + nirRegistryDownloadModal() + shippingModal() + customerModal() + promotionModal() + promotionStatsModal() + companyModal());
+    document.body.insertAdjacentHTML('beforeend', productModal() + productDetailModal() + productSaveProgressOverlay() + orderModal() + invoiceIssueModal() + invoiceDetailModal() + stockModal() + sourceModal() + supplierModal() + nirModal() + nirRegistryDownloadModal() + shippingModal() + customerModal() + promotionModal() + promotionStatsModal() + companyModal());
     wire();
     if ($('tab-shop-dashboard')?.classList.contains('active')) void loadShopView('shop-dashboard', { force: true });
   }
 
   function commercePage(title, description, contentId, hasAdd = false) {
     const kind = contentId.replace('shop-', '').replace('-content', '');
-    const symbols = { products: '◇', orders: '✓', invoices: '<svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>', inventory: '▦', sources: '◎', suppliers: '⌁', nirs: '<svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h5M9 12h7m-7 4h7"/><path d="m9 8 1.2 1.2L12.7 7"/></svg>', payments: '▣', automations: '<svg viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 10-13h-7Z"/></svg>', shipping: '⇢', customers: '◉', discounts: '%', company: '▤' };
+    const symbols = { products: '◇', orders: '✓', invoices: '<svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>', inventory: '▦', sources: '◎', suppliers: '⌁', nirs: '<svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h5M9 12h7m-7 4h7"/><path d="m9 8 1.2 1.2L12.7 7"/></svg>', payments: '▣', automations: '<svg viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 10-13h-7Z"/></svg>', shipping: '⇢', customers: '◉', newsletter: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/><path d="m16 17 2 2 4-4"/></svg>', discounts: '%', company: '▤' };
     return `<div class="shop-commerce-page"><button type="button" class="shop-back-btn" data-shop-open="shop-dashboard" aria-label="Înapoi la Panoul SHOP" title="Panou SHOP"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><header class="shop-commerce-head shop-commerce-hero" data-commerce-kind="${kind}"><span class="shop-commerce-hero-glow"></span><div class="shop-commerce-title"><span>G-TROTS SHOP CRM</span><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="shop-commerce-hero-symbol" aria-hidden="true">${symbols[kind] || '◇'}</div><div class="shop-commerce-head-actions"><button type="button" class="shop-commerce-refresh" data-commerce-refresh="${contentId}" title="Reincarca" aria-label="Reincarca datele"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0 2 5"/><path d="M20 4v7h-7"/></svg></button>${hasAdd ? `<button type="button" class="shop-commerce-add" data-commerce-add="${contentId}" ${contentId === 'shop-company-content' ? 'hidden' : ''}>${contentId === 'shop-nirs-content' ? '<span class="shop-nir-add-icon">+</span> NIR nou' : '+ Adauga'}</button>` : ''}</div></header><main id="${contentId}" class="shop-commerce-content"><div class="shop-commerce-loading">Se incarca...</div></main></div>`;
   }
   function dashboardCard(target, tone, kicker, title, description) {
@@ -267,6 +270,22 @@
       <div class="shop-google-preview"><span id="shop-google-image" role="img" hidden></span><div><small>G-Trots · g-trots.ro</small><strong id="shop-google-title">Titlul produsului</strong><p id="shop-google-description">Descrierea produsului va aparea aici.</p><em id="shop-google-url">https://g-trots.ro/magazin/produs/slug-produs</em></div></div>
       <div class="shop-editor-toggles"><label class="accounting"><span><b>Urmareste in stocul contabil</b><small>Activ implicit. Oprit: nu apare in Stocuri Conta. Stocul online ramane editabil, iar facturarea si SPV functioneaza normal.</small></span><input id="shop-product-accounting-tracked" type="checkbox" checked /></label><label><span><b>Produs activ</b><small>Este vizibil si poate fi comandat.</small></span><input id="shop-product-active" type="checkbox" checked /></label><label><span><b>Produs recomandat</b><small>Apare prioritar in magazin.</small></span><input id="shop-product-featured" type="checkbox" /></label></div>
     </div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-product-modal">Renunta</button><button type="submit" class="btn-primary" id="shop-product-save">Salveaza produsul</button></footer></form></div>`;
+  }
+
+  function productSaveProgressOverlay() {
+    return `<div class="shop-product-save-overlay" id="shop-product-save-progress" hidden role="dialog" aria-modal="true" aria-labelledby="shop-product-save-title">
+      <section class="shop-product-save-card">
+        <span class="shop-product-save-glow glow-a" aria-hidden="true"></span><span class="shop-product-save-glow glow-b" aria-hidden="true"></span>
+        <div class="shop-product-save-visual" aria-hidden="true"><span class="shop-product-save-orbit"><i></i></span><span class="shop-product-save-core"><svg viewBox="0 0 24 24"><path d="M5 3h12l2 2v16H5V3Z"/><path d="M8 3v6h8V3M8 21v-8h8v8"/></svg></span></div>
+        <small id="shop-product-save-kicker">PRODUS NOU</small>
+        <h2 id="shop-product-save-title">Îl pregătim pentru magazin.</h2>
+        <p id="shop-product-save-stage">Validăm datele și imaginile</p>
+        <div class="shop-product-save-track"><span id="shop-product-save-fill"><i></i></span></div>
+        <div class="shop-product-save-meta"><strong id="shop-product-save-percent">5%</strong><span id="shop-product-save-eta">aprox. 24 sec.</span></div>
+        <div class="shop-product-save-steps" id="shop-product-save-steps" aria-hidden="true"></div>
+        <em>Poți lăsa ecranul deschis. Fereastra se închide automat când salvarea este completă.</em>
+      </section>
+    </div>`;
   }
 
   function productDetailModal() {
@@ -424,6 +443,7 @@
       'shop-automations': loadInvoiceAutomations,
       'shop-shipping': loadShippingPage,
       'shop-customers': loadCustomers,
+      'shop-newsletter': loadNewsletterSubscribers,
       'shop-discounts': loadPromotions,
       'shop-company': loadCompanies,
       'shop-invoice-configurator': () => loadInvoiceConfigurator({ quiet: options.quiet }),
@@ -493,7 +513,7 @@
 
   function wire() {
     mountNirStornoInvoiceFields();
-    const loaders = { 'shop-dashboard': () => loadDashboard({ quiet: Boolean(document.querySelector('#tab-shop-dashboard .shop-dashboard-header')) }), 'shop-products': loadProducts, 'shop-orders': loadOrders, 'shop-invoices': loadInvoices, 'shop-inventory': loadInventory, 'shop-sources': loadSourcesPage, 'shop-suppliers': loadSuppliers, 'shop-nirs': loadNirs, 'shop-payments': loadPayments, 'shop-automations': loadInvoiceAutomations, 'shop-shipping': loadShippingPage, 'shop-customers': loadCustomers, 'shop-discounts': loadPromotions, 'shop-company': loadCompanies, 'shop-invoice-configurator': loadInvoiceConfigurator, 'shop-spv': loadSpv };
+    const loaders = { 'shop-dashboard': () => loadDashboard({ quiet: Boolean(document.querySelector('#tab-shop-dashboard .shop-dashboard-header')) }), 'shop-products': loadProducts, 'shop-orders': loadOrders, 'shop-invoices': loadInvoices, 'shop-inventory': loadInventory, 'shop-sources': loadSourcesPage, 'shop-suppliers': loadSuppliers, 'shop-nirs': loadNirs, 'shop-payments': loadPayments, 'shop-automations': loadInvoiceAutomations, 'shop-shipping': loadShippingPage, 'shop-customers': loadCustomers, 'shop-newsletter': loadNewsletterSubscribers, 'shop-discounts': loadPromotions, 'shop-company': loadCompanies, 'shop-invoice-configurator': loadInvoiceConfigurator, 'shop-spv': loadSpv };
     window.addEventListener('tab-change', event => {
       cancelScheduledShopViewRefresh();
       const tabId = event.detail;
@@ -1779,6 +1799,45 @@
     return !duplicate;
   }
   function updateProductPreview() { const price = Number($('shop-product-price').value || 0); const source = state.sources.find(item => item.id === $('shop-product-source').value); const isBoomag = String(source?.domain || '').trim().toLowerCase() === 'boomag.ro'; const supplierBaseInput = $('shop-product-supplier-base-price'); const differenceInput = $('shop-product-price-difference'); const supplierBase = supplierBaseInput.value === '' ? null : Number(supplierBaseInput.value); $('shop-product-boomag-pricing').hidden = !isBoomag; $('shop-product-price-hint').hidden = !isBoomag; differenceInput.value = isBoomag && supplierBase !== null && Number.isFinite(supplierBase) ? (price - supplierBase).toFixed(2) : ''; const discount = Math.max(0, Number($('shop-product-discount-value').value || 0)); const discountType = $('shop-product-discount-type').value; const finalPrice = discount ? Math.max(0, discountType === 'fixed' ? price - discount : price * (1 - discount / 100)) : price; $('shop-product-discount-label').firstChild.textContent = discountType === 'fixed' ? 'Reducere lei' : 'Reducere %'; $('shop-product-final-price').textContent = money(finalPrice); $('shop-google-title').textContent = $('shop-product-meta-title').value.trim() || $('shop-product-name').value.trim() || 'Titlul produsului'; $('shop-google-description').textContent = $('shop-product-meta-description').value.trim() || $('shop-product-short').value.trim() || 'Descrierea produsului va aparea aici.'; $('shop-google-url').textContent = `https://g-trots.ro/magazin/produs/${$('shop-product-slug').value || 'slug-produs'}`; const image = $('shop-google-image'); if (state.productImages[0]) { image.setAttribute('style', imageBackground(state.productImages[0])); image.hidden = false; } else { image.removeAttribute('style'); image.hidden = true; } }
+  function updateProductSaveProgress(mode, elapsedMs) {
+    const estimatedSeconds = mode === 'create' ? 24 : 17;
+    const seconds = elapsedMs / 1000;
+    const progress = Math.min(94, Math.max(5, Math.round((1 - Math.exp(-seconds / (estimatedSeconds * .48))) * 100)));
+    const remaining = Math.max(0, Math.ceil(estimatedSeconds - seconds));
+    const stages = mode === 'create'
+      ? ['Validăm datele și imaginile', 'Salvăm produsul în catalog', 'Sincronizăm canalele de vânzare', 'Generăm pagina publică și SEO', 'Pregătim noutatea pentru abonați']
+      : ['Validăm modificările', 'Actualizăm produsul în catalog', 'Sincronizăm prețul și stocul', 'Regenerăm pagina publică', 'Reîmprospătăm lista de produse'];
+    const stageIndex = Math.min(stages.length - 1, Math.floor(progress / 20));
+    $('shop-product-save-fill').style.width = `${progress}%`;
+    $('shop-product-save-percent').textContent = `${progress}%`;
+    $('shop-product-save-eta').textContent = remaining > 0 ? `aprox. ${remaining} sec.` : 'ultimele verificări…';
+    $('shop-product-save-stage').textContent = stages[stageIndex];
+    $('shop-product-save-steps').innerHTML = stages.map((stage, index) => `<span class="${index <= stageIndex ? 'active' : ''} ${index < stageIndex ? 'done' : ''}" title="${esc(stage)}">${index < stageIndex ? '✓' : index + 1}</span>`).join('');
+  }
+
+  function startProductSaveProgress(mode) {
+    const overlay = $('shop-product-save-progress');
+    if (!overlay) return;
+    clearInterval(state.productSaveProgressTimer);
+    $('shop-product-save-kicker').textContent = mode === 'create' ? 'PRODUS NOU' : 'ACTUALIZARE PRODUS';
+    $('shop-product-save-title').textContent = mode === 'create' ? 'Îl pregătim pentru magazin.' : 'Salvăm toate modificările.';
+    overlay.hidden = false;
+    const startedAt = Date.now();
+    updateProductSaveProgress(mode, 0);
+    state.productSaveProgressTimer = setInterval(() => updateProductSaveProgress(mode, Date.now() - startedAt), 300);
+  }
+
+  function stopProductSaveProgress() {
+    clearInterval(state.productSaveProgressTimer);
+    state.productSaveProgressTimer = null;
+    const overlay = $('shop-product-save-progress');
+    if (!overlay) return;
+    $('shop-product-save-fill').style.width = '100%';
+    $('shop-product-save-percent').textContent = '100%';
+    $('shop-product-save-eta').textContent = 'salvat complet';
+    window.setTimeout(() => { overlay.hidden = true; }, 260);
+  }
+
   async function saveProduct(event) {
     event.preventDefault(); const button = $('shop-product-save'); button.disabled = true;
     try {
@@ -1791,14 +1850,17 @@
       const payload = { source_id: source?.id || null, source_domain: source?.domain || 'g-trots.ro', source_url: '', supplier_product_code: $('shop-product-supplier-code').value.trim(), ean: $('shop-product-ean').value.trim(), name: $('shop-product-name').value.trim(), slug: $('shop-product-slug').value.trim(), short_description: $('shop-product-short').value.trim(), description_title: $('shop-product-description-title').value.trim(), description_html: richDescriptionHtml(), specifications: state.productSpecifications.map(item => ({ group: item.group.trim(), label: item.label.trim(), value: item.value.trim() })), questions: state.productQuestions.map(item => ({ question: item.question.trim(), answer: item.answer.trim() })), manufacturer_address: $('shop-product-manufacturer-address').value.trim(), manufacturer_email: $('shop-product-manufacturer-email').value.trim(), eu_responsible_person_name: $('shop-product-eu-name').value.trim(), eu_responsible_person_address: $('shop-product-eu-address').value.trim(), eu_responsible_person_email: $('shop-product-eu-email').value.trim(), product_model: $('shop-product-model').value.trim(), product_identifier: $('shop-product-identifier').value.trim(), safety_warnings_ro: $('shop-product-safety-warnings').value.trim(), safety_documents: $('shop-product-safety-documents').value.split(/\r?\n/).map(value => value.trim()).filter(Boolean), ce_marking_applicable: $('shop-product-ce').value === '' ? null : $('shop-product-ce').value === 'yes', compliance_documents: $('shop-product-compliance-documents').value.split(/\r?\n/).map(value => value.trim()).filter(Boolean), legal_warranty_months: $('shop-product-legal-warranty').value === '' ? null : Math.max(0, Number($('shop-product-legal-warranty').value)), commercial_warranty_months: $('shop-product-commercial-warranty').value === '' ? null : Math.max(0, Number($('shop-product-commercial-warranty').value)), software_updates_until: $('shop-product-software-updates').value || null, repairability_info: $('shop-product-repairability').value.trim(), spare_parts_info: $('shop-product-spare-parts').value.trim(), meta_title: $('shop-product-meta-title').value.trim(), meta_description: $('shop-product-meta-description').value.trim(), cost_price: costPrice, price, discount_type: discountType, discount_value: discount || null, discount_percent: discountType === 'percent' ? discount || null : null, sale_price: salePrice, category_id: primaryCategoryId, category_ids: categoryIds, manufacturer_id: $('shop-product-manufacturers').querySelector('input[type="radio"]:checked')?.value || null, brand_ids: Array.from($('shop-product-brands').querySelectorAll('input:checked')).map(input => input.value), stock_mode: $('shop-product-stock-mode').value, stock_quantity: Math.max(0, Number($('shop-product-stock').value || 0)), is_accounting_stock_tracked: $('shop-product-accounting-tracked').checked, low_stock_threshold: Math.max(0, Number($('shop-product-low-stock').value || 0)), currency: 'RON', is_active: $('shop-product-active').checked, is_featured: $('shop-product-featured').checked, images: state.productImages.map((image, index) => ({ id: image.id, base64: image.base64, alt_text: image.alt_text || $('shop-product-name').value.trim(), sort_order: index })) };
       payload.legal_warranty_months = $('shop-product-legal-warranty').value === '' ? null : Math.max(0, Number($('shop-product-legal-warranty').value));
       if (!payload.name || !payload.slug || !Number.isFinite(price) || !Number.isFinite(costPrice) || costPrice < 0) throw new Error('Completeaza numele, slug-ul si preturile valide.');
+      const saveMode = state.editingProduct ? 'edit' : 'create';
+      startProductSaveProgress(saveMode);
       const saved = state.editingProduct ? await window.SHOP_API.updateProduct(state.editingProduct.id, payload) : await window.SHOP_API.createProduct(payload);
       closeModal('shop-product-modal');
       const warnings = [];
       if (saved.stripe_sync_status === 'error') warnings.push(`Stripe: ${saved.stripe_sync_error || 'sincronizarea trebuie reincercata.'}`);
       if (saved.seo_page && !saved.seo_page.success) warnings.push(`Pagina Google: ${saved.seo_page.error || 'generarea trebuie reincercata.'}`);
+      if (saved.newsletter_notification?.failed) warnings.push(`Newsletter: ${saved.newsletter_notification.failed} e-mailuri nu au putut fi trimise. Detaliile apar în Abonați newsletter.`);
       toast(warnings.length ? `Produs salvat. ${warnings.join(' · ')}` : 'Produsul, pagina SEO si sincronizarea au fost salvate.', warnings.length ? 'error' : 'success');
       await loadProducts();
-    } catch (error) { toast(error.message || 'Produsul nu a putut fi salvat.', 'error'); } finally { button.disabled = false; }
+    } catch (error) { toast(error.message || 'Produsul nu a putut fi salvat.', 'error'); } finally { stopProductSaveProgress(); button.disabled = false; }
   }
   async function deleteProduct(id) { const product = state.products.find(item => item.id === id); if (!product || !confirm(`Stergi definitiv produsul „${product.name}”? Toate pozele lui vor fi sterse de pe server.`)) return; try { const result = await window.SHOP_API.deleteProduct(id); if (!result?.success || result.deleted_id !== id) throw new Error('Serverul nu a confirmat stergerea produsului.'); state.products = state.products.filter(item => item.id !== id); renderProducts(); await loadProducts(); if (state.products.some(item => item.id === id)) throw new Error('Produsul apare inca in catalog dupa stergere. Reincarca si incearca din nou.'); toast(`Produsul a fost sters definitiv${result.deleted_files ? ` impreuna cu ${result.deleted_files} fisiere` : ''}.`); } catch (error) { toast(error.message, 'error'); } }
 
@@ -3147,6 +3209,89 @@
     search.addEventListener('input', () => { state.customerQuery = search.value; state.pages.customers = 1; renderCustomerResults(); });
     $('shop-customer-search-clear').addEventListener('click', () => { state.customerQuery = ''; state.pages.customers = 1; search.value = ''; search.focus(); renderCustomerResults(); });
     renderCustomerResults();
+  }
+
+  async function loadNewsletterSubscribers() {
+    loading('shop-newsletter-content', 'Se încarcă abonații newsletter...');
+    try {
+      const subscribers = await window.SHOP_API.listNewsletterSubscribers();
+      state.newsletterSubscribers = Array.isArray(subscribers) ? subscribers : [];
+      renderNewsletterSubscribers();
+    } catch (error) { failure('shop-newsletter-content', error); }
+  }
+
+  function filteredNewsletterSubscribers() {
+    const query = String(state.newsletterQuery || '').trim().toLocaleLowerCase('ro-RO');
+    return state.newsletterSubscribers.filter(subscriber => {
+      const matchesStatus = state.newsletterStatus === 'all' || subscriber.status === state.newsletterStatus;
+      const matchesQuery = !query || [subscriber.full_name, subscriber.email, subscriber.phone]
+        .some(value => String(value || '').toLocaleLowerCase('ro-RO').includes(query));
+      return matchesStatus && matchesQuery;
+    });
+  }
+
+  function renderNewsletterResults() {
+    const host = $('shop-newsletter-results');
+    if (!host) return;
+    const filtered = filteredNewsletterSubscribers();
+    const pageSize = state.pageSizes.newsletter;
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    state.pages.newsletter = Math.max(1, Math.min(Number(state.pages.newsletter || 1), totalPages));
+    const start = (state.pages.newsletter - 1) * pageSize;
+    const visible = filtered.slice(start, start + pageSize);
+    const rows = visible.map((subscriber, index) => {
+      const subscribed = subscriber.status === 'subscribed';
+      const initial = String(subscriber.full_name || subscriber.email || '?').trim().charAt(0).toUpperCase();
+      const activityLabel = subscriber.last_error
+        ? `Eroare la ultima trimitere: ${subscriber.last_error}`
+        : subscribed && subscriber.last_notified_at
+          ? `Ultima notificare: ${dateTime(subscriber.last_notified_at)}`
+          : subscribed
+            ? `Abonat din ${dateTime(subscriber.consent_at || subscriber.created_at)}`
+            : `Dezabonat la ${dateTime(subscriber.unsubscribed_at)}`;
+      return `<article class="shop-newsletter-card ${subscribed ? 'subscribed' : 'unsubscribed'}" style="--newsletter-index:${index}">
+        <span class="shop-newsletter-avatar">${esc(initial)}<i></i></span>
+        <div class="shop-newsletter-copy"><strong>${esc(subscriber.full_name || 'Client fără nume')}</strong><a href="mailto:${esc(subscriber.email)}" data-newsletter-link>${esc(subscriber.email)}</a><span>${subscriber.phone ? esc(subscriber.phone) : 'Telefon necompletat'}</span><em class="${subscriber.last_error ? 'error' : ''}">${esc(activityLabel)}</em></div>
+        <div class="shop-newsletter-consent"><small>SURSĂ CONSIMȚĂMÂNT</small><strong>${esc(subscriber.consent_source === 'checkout_historical' ? 'Checkout · istoric' : 'Checkout')}</strong><span>${esc(dateTime(subscriber.consent_at || subscriber.created_at))}</span></div>
+        <b class="shop-newsletter-status ${subscribed ? 'subscribed' : 'unsubscribed'}"><i></i>${subscribed ? 'ABONAT' : 'DEZABONAT'}</b>
+      </article>`;
+    }).join('');
+    const pageItems = customerPaginationItems(totalPages, state.pages.newsletter);
+    const pager = filtered.length ? `<nav class="shop-customer-pagination shop-newsletter-pagination" aria-label="Paginile abonaților"><button type="button" class="direction" data-newsletter-page="${state.pages.newsletter - 1}" ${state.pages.newsletter === 1 ? 'disabled' : ''}>‹</button>${pageItems.map(item => item === '…' ? '<span>…</span>' : `<button type="button" data-newsletter-page="${item}" class="${item === state.pages.newsletter ? 'active' : ''}" ${item === state.pages.newsletter ? 'aria-current="page"' : ''}>${item}</button>`).join('')}<button type="button" class="direction" data-newsletter-page="${state.pages.newsletter + 1}" ${state.pages.newsletter === totalPages ? 'disabled' : ''}>›</button></nav>` : '';
+    host.innerHTML = `<div class="shop-newsletter-list">${rows || empty('Niciun abonat găsit', 'Schimbă filtrul sau caută după alt nume, e-mail ori telefon.')}</div>${pager}`;
+    const counter = $('shop-newsletter-result-count');
+    if (counter) counter.textContent = `${filtered.length} ${filtered.length === 1 ? 'persoană' : 'persoane'}${filtered.length ? ` · pagina ${state.pages.newsletter} din ${totalPages}` : ''}`;
+    const clear = $('shop-newsletter-search-clear');
+    if (clear) clear.hidden = !state.newsletterQuery;
+    host.querySelectorAll('[data-newsletter-page]').forEach(button => button.addEventListener('click', () => {
+      const page = Number(button.dataset.newsletterPage || 1);
+      if (button.disabled || page === state.pages.newsletter) return;
+      state.pages.newsletter = page;
+      renderNewsletterResults();
+      $('shop-newsletter-search')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }));
+    host.querySelectorAll('[data-newsletter-link]').forEach(link => link.addEventListener('click', event => {
+      event.preventDefault();
+      void shell.openExternal(link.href);
+    }));
+  }
+
+  function renderNewsletterSubscribers() {
+    const subscribed = state.newsletterSubscribers.filter(item => item.status === 'subscribed').length;
+    const unsubscribed = state.newsletterSubscribers.length - subscribed;
+    const notified = state.newsletterSubscribers.filter(item => item.last_notified_at).length;
+    const searchIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>';
+    $('shop-newsletter-content').innerHTML = `<section class="shop-newsletter-metrics"><article><span class="green">${subscribed}</span><div><strong>Abonați activi</strong><small>Primesc produsele noi</small></div></article><article><span class="muted">${unsubscribed}</span><div><strong>Dezabonați</strong><small>Nu mai primesc mesaje</small></div></article><article><span class="orange">${notified}</span><div><strong>Notificați</strong><small>Au primit cel puțin un produs</small></div></article></section>
+      <section class="shop-newsletter-toolbar"><div class="shop-newsletter-search"><span>${searchIcon}</span><label for="shop-newsletter-search"><small>CAUTĂ ÎN LISTĂ</small><input id="shop-newsletter-search" type="search" value="${esc(state.newsletterQuery)}" placeholder="Nume, e-mail sau telefon" autocomplete="off" /></label><b id="shop-newsletter-result-count"></b><button type="button" id="shop-newsletter-search-clear" aria-label="Șterge căutarea">×</button></div><div class="shop-newsletter-filters"><button type="button" data-newsletter-status="all" class="${state.newsletterStatus === 'all' ? 'active' : ''}">Toți</button><button type="button" data-newsletter-status="subscribed" class="${state.newsletterStatus === 'subscribed' ? 'active' : ''}">Abonați</button><button type="button" data-newsletter-status="unsubscribed" class="${state.newsletterStatus === 'unsubscribed' ? 'active' : ''}">Dezabonați</button></div></section><div id="shop-newsletter-results"></div>`;
+    const search = $('shop-newsletter-search');
+    search.addEventListener('input', () => { state.newsletterQuery = search.value; state.pages.newsletter = 1; renderNewsletterResults(); });
+    $('shop-newsletter-search-clear').addEventListener('click', () => { state.newsletterQuery = ''; state.pages.newsletter = 1; search.value = ''; search.focus(); renderNewsletterResults(); });
+    $('shop-newsletter-content').querySelectorAll('[data-newsletter-status]').forEach(button => button.addEventListener('click', () => {
+      state.newsletterStatus = button.dataset.newsletterStatus || 'all';
+      state.pages.newsletter = 1;
+      renderNewsletterSubscribers();
+    }));
+    renderNewsletterResults();
   }
 
   async function openCustomer(id) {

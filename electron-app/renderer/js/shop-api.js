@@ -197,6 +197,7 @@
     listProductReviews: (id = '') => call('listProductReviews', {}, id),
     replyProductReview: (id, adminReply) => call('replyProductReview', json('PATCH', { admin_reply: adminReply }), id),
     deleteProductReview: (id) => call('deleteProductReview', { method: 'DELETE' }, id),
+    listNewsletterSubscribers: () => call('listNewsletterSubscribers'),
     listInventory: () => call('listInventory'),
     listInventoryMovements: (id = '') => call('listInventoryMovements', {}, id),
     adjustStock: (id, payload) => call('adjustStock', json('POST', payload), id),

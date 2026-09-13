@@ -52,6 +52,10 @@ $emails = file_get_contents(__DIR__ . '/../order-emails.php');
 $module = file_get_contents(__DIR__ . '/../../components/ShopModuleScreen.tsx');
 $manager = file_get_contents(__DIR__ . '/../../components/ShopNewsletterSubscribersManager.tsx');
 $products = file_get_contents(__DIR__ . '/../../components/ShopProductsManager.tsx');
+$desktopHtml = file_get_contents(__DIR__ . '/../../electron-app/renderer/index.html');
+$desktopApi = file_get_contents(__DIR__ . '/../../electron-app/renderer/js/shop-api.js');
+$desktopCommerce = file_get_contents(__DIR__ . '/../../electron-app/renderer/js/shop-commerce.js');
+$desktopStyles = file_get_contents(__DIR__ . '/../../electron-app/renderer/style.css');
 newsletterAssert(is_string($api) && str_contains($api, 'shopNewsletterSubscribeFromOrder'), 'Checkoutul nu salvează abonatul.');
 newsletterAssert(str_contains($api, "if (\$newsletterOptIn)"), 'Abonarea trebuie să depindă de consimțământul explicit.');
 newsletterAssert(str_contains($api, "\$productResponse['newsletter_notification'] = shopNewsletterNotifyNewProduct"), 'Produsul manual nou nu declanșează newsletterul.');
@@ -63,5 +67,9 @@ newsletterAssert(is_string($emails) && str_contains($emails, 'List-Unsubscribe-P
 newsletterAssert(is_string($module) && str_contains($module, "'newsletter'"), 'Tabul newsletter nu este în navigarea aplicației.');
 newsletterAssert(is_string($manager) && str_contains($manager, 'Abonați') && str_contains($manager, 'DEZABONAT'), 'Managerul nu afișează ambele stări.');
 newsletterAssert(is_string($products) && str_contains($products, 'saving ? <ProductSaveProgress'), 'Ecranul de progres la salvare lipsește.');
+newsletterAssert(is_string($desktopHtml) && str_contains($desktopHtml, 'data-tab="shop-newsletter"'), 'Tabul newsletter lipsește din aplicația desktop.');
+newsletterAssert(is_string($desktopApi) && str_contains($desktopApi, 'listNewsletterSubscribers'), 'Clientul API desktop nu poate încărca abonații.');
+newsletterAssert(is_string($desktopCommerce) && str_contains($desktopCommerce, 'loadNewsletterSubscribers') && str_contains($desktopCommerce, 'startProductSaveProgress'), 'Managerul desktop sau progresul salvării lipsește.');
+newsletterAssert(is_string($desktopStyles) && str_contains($desktopStyles, '.shop-product-save-overlay') && str_contains($desktopStyles, '.shop-newsletter-card'), 'Designul desktop pentru newsletter sau progres lipsește.');
 
 echo "Newsletter contract tests passed.\n";

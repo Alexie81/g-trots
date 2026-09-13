@@ -1,6 +1,6 @@
 {
   "schema": "OpenAI Product Discovery Stable",
-  "generated_at": "2026-09-10T15:46:04.398Z",
+  "generated_at": "2026-09-13T08:13:19.403Z",
   "encoding": "UTF-8",
   "required_fields": [
     "item_id",
@@ -13,7 +13,7 @@
     "availability",
     "price"
   ],
-  "products": 1515,
+  "products": 1513,
   "excluded": 87,
   "excluded_missing_brand": 87,
   "excluded_other_invalid": 0,

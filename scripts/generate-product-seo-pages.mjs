@@ -123,6 +123,32 @@ function isInStock(product) {
   return product.stock_mode === "unlimited" || Number(product.stock_quantity || 0) > 0;
 }
 
+function offerShippingDetails(shippingMethods, activePrice, currency) {
+  return (Array.isArray(shippingMethods) ? shippingMethods : []).flatMap(method => {
+    if (!method || method.is_active === false) return [];
+    const days = String(method.eta_label || method.description || "").match(/\d+/g)?.map(Number).filter(Number.isFinite) || [];
+    if (!days.length) return [];
+    const minDays = Math.max(0, Math.min(...days));
+    const maxDays = Math.max(minDays, Math.max(...days));
+    const freeAbove = method.free_above == null || method.free_above === "" ? null : Number(method.free_above);
+    const configuredCost = Number(method.cost || 0);
+    const shippingCost = Number.isFinite(freeAbove) && activePrice >= freeAbove
+      ? 0
+      : Math.max(0, Number.isFinite(configuredCost) ? configuredCost : 0);
+    return [{
+      "@type": "OfferShippingDetails",
+      ...(cleanText(method.name) ? { shippingLabel: cleanText(method.name) } : {}),
+      shippingDestination: { "@type": "DefinedRegion", addressCountry: "RO" },
+      shippingRate: { "@type": "MonetaryAmount", value: shippingCost.toFixed(2), currency },
+      deliveryTime: {
+        "@type": "ShippingDeliveryTime",
+        handlingTime: { "@type": "QuantitativeValue", minValue: 0, maxValue: 0, unitCode: "DAY" },
+        transitTime: { "@type": "QuantitativeValue", minValue: minDays, maxValue: maxDays, unitCode: "DAY" }
+      }
+    }];
+  });
+}
+
 function intentKey(value) {
   return cleanText(value).toLocaleLowerCase("ro-RO").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
@@ -353,7 +379,7 @@ function replaceMeta(html, attribute, key, value) {
   return html.replace("</head>", `    <meta ${attribute}="${escapeHtml(key)}" content="${escaped}">\n  </head>`);
 }
 
-function renderProductPage(template, product) {
+function renderProductPage(template, product, shippingMethods = []) {
   const slug = safeSlug(product.slug);
   const canonical = `${WEBSITE_BASE_URL}/magazin/produs/${encodeURIComponent(slug)}/`;
   const name = cleanText(product.name) || "Produs G-Trots";
@@ -394,6 +420,7 @@ function renderProductPage(template, product) {
   const images = (product.images || []).map(image => absoluteUrl(image.url || image.image_path)).filter(Boolean);
   if (!images.length) images.push(`${WEBSITE_BASE_URL}/assets/magazin-produse-v1.png`);
 
+  const shippingDetails = offerShippingDetails(shippingMethods, Number(priceText), currency);
   const productSchema = {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -421,7 +448,8 @@ function renderProductPage(template, product) {
         returnMethod: "https://schema.org/ReturnByMail",
         returnFees: "https://schema.org/ReturnFeesCustomerResponsibility",
         merchantReturnLink: `${WEBSITE_BASE_URL}/politica-de-retur`
-      }
+      },
+      ...(shippingDetails.length ? { shippingDetails } : {})
     }
   };
   const organizationSchema = {
@@ -964,11 +992,13 @@ async function main() {
   const previousSlugs = await readManifest();
   const { products, reportedTotal } = await loadPublicProducts();
   if (!products.length) throw new Error("Catalogul public nu conține produse; generarea a fost oprită fără ștergeri.");
+  const shopConfig = await fetchJson(`${API_URL}?action=publicShopConfig`);
+  const shippingMethods = Array.isArray(shopConfig?.shipping_methods) ? shopConfig.shipping_methods : [];
   await loadPublicReviews(products);
 
   for (const product of products) {
     const outputPath = path.join(PRODUCT_ROOT, product.slug, "index.html");
-    await atomicWrite(outputPath, renderProductPage(template, product));
+    await atomicWrite(outputPath, renderProductPage(template, product, shippingMethods));
   }
   const removed = await removeStaleGeneratedPages(previousSlugs, products.map(product => product.slug));
   const storePages = await generateStorePages(storeTemplate, products);

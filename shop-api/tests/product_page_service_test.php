@@ -31,7 +31,18 @@ $product = [
     'questions' => [['question' => 'Produsul este verificat?', 'answer' => 'Da, este verificat înainte de listare.']],
 ];
 
-$html = shopProductSeoRender($product, ['website_base_url' => 'https://g-trots.ro']);
+$renderConfig = [
+    'website_base_url' => 'https://g-trots.ro',
+    'shipping_methods' => [[
+        'name' => 'Curier',
+        'description' => '',
+        'cost' => 29.99,
+        'free_above' => null,
+        'eta_label' => '1-3 zile',
+        'is_active' => true,
+    ]],
+];
+$html = shopProductSeoRender($product, $renderConfig);
 
 productPageAssert(str_contains($html, '<title>Trotinetă Xiaomi Pro 2 second hand | G-Trots</title>'), 'Titlul SEO trebuie să fie prezent în HTML-ul inițial.');
 productPageAssert(str_contains($html, 'property="og:title" content="Trotinetă Xiaomi Pro 2 second hand | G-Trots"'), 'WhatsApp trebuie să primească exact meta titlul salvat în aplicație.');
@@ -53,6 +64,7 @@ productPageAssert(!str_contains($categoryDrivenHtml, 'itemCondition'), 'Categori
 productPageAssert(str_contains($html, '"@type":"Product"') && str_contains($html, '"@type":"FAQPage"') && str_contains($html, '"@type":"BreadcrumbList"'), 'Datele structurate Product, FAQ și Breadcrumb trebuie generate.');
 productPageAssert(str_contains($html, '"sameAs":["https://www.instagram.com/gtrots.ro/"') && str_contains($html, 'https://www.youtube.com/@g-trots') && !str_contains($html, 'medium.com'), 'Schema Organization a produsului trebuie să declare exclusiv profilurile sociale afișate.');
 productPageAssert(str_contains($html, '"merchantReturnDays":30') && !str_contains($html, '"merchantReturnDays":14'), 'Politica structurată a produsului trebuie să coincidă cu fereastra publică B2C de 30 de zile.');
+productPageAssert(str_contains($html, '"shippingDetails":[{"@type":"OfferShippingDetails"') && str_contains($html, '"value":"29.99","currency":"RON"') && str_contains($html, '"minValue":1,"maxValue":3,"unitCode":"DAY"'), 'Schema Product trebuie să publice costul și termenul real de livrare în România.');
 productPageAssert(str_contains($html, 'id="gt-product-bootstrap"') && str_contains($html, 'data-gt-static-product'), 'Pagina trebuie să poată porni imediat din conținutul generat și să aibă text semantic în HTML.');
 productPageAssert(str_contains($html, 'data-product-id="trotineta-second-hand-xiaomi-pro-2"'), 'Identificatorul produsului trebuie fixat în pagină.');
 productPageAssert(str_contains($html, '<b data-product-sku>SE-CMM087</b>'), 'Codul real al produsului trebuie randat vizibil în HTML-ul inițial.');

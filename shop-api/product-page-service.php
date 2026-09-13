@@ -76,6 +76,53 @@ function shopProductSeoValidGtin(string $value): ?string {
     return $expected === (int)$gtin[$length - 1] ? $gtin : null;
 }
 
+function shopProductSeoShippingDetails(array $shippingMethods, float $activePrice, string $currency): array {
+    $details = [];
+    foreach ($shippingMethods as $method) {
+        if (!is_array($method)) continue;
+        if (array_key_exists('is_active', $method) && !(bool)$method['is_active']) continue;
+        $eta = trim((string)($method['eta_label'] ?? $method['description'] ?? ''));
+        preg_match_all('/\d+/', $eta, $matches);
+        $days = array_values(array_filter(array_map('intval', $matches[0] ?? []), static fn(int $day): bool => $day >= 0));
+        if (!$days) continue;
+        $minDays = min($days);
+        $maxDays = max($days);
+        $shippingCost = max(0.0, (float)($method['cost'] ?? 0));
+        $freeAbove = $method['free_above'] ?? null;
+        if ($freeAbove !== null && $freeAbove !== '' && $activePrice >= (float)$freeAbove) $shippingCost = 0.0;
+        $detail = [
+            '@type' => 'OfferShippingDetails',
+            'shippingDestination' => ['@type' => 'DefinedRegion', 'addressCountry' => 'RO'],
+            'shippingRate' => [
+                '@type' => 'MonetaryAmount',
+                'value' => number_format($shippingCost, 2, '.', ''),
+                'currency' => $currency,
+            ],
+            'deliveryTime' => [
+                '@type' => 'ShippingDeliveryTime',
+                'handlingTime' => ['@type' => 'QuantitativeValue', 'minValue' => 0, 'maxValue' => 0, 'unitCode' => 'DAY'],
+                'transitTime' => ['@type' => 'QuantitativeValue', 'minValue' => $minDays, 'maxValue' => $maxDays, 'unitCode' => 'DAY'],
+            ],
+        ];
+        $label = shopProductSeoText($method['name'] ?? '');
+        if ($label !== '') $detail['shippingLabel'] = $label;
+        $details[] = $detail;
+    }
+    return $details;
+}
+
+function shopProductSeoActiveShippingMethods(PDO $db): array {
+    static $cache = [];
+    $key = spl_object_id($db);
+    if (array_key_exists($key, $cache)) return $cache[$key];
+    try {
+        $rows = $db->query('SELECT name, description, cost, free_above, eta_label, is_active FROM shop_shipping_methods WHERE is_active = 1 ORDER BY sort_order ASC, name ASC')->fetchAll();
+        return $cache[$key] = is_array($rows) ? $rows : [];
+    } catch (Throwable) {
+        return $cache[$key] = [];
+    }
+}
+
 function shopProductSeoIntentKey(mixed $value): string {
     $text = mb_strtolower(shopProductSeoText($value), 'UTF-8');
     return strtr($text, [
@@ -444,6 +491,8 @@ function shopProductSeoRender(array $product, array $config): string {
             ],
         ],
     ];
+    $shippingDetails = shopProductSeoShippingDetails((array)($config['shipping_methods'] ?? []), max(0, $price), $currency);
+    if ($shippingDetails) $productSchema['offers']['shippingDetails'] = $shippingDetails;
     foreach ($productSchema as $key => $value) if ($value === null || $value === '') unset($productSchema[$key]);
     $gtin = shopProductSeoValidGtin((string)($product['gtin'] ?? $product['ean'] ?? ''));
     if ($gtin !== null) $productSchema['gtin' . strlen($gtin)] = $gtin;
@@ -1199,7 +1248,9 @@ function shopProductSeoSync(PDO $db, array $config, string $productId, ?string $
         $dynamicPage = $directory . DIRECTORY_SEPARATOR . 'index.php';
         if (is_file($dynamicPage)) @unlink($dynamicPage);
         $path = $directory . DIRECTORY_SEPARATOR . 'index.html';
-        if (file_put_contents($path, shopProductSeoRender($product, $config), LOCK_EX) === false) throw new RuntimeException('Pagina SEO a produsului nu poate fi scrisă.');
+        $renderConfig = $config;
+        $renderConfig['shipping_methods'] = shopProductSeoActiveShippingMethods($db);
+        if (file_put_contents($path, shopProductSeoRender($product, $renderConfig), LOCK_EX) === false) throw new RuntimeException('Pagina SEO a produsului nu poate fi scrisă.');
         $redirectPath = null;
         if ($oldSlug !== null && trim($oldSlug) !== '' && $oldSlug !== $slug) {
             $redirectPath = shopProductSeoWriteRedirect($oldSlug, $slug, $config);

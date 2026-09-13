@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "generated_at": "2026-09-10T15:46:04.120Z",
+  "generated_at": "2026-09-13T08:13:19.097Z",
   "publisher": {
     "name": "G-Trots România",
     "legal_name": "CAB IT EXPERT S.R.L.",
@@ -1184,7 +1184,7 @@
       "warranty": null,
       "price": 19,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/0407386c9e63e93d7d34abd0729121bf.webp"
     },
     {
@@ -3359,7 +3359,7 @@
       "warranty": null,
       "price": 39,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/8d5aa966a53922ddcc7cc44cca8998a8.webp"
     },
     {
@@ -3986,7 +3986,7 @@
       "warranty": null,
       "price": 650,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/039b17c6046882f92cfd567ce34caf5d.webp"
     },
     {
@@ -4803,7 +4803,7 @@
       "warranty": null,
       "price": 199,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/779b2f0e3bfe9b8466ac5e81e8d593a5.webp"
     },
     {
@@ -9698,7 +9698,7 @@
       "warranty": null,
       "price": 15,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/70087a2b25148c8aed39b100e58f2c22.webp"
     },
     {
@@ -10266,7 +10266,7 @@
       "warranty": null,
       "price": 16,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/553af7911073c90b0bb8b250037799a2.webp"
     },
     {
@@ -11427,7 +11427,7 @@
       "warranty": null,
       "price": 149,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/5632be969d1114aa1989ae9718fca1df.webp"
     },
     {
@@ -11756,7 +11756,7 @@
       "warranty": null,
       "price": 149,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/3eeee442f86314ba97c46074c13858f6.webp"
     },
     {
@@ -12486,7 +12486,7 @@
       "warranty": null,
       "price": 160,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/97485f702d2590cda32344340aed86aa.webp"
     },
     {
@@ -12514,7 +12514,7 @@
       "warranty": null,
       "price": 149,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/f16b9e221f3b2b34ba929dd968c0b494.webp"
     },
     {
@@ -12997,7 +12997,7 @@
       "warranty": null,
       "price": 132,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/9428f11156048120542aa66911cc4a9e.webp"
     },
     {
@@ -16626,7 +16626,7 @@
       "warranty": null,
       "price": 129,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/cd4bd70c42c3b383a9e37fc59d5dfb67.webp"
     },
     {
@@ -20093,7 +20093,7 @@
       "warranty": null,
       "price": 30,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/38211cac7d242dc085d01eac8ab4a6f1.webp"
     },
     {
@@ -20268,7 +20268,7 @@
       "warranty": null,
       "price": 39,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/9cb4a7d678cc227df9fbcb496f218ab4.webp"
     },
     {
@@ -20535,31 +20535,6 @@
       "currency": "RON",
       "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/2ca72ede59a5628f6e228140ad4fccf1.webp"
-    },
-    {
-      "id": "35546d1c-b8b0-5275-97f8-b2f6c6d7a166",
-      "name": "Disc de frână 140 mm 6H pentru trotinetă electrică",
-      "meta_title": "Disc de frână 140 mm 6H pentru trotinetă electrică",
-      "meta_description": "Disc de frână 140 mm 6H pentru trotinetă electrică. , cu potrivire stabilită prin comparație cu piesa originală. Compară diametrul exterior, numărul și cercul găurilor",
-      "short_description": "Disc de frână 140 mm 6H pentru trotinetă electrică. Cu potrivire stabilită prin comparație cu piesa originală. Compară diametrul exterior, numărul și cercul găurilor, grosimea, off",
-      "description_excerpt": "Disc de frână 140 mm 6H pentru trotinetă electrică. Cu potrivire stabilită prin comparație cu piesa originală. Compară diametrul exterior, numărul și cercul găurilor, grosimea, off",
-      "description": "Disc de frână 140 mm 6H pentru trotinetă electrică. , cu potrivire stabilită prin comparație cu piesa originală. Compară diametrul exterior, numărul și cercul găurilor",
-      "url": "https://g-trots.ro/magazin/produs/disc-frana-trotineta-electrica-140-mm-prindere-in-6-suruburi-varianta-2/",
-      "sku": "4273.00",
-      "gtin": "",
-      "manufacturer": "OEM",
-      "category": "Discuri de frana",
-      "compatibility": [],
-      "specifications": [],
-      "conversation_intents": [],
-      "compatibility_guidance": "Confirmă modelul, anul sau versiunea și specificațiile relevante înainte de comandă; piesele asemănătoare vizual nu sunt întotdeauna interschimbabile.",
-      "delivery": "Livrare disponibilă în toată România.",
-      "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
-      "warranty": null,
-      "price": 40,
-      "currency": "RON",
-      "availability": "https://schema.org/InStock",
-      "image": "https://g-trots.ro/shop-api/uploads/products/03623bbe059c1368ba84f03a5a44f882.webp"
     },
     {
       "id": "c9c45ee0-a0df-5a80-b1e1-e94868e0480d",
@@ -20965,7 +20940,7 @@
       "warranty": null,
       "price": 466,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/338b7f3a1b7900a3802c3fb9eb776bdd.webp"
     },
     {
@@ -21079,7 +21054,7 @@
       "warranty": null,
       "price": 349,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/bc2af29bb8fa1ad12f17b552c39d2061.webp"
     },
     {
@@ -21170,7 +21145,7 @@
       "warranty": null,
       "price": 390,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/d8c76a37ff0794d1a1bb111839df7dbf.webp"
     },
     {
@@ -21350,7 +21325,7 @@
       "warranty": null,
       "price": 457,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/cc00dcea006445464a3dfbb1f4be5b19.webp"
     },
     {
@@ -22804,34 +22779,6 @@
       "image": "https://g-trots.ro/shop-api/uploads/products/580515ecf3072cc131d264a8880137b8.webp"
     },
     {
-      "id": "c6d78b43-909e-5628-8328-ed2c84a6208c",
-      "name": "Dopuri protectie cauciuc albastru Xiaomi",
-      "meta_title": "Dopuri protecție cauciuc albastru Xiaomi | G-Trots",
-      "meta_description": "Dopuri protecție cauciuc albastru Xiaomi | G-Trots. , pentru Xiaomi, Xiaomi M365. Culoare: albastru, roșu. Compară dimensiunea înscrisă pe anvelopa veche, diametrul jantei.",
-      "short_description": "Dopuri protecție cauciuc albastru Xiaomi, pentru Xiaomi, Xiaomi M365. Culoare: albastru, roșu. Compară dimensiunea înscrisă pe anvelopa veche, diametrul jantei, lățimea, tipul came",
-      "description_excerpt": "Dopuri protecție cauciuc albastru Xiaomi, pentru Xiaomi, Xiaomi M365. Culoare: albastru, roșu. Compară dimensiunea înscrisă pe anvelopa veche, diametrul jantei, lățimea, tipul came",
-      "description": "Dopuri protecție cauciuc albastru Xiaomi | G-Trots. , pentru Xiaomi, Xiaomi M365. Culoare: albastru, roșu. Compară dimensiunea înscrisă pe anvelopa veche, diametrul jantei.",
-      "url": "https://g-trots.ro/magazin/produs/dopuri-protectie-cauciuc-albastru-xiaomi/",
-      "sku": "SE-67467-1",
-      "gtin": "7427135771781",
-      "manufacturer": "OEM",
-      "category": "Aparatori si protectii",
-      "compatibility": [
-        "Xiaomi",
-        "Xiaomi M365"
-      ],
-      "specifications": [],
-      "conversation_intents": [],
-      "compatibility_guidance": "Confirmă modelul, anul sau versiunea și specificațiile relevante înainte de comandă; piesele asemănătoare vizual nu sunt întotdeauna interschimbabile.",
-      "delivery": "Livrare disponibilă în toată România.",
-      "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
-      "warranty": null,
-      "price": 20,
-      "currency": "RON",
-      "availability": "https://schema.org/InStock",
-      "image": "https://g-trots.ro/shop-api/uploads/products/c7c3200dfb1db72f74073055633a26b4.webp"
-    },
-    {
       "id": "3c125102-28ff-57fb-bacf-2ecf09709630",
       "name": "Dopuri protectie cauciuc negru Xiaomi – Xiaomi, Xiaomi M365",
       "meta_title": "Dopuri protectie cauciuc negru Xiaomi – Xiaomi, Xiaomi M365",
@@ -24089,7 +24036,7 @@
       "warranty": null,
       "price": 39,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/26f101d49e0314b7e8a7f0f92b70be2c.webp"
     },
     {
@@ -26401,7 +26348,7 @@
       "warranty": null,
       "price": 79,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/a744a86464e57e845baabc0fb0e7ab1b.webp"
     },
     {
@@ -28154,7 +28101,7 @@
       "warranty": null,
       "price": 189,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/53494930049113b570f7d7f665f0eabb.webp"
     },
     {
@@ -29029,7 +28976,7 @@
       "warranty": null,
       "price": 99,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/e8e700bc728c3cd95d05f1cddc134b10.webp"
     },
     {
@@ -29485,7 +29432,7 @@
       "warranty": null,
       "price": 170,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/7e331b37e06a127ad82e5d4b99d44f0f.webp"
     },
     {
@@ -32534,7 +32481,7 @@
       "warranty": null,
       "price": 49,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/dedb7807a9e37fe6a469ab9b43a3ac05.webp"
     },
     {
@@ -32659,7 +32606,7 @@
       "warranty": null,
       "price": 10,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/7bca84e0af3002bf972a44a0ef1b492f.webp"
     },
     {
@@ -32889,6 +32836,34 @@
       "image": "https://g-trots.ro/shop-api/uploads/products/7b7b72ce7ad898df7a797eb4ac42ecda.webp"
     },
     {
+      "id": "d600a903-a831-59ba-9d0a-eaa0f21f4f8c",
+      "name": "Motor 48v 1000w 6 B34 Kugoo Kirin G2 Max",
+      "meta_title": "Motor 48v 1000w 6 B34 Kugoo Kirin G2 Max | G-Trots",
+      "meta_description": "Motor 48v 1000w 6 B34 Kugoo Kirin G2 Max | G-Trots. , pentru KuKirin G2 Max, KuKirin G2. Tensiune: 48 V. Compară tensiunea, puterea, diametrul roții, axul, distanțierele.",
+      "short_description": "Pentru KuKirin G2 Max, KuKirin G2. Tensiune: 48 V. Compară tensiunea, puterea, diametrul roții, axul, distanțierele, conectorii de fază și senzorii înainte de comandă Pentru varian",
+      "description_excerpt": "Pentru KuKirin G2 Max, KuKirin G2. Tensiune: 48 V. Compară tensiunea, puterea, diametrul roții, axul, distanțierele, conectorii de fază și senzorii înainte de comandă Pentru varian",
+      "description": "Motor 48v 1000w 6 B34 Kugoo Kirin G2 Max | G-Trots. , pentru KuKirin G2 Max, KuKirin G2. Tensiune: 48 V. Compară tensiunea, puterea, diametrul roții, axul, distanțierele.",
+      "url": "https://g-trots.ro/magazin/produs/motor-48v-1000w-6-b34-kugoo-kirin-g2-max/",
+      "sku": "SE-CMM035",
+      "gtin": "",
+      "manufacturer": "KUGOO",
+      "category": "Motoare",
+      "compatibility": [
+        "KuKirin G2",
+        "KuKirin G2 Max"
+      ],
+      "specifications": [],
+      "conversation_intents": [],
+      "compatibility_guidance": null,
+      "delivery": "Livrare disponibilă în toată România.",
+      "service_support": null,
+      "warranty": null,
+      "price": 1425,
+      "currency": "RON",
+      "availability": "https://schema.org/InStock",
+      "image": "https://g-trots.ro/shop-api/uploads/products/3194b67c4c7c1bd2cfa4fd6f9fd1e4d3.webp"
+    },
+    {
       "id": "f7089a80-d8c3-5037-bb55-090c811f9180",
       "name": "Motor 48v 1000w 6 B34 KuKirin G2 Max",
       "meta_title": "Motor 48v 1000w 6 B34 KuKirin G2 Max | G-Trots",
@@ -32913,7 +32888,7 @@
       "warranty": null,
       "price": 949,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/d95e0a49a048fc84922ec4eaf497d532.webp"
     },
     {
@@ -33322,7 +33297,7 @@
       "warranty": null,
       "price": 69,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/ae2cb9aecaa3147fe3f702e380767c52.webp"
     },
     {
@@ -36112,7 +36087,7 @@
       "warranty": null,
       "price": 39,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/bf02a6f654b2a18abe4a2247e8af1719.webp"
     },
     {
@@ -37876,7 +37851,7 @@
       "warranty": null,
       "price": 355,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/d335b2305daea9e4b7fbff3e94066390.webp"
     },
     {
@@ -38502,7 +38477,7 @@
       "warranty": null,
       "price": 100,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/eada12fd62c98bb92a6ddc75ee5be30f.webp"
     },
     {
@@ -39104,7 +39079,7 @@
       "warranty": null,
       "price": 60,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/4ff32e7b547c663f3b06af19a7f2d0da.webp"
     },
     {
@@ -41476,7 +41451,7 @@
       "warranty": null,
       "price": 449,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/5aba7eb3e787365b2e06ab1cb16697df.webp"
     },
     {
@@ -41893,7 +41868,7 @@
       "warranty": null,
       "price": 50,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/75cf832ffa249df496ad44c411c7db22.webp"
     },
     {
@@ -42988,7 +42963,7 @@
       "warranty": null,
       "price": 199,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/c3d814b50163aad8599b36a1b840a943.webp"
     },
     {
@@ -43950,34 +43925,6 @@
       "currency": "RON",
       "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/6e9a1610c0abbec06d869a1b9a8408c8.webp"
-    },
-    {
-      "id": "c6940e41-13d1-59af-8a05-11777f9ecb3d",
-      "name": "Suspensie fata spate trotineta electrica Kukirin G2 Master",
-      "meta_title": "Suspensie fata spate trotineta electrica Kukirin G2 Master",
-      "meta_description": "Suspensie fata spate trotineta electrica Kukirin G2 Master. , pentru KuKirin G2 Master, KuKirin G2. Poziție: față, spate. Compară lungimea, axul, lățimea, diametrul coloanei",
-      "short_description": "Suspensie față spate trotinetă electrică Kukirin G2 Master, pentru KuKirin G2 Master, KuKirin G2. Poziție: față, spate. Compară lungimea, axul, lățimea, diametrul coloanei, prinder",
-      "description_excerpt": "Suspensie față spate trotinetă electrică Kukirin G2 Master, pentru KuKirin G2 Master, KuKirin G2. Poziție: față, spate. Compară lungimea, axul, lățimea, diametrul coloanei, prinder",
-      "description": "Suspensie fata spate trotineta electrica Kukirin G2 Master. , pentru KuKirin G2 Master, KuKirin G2. Poziție: față, spate. Compară lungimea, axul, lățimea, diametrul coloanei",
-      "url": "https://g-trots.ro/magazin/produs/suspensie-fata-spate-trotineta-electrica-kukirin-g2-master-fata-spate/",
-      "sku": "RK-G2Master-013-T",
-      "gtin": "8410100972800",
-      "manufacturer": "KuKirin",
-      "category": "Suspensii",
-      "compatibility": [
-        "KuKirin G2",
-        "KuKirin G2 Master"
-      ],
-      "specifications": [],
-      "conversation_intents": [],
-      "compatibility_guidance": "Confirmă modelul, anul sau versiunea și specificațiile relevante înainte de comandă; piesele asemănătoare vizual nu sunt întotdeauna interschimbabile.",
-      "delivery": "Livrare disponibilă în toată România.",
-      "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
-      "warranty": null,
-      "price": 199,
-      "currency": "RON",
-      "availability": "https://schema.org/InStock",
-      "image": "https://g-trots.ro/shop-api/uploads/products/852375074aef9fa2d483a667c898ca73.webp"
     },
     {
       "id": "0078538c-9d71-5baf-9c65-8f39d03e148e",
@@ -45563,7 +45510,7 @@
       "warranty": null,
       "price": 20,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/72627b9ebfc93b9000cd476a54120682.webp"
     },
     {

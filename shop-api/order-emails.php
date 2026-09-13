@@ -357,7 +357,7 @@ function gtSmtpCommand($socket, string $command, array $expectedCodes): string {
     return $response;
 }
 
-function gtSmtpSend(array $config, string $recipient, string $subject, string $html, array $attachments = []): void {
+function gtSmtpSend(array $config, string $recipient, string $subject, string $html, array $attachments = [], array $extraHeaders = []): void {
     $host = trim((string)($config['smtp_host'] ?? ''));
     $port = (int)($config['smtp_port'] ?? 465);
     $encryption = strtolower(trim((string)($config['smtp_encryption'] ?? 'ssl')));
@@ -402,6 +402,13 @@ function gtSmtpSend(array $config, string $recipient, string $subject, string $h
             'Message-ID: <' . bin2hex(random_bytes(12)) . '@g-trots.ro>',
             'MIME-Version: 1.0',
         ];
+        foreach ($extraHeaders as $name => $value) {
+            $name = trim((string)$name);
+            $value = trim((string)$value);
+            if (!in_array($name, ['List-Unsubscribe', 'List-Unsubscribe-Post'], true)) continue;
+            if ($value === '' || preg_match('/[\r\n]/', $value)) continue;
+            $headers[] = $name . ': ' . $value;
+        }
         if ($attachments) {
             $boundary = '=_gtrots_' . bin2hex(random_bytes(18));
             $headers[] = 'Content-Type: multipart/mixed; boundary="' . $boundary . '"';

@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Easing,
   Modal,
   PanResponder,
   ScrollView,
@@ -301,6 +302,7 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
   const [loading, setLoading] = useState(!initialBootstrap);
   const [listRefreshing, setListRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingMode, setSavingMode] = useState<'create' | 'edit'>('create');
   const [error, setError] = useState('');
   const [editorVisible, setEditorVisible] = useState(false);
   const [editorLoading, setEditorLoading] = useState(false);
@@ -681,6 +683,7 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
       repairability_info: form.repairability_info.trim(),
       spare_parts_info: form.spare_parts_info.trim(),
     };
+    setSavingMode(form.id ? 'edit' : 'create');
     setSaving(true);
     try {
       const saved = form.id
@@ -694,6 +697,9 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
       }
       if (saved.seo_page && !saved.seo_page.success) {
         saveWarnings.push(`Pagina Google: ${saved.seo_page.error || 'generarea trebuie reincercata.'}`);
+      }
+      if (saved.newsletter_notification?.failed) {
+        saveWarnings.push(`Newsletter: ${saved.newsletter_notification.failed} ${saved.newsletter_notification.failed === 1 ? 'e-mail nu a putut fi trimis' : 'e-mailuri nu au putut fi trimise'}. Detaliile apar in tabul Abonati newsletter.`);
       }
       if (saveWarnings.length) {
         Alert.alert('Produs salvat in catalog', `Produsul este salvat, dar exista avertizari:\n\n${saveWarnings.join('\n')}`);
@@ -915,8 +921,58 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
           </ScrollView>}
         </SafeAreaView>
       </Modal> : null}
+      {saving ? <ProductSaveProgress mode={savingMode} /> : null}
     </>
   );
+}
+
+function ProductSaveProgress({ mode }: { mode: 'create' | 'edit' }) {
+  const [elapsed, setElapsed] = useState(0);
+  const [spin] = useState(() => new Animated.Value(0));
+  const [pulse] = useState(() => new Animated.Value(0));
+  const estimatedSeconds = mode === 'create' ? 24 : 17;
+
+  useEffect(() => {
+    const startedAt = Date.now();
+    const timer = setInterval(() => setElapsed(Date.now() - startedAt), 300);
+    const spinLoop = Animated.loop(Animated.timing(spin, { toValue: 1, duration: 1500, easing: Easing.linear, useNativeDriver: true }));
+    const pulseLoop = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+    ]));
+    spinLoop.start();
+    pulseLoop.start();
+    return () => { clearInterval(timer); spinLoop.stop(); pulseLoop.stop(); };
+  }, [pulse, spin]);
+
+  const seconds = elapsed / 1000;
+  const progress = Math.min(94, Math.max(5, Math.round((1 - Math.exp(-seconds / (estimatedSeconds * .48))) * 100)));
+  const remaining = Math.max(0, Math.ceil(estimatedSeconds - seconds));
+  const stages = mode === 'create'
+    ? ['Validăm datele și imaginile', 'Salvăm produsul în catalog', 'Sincronizăm canalele de vânzare', 'Generăm pagina publică și SEO', 'Pregătim noutatea pentru abonați']
+    : ['Validăm modificările', 'Actualizăm produsul în catalog', 'Sincronizăm prețul și stocul', 'Regenerăm pagina publică', 'Reîmprospătăm lista de produse'];
+  const stageIndex = Math.min(stages.length - 1, Math.floor(progress / 20));
+  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const pulseScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
+
+  return <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={() => undefined}>
+    <View style={styles.saveProgressBackdrop}>
+      <View style={styles.saveProgressCard}>
+        <View style={styles.saveGlowA} /><View style={styles.saveGlowB} />
+        <View style={styles.saveVisual}>
+          <Animated.View style={[styles.saveOrbit, { transform: [{ rotate }] }]}><View style={styles.saveOrbitDot} /></Animated.View>
+          <Animated.View style={[styles.saveCore, { transform: [{ scale: pulseScale }] }]}><Save size={28} color="#FFF" /></Animated.View>
+        </View>
+        <Text style={styles.saveProgressKicker}>{mode === 'create' ? 'PRODUS NOU' : 'ACTUALIZARE PRODUS'}</Text>
+        <Text style={styles.saveProgressTitle}>{mode === 'create' ? 'Îl pregătim pentru magazin.' : 'Salvăm toate modificările.'}</Text>
+        <Text style={styles.saveProgressText}>{stages[stageIndex]}</Text>
+        <View style={styles.saveTrack}><View style={[styles.saveTrackFill, { width: `${progress}%` as `${number}%` }]}><View style={styles.saveTrackShine} /></View></View>
+        <View style={styles.saveProgressMeta}><Text style={styles.saveProgressPercent}>{progress}%</Text><Text style={styles.saveProgressEta}>{remaining > 0 ? `aprox. ${remaining} sec.` : 'ultimele verificări…'}</Text></View>
+        <View style={styles.saveSteps}>{stages.map((stage, index) => <View key={stage} style={[styles.saveStep, index <= stageIndex && styles.saveStepActive]}>{index < stageIndex ? <Check size={12} color="#1A0C02" /> : <Text style={[styles.saveStepNumber, index <= stageIndex && styles.saveStepNumberActive]}>{index + 1}</Text>}</View>)}</View>
+        <Text style={styles.saveProgressNote}>Poți lăsa ecranul deschis. Se închide automat când produsul este salvat complet.</Text>
+      </View>
+    </View>
+  </Modal>;
 }
 
 function SectionTitle({ number, title, text }: { number: string; title: string; text: string }) {
@@ -1076,4 +1132,11 @@ const styles = StyleSheet.create({
   googlePreview: { flexDirection: 'row', gap: 12, borderWidth: 1, borderColor: '#343137', borderRadius: 19, padding: 14, backgroundColor: '#FFF', marginBottom: 18 }, googleImage: { width: 78, height: 78, borderRadius: 10, backgroundColor: '#EEE' }, googleCopy: { flex: 1, minWidth: 0 }, googleSite: { color: '#202124', fontFamily: 'Inter-Regular', fontSize: 9 }, googleTitle: { color: '#1A0DAB', fontFamily: 'Inter-Regular', fontSize: 15, lineHeight: 19, marginTop: 3 }, googleDescription: { color: '#4D5156', fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 14, marginTop: 3 }, googleUrl: { color: '#188038', fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 4 },
   toggleCard: { minHeight: 65, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderRadius: 17, padding: 13, backgroundColor: '#1B1B1F', marginBottom: 9 }, accountingToggleCard: { borderWidth: 1, borderColor: 'rgba(52,211,153,0.22)', backgroundColor: '#17201E' }, toggleCopy: { flex: 1, minWidth: 0 }, toggleTitle: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 11 }, toggleText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 13, marginTop: 3 },
   saveBottom: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 17, backgroundColor: Colors.orange, marginTop: 14 }, saveBottomText: { color: Colors.white, fontFamily: 'Inter-Bold', fontSize: 11 },
+  saveProgressBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16, backgroundColor: '#050404E8' },
+  saveProgressCard: { width: '100%', maxWidth: 570, minHeight: 510, paddingHorizontal: 24, paddingVertical: 34, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 1, borderColor: '#59402D', borderRadius: 34, backgroundColor: '#171311', shadowColor: '#000', shadowOpacity: .55, shadowRadius: 35, shadowOffset: { width: 0, height: 20 }, elevation: 22 },
+  saveGlowA: { width: 260, height: 260, position: 'absolute', top: -170, right: -80, borderRadius: 130, backgroundColor: '#FF790021' }, saveGlowB: { width: 210, height: 210, position: 'absolute', bottom: -150, left: -100, borderRadius: 105, backgroundColor: '#FFAA3312' },
+  saveVisual: { width: 112, height: 112, alignItems: 'center', justifyContent: 'center' }, saveOrbit: { width: 106, height: 106, position: 'absolute', borderWidth: 1, borderColor: '#FF9A3A55', borderRadius: 53 }, saveOrbitDot: { width: 13, height: 13, position: 'absolute', top: -6, left: 46, borderWidth: 3, borderColor: '#FFD1A1', borderRadius: 7, backgroundColor: '#FF7900' }, saveCore: { width: 72, height: 72, alignItems: 'center', justifyContent: 'center', borderRadius: 24, backgroundColor: '#FE7F0A', shadowColor: '#FF7900', shadowOpacity: .5, shadowRadius: 22, shadowOffset: { width: 0, height: 8 }, elevation: 12 },
+  saveProgressKicker: { marginTop: 22, color: '#FE9C3D', fontFamily: 'Inter-Bold', fontSize: 9, letterSpacing: 1.6 }, saveProgressTitle: { maxWidth: 430, marginTop: 8, color: '#FFF8F1', fontFamily: 'Inter-Bold', fontSize: 26, lineHeight: 32, letterSpacing: -.7, textAlign: 'center' }, saveProgressText: { minHeight: 19, marginTop: 10, color: '#B5AAA3', fontFamily: 'Inter-SemiBold', fontSize: 11, textAlign: 'center' },
+  saveTrack: { width: '100%', height: 12, marginTop: 26, overflow: 'hidden', borderWidth: 1, borderColor: '#41352D', borderRadius: 99, backgroundColor: '#0D0C0B' }, saveTrackFill: { height: '100%', minWidth: 12, overflow: 'hidden', borderRadius: 99, backgroundColor: '#FE800A' }, saveTrackShine: { width: '35%', height: '100%', alignSelf: 'flex-end', backgroundColor: '#FFBD70AA' }, saveProgressMeta: { width: '100%', marginTop: 9, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, saveProgressPercent: { color: '#FFF', fontFamily: 'Inter-Bold', fontSize: 11 }, saveProgressEta: { color: '#8F8580', fontFamily: 'Inter-SemiBold', fontSize: 9 },
+  saveSteps: { marginTop: 23, flexDirection: 'row', alignItems: 'center', gap: 8 }, saveStep: { width: 27, height: 27, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#403A3A', borderRadius: 9, backgroundColor: '#242023' }, saveStepActive: { borderColor: '#FF9A3F', backgroundColor: '#FE8C19' }, saveStepNumber: { color: '#777078', fontFamily: 'Inter-Bold', fontSize: 8 }, saveStepNumberActive: { color: '#1A0C02' }, saveProgressNote: { maxWidth: 420, marginTop: 23, color: '#746C68', fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 14, textAlign: 'center' },
 });

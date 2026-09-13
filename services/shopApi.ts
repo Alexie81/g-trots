@@ -531,6 +531,13 @@ export type ShopProduct = {
     error?: string;
     reason?: 'deleted' | 'inactive' | 'inactive_source';
   };
+  newsletter_notification?: {
+    eligible: boolean;
+    subscribers?: number;
+    sent: number;
+    failed: number;
+    skipped: number;
+  };
   brand_ids: string[];
   brands: Pick<ShopBrand, 'id' | 'name' | 'slug'>[];
   created_at: string;
@@ -978,6 +985,22 @@ export type ShopCustomerSummary = {
 
 export type ShopCustomerDetail = ShopCustomerSummary & {
   orders: ShopOrder[];
+};
+
+export type ShopNewsletterSubscriber = {
+  id: string;
+  email: string;
+  full_name: string;
+  phone: string | null;
+  status: 'subscribed' | 'unsubscribed';
+  is_subscribed: boolean;
+  consent_source: string;
+  consent_at: string | null;
+  unsubscribed_at: string | null;
+  last_notified_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ShopPromotion = {
@@ -1582,6 +1605,7 @@ export const shopApi = {
   listShopNotifications: (token: string) => shopCall<ShopNotificationFeed>('listShopNotifications', token, undefined, '', 0, { unread_only: 1 }),
   markShopNotificationRead: (token: string, id: string, all = false) => shopCall<ShopNotificationFeed>('markShopNotificationRead', token, { method: 'POST', body: JSON.stringify({ id, all }) }, id),
   listCustomers: (token: string) => shopCall<ShopCustomerSummary[]>('listCustomers', token),
+  listNewsletterSubscribers: (token: string) => shopCall<ShopNewsletterSubscriber[]>('listNewsletterSubscribers', token),
   getCustomer: (token: string, id: string) => shopCall<ShopCustomerDetail>('getCustomer', token, undefined, id),
   updateCustomerStatus: (token: string, id: string, isActive: boolean) => shopCall<{ success: true; is_active: boolean }>('updateCustomerStatus', token, { method: 'PATCH', body: JSON.stringify({ is_active: isActive }) }, id),
   listPromotions: (token: string) => shopCall<ShopPromotion[]>('listPromotions', token),

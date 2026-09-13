@@ -18,6 +18,7 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
 require_once __DIR__ . '/order-emails.php';
+require_once __DIR__ . '/newsletter.php';
 require_once __DIR__ . '/invoice-service.php';
 require_once __DIR__ . '/invoice-automation.php';
 require_once __DIR__ . '/spv-service.php';
@@ -254,7 +255,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026091001;
+    $schemaVersion = 2026091301;
     // Ruta normala face doar SELECT-ul indexat. Un CREATE TABLE IF NOT EXISTS la
     // fiecare request tot cere verificari de metadata si poate astepta lock-uri.
     try {
@@ -1711,6 +1712,7 @@ function ensureShopSchema(PDO $db): void {
             $db->exec("ALTER TABLE shop_orders ADD COLUMN {$column} {$definition}");
         }
     }
+    shopNewsletterEnsureSchema($db);
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_order_return_items (
             id CHAR(36) NOT NULL PRIMARY KEY,
@@ -4888,6 +4890,14 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
             'Magazin online',
             $paymentMethod === 'cash_on_delivery' ? 'pending' : 'not_requested'
         );
+        if ($newsletterOptIn) {
+            shopNewsletterSubscribeFromOrder($db, [
+                'email' => $customerEmail,
+                'full_name' => $name,
+                'phone' => $phone,
+                'order_id' => $orderId,
+            ]);
+        }
         $db->commit();
         $stmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ?');
         $stmt->execute([$orderId]);
@@ -6400,6 +6410,10 @@ try {
         jsonResponse($rows);
     }
 
+    if ($action === 'listNewsletterSubscribers' && $method === 'GET') {
+        jsonResponse(shopNewsletterList($db));
+    }
+
     if ($action === 'getCustomer' && $method === 'GET') {
         $id = trim((string)($_GET['id'] ?? ''));
         $stmt = $db->prepare('SELECT * FROM shop_customers WHERE id = ? LIMIT 1');
@@ -7300,6 +7314,7 @@ try {
         $productResponse['merchant_sync'] = $merchantSync;
         $productResponse['shopify_sync'] = $shopifySync;
         $productResponse['seo_page'] = shopProductSeoSync($db, $config, $id);
+        $productResponse['newsletter_notification'] = shopNewsletterNotifyNewProduct($db, $config, $productResponse);
         jsonResponse($productResponse, 201);
     }
 

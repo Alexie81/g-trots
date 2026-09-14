@@ -199,7 +199,8 @@ function gtEmailReturnDecisionSummary(array $order): string {
             ? '<p style="margin:9px 0 0;padding:10px 12px;border-radius:12px;background:#25191e;color:#f5d7e0;font-size:11px;line-height:1.5"><strong style="color:#fb9aad">Motivul refuzului:</strong> ' . gtEmailEscape($reason) . '</p>'
             : '';
         $rows .= '<div style="margin-top:10px;padding:15px;border:1px solid #403b43;border-radius:18px;background:#171519">'
-            . '<table role="presentation" width="100%"><tr><td><strong style="display:block;color:#fff8f3;font-size:13px;line-height:1.4">' . gtEmailEscape($item['product_name'] ?? '') . '</strong><span style="display:block;margin-top:3px;color:#827b84;font-size:10px">' . gtEmailEscape($item['product_sku'] ?? 'Fără SKU') . '</span></td><td align="right"><span style="display:inline-block;color:' . $decisionColor . ';font-size:9px;font-weight:900;letter-spacing:.08em">' . $decisionLabel . '</span></td></tr></table>'
+            . '<span style="display:block;color:' . $decisionColor . ';font-size:9px;font-weight:900;letter-spacing:.08em">' . $decisionLabel . '</span>'
+            . '<strong style="display:block;margin-top:6px;color:#fff8f3;font-size:13px;line-height:1.4;word-break:break-word;overflow-wrap:anywhere">' . gtEmailEscape($item['product_name'] ?? '') . '</strong><span style="display:block;margin-top:3px;color:#827b84;font-size:10px">' . gtEmailEscape($item['product_sku'] ?? 'Fără SKU') . '</span>'
             . '<table role="presentation" width="100%" style="margin-top:12px;font-size:11px"><tr><td style="color:#aaa2ac">Solicitată <strong style="color:#fff8f3">' . gtEmailQuantity($requested) . '</strong></td><td align="center" style="color:#6ee7b7">Acceptată <strong>' . gtEmailQuantity($accepted) . '</strong></td><td align="right" style="color:#fb9aad">Refuzată <strong>' . gtEmailQuantity($refused) . '</strong></td></tr></table>'
             . $reasonHtml . '</div>';
     }
@@ -220,23 +221,23 @@ function gtBuildOrderEmail(array $order, array $config, string $status): array {
         if (!is_array($item)) continue;
         $imageUrl = trim((string)($item['image_url'] ?? ''));
         $image = $imageUrl !== ''
-            ? '<img src="' . gtEmailEscape($imageUrl) . '" width="72" height="72" alt="" style="display:block;width:72px;height:72px;object-fit:contain;border-radius:20px;background:#f7f2ed">'
-            : '<span style="display:block;width:72px;height:72px;line-height:72px;text-align:center;border-radius:20px;background:#302d33;color:#ffb77a;font-size:21px;font-weight:900">GT</span>';
+            ? '<img src="' . gtEmailEscape($imageUrl) . '" width="64" height="64" alt="" style="display:block;width:64px;height:64px;object-fit:contain;border-radius:16px;background:#f7f2ed">'
+            : '<span style="display:block;width:64px;height:64px;line-height:64px;text-align:center;border-radius:16px;background:#302d33;color:#ffb77a;font-size:19px;font-weight:900">GT</span>';
         $hasItemDiscount = $isProductPromotion && (float)($item['discount_total'] ?? 0) > 0;
         $unitPriceHtml = $hasItemDiscount
             ? '<span style="text-decoration:line-through;color:#766f78">' . gtEmailMoney($item['unit_price'] ?? 0, $currency) . '</span> <strong style="color:#6ee7b7">' . gtEmailMoney($item['discounted_unit_price'] ?? 0, $currency) . '</strong>'
             : gtEmailMoney($item['unit_price'] ?? 0, $currency);
         $linePriceHtml = $hasItemDiscount
-            ? '<span style="display:block;text-decoration:line-through;color:#766f78;font-size:10px;font-weight:600">' . gtEmailMoney($item['line_total'] ?? 0, $currency) . '</span><strong style="display:block;margin-top:3px;color:#6ee7b7">' . gtEmailMoney($item['discounted_line_total'] ?? 0, $currency) . '</strong>'
+            ? '<span style="text-decoration:line-through;color:#766f78;font-size:10px;font-weight:600">' . gtEmailMoney($item['line_total'] ?? 0, $currency) . '</span> <strong style="color:#6ee7b7">' . gtEmailMoney($item['discounted_line_total'] ?? 0, $currency) . '</strong>'
             : gtEmailMoney($item['line_total'] ?? 0, $currency);
         $itemsHtml .= '<tr>'
-            . '<td style="padding:14px 0;border-bottom:1px solid #39353d;width:84px;vertical-align:middle">' . $image . '</td>'
-            . '<td style="padding:14px 12px;border-bottom:1px solid #39353d;vertical-align:middle">'
-            . '<strong style="display:block;color:#fff8f3;font-size:14px;line-height:1.35">' . gtEmailEscape($item['product_name'] ?? '') . '</strong>'
+            . '<td style="padding:14px 0;border-bottom:1px solid #39353d;width:76px;vertical-align:top">' . $image . '</td>'
+            . '<td style="padding:14px 0 14px 12px;border-bottom:1px solid #39353d;vertical-align:top;min-width:0">'
+            . '<strong style="display:block;color:#fff8f3;font-size:14px;line-height:1.4;word-break:break-word;overflow-wrap:anywhere">' . gtEmailEscape($item['product_name'] ?? '') . '</strong>'
+            . '<span style="display:block;margin-top:5px;color:#827b84;font-size:10px">' . gtEmailEscape($item['product_sku'] ?? 'Fără SKU') . '</span>'
             . '<span style="display:block;color:#9d959f;font-size:11px;margin-top:5px">' . (int)($item['quantity'] ?? 0) . ' × ' . $unitPriceHtml . '</span>'
-            . '</td>'
-            . '<td style="padding:14px 0;border-bottom:1px solid #39353d;text-align:right;vertical-align:middle;color:#fff8f3;font-size:13px;font-weight:900;white-space:nowrap">' . $linePriceHtml . '</td>'
-            . '</tr>';
+            . '<span style="display:block;margin-top:7px;color:#fff8f3;font-size:13px;line-height:1.3;font-weight:900">Total produs: <span style="color:#ffb77a">' . $linePriceHtml . '</span></span>'
+            . '</td></tr>';
     }
     $paymentLabel = ($order['payment_method'] ?? '') === 'card' ? 'Card online' : 'Ramburs la curier';
     $subject = (string)$meta['title'] . ' · ' . (string)($order['order_number'] ?? 'G-Trots');
@@ -322,7 +323,7 @@ function gtBuildOrderEmail(array $order, array $config, string $status): array {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;border:1px solid {$statusColor}55;border-radius:24px;background:{$statusColor}12"><tr><td class="gt-next-icon" style="width:64px;padding:15px 0 15px 15px"><span style="display:block;width:48px;height:48px;line-height:48px;text-align:center;border-radius:17px;background:{$statusColor};color:#151116;font-size:15px;font-weight:1000">{$statusSymbol}</span></td><td class="gt-next-copy" style="padding:15px"><span style="display:block;color:{$statusColor};font-size:8px;font-weight:900;letter-spacing:.12em">CE URMEAZĂ</span><strong style="display:block;margin-top:4px;color:#fff8f3;font-size:14px">{$nextTitle}</strong><span style="display:block;margin-top:4px;color:#9d959f;font-size:11px;line-height:1.45">{$nextMessage}</span></td></tr></table>
 <div class="gt-summary" style="padding:24px;border:1px solid #403b43;border-radius:28px;background:#151318">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td><span style="display:block;color:#9d959f;font-size:9px;font-weight:900;letter-spacing:.12em">REZUMAT COMANDĂ</span><strong style="display:block;margin-top:6px;color:#ffb77a;font-size:17px;overflow-wrap:anywhere">{$orderNumber}</strong></td><td align="right"><span style="display:block;color:#9d959f;font-size:9px;font-weight:900;letter-spacing:.12em">DATA</span><strong style="display:block;margin-top:6px;color:#d8d1d9;font-size:12px">{$createdAt}</strong></td></tr></table>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px">{$itemsHtml}</table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;table-layout:fixed">{$itemsHtml}</table>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:17px;color:#aaa2ac;font-size:12px"><tr><td style="padding:6px 0">{$subtotalLabel}</td><td align="right">{$subtotal}</td></tr>{$discountRow}<tr><td style="padding:6px 0">Livrare · {$shippingName}</td><td align="right">{$shippingCost}</td></tr><tr><td style="padding:6px 0">Plată</td><td align="right">{$paymentText}</td></tr><tr><td style="padding:19px 0 0;border-top:1px solid #403b43;color:#fff8f3;font-size:15px;font-weight:900">Total de plată{$vatTotalLabel}</td><td align="right" style="padding:19px 0 0;border-top:1px solid #403b43;color:#ffb77a;font-size:24px;font-weight:1000">{$total}</td></tr></table>
 </div>
 {$returnDecisionSummary}

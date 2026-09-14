@@ -6772,7 +6772,13 @@ try {
                         WHEN payment_status = "paid"
                          AND status NOT IN ("cancelled", "return_confirmed", "refunded")
                         THEN total ELSE 0
-                    END), 0) AS collected_revenue
+                    END), 0) AS collected_revenue,
+                    COALESCE(SUM(CASE
+                        WHEN payment_method <> "card"
+                         AND payment_status = "pending"
+                         AND status NOT IN ("cancelled", "return_confirmed", "refunded")
+                        THEN total ELSE 0
+                    END), 0) AS pending_cash
              FROM shop_orders
              WHERE created_at >= ? AND created_at < ?'
         );
@@ -6850,7 +6856,13 @@ try {
                         WHEN o.payment_status = "paid"
                          AND o.status NOT IN ("cancelled", "return_confirmed", "refunded")
                         THEN o.total ELSE 0
-                    END), 0) AS collected_revenue
+                    END), 0) AS collected_revenue,
+                    COALESCE(SUM(CASE
+                        WHEN o.payment_method <> "card"
+                         AND o.payment_status = "pending"
+                         AND o.status NOT IN ("cancelled", "return_confirmed", "refunded")
+                        THEN o.total ELSE 0
+                    END), 0) AS pending_cash
              FROM shop_orders o
              WHERE o.created_at >= ? AND o.created_at < ?
              GROUP BY ' . $orderBucketExpression . '
@@ -6912,7 +6924,11 @@ try {
         $dailyByDate = [];
         foreach ($ordersDailyStatement->fetchAll() as $dailyRow) {
             $day = (string)$dailyRow['day'];
-            $dailyByDate[$day] = ['orders_count' => (int)$dailyRow['orders_count']];
+            $dailyByDate[$day] = [
+                'orders_count' => (int)$dailyRow['orders_count'],
+                'collected_revenue' => (float)($dailyRow['collected_revenue'] ?? 0),
+                'pending_cash' => (float)($dailyRow['pending_cash'] ?? 0),
+            ];
         }
         foreach ($invoicesDailyStatement->fetchAll() as $dailyRow) {
             $day = (string)$dailyRow['day'];
@@ -6950,6 +6966,7 @@ try {
             $dailyGrossRevenue = round((float)($daily['gross_revenue'] ?? 0), 2);
             $dailyReturnsTotal = round((float)($daily['returns_total'] ?? 0), 2);
             $dailyRevenue = round((float)($daily['collected_revenue'] ?? 0), 2);
+            $dailyPendingCash = round((float)($daily['pending_cash'] ?? 0), 2);
             $dailyAcquisitions = round((float)($daily['acquisitions'] ?? 0), 2);
             $dailyCostOfGoodsSold = round((float)($daily['cost_of_goods_sold'] ?? 0), 2);
             $dailyStats[] = [
@@ -6957,6 +6974,7 @@ try {
                 'orders_count' => (int)($daily['orders_count'] ?? 0),
                 'gross_revenue' => $dailyGrossRevenue,
                 'collected_revenue' => $dailyRevenue,
+                'pending_cash' => $dailyPendingCash,
                 'returns_count' => (int)($daily['returns_count'] ?? 0),
                 'returns_total' => $dailyReturnsTotal,
                 'revenue' => $dailyRevenue,
@@ -6988,6 +7006,7 @@ try {
         $grossRevenue = round((float)($invoiceSummary['gross_revenue'] ?? 0), 2);
         $returnsTotal = round((float)($invoiceSummary['returns_total'] ?? 0), 2);
         $revenue = round((float)($summary['collected_revenue'] ?? 0), 2);
+        $pendingCash = round((float)($summary['pending_cash'] ?? 0), 2);
         $acquisitions = round((float)($acquisitionSummary['acquisitions'] ?? 0), 2);
         $costOfGoodsSold = round(
             (float)($costSummary['cost_of_goods_sold'] ?? 0)
@@ -6997,6 +7016,7 @@ try {
         jsonResponse([
             'revenue' => $revenue,
             'collected_revenue' => $revenue,
+            'pending_cash' => $pendingCash,
             'gross_revenue' => $grossRevenue,
             'returns_count' => (int)($invoiceSummary['returns_count'] ?? 0),
             'returns_total' => $returnsTotal,

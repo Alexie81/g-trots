@@ -30,6 +30,7 @@ FILES = (
     "openai-discovery-scope.json",
     "gomag.php",
     "order-emails.php",
+    "email-image.php",
     "newsletter.php",
     "newsletter-unsubscribe.php",
     "order-cancellation.php",

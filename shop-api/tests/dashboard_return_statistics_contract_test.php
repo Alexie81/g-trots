@@ -20,10 +20,13 @@ dashboardContractAssert(str_contains($api, 'acquisition_total_cost_snapshot') &&
 dashboardContractAssert(str_contains($api, 'WHEN operation_type = "supplier_receipt" THEN ABS(inventory_cost_total_ron)') && str_contains($api, 'WHEN operation_type = "supplier_return" THEN -ABS(inventory_cost_total_ron)'), 'Achizițiile trebuie să provină din NIR-urile furnizorului și storno-urile lor.');
 dashboardContractAssert(str_contains($api, "'cost_of_goods_sold' => \$costOfGoodsSold") && str_contains($api, 'round($revenue - $costOfGoodsSold, 2)'), 'Profitul trebuie să folosească separat costul FIFO al mărfii vândute.');
 dashboardContractAssert(str_contains($api, 'returns_count') && str_contains($api, 'returns_total'), 'API-ul trebuie să expună numărul și valoarea retururilor.');
+dashboardContractAssert(str_contains($api, 'AS pending_cash') && str_contains($api, "'pending_cash' => \$pendingCash"), 'API-ul trebuie să expună rambursurile active rămase de încasat.');
 dashboardContractAssert(str_contains($api, '$status === \'returned\'') && str_contains($api, 'o.status IN ("return_confirmed", "refunded")'), 'API-ul trebuie să permită filtrarea comenzilor returnate.');
 dashboardContractAssert(str_contains($mobileDashboard, 'title="Încasări"') && str_contains($mobileDashboard, 'Retururi ·'), 'Dashboardul mobil trebuie să afișeze separat încasările și retururile.');
+dashboardContractAssert(str_contains($mobileDashboard, 'title="De încasat"') && str_contains($mobileDashboard, "dashboardSeries.includes('pending')"), 'Dashboardul mobil trebuie să afișeze De încasat lângă retururi.');
 dashboardContractAssert(str_contains($mobileOrders, 'label="Returnate"'), 'Comenzile mobile trebuie să ofere filtrul Returnate.');
 dashboardContractAssert(str_contains($desktop, "option('returned', 'Returnate'") && str_contains($desktop, "dashboardMetric('Încasări'") && str_contains($desktop, "dashboardMetric(`Retururi ·"), 'Desktopul trebuie să afișeze încasările, retururile și filtrul dedicat.');
+dashboardContractAssert(str_contains($desktop, "dashboardMetric('De încasat'") && str_contains($desktop, "key: 'pending'"), 'Dashboardul desktop trebuie să afișeze De încasat lângă retururi.');
 
 $db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 $db->exec('CREATE TABLE shop_orders (status TEXT, payment_status TEXT, total NUMERIC)');

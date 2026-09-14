@@ -114,7 +114,7 @@ type SettingsView = 'sources' | 'suppliers' | 'nirs' | 'invoices' | 'invoice-con
 type PrimaryTab = 'home' | 'orders' | 'products' | 'inventory' | 'more';
 type ShopView = PrimaryTab | CatalogView | SettingsView;
 type DeleteTarget = { type: 'category'; item: ShopCategory } | { type: 'brand'; item: ShopBrand } | { type: 'manufacturer'; item: ShopManufacturer };
-type DashboardSeriesKey = 'revenue' | 'returns' | 'orders' | 'acquisitions' | 'profit';
+type DashboardSeriesKey = 'revenue' | 'returns' | 'pending' | 'orders' | 'acquisitions' | 'profit';
 type DashboardPeriod = '24h' | 'today' | 'yesterday' | '7d' | '14d' | '28d' | '30d' | '3m' | '6m' | '12m' | '16m' | 'current_week_sun' | 'current_week_mon' | 'previous_week_sun' | 'previous_week_mon' | 'current_month' | 'previous_month' | 'current_year' | 'previous_year' | 'all' | 'custom';
 type DashboardGranularity = 'hour' | 'day' | 'week' | 'month';
 const SECOND_HAND_CATEGORY_SYSTEM_KEY = 'second_hand_scooters';
@@ -245,6 +245,7 @@ function compactDashboardSnapshot(data: ShopDashboardStats): ShopDashboardStats 
       date: row.date,
       orders_count: row.orders_count,
       collected_revenue: row.collected_revenue,
+      pending_cash: row.pending_cash,
       gross_revenue: row.gross_revenue,
       returns_count: row.returns_count,
       returns_total: row.returns_total,
@@ -416,7 +417,7 @@ export default function ShopModuleScreen() {
   const [dashboardRangeModal, setDashboardRangeModal] = useState(false);
   const [dashboardCustomEditor, setDashboardCustomEditor] = useState(false);
   const [dashboardDatePicker, setDashboardDatePicker] = useState<'start' | 'end' | null>(null);
-  const [dashboardSeries, setDashboardSeries] = useState<DashboardSeriesKey[]>(['revenue', 'returns', 'orders', 'acquisitions', 'profit']);
+  const [dashboardSeries, setDashboardSeries] = useState<DashboardSeriesKey[]>(['revenue', 'returns', 'pending', 'orders', 'acquisitions', 'profit']);
   const [dashboardPreferencesReady, setDashboardPreferencesReady] = useState(false);
   const [dashboardRangeMotion] = useState(() => new Animated.Value(0));
   const [dashboardCustomMotion] = useState(() => new Animated.Value(0));
@@ -947,6 +948,7 @@ export default function ShopModuleScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.metricPills}>
                 <DashboardMetric title="Încasări" value={compactShopMoney(dashboard?.revenue || 0)} color="#8AB4F8" selected={dashboardSeries.includes('revenue')} onPress={() => toggleDashboardSeries('revenue')} />
                 <DashboardMetric title={`Retururi · ${dashboard?.returns_count || 0}`} value={compactShopMoney(dashboard?.returns_total || 0)} color="#F472B6" selected={dashboardSeries.includes('returns')} onPress={() => toggleDashboardSeries('returns')} />
+                <DashboardMetric title="De încasat" value={compactShopMoney(dashboard?.pending_cash || 0)} color="#FBBF24" selected={dashboardSeries.includes('pending')} onPress={() => toggleDashboardSeries('pending')} />
                 <DashboardMetric title="Comenzi" value={String(dashboard?.orders_count || 0)} color="#F28B82" selected={dashboardSeries.includes('orders')} onPress={() => toggleDashboardSeries('orders')} />
                 <DashboardMetric title="Achiziții" value={compactShopMoney(dashboard?.acquisitions || 0)} color="#FDD663" selected={dashboardSeries.includes('acquisitions')} onPress={() => toggleDashboardSeries('acquisitions')} />
                 <DashboardMetric title="Profit" value={compactShopMoney(dashboard?.profit || 0)} color="#81C995" selected={dashboardSeries.includes('profit')} onPress={() => toggleDashboardSeries('profit')} />
@@ -1572,15 +1574,16 @@ function DashboardTrendChart({ rows, selected, granularity, dismissRef, scrollGe
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const gestureStartX = useSharedValue(0);
   const gestureStartY = useSharedValue(0);
-  const safeRows = useMemo(() => rows.length ? rows : Array.from({ length: 7 }, (_, index) => ({ date: `2000-01-${String(index + 1).padStart(2, '0')}`, collected_revenue: 0, gross_revenue: 0, returns_count: 0, returns_total: 0, revenue: 0, orders_count: 0, acquisitions: 0, cost_of_goods_sold: 0, profit: 0 })), [rows]);
+  const safeRows = useMemo(() => rows.length ? rows : Array.from({ length: 7 }, (_, index) => ({ date: `2000-01-${String(index + 1).padStart(2, '0')}`, collected_revenue: 0, pending_cash: 0, gross_revenue: 0, returns_count: 0, returns_total: 0, revenue: 0, orders_count: 0, acquisitions: 0, cost_of_goods_sold: 0, profit: 0 })), [rows]);
   const chartValues = useMemo(() => ({
     revenue: safeRows.map((row) => Number(row.revenue || 0)),
     returns: safeRows.map((row) => Number(row.returns_total || 0)),
+    pending: safeRows.map((row) => Number(row.pending_cash || 0)),
     orders: safeRows.map((row) => Number(row.orders_count || 0)),
     acquisitions: safeRows.map((row) => Number(row.acquisitions || 0)),
     profit: safeRows.map((row) => Number(row.profit || 0)),
   }), [safeRows]);
-  const moneyMaximum = useMemo(() => Math.max(1, ...chartValues.revenue, ...chartValues.returns, ...chartValues.acquisitions, ...chartValues.profit), [chartValues]);
+  const moneyMaximum = useMemo(() => Math.max(1, ...chartValues.revenue, ...chartValues.returns, ...chartValues.pending, ...chartValues.acquisitions, ...chartValues.profit), [chartValues]);
   const orderMaximum = useMemo(() => Math.max(1, ...chartValues.orders), [chartValues]);
   const labels = useMemo(() => rows.length ? safeRows
     .map((row, index) => ({ row, index }))
@@ -1649,6 +1652,7 @@ function DashboardTrendChart({ rows, selected, granularity, dismissRef, scrollGe
   const allTooltipRows: { key: DashboardSeriesKey; label: string; color: string; value: string }[] = selectedRow ? [
     { key: 'revenue', label: 'Încasări', color: '#8AB4F8', value: formatShopMoney(Number(selectedRow.revenue || 0)) },
     { key: 'returns', label: `Retururi (${Number(selectedRow.returns_count || 0)})`, color: '#F472B6', value: formatShopMoney(Number(selectedRow.returns_total || 0)) },
+    { key: 'pending', label: 'De încasat', color: '#FBBF24', value: formatShopMoney(Number(selectedRow.pending_cash || 0)) },
     { key: 'orders', label: 'Comenzi', color: '#F28B82', value: String(Number(selectedRow.orders_count || 0)) },
     { key: 'acquisitions', label: 'Achiziții', color: '#FDD663', value: formatShopMoney(Number(selectedRow.acquisitions || 0)) },
     { key: 'profit', label: 'Profit', color: '#81C995', value: formatShopMoney(Number(selectedRow.profit || 0)) },
@@ -1664,12 +1668,14 @@ function DashboardTrendChart({ rows, selected, granularity, dismissRef, scrollGe
           <Line x1="12" y1={height - 12} x2={width - 12} y2={height - 12} stroke="#FFFFFF1A" strokeWidth="1" />
           <AnimatedChartLine values={chartValues.revenue} maximum={moneyMaximum} width={width} height={height} color="#8AB4F8" selected={selected.includes('revenue')} />
           <AnimatedChartLine values={chartValues.returns} maximum={moneyMaximum} width={width} height={height} color="#F472B6" selected={selected.includes('returns')} />
+          <AnimatedChartLine values={chartValues.pending} maximum={moneyMaximum} width={width} height={height} color="#FBBF24" selected={selected.includes('pending')} />
           <AnimatedChartLine values={chartValues.acquisitions} maximum={moneyMaximum} width={width} height={height} color="#FDD663" selected={selected.includes('acquisitions')} />
           <AnimatedChartLine values={chartValues.profit} maximum={moneyMaximum} width={width} height={height} color="#81C995" selected={selected.includes('profit')} visualOffset={4} />
           <AnimatedChartLine values={chartValues.orders} maximum={orderMaximum} width={width} height={height} color="#F28B82" selected={selected.includes('orders')} visualOffset={-5} strokeWidth={3.2} />
           {selectedRow && <><Line x1={selectedX} y1="10" x2={selectedX} y2={height - 12} stroke="#BDC1C6" strokeWidth="1" strokeDasharray="3 3" opacity="0.62" />
             {selected.includes('revenue') && <Circle cx={selectedX} cy={chartPointY(Number(selectedRow.revenue || 0), moneyMaximum, height)} r="4" fill="#18171C" stroke="#8AB4F8" strokeWidth="2" />}
             {selected.includes('returns') && <Circle cx={selectedX} cy={chartPointY(Number(selectedRow.returns_total || 0), moneyMaximum, height)} r="4" fill="#18171C" stroke="#F472B6" strokeWidth="2" />}
+            {selected.includes('pending') && <Circle cx={selectedX} cy={chartPointY(Number(selectedRow.pending_cash || 0), moneyMaximum, height)} r="4" fill="#18171C" stroke="#FBBF24" strokeWidth="2" />}
             {selected.includes('acquisitions') && <Circle cx={selectedX} cy={chartPointY(Number(selectedRow.acquisitions || 0), moneyMaximum, height)} r="4" fill="#18171C" stroke="#FDD663" strokeWidth="2" />}
             {selected.includes('profit') && <Circle cx={selectedX} cy={chartPointY(Number(selectedRow.profit || 0), moneyMaximum, height, 4)} r="4" fill="#18171C" stroke="#81C995" strokeWidth="2" />}
             {selected.includes('orders') && <Circle cx={selectedX} cy={chartPointY(Number(selectedRow.orders_count || 0), orderMaximum, height, -5)} r="4.5" fill="#18171C" stroke="#F28B82" strokeWidth="2.6" />}</>}

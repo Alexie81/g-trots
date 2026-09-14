@@ -623,6 +623,7 @@ export type ShopProductStats = {
 export type ShopDashboardStats = {
   revenue: number;
   collected_revenue: number;
+  pending_cash: number;
   gross_revenue: number;
   returns_count: number;
   returns_total: number;
@@ -635,7 +636,8 @@ export type ShopDashboardStats = {
   daily_stats: Array<{
     date: string;
     orders_count: number;
-    collected_revenue: number;
+      collected_revenue: number;
+      pending_cash: number;
     gross_revenue: number;
     returns_count: number;
     returns_total: number;

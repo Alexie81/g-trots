@@ -60,4 +60,15 @@ return [
     'smtp_encryption' => 'ssl',
     'smtp_username' => 'contact@g-trots.ro',
     'smtp_password' => 'replace-with-email-password',
+    // Notificări interne pentru comenzi/anulări/retururi. Aceste valori pot
+    // folosi alt cont SMTP decât e-mailurile tranzacționale ale clienților.
+    'admin_order_notification_recipient' => 'comenzi@g-trots.ro',
+    'admin_order_email_from' => 'site@cab-it.ro',
+    'admin_order_email_from_name' => 'G-Trots · Comenzi',
+    'admin_order_email_reply_to' => 'comenzi@g-trots.ro',
+    'admin_order_smtp_host' => 'mail.cab-it.ro',
+    'admin_order_smtp_port' => 465,
+    'admin_order_smtp_encryption' => 'ssl',
+    'admin_order_smtp_username' => 'site@cab-it.ro',
+    'admin_order_smtp_password' => 'replace-with-email-password',
 ];

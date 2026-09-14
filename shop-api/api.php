@@ -18,6 +18,7 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
 require_once __DIR__ . '/order-emails.php';
+require_once __DIR__ . '/order-admin-notifications.php';
 require_once __DIR__ . '/newsletter.php';
 require_once __DIR__ . '/invoice-service.php';
 require_once __DIR__ . '/invoice-automation.php';
@@ -90,6 +91,15 @@ function shopConfig(): array {
         'smtp_encryption' => 'ssl',
         'smtp_username' => '',
         'smtp_password' => '',
+        'admin_order_notification_recipient' => 'comenzi@g-trots.ro',
+        'admin_order_email_from' => '',
+        'admin_order_email_from_name' => 'G-Trots · Comenzi',
+        'admin_order_email_reply_to' => '',
+        'admin_order_smtp_host' => '',
+        'admin_order_smtp_port' => 465,
+        'admin_order_smtp_encryption' => 'ssl',
+        'admin_order_smtp_username' => '',
+        'admin_order_smtp_password' => '',
         'gomag_api_key' => '',
         'gomag_shop_url' => 'https://www.boomag.ro',
         'boomag_feed_url' => 'https://www.boomag.ro/feed/doctor-trotineta.csv',
@@ -255,7 +265,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026091301;
+    $schemaVersion = 2026091401;
     // Ruta normala face doar SELECT-ul indexat. Un CREATE TABLE IF NOT EXISTS la
     // fiecare request tot cere verificari de metadata si poate astepta lock-uri.
     try {
@@ -1766,6 +1776,22 @@ function ensureShopSchema(PDO $db): void {
             discounted_unit_price DECIMAL(12,2) NOT NULL DEFAULT 0,
             discounted_line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
             INDEX idx_shop_order_items_order (order_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_order_admin_notifications (
+            id CHAR(36) NOT NULL PRIMARY KEY,
+            order_id CHAR(36) NOT NULL,
+            event_type VARCHAR(60) NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'sending',
+            attempts INT UNSIGNED NOT NULL DEFAULT 1,
+            recipient VARCHAR(180) NOT NULL,
+            last_error VARCHAR(500) NULL,
+            sent_at DATETIME NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE INDEX uq_shop_order_admin_event (order_id, event_type),
+            INDEX idx_shop_order_admin_status (status, updated_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
     $promotionItemColumns = [
@@ -4906,6 +4932,15 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
             $emailResult = gtSendOrderStatusEmail($order, $config, $initialStatus);
             updateOrderHistoryEmail($db, $historyId, $emailResult);
             $order['email_notification'] = $emailResult;
+            // Rambursul devine comandă fermă în momentul în care checkout-ul
+            // s-a salvat integral. Notificarea internă nu poate anula comanda
+            // dacă serverul SMTP este temporar indisponibil.
+            gtSendAdminOrderNotification(
+                $db,
+                $config,
+                $orderId,
+                'new_order_confirmed'
+            );
             $order['status_history'] = orderStatusHistory($db, $orderId);
         }
         return $order;

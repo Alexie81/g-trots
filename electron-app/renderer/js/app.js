@@ -13,6 +13,7 @@
   let activeModule = localStorage.getItem(MODULE_STORAGE_KEY) === 'shop' ? 'shop' : 'service';
   let tabChangeRevision = 0;
   let warmedTablesToken = '';
+  let pendingOrderDeepLink = '';
 
   function rememberedModuleTab(moduleId) {
     const candidate = moduleStartTabs[moduleId];
@@ -152,6 +153,25 @@
     if ('requestIdleCallback' in window) window.requestIdleCallback(warmTables, { timeout: 1200 });
     else window.setTimeout(warmTables, 250);
   });
+
+  function openPendingOrderDeepLink() {
+    if (!pendingOrderDeepLink || !window.AUTH?.isLoggedIn?.()) return;
+    const orderId = pendingOrderDeepLink;
+    pendingOrderDeepLink = '';
+    selectModule('shop', false);
+    switchTab('shop-orders');
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('shop-open-entity', { detail: { type: 'order', id: orderId } }));
+    }, 0);
+  }
+
+  window.onAppDeepLink?.((payload) => {
+    const orderId = String(payload?.orderId || '').toLowerCase();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(orderId)) return;
+    pendingOrderDeepLink = orderId;
+    openPendingOrderDeepLink();
+  });
+  window.addEventListener('auth-change', openPendingOrderDeepLink);
 
   window.switchTab = switchTab;
   window.selectAppModule = selectModule;

@@ -580,6 +580,16 @@ function stripeApplyCheckoutSession(PDO $db, array $session, ?array $config = nu
         $emailOrder = orderRow($db, $saved, $config, true);
         $emailResult = gtSendOrderStatusEmail($emailOrder, $config, 'confirmed');
         updateOrderHistoryEmail($db, $historyId, $emailResult);
+        // Webhook-urile Stripe pot fi retrimise. Jurnalul dedicat notificării
+        // garantează că aceeași plată confirmată produce un singur e-mail intern.
+        if (function_exists('gtSendAdminOrderNotification')) {
+            gtSendAdminOrderNotification(
+                $db,
+                $config,
+                (string)$saved['id'],
+                'new_order_confirmed'
+            );
+        }
     }
     if ($saved && $config && class_exists('GtrotsInvoiceAutomation')) {
         // E-mailul de confirmare a comenzii de mai sus se încheie înainte să

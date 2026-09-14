@@ -321,6 +321,9 @@ final class GtrotsOrderReturnRequest
             $email = $saved ? gtSendOrderReturnRequestEmail($saved, $config) : ['sent' => false, 'error' => 'Comanda nu a putut fi recitită pentru e-mail.'];
             self::recordEmail($db, $orderId, $historyId, $email);
         }
+        if ($source === 'customer' && function_exists('gtSendAdminOrderNotification')) {
+            gtSendAdminOrderNotification($db, $config, $orderId, 'return_requested_by_customer');
+        }
         return self::result($db, $orderId, $duplicate, $email);
     }
 

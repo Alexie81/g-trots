@@ -94,6 +94,7 @@ import type { ShopNotification } from '@/services/shopApi';
 import { ShopPaymentMethodsManager, ShopProductSourcesManager, ShopShippingManager } from '@/components/ShopMoreManagers';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppModule } from '@/contexts/AppModuleContext';
 import {
   shopApi,
   shopOrderCustomerDisplayName,
@@ -364,6 +365,7 @@ const moreAreaGroups = [
 
 export default function ShopModuleScreen() {
   const { token, user } = useAuth();
+  const { pendingShopOrderId, consumePendingShopOrder } = useAppModule();
   const insets = useSafeAreaInsets();
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const persistedDashboard = persistedShopDashboardSnapshot?.token === token
@@ -634,11 +636,20 @@ export default function ShopModuleScreen() {
     void loadCatalog();
   };
 
-  const openOrders = (filter: 'all' | 'new' = 'all', orderId: string | null = null) => {
+  const openOrders = useCallback((filter: 'all' | 'new' = 'all', orderId: string | null = null) => {
     setOrdersInitialFilter(filter);
     setInitialOrderId(orderId);
     setView('orders');
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!pendingShopOrderId) return;
+    const timer = setTimeout(() => {
+      openOrders('all', pendingShopOrderId);
+      consumePendingShopOrder();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [consumePendingShopOrder, openOrders, pendingShopOrderId]);
 
   const openNirFromInventory = (nirId: string) => {
     setInitialNirId(nirId);

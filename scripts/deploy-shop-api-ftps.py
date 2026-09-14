@@ -24,6 +24,8 @@ FILES = (
     "product-export.php",
     "api.php",
     "api-v2.php",
+    "order-admin-notifications.php",
+    "deschide-comanda.php",
     "product-page-service.php",
     "openai-discovery-scope.json",
     "gomag.php",
@@ -105,6 +107,11 @@ def arguments() -> argparse.Namespace:
         "--configure-meta-from-env",
         action="store_true",
         help="Salveaza tokenul GT_META_CAPI_TOKEN numai in config.local.php protejat de pe server.",
+    )
+    parser.add_argument(
+        "--configure-admin-order-email-from-local",
+        action="store_true",
+        help="Copiaza numai configuratia SMTP a notificarilor interne din config.local.php local pe server.",
     )
     return parser.parse_args()
 
@@ -340,6 +347,55 @@ def configure_meta_from_env(ftp: FTP_TLS, timestamp: str) -> None:
     print("Meta Conversions API a fost activat in configuratia protejata de pe server.", flush=True)
 
 
+def configure_admin_order_email_from_local(ftp: FTP_TLS, timestamp: str) -> None:
+    local_source = (API_ROOT / "config.local.php").read_text(encoding="utf-8-sig")
+    keys = (
+        "admin_order_notification_recipient",
+        "admin_order_email_from",
+        "admin_order_email_from_name",
+        "admin_order_email_reply_to",
+        "admin_order_smtp_host",
+        "admin_order_smtp_port",
+        "admin_order_smtp_encryption",
+        "admin_order_smtp_username",
+        "admin_order_smtp_password",
+    )
+    values: dict[str, str] = {}
+    for key in keys:
+        match = re.search(rf"['\"]{re.escape(key)}['\"]\s*=>\s*(?:['\"]([^'\"\r\n]*)['\"]|([0-9]+))", local_source)
+        if not match:
+            raise RuntimeError(f"Lipseste {key} din config.local.php local.")
+        values[key] = match.group(1) if match.group(1) is not None else match.group(2)
+    if values["admin_order_notification_recipient"].lower() != "comenzi@g-trots.ro":
+        raise RuntimeError("Destinatarul intern al comenzilor nu este cel asteptat.")
+    if values["admin_order_smtp_host"].lower() != "mail.cab-it.ro" or values["admin_order_smtp_port"] != "465":
+        raise RuntimeError("Serverul SMTP intern nu corespunde configuratiei aprobate.")
+    if values["admin_order_smtp_username"].lower() != "site@cab-it.ro" or len(values["admin_order_smtp_password"]) < 8:
+        raise RuntimeError("Credentialele SMTP interne lipsesc sau nu au formatul asteptat.")
+
+    buffer = BytesIO()
+    ftp.retrbinary("RETR config.local.php", buffer.write)
+    original = buffer.getvalue().decode("utf-8-sig")
+    updated = original
+    for key, value in values.items():
+        updated = set_php_config_value(updated, key, value)
+    temporary = f"config.local.php.codex-upload-{timestamp}.tmp"
+    backup = f"config.local.php.bak-codex-admin-mail-{timestamp}"
+    ftp.storbinary(f"STOR {temporary}", BytesIO(updated.encode("utf-8")), blocksize=262144)
+    try:
+        ftp.rename("config.local.php", backup)
+        ftp.rename(temporary, "config.local.php")
+    except Exception:
+        try:
+            ftp.delete(temporary)
+        except Exception:
+            pass
+        if "config.local.php" not in set(ftp.nlst()) and backup in set(ftp.nlst()):
+            ftp.rename(backup, "config.local.php")
+        raise
+    print("SMTP-ul notificarilor interne a fost salvat numai in configuratia protejata de pe server.", flush=True)
+
+
 def main() -> None:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     options = arguments()
@@ -394,6 +450,8 @@ def main() -> None:
             configure_shopify_from_local(ftp, timestamp)
         if options.configure_meta_from_env:
             configure_meta_from_env(ftp, timestamp)
+        if options.configure_admin_order_email_from_local:
+            configure_admin_order_email_from_local(ftp, timestamp)
     except Exception:
         for name in reversed(activated):
             try:

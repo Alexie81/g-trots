@@ -10,6 +10,7 @@ let updateCheckInFlight = false;
 let updateDownloadInFlight = false;
 let updateCheckTimer = null;
 const updateStartupTimers = [];
+let pendingOrderDeepLink = null;
 const updateState = {
   status: 'idle',
   currentVersion: app.getVersion(),
@@ -17,6 +18,48 @@ const updateState = {
   percent: 0,
   message: 'Poti verifica daca exista o versiune noua.',
 };
+
+const ownsPrimaryInstance = app.requestSingleInstanceLock();
+if (!ownsPrimaryInstance) app.quit();
+
+function orderDeepLinkFromValue(value) {
+  const match = String(value || '').match(/^gtrots:\/\/(?:order|orders)\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})(?:[/?#]|$)/i);
+  return match?.[1]?.toLowerCase() || null;
+}
+
+function orderDeepLinkFromArgs(args) {
+  for (const value of Array.isArray(args) ? args : []) {
+    const orderId = orderDeepLinkFromValue(value);
+    if (orderId) return orderId;
+  }
+  return null;
+}
+
+function dispatchPendingOrderDeepLink() {
+  if (!pendingOrderDeepLink || !mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isLoading()) return;
+  const orderId = pendingOrderDeepLink;
+  pendingOrderDeepLink = null;
+  mainWindow.webContents.send('app-deep-link', { type: 'order', orderId });
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.focus();
+}
+
+function queueOrderDeepLink(value) {
+  const orderId = orderDeepLinkFromValue(value) || orderDeepLinkFromArgs(value);
+  if (!orderId) return;
+  pendingOrderDeepLink = orderId;
+  dispatchPendingOrderDeepLink();
+}
+
+if (ownsPrimaryInstance) {
+  pendingOrderDeepLink = orderDeepLinkFromArgs(process.argv);
+  app.on('second-instance', (_event, commandLine) => queueOrderDeepLink(commandLine));
+  app.on('open-url', (event, url) => {
+    event.preventDefault();
+    queueOrderDeepLink(url);
+  });
+}
 
 // Hardware acceleration is essential for the blurred/translucent desktop UI.
 // Keep an explicit safe-mode escape hatch for PCs with problematic GPU drivers:
@@ -234,6 +277,7 @@ function createWindow() {
       win.webContents.send('rendering-mode', {
         software: useSoftwareRendering,
       });
+      dispatchPendingOrderDeepLink();
     }
   });
 
@@ -557,6 +601,7 @@ ipcMain.handle('app-update:install', () => {
 
 app.whenReady().then(() => {
   app.setAppUserModelId('ro.cabit.gtrots.desktop');
+  if (app.isPackaged) app.setAsDefaultProtocolClient('gtrots');
   setupAutoUpdater();
   createWindow();
   if (app.isPackaged) {

@@ -1,6 +1,6 @@
 {
   "name": "gtrots-desktop",
-  "version": "1.2.42",
+  "version": "1.2.43",
   "description": "G-Trots CRM Desktop",
   "main": "main.js",
   "scripts": {
@@ -23,6 +23,14 @@
   "build": {
     "appId": "ro.cabit.gtrots.desktop",
     "productName": "G-Trots CRM",
+    "protocols": [
+      {
+        "name": "G-Trots Order",
+        "schemes": [
+          "gtrots"
+        ]
+      }
+    ],
     "artifactName": "GTrotsSetup-${version}.${ext}",
     "publish": [
       {

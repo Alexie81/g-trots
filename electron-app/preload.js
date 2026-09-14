@@ -10,6 +10,11 @@ window.onRenderingMode = (callback) => {
   ipcRenderer.on('rendering-mode', listener);
   return () => ipcRenderer.removeListener('rendering-mode', listener);
 };
+window.onAppDeepLink = (callback) => {
+  const listener = (_event, payload) => callback(payload);
+  ipcRenderer.on('app-deep-link', listener);
+  return () => ipcRenderer.removeListener('app-deep-link', listener);
+};
 window.desktopUpdater = {
   getState: () => ipcRenderer.invoke('app-update:get-state'),
   check: () => ipcRenderer.invoke('app-update:check'),

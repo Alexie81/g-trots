@@ -2570,13 +2570,16 @@
   }
   async function openOrder(id) {
     const summary = state.orders.find(item => item.id === id);
-    if (!summary) return;
-    state.editingOrder = summary;
-    $('shop-order-title').textContent = summary.order_number;
+    state.editingOrder = summary || null;
+    $('shop-order-title').textContent = summary?.order_number || 'Comandă';
     $('shop-order-details').innerHTML = '<div class="shop-commerce-loading">Se încarcă istoricul comenzii...</div>';
     openModal('shop-order-modal');
     try { renderOrderDetails(await window.SHOP_API.getOrder(id)); }
-    catch (error) { renderOrderDetails(summary); toast(error.message || 'Istoricul nu a putut fi încărcat.', 'error'); }
+    catch (error) {
+      if (summary) renderOrderDetails(summary);
+      else $('shop-order-details').innerHTML = `<div class="shop-commerce-error">${esc(error.message || 'Comanda nu a putut fi încărcată.')}</div>`;
+      toast(error.message || 'Istoricul nu a putut fi încărcat.', 'error');
+    }
   }
   async function saveOrder(event) {
     event.preventDefault();

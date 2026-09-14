@@ -118,6 +118,9 @@ final class GtrotsOrderCancellation
             'return_invoice' => $returnInvoice,
         ]) : ['sent' => false, 'error' => 'Comanda anulată nu a putut fi recitită pentru e-mail.'];
         self::recordEmail($db, (string)$orderId, $historyId, $cancellationEmail);
+        if ($source === 'customer' && function_exists('gtSendAdminOrderNotification')) {
+            gtSendAdminOrderNotification($db, $config, (string)$orderId, 'cancelled_by_customer');
+        }
 
         return self::result($db, (string)$orderId, $alreadyCancelled, $invoiceAction, $releasedNumber, $returnInvoice, $returnEmail, $cancellationEmail);
     }

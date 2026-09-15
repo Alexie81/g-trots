@@ -22,6 +22,12 @@ $product = [
     'manufacturer_name' => 'G-Trots',
     'category_id' => 'legacy-second-hand-category-id',
     'category_system_key' => 'second_hand_scooters',
+    'merchant_product_type' => 'Piese trotinete electrice > Componente electrice > Controller',
+    'brands' => [
+        ['id' => 'compatibility-1', 'name' => 'KuKirin G2 Pro'],
+        ['id' => 'compatibility-2', 'name' => 'KuKirin G2 Max'],
+        ['id' => 'compatibility-duplicate', 'name' => '  KuKirin   G2 Pro  '],
+    ],
     'supplier_product_code' => 'SE-CMM087',
     'ean' => '1234567890128',
     'price' => 0,
@@ -43,6 +49,15 @@ $attributes = $payload['productAttributes'];
 $assert($payload['offerId'] === 'product-stable-id', 'offerId nu este ID-ul intern stabil');
 $assert($attributes['price']['amountMicros'] === '89990000', 'prețul nu respectă regula publică comună');
 $assert($attributes['customLabel0'] === '50_100', 'customLabel0 nu folosește prețul final public');
+$assert($attributes['productTypes'] === ['Piese trotinete electrice > Componente electrice > Controller'], 'productTypes nu conține breadcrumb-ul categoriei principale');
+$assert(count($attributes['productDetails']) === 2, 'compatibilitățile Merchant lipsesc sau nu sunt deduplicate');
+$assert($attributes['productDetails'][0] === [
+    'sectionName' => 'Compatibilitate',
+    'attributeName' => 'Model',
+    'attributeValue' => 'KuKirin G2 Pro',
+], 'prima compatibilitate nu respectă contractul Merchant API');
+$assert($attributes['productDetails'][1]['attributeValue'] === 'KuKirin G2 Max', 'a doua compatibilitate lipsește');
+$assert($attributes['brand'] === 'G-Trots', 'compatibilitatea a înlocuit producătorul în câmpul brand');
 $assert($attributes['availability'] === 'IN_STOCK', 'stocul activ nu este IN_STOCK');
 $assert($attributes['condition'] === 'USED', 'categoria SH identificată prin cheia tehnică nu este marcată USED');
 $assert($attributes['link'] === 'https://g-trots.ro/magazin/produs/controller-trotineta-electrica/', 'ruta conține .html sau este incorectă');
@@ -83,6 +98,16 @@ $unlimited['stock_quantity'] = 0;
 $unlimitedAttributes = merchantProductPayload($unlimited, ['website_base_url' => 'https://g-trots.ro'])['productAttributes'];
 $assert($unlimitedAttributes['availability'] === 'IN_STOCK', 'stocul online nelimitat fără stoc fizic nu este transmis IN_STOCK');
 
+$withoutCompatibility = $product;
+$withoutCompatibility['brands'] = [];
+$withoutCompatibilityAttributes = merchantProductPayload($withoutCompatibility, ['website_base_url' => 'https://g-trots.ro'])['productAttributes'];
+$assert(!isset($withoutCompatibilityAttributes['productDetails']), 'produsul fără compatibilități trimite productDetails goale');
+
+$withoutManufacturer = $product;
+$withoutManufacturer['manufacturer_name'] = '';
+$withoutManufacturerAttributes = merchantProductPayload($withoutManufacturer, ['website_base_url' => 'https://g-trots.ro'])['productAttributes'];
+$assert(!isset($withoutManufacturerAttributes['brand']), 'o compatibilitate a fost trimisă greșit drept brand al produsului');
+
 $api = (string)file_get_contents(dirname(__DIR__) . '/api.php');
 $gomag = (string)file_get_contents(dirname(__DIR__) . '/gomag.php');
 $stripe = (string)file_get_contents(dirname(__DIR__) . '/stripe.php');
@@ -103,6 +128,7 @@ $assert(str_contains($gomag, 'supplier_price_difference = ?'), 'importul Boomag 
 $assert(str_contains($api, 'syncCommerceCatalogProducts'), 'promoțiile de produs nu resincronizează canalele de vânzare');
 $assert(str_contains($api, "'catalog_sync'"), 'răspunsul promoțiilor nu expune rezultatul sincronizării catalogului');
 $assert(str_contains($merchant, 'applyCatalogPromotionPrices'), 'Merchant nu aplică promoția publică');
+$assert(str_contains($merchant, 'merchantProductType($db, $merchantCategoryId === \'\' ? null : $merchantCategoryId)'), 'sincronizarea Merchant nu construiește automat product_type pentru produsele viitoare');
 $assert(str_contains($merchant, 'function merchantSyncIsEnabled'), 'Merchant nu are un comutator explicit de activare');
 $assert(str_contains($merchant, "return ['status' => 'disabled']"), 'Hook-urile Merchant nu respectă pauza de publicare');
 $assert(str_contains($stripe, 'applyCatalogPromotionPrices'), 'Stripe nu aplică promoția publică');

@@ -212,6 +212,44 @@ function merchantPriceRangeLabel(float $price): string {
     return '250_plus';
 }
 
+/**
+ * Construiește taxonomia proprie Merchant din categoria principală a
+ * produsului. Harta este încărcată o singură dată pe cerere, iar protecția la
+ * cicluri permite oricâte niveluri valide fără a bloca sincronizarea dacă o
+ * categorie a fost configurată greșit.
+ */
+function merchantProductType(PDO $db, ?string $categoryId): string {
+    $categoryId = trim((string)$categoryId);
+    if ($categoryId === '') return '';
+
+    static $categoryMaps = [];
+    $cacheKey = spl_object_id($db);
+    if (!isset($categoryMaps[$cacheKey])) {
+        $categoryMaps[$cacheKey] = [];
+        $rows = $db->query('SELECT id, parent_id, name FROM shop_categories')->fetchAll();
+        foreach ($rows as $row) {
+            $id = trim((string)($row['id'] ?? ''));
+            if ($id === '') continue;
+            $categoryMaps[$cacheKey][$id] = [
+                'parent_id' => empty($row['parent_id']) ? null : (string)$row['parent_id'],
+                'name' => preg_replace('/\s+/u', ' ', trim((string)($row['name'] ?? ''))) ?: '',
+            ];
+        }
+    }
+
+    $path = [];
+    $visited = [];
+    $currentId = $categoryId;
+    while ($currentId !== '' && isset($categoryMaps[$cacheKey][$currentId]) && !isset($visited[$currentId])) {
+        $visited[$currentId] = true;
+        $category = $categoryMaps[$cacheKey][$currentId];
+        if ($category['name'] !== '') array_unshift($path, $category['name']);
+        $currentId = trim((string)($category['parent_id'] ?? ''));
+    }
+
+    return mb_substr(implode(' > ', $path), 0, 750);
+}
+
 function merchantProductPayload(array $product, array $config): array {
     $description = trim((string)($product['meta_description'] ?? ''));
     if ($description === '') $description = trim((string)($product['short_description'] ?? ''));
@@ -247,8 +285,32 @@ function merchantProductPayload(array $product, array $config): array {
         $attributes['imageLink'] = $images[0];
         if (count($images) > 1) $attributes['additionalImageLinks'] = array_slice($images, 1, 10);
     }
+    $productType = trim((string)($product['merchant_product_type'] ?? ''));
+    if ($productType !== '') $attributes['productTypes'] = [mb_substr($productType, 0, 750)];
+
+    $productDetails = [];
+    $compatibilitiesSeen = [];
+    foreach ((array)($product['brands'] ?? []) as $compatibility) {
+        $name = is_array($compatibility)
+            ? trim((string)($compatibility['name'] ?? ''))
+            : trim((string)$compatibility);
+        $name = preg_replace('/\s+/u', ' ', $name) ?: '';
+        if ($name === '') continue;
+        $key = mb_strtolower($name, 'UTF-8');
+        if (isset($compatibilitiesSeen[$key])) continue;
+        $compatibilitiesSeen[$key] = true;
+        $productDetails[] = [
+            'sectionName' => 'Compatibilitate',
+            'attributeName' => 'Model',
+            'attributeValue' => mb_substr($name, 0, 1000),
+        ];
+        if (count($productDetails) >= 100) break;
+    }
+    if ($productDetails) $attributes['productDetails'] = $productDetails;
+
+    // Brandul Merchant reprezintă producătorul produsului; compatibilitățile
+    // sunt informații distincte și nu trebuie folosite drept brand de rezervă.
     $brand = trim((string)($product['manufacturer_name'] ?? ''));
-    if ($brand === '' && !empty($product['brands'][0]['name'])) $brand = trim((string)$product['brands'][0]['name']);
     if ($brand !== '') $attributes['brand'] = mb_substr($brand, 0, 70);
     $gtin = merchantValidGtin((string)($product['ean'] ?? ''));
     if ($gtin !== null) $attributes['gtins'] = [$gtin];
@@ -308,6 +370,14 @@ function merchantSyncProduct(PDO $db, array $config, string $productId): array {
         $priced = applyCatalogPromotionPrices($db, [$product], null, '');
         if (isset($priced[0]) && is_array($priced[0])) $product = $priced[0];
     }
+    $merchantCategoryId = empty($product['category_id']) ? '' : (string)$product['category_id'];
+    if ($merchantCategoryId === '' && !empty($product['category_ids'][0])) {
+        // Catalogurile importate mai vechi pot avea relația de categorie fără
+        // category_id principal. Prima relație (ordonată primary-first) devine
+        // în acest caz traseul principal Merchant, fără a inventa o categorie.
+        $merchantCategoryId = (string)$product['category_ids'][0];
+    }
+    $product['merchant_product_type'] = merchantProductType($db, $merchantCategoryId === '' ? null : $merchantCategoryId);
     $effectivePrice = function_exists('stripeEffectiveProductPrice')
         ? stripeEffectiveProductPrice($product)
         : max(0.0, (float)($product['sale_price'] ?? 0), (float)($product['price'] ?? 0), (float)($product['supplier_base_price'] ?? 0));

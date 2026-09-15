@@ -118,6 +118,11 @@ try {{
         $customLabel0Summary = [];
         $missingCustomLabel0 = 0;
         $missingCustomLabel0OfferIds = [];
+        $productTypeSummary = [];
+        $missingProductType = 0;
+        $missingProductTypeOfferIds = [];
+        $productsWithCompatibilityDetails = 0;
+        $compatibilityDetailsTotal = 0;
         do {{
             $url = 'https://merchantapi.googleapis.com/products/v1/' . $account . '/products?pageSize=1000';
             if ($pageToken !== '') $url .= '&pageToken=' . rawurlencode($pageToken);
@@ -134,6 +139,25 @@ try {{
                     if ($offerId !== '') $missingCustomLabel0OfferIds[] = $offerId;
                 }} else {{
                     $customLabel0Summary[$customLabel0] = ($customLabel0Summary[$customLabel0] ?? 0) + 1;
+                }}
+                $productTypes = array_values(array_filter(array_map('strval', (array)($product['productAttributes']['productTypes'] ?? []))));
+                if (!$productTypes) {{
+                    $missingProductType++;
+                    if ($offerId !== '') $missingProductTypeOfferIds[] = $offerId;
+                }} else {{
+                    $primaryProductType = trim($productTypes[0]);
+                    if ($primaryProductType !== '') $productTypeSummary[$primaryProductType] = ($productTypeSummary[$primaryProductType] ?? 0) + 1;
+                }}
+                $compatibilityDetails = array_values(array_filter(
+                    (array)($product['productAttributes']['productDetails'] ?? []),
+                    static fn($detail): bool => is_array($detail)
+                        && (string)($detail['sectionName'] ?? '') === 'Compatibilitate'
+                        && (string)($detail['attributeName'] ?? '') === 'Model'
+                        && trim((string)($detail['attributeValue'] ?? '')) !== ''
+                ));
+                if ($compatibilityDetails) {{
+                    $productsWithCompatibilityDetails++;
+                    $compatibilityDetailsTotal += count($compatibilityDetails);
                 }}
                 if ($offerId !== '') $merchantOfferIds[$offerId] = true;
                 $statuses = (array)($product['productStatus']['destinationStatuses'] ?? []);
@@ -184,6 +208,7 @@ try {{
         }} while ($pageToken !== '' && $pages < 20);
         ksort($destinationSummary);
         ksort($customLabel0Summary);
+        ksort($productTypeSummary);
         arsort($issueSummary);
         foreach ($issueOfferIdsByKey as $key => $offerIds) {{
             $issueOfferIdsByKey[$key] = array_keys($offerIds);
@@ -203,6 +228,11 @@ try {{
             'custom_label_0_summary' => $customLabel0Summary,
             'missing_custom_label_0' => $missingCustomLabel0,
             'missing_custom_label_0_offer_ids' => $missingCustomLabel0OfferIds,
+            'product_type_summary' => $productTypeSummary,
+            'missing_product_type' => $missingProductType,
+            'missing_product_type_offer_ids' => $missingProductTypeOfferIds,
+            'products_with_compatibility_details' => $productsWithCompatibilityDetails,
+            'compatibility_details_total' => $compatibilityDetailsTotal,
             'unexpected_offer_ids' => $unexpectedOfferIds,
             'missing_offer_ids' => $missingOfferIds,
             'destination_summary' => $destinationSummary,
@@ -278,7 +308,13 @@ try {{
         echo json_encode(['ok' => true, 'results' => $results], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
     }}
-    $row = $db->query("SELECT COUNT(*) AS total, SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) AS active_total, SUM(CASE WHEN merchant_synced_at IS NOT NULL AND merchant_sync_error IS NULL THEN 1 ELSE 0 END) AS synced, SUM(CASE WHEN merchant_sync_error IS NOT NULL THEN 1 ELSE 0 END) AS errors FROM shop_products")->fetch();
+    $row = $db->query("SELECT COUNT(*) AS total,
+        SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) AS active_total,
+        SUM(CASE WHEN merchant_synced_at IS NOT NULL AND merchant_sync_error IS NULL THEN 1 ELSE 0 END) AS synced,
+        SUM(CASE WHEN merchant_sync_error IS NOT NULL THEN 1 ELSE 0 END) AS errors,
+        SUM(CASE WHEN category_id IS NULL OR category_id = '' THEN 1 ELSE 0 END) AS missing_primary_category,
+        SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM shop_product_categories pc WHERE pc.product_id = shop_products.id) THEN 1 ELSE 0 END) AS missing_all_categories
+        FROM shop_products")->fetch();
     $samples = $db->query("SELECT id, merchant_sync_error FROM shop_products WHERE merchant_sync_error IS NOT NULL ORDER BY id ASC LIMIT 5")->fetchAll();
     echo json_encode(['ok' => true, 'enabled' => merchantSyncIsEnabled($config), 'stats' => $row, 'error_samples' => $samples], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }} catch (Throwable $error) {{

@@ -42,6 +42,7 @@ $payload = merchantProductPayload($product, ['website_base_url' => 'https://g-tr
 $attributes = $payload['productAttributes'];
 $assert($payload['offerId'] === 'product-stable-id', 'offerId nu este ID-ul intern stabil');
 $assert($attributes['price']['amountMicros'] === '89990000', 'prețul nu respectă regula publică comună');
+$assert($attributes['customLabel0'] === '50_100', 'customLabel0 nu folosește prețul final public');
 $assert($attributes['availability'] === 'IN_STOCK', 'stocul activ nu este IN_STOCK');
 $assert($attributes['condition'] === 'USED', 'categoria SH identificată prin cheia tehnică nu este marcată USED');
 $assert($attributes['link'] === 'https://g-trots.ro/magazin/produs/controller-trotineta-electrica/', 'ruta conține .html sau este incorectă');
@@ -56,6 +57,20 @@ $assert(merchantProductTitle('MOTOR BICICLETA ELECTRICA 36V 250W') === 'Motor Bi
 $assert(merchantProductTitle('BMS 16S 60V 50A') === 'Modul de protecție pentru baterie BMS 16S 60V 50A', 'titlul BMS rămâne excesiv capitalizat');
 $assert(merchantProductTitle('ROATA SPATE SOLIDA TROTINETA ELECTRICA NINEBOT E2 E2 Plus') === 'Roata Spate Solida Trotineta Electrica Ninebot E2 E2 Plus', 'titlul majoritar all-caps nu este normalizat');
 $assert(merchantProductTitle('Controller 60V 30A 1500W-B LCD SQ-S4') === 'Controller pentru trotinetă electrică 60V 30A 1500W-B LCD SQ-S4', 'titlul tehnic nu primește context suficient');
+$priceLabelCases = [
+    [0.0, '0_20'],
+    [20.0, '0_20'],
+    [20.01, '20_50'],
+    [50.0, '20_50'],
+    [50.01, '50_100'],
+    [100.0, '50_100'],
+    [100.01, '100_250'],
+    [250.0, '100_250'],
+    [250.01, '250_plus'],
+];
+foreach ($priceLabelCases as [$price, $expectedLabel]) {
+    $assert(merchantPriceRangeLabel($price) === $expectedLabel, 'interval de preț greșit pentru ' . $price);
+}
 $assert(merchantProductIsVisible($product), 'produsul cumpărabil este tratat ca invizibil');
 $product['is_purchasable'] = false;
 $assert(!merchantProductIsVisible($product), 'produsul dezactivat rămâne vizibil');
@@ -72,6 +87,7 @@ $api = (string)file_get_contents(dirname(__DIR__) . '/api.php');
 $gomag = (string)file_get_contents(dirname(__DIR__) . '/gomag.php');
 $stripe = (string)file_get_contents(dirname(__DIR__) . '/stripe.php');
 $merchant = (string)file_get_contents(dirname(__DIR__) . '/merchant.php');
+$meta = (string)file_get_contents(dirname(__DIR__) . '/meta.php');
 $assert(str_contains($api, 'merchantSyncProductSafe($db, $config, $id)'), 'adăugarea/editarea produsului nu declanșează Merchant');
 $assert(str_contains($api, 'merchantDeleteProduct($config, $id)'), 'ștergerea produsului nu îl elimină din Merchant');
 $assert(str_contains($api, '$feedSync[\'stock_changed\']'), 'schimbarea de stoc Boomag nu declanșează Merchant');
@@ -90,5 +106,6 @@ $assert(str_contains($merchant, 'applyCatalogPromotionPrices'), 'Merchant nu apl
 $assert(str_contains($merchant, 'function merchantSyncIsEnabled'), 'Merchant nu are un comutator explicit de activare');
 $assert(str_contains($merchant, "return ['status' => 'disabled']"), 'Hook-urile Merchant nu respectă pauza de publicare');
 $assert(str_contains($stripe, 'applyCatalogPromotionPrices'), 'Stripe nu aplică promoția publică');
+$assert(str_contains($meta, 'merchantPriceRangeLabel($price)'), 'catalogul Meta nu folosește aceleași intervale dinamice de preț');
 
 echo "merchant_product_contract_test: OK\n";

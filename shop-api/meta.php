@@ -109,7 +109,7 @@ function metaCatalogCsv(PDO $db, array $config): string {
             mb_substr($mpn, 0, 100, 'UTF-8'),
             $gtin ?? '',
             $inventory,
-            'Catalog G-Trots',
+            function_exists('merchantPriceRangeLabel') ? merchantPriceRangeLabel($price) : '',
         ], ',', '"', '\\', "\r\n");
     }
     rewind($stream);

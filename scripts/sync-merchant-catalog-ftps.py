@@ -52,6 +52,11 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--diagnose-only", action="store_true", help="Citeste starea si erorile existente fara a trimite produse.")
     parser.add_argument("--repair-images", action="store_true", help="Reface imaginile Boomag lipsa si resincronizeaza produsele afectate.")
     parser.add_argument(
+        "--product-ids",
+        nargs="+",
+        help="Resincronizeaza numai ID-urile indicate (util pentru reluarea erorilor tranzitorii).",
+    )
+    parser.add_argument(
         "--resync-disapproved-images",
         action="store_true",
         help="Resincronizeaza numai produsele blocate de procesarea imaginilor si realiniaza sursa Merchant.",
@@ -110,6 +115,9 @@ try {{
         $issueSamplesByCode = [];
         $issueOfferIdsByKey = [];
         $merchantOfferIds = [];
+        $customLabel0Summary = [];
+        $missingCustomLabel0 = 0;
+        $missingCustomLabel0OfferIds = [];
         do {{
             $url = 'https://merchantapi.googleapis.com/products/v1/' . $account . '/products?pageSize=1000';
             if ($pageToken !== '') $url .= '&pageToken=' . rawurlencode($pageToken);
@@ -120,6 +128,13 @@ try {{
                 if ((string)($product['dataSource'] ?? '') !== $expectedDataSource) continue;
                 $dataSourceTotal++;
                 $offerId = (string)($product['offerId'] ?? '');
+                $customLabel0 = trim((string)($product['productAttributes']['customLabel0'] ?? ''));
+                if ($customLabel0 === '') {{
+                    $missingCustomLabel0++;
+                    if ($offerId !== '') $missingCustomLabel0OfferIds[] = $offerId;
+                }} else {{
+                    $customLabel0Summary[$customLabel0] = ($customLabel0Summary[$customLabel0] ?? 0) + 1;
+                }}
                 if ($offerId !== '') $merchantOfferIds[$offerId] = true;
                 $statuses = (array)($product['productStatus']['destinationStatuses'] ?? []);
                 if (!$statuses) $withoutDestinations++;
@@ -168,6 +183,7 @@ try {{
             $pageToken = trim((string)($response['nextPageToken'] ?? ''));
         }} while ($pageToken !== '' && $pages < 20);
         ksort($destinationSummary);
+        ksort($customLabel0Summary);
         arsort($issueSummary);
         foreach ($issueOfferIdsByKey as $key => $offerIds) {{
             $issueOfferIdsByKey[$key] = array_keys($offerIds);
@@ -184,6 +200,9 @@ try {{
             'data_source_total' => $dataSourceTotal,
             'expected_data_source' => $expectedDataSource,
             'without_destinations' => $withoutDestinations,
+            'custom_label_0_summary' => $customLabel0Summary,
+            'missing_custom_label_0' => $missingCustomLabel0,
+            'missing_custom_label_0_offer_ids' => $missingCustomLabel0OfferIds,
             'unexpected_offer_ids' => $unexpectedOfferIds,
             'missing_offer_ids' => $missingOfferIds,
             'destination_summary' => $destinationSummary,
@@ -286,6 +305,20 @@ try {{
                 "merchant": request_json(base + "&mode=merchant-products", timeout=180),
             }
             print(json.dumps(diagnosis, ensure_ascii=False, indent=2), flush=True)
+            return
+        if options.product_ids:
+            product_ids = list(dict.fromkeys(value.strip() for value in options.product_ids if value.strip()))
+            invalid_ids = [value for value in product_ids if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", value)]
+            if invalid_ids:
+                raise RuntimeError("Lista conține ID-uri de produs nevalide.")
+            results = []
+            for group in chunks(product_ids, 5):
+                payload = request_json(base + "&" + urlencode({"mode": "sync", "ids": ",".join(group)}))
+                results.extend(payload.get("results", []))
+            errors = [result for result in results if result.get("status") != "synced"]
+            print(json.dumps({"phase": "targeted-sync", "results": results, "errors": errors}, ensure_ascii=False, indent=2), flush=True)
+            if errors:
+                raise SystemExit(1)
             return
         if options.repair_images:
             first = request_json(base + "&" + urlencode({"mode": "repair-images", "offset": 0, "limit": 10}), timeout=300)

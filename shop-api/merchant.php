@@ -198,6 +198,20 @@ function merchantProductTitle(string $value): string {
     return $title;
 }
 
+/**
+ * Grupează prețul final public în intervale stabile pentru campaniile Shopping.
+ * Limita superioară aparține intervalului din stânga, astfel încât 20 lei este
+ * 0_20, iar abia un preț mai mare de 20 lei intră în 20_50.
+ */
+function merchantPriceRangeLabel(float $price): string {
+    $price = max(0.0, $price);
+    if ($price <= 20.0) return '0_20';
+    if ($price <= 50.0) return '20_50';
+    if ($price <= 100.0) return '50_100';
+    if ($price <= 250.0) return '100_250';
+    return '250_plus';
+}
+
 function merchantProductPayload(array $product, array $config): array {
     $description = trim((string)($product['meta_description'] ?? ''));
     if ($description === '') $description = trim((string)($product['short_description'] ?? ''));
@@ -223,6 +237,7 @@ function merchantProductPayload(array $product, array $config): array {
             'amountMicros' => (string)max(0, (int)round($price * 1000000)),
             'currencyCode' => strtoupper((string)($product['currency'] ?? 'RON')),
         ],
+        'customLabel0' => merchantPriceRangeLabel($price),
         'condition' => (
             (string)($product['category_system_key'] ?? '') === (defined('SHOP_CATEGORY_SECOND_HAND_KEY') ? SHOP_CATEGORY_SECOND_HAND_KEY : 'second_hand_scooters')
             || (string)($product['category_id'] ?? '') === (defined('SHOP_CATEGORY_SECOND_HAND_ID') ? SHOP_CATEGORY_SECOND_HAND_ID : '')

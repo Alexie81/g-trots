@@ -4982,7 +4982,7 @@
       const movementCards = movements.map((movement, index) => {
         const delta = Number(movement.accounting_quantity_delta ?? movement.quantity_delta ?? 0);
         const incoming = delta >= 0;
-        const documentNumber = movement.movement_document_number || movement.note || 'Document de stoc';
+        const documentNumber = String(movement.movement_document_number || movement.note || 'Document de stoc').replace(/FIFO/gi, 'lot');
         return `<article class="shop-nir-movement-card ${incoming ? 'incoming' : 'outgoing'}"><span class="shop-nir-movement-direction" aria-hidden="true">${incoming ? '<svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 20h14"/></svg>' : nirUiIcon('reverse')}</span><div class="shop-nir-movement-main"><header><b>${esc(movementType(movement.movement_type))}</b><time>${esc(movementDate(movement.created_at))}</time></header><strong>${esc(movement.product_name || `Miscare ${index + 1}`)}</strong><p><span>${esc(movement.product_sku || 'Fara SKU')}</span><i>·</i><em>${esc(documentNumber)}</em></p><footer><span><small>CANTITATE</small><b>${delta > 0 ? '+' : '−'}${movementQuantity(Math.abs(delta))} buc</b></span><span><small>STOC DUPA</small><b>${movementQuantity(movement.accounting_quantity_after ?? movement.quantity_after)} buc</b></span><span><small>OPERATOR</small><b>${esc(movement.created_by || 'Sistem')}</b></span></footer></div></article>`;
       }).join('');
       const emptyState = '<div class="shop-nir-movement-empty"><span>' + nirUiIcon('product') + '</span><strong>Nu exista miscari de stoc</strong><p>Acest document nu a produs inca o intrare sau iesire contabila.</p></div>';

@@ -1085,7 +1085,7 @@ final class GtrotsInvoiceService
             $accountingAfter = $accountingTracked ? round($accountingCurrent - $quantity, 4) : $accountingCurrent;
             $note = 'Ieșire prin factura ' . $invoiceLabel . ' · comanda ' . (string)$order['order_number'];
             if ($fifoStatus === 'not_tracked') $note .= ' · produs exclus din Stocuri Conta';
-            elseif ($fifoStatus !== 'allocated') $note .= ' · proveniența FIFO se completează la confirmarea NIR-ului';
+            elseif ($fifoStatus !== 'allocated') $note .= ' · proveniența lotului și costul de achiziție se completează la confirmarea NIR-ului';
             $existing->execute([(string)$order['id'], $productId]);
             if ($existing->fetchColumn()) {
                 // Comenzile create înaintea acestei funcționalități au rezervat deja stocul.

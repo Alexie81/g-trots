@@ -6038,7 +6038,7 @@ try {
     $currentUser = validateAuthToken($db, $config, $body);
     // Pe LiteSpeed/PHP-FPM, răspunsul ajunge întâi la aplicație, iar coada SPV
     // este procesată apoi în fundal. Navigarea rămâne rapidă pe telefon și desktop.
-    if (!in_array($action, ['exportProducts', 'exportCatalog', 'exportInvoiceRegistry'], true)) {
+    if (!in_array($action, ['exportProducts', 'exportCatalog', 'exportInvoiceRegistry', 'getInventoryExportEstimate', 'exportInventoryLedger'], true)) {
         GtrotsSpvService::scheduleWorkerAfterResponse($db, $config);
     }
 
@@ -7125,6 +7125,17 @@ try {
         jsonResponse(GtrotsInvoiceExport::download($db, $body, $config));
     }
 
+    if ($action === 'getInventoryExportEstimate' && $method === 'POST') {
+        require_once __DIR__ . '/inventory-export.php';
+        jsonResponse(GtrotsInventoryExport::estimate($db, $body));
+    }
+
+    if ($action === 'exportInventoryLedger' && $method === 'POST') {
+        require_once __DIR__ . '/inventory-export.php';
+        @set_time_limit(0);
+        jsonResponse(GtrotsInventoryExport::download($db, $body));
+    }
+
     if ($action === 'listProductSources' && $method === 'GET') {
         jsonResponse(array_map('sourceRow', $db->query(
             'SELECT s.*,
@@ -7392,7 +7403,7 @@ try {
             $pendingFifo = $db->prepare('SELECT COUNT(*) FROM shop_inventory_movements WHERE product_id = ? AND movement_type = "sale" AND fifo_quantity_pending > 0.00005');
             $pendingFifo->execute([$id]);
             if ($accountingQuantity > 0.00005 || (int)$openLayers->fetchColumn() > 0 || (int)$pendingFifo->fetchColumn() > 0) {
-                throw new InvalidArgumentException('Urmărirea contabilă poate fi oprită numai după ce stocul contabil, loturile și ieșirile FIFO în așteptare ajung la zero. Stocul online, facturarea și SPV nu sunt afectate.');
+                throw new InvalidArgumentException('Urmărirea contabilă poate fi oprită numai după ce stocul contabil, loturile și ieșirile fără cost asociat ajung la zero. Stocul online, facturarea și SPV nu sunt afectate.');
             }
         }
         if (mb_strtolower(trim((string)$payload['source_domain'])) === 'boomag.ro') {

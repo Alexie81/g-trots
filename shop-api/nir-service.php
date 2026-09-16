@@ -2587,7 +2587,7 @@ function shopNirFifoPreviewForProduct(PDO $db, string $productId, array $body, a
  * action until the sales-invoice module owns a confirmed source document.
  */
 function shopNirConsumeFifoAvailable(PDO $db, string $productId, string $warehouseId, $quantity, string $sourceDocumentType, string $sourceDocumentId, string $sourceLineId, string $idempotencyKey, bool $requireFull = false): array {
-    if (!$db->inTransaction()) throw new RuntimeException('Consumarea FIFO trebuie apelată într-o tranzacție a documentului sursă.');
+    if (!$db->inTransaction()) throw new RuntimeException('Alocarea costului trebuie apelată într-o tranzacție a documentului sursă.');
     if ($sourceDocumentId === '' || $sourceLineId === '' || $idempotencyKey === '') throw new InvalidArgumentException('Documentul sursă și cheia de idempotency sunt obligatorii.');
     $requestedScaled = shopNirDecimalToScaled($quantity, 4, 'Cantitatea solicitată');
     if ($requestedScaled <= 0) throw new InvalidArgumentException('Cantitatea solicitată trebuie să fie mai mare decât zero.');
@@ -2595,7 +2595,7 @@ function shopNirConsumeFifoAvailable(PDO $db, string $productId, string $warehou
     $existing->execute([$sourceDocumentType, $sourceDocumentId, $sourceLineId]);
     $existingRows = $existing->fetchAll();
     $alreadyAllocatedScaled = array_reduce($existingRows, static fn(int $sum, array $row): int => $sum + shopNirDecimalToScaled($row['quantity'] ?? 0, 4), 0);
-    if ($alreadyAllocatedScaled > $requestedScaled) throw new RuntimeException('Alocările FIFO existente depășesc cantitatea documentului sursă.');
+    if ($alreadyAllocatedScaled > $requestedScaled) throw new RuntimeException('Alocările de cost existente depășesc cantitatea documentului sursă.');
     $remainingRequestScaled = $requestedScaled - $alreadyAllocatedScaled;
     if ($remainingRequestScaled === 0) {
         $existingCostScaled = array_reduce($existingRows, static fn(int $sum, array $row): int => $sum + shopNirDecimalToScaled($row['total_cost_ron'] ?? 0, 2), 0);
@@ -2618,7 +2618,7 @@ function shopNirConsumeFifoAvailable(PDO $db, string $productId, string $warehou
     $layerStmt->execute([$productId, $warehouseId]);
     $layers = $layerStmt->fetchAll();
     $preview = shopNirFifoPreview($layers, shopNirScaledToDecimal($remainingRequestScaled, 4));
-    if ($requireFull && !$preview['available']) throw new ShopNirHttpException('Stoc FIFO insuficient pentru documentul sursă.', 409, ['preview' => $preview]);
+    if ($requireFull && !$preview['available']) throw new ShopNirHttpException('Stoc contabil insuficient pentru documentul sursă.', 409, ['preview' => $preview]);
     $byId = [];
     foreach ($layers as $layer) $byId[(string)$layer['id']] = $layer;
     $insert = $db->prepare(
@@ -2634,7 +2634,7 @@ function shopNirConsumeFifoAvailable(PDO $db, string $productId, string $warehou
         $consumptionId = uuidV4();
         $insert->execute([$consumptionId, $layer['id'], $productId, $warehouseId, $sourceDocumentType, $sourceDocumentId, $sourceLineId, $allocation['quantity'], $allocation['unit_cost_ron'], $allocation['cost_ron'], $idempotencyKey]);
         $update->execute([$allocation['quantity'], $allocation['quantity'], $layer['id'], $allocation['quantity']]);
-        if ($update->rowCount() !== 1) throw new ShopNirHttpException('Lotul FIFO a fost consumat simultan. Reîncearcă documentul.', 409);
+        if ($update->rowCount() !== 1) throw new ShopNirHttpException('Lotul de achiziție a fost consumat simultan. Reîncearcă documentul.', 409);
         $newConsumptions[] = ['id' => $consumptionId] + $allocation;
     }
     $consumptions = array_merge($existingRows, $newConsumptions);
@@ -2662,7 +2662,7 @@ function shopNirConsumeFifo(PDO $db, string $productId, string $warehouseId, $qu
  * costul real atunci când lotul de achiziție devine disponibil.
  */
 function shopNirReconcilePendingInvoiceFifo(PDO $db, array $productIds): array {
-    if (!$db->inTransaction()) throw new RuntimeException('Reconcilierea FIFO trebuie apelată în tranzacția NIR-ului.');
+    if (!$db->inTransaction()) throw new RuntimeException('Reconcilierea costului trebuie apelată în tranzacția NIR-ului.');
     $productIds = array_values(array_unique(array_filter(array_map(static fn($id): string => trim((string)$id), $productIds))));
     if (!$productIds) return ['movements_reconciled' => 0, 'movements_pending' => 0];
     $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
@@ -2738,14 +2738,14 @@ function shopNirCreateOpeningBalance(PDO $db, array $body, array $user): array {
         $product->execute([$productId]);
         $productRow = $product->fetch();
         if (!$productRow) throw new InvalidArgumentException('Produsul nu există.');
-        if (!(bool)$productRow['is_accounting_stock_tracked']) throw new InvalidArgumentException('Produsul este exclus din Stocuri Conta și nu poate primi sold inițial FIFO.');
+        if (!(bool)$productRow['is_accounting_stock_tracked']) throw new InvalidArgumentException('Produsul este exclus din Stocuri Conta și nu poate primi sold inițial cu cost de achiziție.');
         $accountingStock = $productRow['accounting_stock_quantity'];
         $layers = $db->prepare('SELECT COALESCE(SUM(remaining_quantity), 0) FROM shop_inventory_cost_layers WHERE product_id = ? AND warehouse_id = ? AND is_reversed = 0 FOR UPDATE');
         $layers->execute([$productId, $warehouseId]);
         $layerQuantity = (string)$layers->fetchColumn();
         $missing = shopNirDecimalToScaled($accountingStock, 4) - shopNirDecimalToScaled($layerQuantity, 4);
         if ($missing <= 0 || shopNirDecimalToScaled($quantity, 4) > $missing) {
-            throw new ShopNirHttpException('Cantitatea soldului inițial depășește stocul contabil fără lot FIFO.', 409, ['missing_fifo_quantity' => shopNirScaledToDecimal(max(0, $missing), 4)]);
+            throw new ShopNirHttpException('Cantitatea soldului inițial depășește stocul contabil fără cost asociat.', 409, ['missing_fifo_quantity' => shopNirScaledToDecimal(max(0, $missing), 4)]);
         }
         $id = uuidV4();
         $db->prepare(

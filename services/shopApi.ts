@@ -1335,7 +1335,7 @@ async function shopCall<T>(action: string, token: string, init?: RequestInit, id
   const controller = new AbortController();
   // Stergerea sincronizeaza arhivarea cu Stripe inainte de eliminarea locala.
   // O lasam sa se incheie si pe conexiuni mobile mai lente.
-  const timeoutMs = action === 'exportProducts' ? 180000 : ['exportInvoiceRegistry', 'downloadNirBundle', 'downloadNirRegistryBundle'].includes(action) ? 1800000 : action === 'syncStripeCatalog' ? 90000 : ['syncBoomagTaxonomy', 'syncBoomagStock'].includes(action) ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
+  const timeoutMs = action === 'exportProducts' ? 180000 : ['exportInvoiceRegistry', 'exportInventoryLedger', 'downloadNirBundle', 'downloadNirRegistryBundle'].includes(action) ? 1800000 : action === 'syncStripeCatalog' ? 90000 : ['syncBoomagTaxonomy', 'syncBoomagStock'].includes(action) ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const isGet = !init?.method || init.method === 'GET';
   const cacheBuster = isGet ? `&_=${Date.now()}` : '';
@@ -1562,6 +1562,8 @@ export const shopApi = {
   exportProducts: (token: string, sourceIds: string[] | null) => shopCall<{ file_name: string; mime_type: string; content_base64: string; product_count: number }>('exportProducts', token, { method: 'POST', body: JSON.stringify({ source_ids: sourceIds }) }),
   exportCatalog: (token: string, kind: 'categories' | 'brands' | 'manufacturers') => shopCall<{ file_name: string; mime_type: string; content_base64: string; item_count: number }>('exportCatalog', token, { method: 'POST', body: JSON.stringify({ kind }) }),
   exportInvoiceRegistry: (token: string, from: string, to: string, includeDocuments: boolean) => shopCall<{ file_name: string; mime_type: string; content_base64: string; item_count: number }>('exportInvoiceRegistry', token, { method: 'POST', body: JSON.stringify({ from, to, include_documents: includeDocuments }) }),
+  getInventoryExportEstimate: (token: string, from: string, to: string) => shopCall<{ from: string; to: string; product_count: number; movement_count: number; document_count: number; estimated_seconds: number }>('getInventoryExportEstimate', token, { method: 'POST', body: JSON.stringify({ from, to }) }),
+  exportInventoryLedger: (token: string, from: string, to: string) => shopCall<{ file_name: string; mime_type: string; content_base64: string; product_count: number; movement_count: number; document_count: number; generation_seconds: number }>('exportInventoryLedger', token, { method: 'POST', body: JSON.stringify({ from, to }) }),
   listProducts: (token: string) => shopCall<ShopProduct[]>('listProducts', token),
   listProductOptions: (token: string, options: { q?: string; ids?: string[]; supplier_id?: string; limit?: number } = {}) => shopCall<ShopProduct[]>('listProductOptions', token, { method: 'POST', body: JSON.stringify(options) }),
   listProductOptionIds: (token: string) => shopCall<string[]>('listProductOptionIds', token, { method: 'POST', body: '{}' }),

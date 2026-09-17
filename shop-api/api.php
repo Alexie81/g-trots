@@ -2906,12 +2906,35 @@ function catalogProductSlugFamily(array $row): string {
     return implode('-', $tokens);
 }
 
+function catalogProductAvailabilityRank(array $row): int {
+    if (mb_strtolower(trim((string)($row['stock_mode'] ?? ''))) === 'unlimited') return 3;
+    $quantity = (float)($row['stock_quantity'] ?? 0);
+    $lowStockThreshold = max(0.0, (float)($row['low_stock_threshold'] ?? 0));
+    if ($quantity > $lowStockThreshold) return 2;
+    if ($quantity > 0) return 1;
+    return 0;
+}
+
+function shouldReplaceCatalogProductRow(array $current, array $candidate): bool {
+    $currentAvailability = catalogProductAvailabilityRank($current);
+    $candidateAvailability = catalogProductAvailabilityRank($candidate);
+    if ($candidateAvailability !== $currentAvailability) {
+        return $candidateAvailability > $currentAvailability;
+    }
+
+    $currentSlugLength = strlen((string)($current['slug'] ?? '')) ?: PHP_INT_MAX;
+    $candidateSlugLength = strlen((string)($candidate['slug'] ?? '')) ?: PHP_INT_MAX;
+    return $candidateSlugLength < $currentSlugLength;
+}
+
 function deduplicateCatalogProductRows(array $rows): array {
     $keyIndexes = [];
     $unique = [];
     foreach ($rows as $row) {
         $keys = [];
-        foreach (['id', 'slug', 'sku', 'ean'] as $field) {
+        // Un EAN comun nu este suficient pentru a declara două produse duplicate:
+        // furnizorii pot reutiliza GTIN-ul pentru înregistrări comerciale distincte.
+        foreach (['id', 'slug', 'sku'] as $field) {
             $value = normalizedCatalogIdentity($row[$field] ?? '');
             if ($value !== '') $keys[] = $field . ':' . $value;
         }
@@ -2932,9 +2955,9 @@ function deduplicateCatalogProductRows(array $rows): array {
             }
         }
         if ($duplicateIndex !== null) {
-            $currentSlugLength = strlen((string)($unique[$duplicateIndex]['slug'] ?? '')) ?: PHP_INT_MAX;
-            $nextSlugLength = strlen((string)($row['slug'] ?? '')) ?: PHP_INT_MAX;
-            if ($nextSlugLength < $currentSlugLength) $unique[$duplicateIndex] = $row;
+            if (shouldReplaceCatalogProductRow($unique[$duplicateIndex], $row)) {
+                $unique[$duplicateIndex] = $row;
+            }
             foreach ($keys as $key) $keyIndexes[$key] = $duplicateIndex;
             continue;
         }

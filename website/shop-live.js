@@ -116,7 +116,7 @@
     });
   }
 
-  const CATALOG_CACHE_KEY = "g-trots:catalog-compact:v1";
+  const CATALOG_CACHE_KEY = "g-trots:catalog-compact:v2";
   const CONSENT_STORAGE_KEY = "g-trots-cookie-consent-v1";
   function catalogCacheAllowed() {
     try {
@@ -172,6 +172,26 @@
     return tokens.join("-");
   }
 
+  function productAvailabilityRank(product) {
+    if (String(product?.stock_mode || "").trim().toLowerCase() === "unlimited") return 3;
+    const quantity = Number(product?.stock_quantity || 0);
+    const lowStockThreshold = Math.max(0, Number(product?.low_stock_threshold || 0));
+    if (quantity > lowStockThreshold) return 2;
+    if (quantity > 0) return 1;
+    return 0;
+  }
+
+  function shouldReplaceCatalogProduct(current, candidate) {
+    const currentAvailability = productAvailabilityRank(current);
+    const candidateAvailability = productAvailabilityRank(candidate);
+    if (candidateAvailability !== currentAvailability) {
+      return candidateAvailability > currentAvailability;
+    }
+    const currentSlugLength = String(current?.slug || "").length || Number.MAX_SAFE_INTEGER;
+    const candidateSlugLength = String(candidate?.slug || "").length || Number.MAX_SAFE_INTEGER;
+    return candidateSlugLength < currentSlugLength;
+  }
+
   function deduplicateProducts(products) {
     const keyIndexes = new Map();
     const uniqueProducts = [];
@@ -180,7 +200,6 @@
         ["id", product.id],
         ["slug", product.slug],
         ["sku", product.sku],
-        ["ean", product.ean],
         ["name", normalizeProductIdentity(product.name)],
         ["family", productSlugFamily(product)]
       ]
@@ -188,9 +207,9 @@
         .map(([type, value]) => `${type}:${String(value).trim().toLowerCase()}`);
       const duplicateIndex = keys.map(key => keyIndexes.get(key)).find(index => index !== undefined);
       if (duplicateIndex !== undefined) {
-        const currentSlugLength = String(uniqueProducts[duplicateIndex]?.slug || "").length || Number.MAX_SAFE_INTEGER;
-        const nextSlugLength = String(product.slug || "").length || Number.MAX_SAFE_INTEGER;
-        if (nextSlugLength < currentSlugLength) uniqueProducts[duplicateIndex] = product;
+        if (shouldReplaceCatalogProduct(uniqueProducts[duplicateIndex], product)) {
+          uniqueProducts[duplicateIndex] = product;
+        }
         keys.forEach(key => keyIndexes.set(key, duplicateIndex));
         return;
       }

@@ -431,6 +431,22 @@ function renderLiveProducts(products) {
     while (tokens.length > 3 && !/^\d+$/.test(tokens.at(-1)) && tokens.slice(0, -1).includes(tokens.at(-1))) tokens.pop();
     return tokens.join("-");
   };
+  const availabilityRank = product => {
+    if (String(product?.stock_mode || "").trim().toLowerCase() === "unlimited") return 3;
+    const quantity = Number(product?.stock_quantity || 0);
+    const lowStockThreshold = Math.max(0, Number(product?.low_stock_threshold || 0));
+    if (quantity > lowStockThreshold) return 2;
+    if (quantity > 0) return 1;
+    return 0;
+  };
+  const shouldReplaceProduct = (current, candidate) => {
+    const currentAvailability = availabilityRank(current);
+    const candidateAvailability = availabilityRank(candidate);
+    if (candidateAvailability !== currentAvailability) return candidateAvailability > currentAvailability;
+    const currentSlugLength = String(current?.slug || "").length || Number.MAX_SAFE_INTEGER;
+    const candidateSlugLength = String(candidate?.slug || "").length || Number.MAX_SAFE_INTEGER;
+    return candidateSlugLength < currentSlugLength;
+  };
   const keyIndexes = new Map();
   const uniqueProducts = [];
   products.forEach(product => {
@@ -444,7 +460,6 @@ function renderLiveProducts(products) {
       ["id", product.id],
       ["slug", product.slug],
       ["sku", product.sku],
-      ["ean", product.ean],
       ["name", normalizedName],
       ["family", productFamily(product)]
     ]
@@ -452,9 +467,9 @@ function renderLiveProducts(products) {
       .map(([type, value]) => `${type}:${String(value).trim().toLowerCase()}`);
     const duplicateIndex = keys.map(key => keyIndexes.get(key)).find(index => index !== undefined);
     if (duplicateIndex !== undefined) {
-      const currentSlugLength = String(uniqueProducts[duplicateIndex]?.slug || "").length || Number.MAX_SAFE_INTEGER;
-      const nextSlugLength = String(product.slug || "").length || Number.MAX_SAFE_INTEGER;
-      if (nextSlugLength < currentSlugLength) uniqueProducts[duplicateIndex] = product;
+      if (shouldReplaceProduct(uniqueProducts[duplicateIndex], product)) {
+        uniqueProducts[duplicateIndex] = product;
+      }
       keys.forEach(key => keyIndexes.set(key, duplicateIndex));
       return;
     }

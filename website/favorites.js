@@ -2,7 +2,7 @@
   const ensureLegalFooter = () => {
     if (document.querySelector('script[src*="legal-footer.js"]')) return;
     const legal = document.createElement('script');
-    legal.src = '/legal-footer.js?v=20260910-conversion-v1';
+    legal.src = '/legal-footer.js?v=20260919-whatsapp-sticky-v4';
     legal.defer = true;
     document.head.append(legal);
   };

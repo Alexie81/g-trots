@@ -4,6 +4,7 @@ declare(strict_types=1);
 $root = dirname(__DIR__, 2);
 $measurement = file_get_contents($root . '/website/google-measurement.js');
 $footer = file_get_contents($root . '/website/legal-footer.js');
+$footerCss = file_get_contents($root . '/website/legal-footer.css');
 $consent = file_get_contents($root . '/website/cookie-consent.js');
 $status = file_get_contents($root . '/website/checkout-status.js');
 $productTemplate = file_get_contents($root . '/website/produs.html');
@@ -22,8 +23,10 @@ $assert = static function (bool $condition, string $message): void {
 };
 
 $assert(str_contains($footer, 'google-measurement.js'), 'componenta globală nu este încărcată de footer');
-$assert(str_contains($productTemplate, 'legal-footer.js?v=20260919-contact-beacon-v2'), 'șablonul produselor viitoare nu încarcă versiunea actuală de măsurare');
-$assert(str_contains($productGenerator, 'gt-product-bootstrap') && str_contains($productGenerator, 'legal-footer.js?v=20260919-contact-beacon-v2'), 'generatorul produselor nu păstrează datele produsului și măsurarea globală actuală');
+$assert(str_contains($productTemplate, 'legal-footer.js?v=20260919-whatsapp-sticky-v4'), 'șablonul produselor viitoare nu încarcă footerul global actual');
+$assert(str_contains($productGenerator, 'gt-product-bootstrap') && str_contains($productGenerator, 'legal-footer.js?v=20260919-whatsapp-sticky-v4'), 'generatorul produselor nu păstrează datele produsului și footerul global actual');
+$assert(str_contains($footer, 'data-gt-whatsapp-sticky') && str_contains($footer, 'whatsappHref'), 'footerul global nu creează butonul WhatsApp sticky');
+$assert(str_contains($footerCss, '.whatsapp-sticky') && str_contains($footerCss, 'safe-area-inset-bottom'), 'butonul WhatsApp sticky nu are stiluri responsive');
 $assert(str_contains($measurement, 'G-6EWM36QSDY'), 'ID-ul GA4 lipsește');
 $assert(str_contains($measurement, 'GTM-K2N32ZFD'), 'ID-ul GTM lipsește');
 $assert(str_contains($measurement, 'send_to: MEASUREMENT_ID'), 'evenimentele nu au destinația GA4 explicită');

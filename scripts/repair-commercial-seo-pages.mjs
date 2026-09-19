@@ -189,7 +189,7 @@ async function repairPage(page) {
   const main = page.main.replace("__FAQ__", faqHtml(page.faqs)).trim();
   if (!/<main class="seo-page">[\s\S]*?<\/main>/i.test(html)) throw new Error(`Structură <main> necunoscută: ${page.slug}`);
   html = html.replace(/(?:\r?\n)*<main class="seo-page">[\s\S]*?<\/main>/i, `\n${main}`);
-  html = html.replace(/\/legal-footer\.js\?v=[^\"']+/g, "/legal-footer.js?v=20260919-contact-beacon-v2");
+  html = html.replace(/\/legal-footer\.js\?v=[^\"']+/g, "/legal-footer.js?v=20260919-whatsapp-sticky-v4");
   await atomicWrite(file, html);
 }
 

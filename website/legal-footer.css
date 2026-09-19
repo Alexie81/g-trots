@@ -6,6 +6,31 @@
   --gt-footer-line: rgba(255, 255, 255, 0.09);
 }
 
+/* Butonul WhatsApp original, încărcat de footerul public pe fiecare pagină. */
+.whatsapp-sticky {
+  position: fixed;
+  z-index: 95;
+  right: 1.1rem;
+  bottom: calc(1.1rem + env(safe-area-inset-bottom));
+  min-height: 3.5rem;
+  padding: .55rem 1rem .55rem .6rem;
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 999px;
+  background: #25d366;
+  color: #07190e;
+  box-shadow: 0 1rem 3rem rgba(0,0,0,.42);
+  font: 800 .72rem/normal "Manrope", Arial, sans-serif;
+  text-decoration: none;
+  transition: transform 180ms ease, background 180ms ease;
+}
+.whatsapp-sticky:hover,
+.whatsapp-sticky:focus-visible { background: #39e879; color: #07190e; transform: translateY(-3px); }
+.whatsapp-sticky:focus-visible { outline: 3px solid rgba(255,255,255,.9); outline-offset: 3px; }
+.whatsapp-sticky svg { width: 2.35rem; height: 2.35rem; padding: .42rem; border-radius: 50%; background: rgba(255,255,255,.9); fill: #128c45; }
+
 /* Navbarul magazinului, folosit și de paginile juridice. */
 .gt-public-header {
   --header-edge-gap: 1rem;
@@ -1015,4 +1040,18 @@ body.menu-open .gt-store-shortcut { opacity: 0; pointer-events: none; }
   .gt-public-header *,
   .gt-site-footer * { scroll-behavior: auto !important; transition: none !important; }
   .gt-social-link { animation: none !important; }
+}
+
+/* Pe telefoane păstrăm exact varianta originală: doar iconița WhatsApp. */
+@media (max-width: 600px) {
+  .whatsapp-sticky {
+    right: .7rem;
+    bottom: calc(.7rem + env(safe-area-inset-bottom));
+    width: 3.5rem;
+    min-height: 3.5rem;
+    padding: .55rem;
+    gap: 0;
+  }
+  .whatsapp-sticky span { display: none; }
+  .whatsapp-sticky svg { width: 2.35rem; height: 2.35rem; padding: .42rem; }
 }

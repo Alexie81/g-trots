@@ -1,5 +1,5 @@
 (() => {
-  const COMPONENT_VERSION = '20260910-conversion-v1';
+  const COMPONENT_VERSION = '20260919-whatsapp-sticky-v4';
   if (window.__gtLegalFooterVersion === COMPONENT_VERSION) return;
   window.__gtLegalFooterVersion = COMPONENT_VERSION;
   window.__gtLegalFooter = true;
@@ -45,7 +45,7 @@
       onload() { this.media = 'all'; },
     });
   }
-  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260910-public-address-v1' });
+  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260919-whatsapp-sticky-v4' });
   if (!document.querySelector('script[src*="google-measurement.js"]')) {
     loadAsset('script', { src: '/google-measurement.js?v=20260919-contact-beacon-v2', async: true });
   }
@@ -62,6 +62,30 @@
     if (digits.startsWith('40')) return `tel:+${digits}`;
     if (digits.startsWith('0')) return `tel:+40${digits.slice(1)}`;
     return digits ? `tel:+40${digits}` : '#';
+  }
+
+  function whatsappHref(phone) {
+    let digits = String(phone || '').replace(/\D/g, '');
+    if (digits.startsWith('0040')) digits = digits.slice(2);
+    if (digits.startsWith('0')) digits = `40${digits.slice(1)}`;
+    if (!digits.startsWith('40') || digits.length < 10) return '#';
+    const message = 'Bună, am nevoie de ajutor cu trotineta mea electrică.';
+    return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+  }
+
+  function ensureWhatsAppSticky(company) {
+    if (document.querySelector('.whatsapp-sticky')) return;
+    const href = whatsappHref(company?.phone);
+    if (href === '#') return;
+    const link = document.createElement('a');
+    link.className = 'whatsapp-sticky';
+    link.setAttribute('data-gt-whatsapp-sticky', '');
+    link.href = href;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.setAttribute('aria-label', 'Trimite mesaj G-Trots pe WhatsApp');
+    link.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3a12.8 12.8 0 0 0-11 19.3L3.4 29l6.9-1.6A12.9 12.9 0 1 0 16 3Zm0 23.3c-2 0-3.8-.5-5.4-1.5l-.4-.2-4 .9.9-3.9-.3-.4A10.3 10.3 0 1 1 16 26.3Zm5.7-7.7c-.3-.2-1.9-.9-2.2-1s-.5-.2-.7.2-.8 1-1 1.2-.4.2-.7.1a8.5 8.5 0 0 1-2.5-1.6 9.3 9.3 0 0 1-1.7-2.1c-.2-.3 0-.5.1-.7l.5-.6.3-.6c.1-.2 0-.4 0-.6l-1-2.3c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.6.1-.9.4-.3.4-1.2 1.2-1.2 2.9s1.3 3.4 1.5 3.6c.2.2 2.5 3.8 6 5.3 3.6 1.6 3.6 1 4.3.9.6 0 1.9-.8 2.2-1.6.3-.8.3-1.5.2-1.6-.1-.2-.3-.3-.6-.4Z"/></svg><span>WhatsApp</span>';
+    document.body.append(link);
   }
 
   function companyAddress(company) {
@@ -397,6 +421,7 @@ ${navigationHtml}
   }
 
   function render(company) {
+    ensureWhatsAppSticky(company);
     if (document.querySelector('[data-gt-legal-footer]')) return;
     const existingFooter = Array.from(document.querySelectorAll('body > footer'))
       .reverse()

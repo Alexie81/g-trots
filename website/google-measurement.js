@@ -234,7 +234,11 @@
 
   function track(eventName, params = {}, context = {}) {
     if (!/^[a-z][a-z0-9_]{0,39}$/.test(String(eventName || ""))) return;
-    const cleanEventParams = cleanParams(params);
+    const cleanEventParams = cleanParams({
+      page_path: limited(`${location.pathname}${location.search}`, 100),
+      page_title: limited(document.title, 100),
+      ...params
+    });
     window.gtag("event", eventName, { ...cleanEventParams, send_to: MEASUREMENT_ID });
     document.dispatchEvent(new CustomEvent("g-trots:analytics-event", {
       detail: { eventName, params: cleanEventParams, context, timestamp: Date.now() }
@@ -242,22 +246,27 @@
   }
 
   function trackLandingPage() {
-    if (!analyticsStorageAllowed()) return false;
-    try { if (sessionStorage.getItem(LANDING_EVENT_KEY) === "1") return false; }
-    catch { /* fără persistență */ }
+    if (analyticsStorageAllowed()) {
+      try { if (sessionStorage.getItem(LANDING_EVENT_KEY) === "1") return false; }
+      catch { /* fără persistență */ }
+    } else if (once.has(LANDING_EVENT_KEY)) {
+      return false;
+    }
     track("landing_page_view", currentAttribution());
-    try { sessionStorage.setItem(LANDING_EVENT_KEY, "1"); } catch { /* fără persistență */ }
+    once.add(LANDING_EVENT_KEY);
+    if (analyticsStorageAllowed()) {
+      try { sessionStorage.setItem(LANDING_EVENT_KEY, "1"); } catch { /* fără persistență */ }
+    }
     return true;
   }
 
   function trackContact(method, params = {}) {
-    const consent = readConsent();
-    if (!consent?.analytics && !consent?.marketing) return false;
     const normalizedMethod = method === "phone" ? "phone" : "whatsapp";
     track(normalizedMethod === "phone" ? "phone_click" : "whatsapp_click", {
       ...currentAttribution(),
-      page_path: limited(`${location.pathname}${location.search}`, 100),
       contact_method: normalizedMethod,
+      event_category: "contact",
+      transport_type: "beacon",
       ...cleanParams(params)
     });
     return true;

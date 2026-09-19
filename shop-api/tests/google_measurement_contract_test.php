@@ -12,6 +12,7 @@ $promotions = file_get_contents($root . '/website/promotions.js');
 $checkout = file_get_contents($root . '/website/checkout.js');
 $account = file_get_contents($root . '/website/cont.js');
 $site = file_get_contents($root . '/website/script.js');
+$contact = file_get_contents($root . '/website/contact.js');
 
 $assert = static function (bool $condition, string $message): void {
     if (!$condition) {
@@ -21,11 +22,15 @@ $assert = static function (bool $condition, string $message): void {
 };
 
 $assert(str_contains($footer, 'google-measurement.js'), 'componenta globală nu este încărcată de footer');
-$assert(str_contains($productTemplate, 'legal-footer.js?v=20260912-payment-outcomes-v1'), 'șablonul produselor viitoare nu încarcă versiunea actuală de măsurare');
-$assert(str_contains($productGenerator, 'gt-product-bootstrap') && str_contains($productGenerator, 'legal-footer.js?v=20260912-payment-outcomes-v1'), 'generatorul produselor nu păstrează datele produsului și măsurarea globală actuală');
+$assert(str_contains($productTemplate, 'legal-footer.js?v=20260919-contact-beacon-v2'), 'șablonul produselor viitoare nu încarcă versiunea actuală de măsurare');
+$assert(str_contains($productGenerator, 'gt-product-bootstrap') && str_contains($productGenerator, 'legal-footer.js?v=20260919-contact-beacon-v2'), 'generatorul produselor nu păstrează datele produsului și măsurarea globală actuală');
 $assert(str_contains($measurement, 'G-6EWM36QSDY'), 'ID-ul GA4 lipsește');
 $assert(str_contains($measurement, 'GTM-K2N32ZFD'), 'ID-ul GTM lipsește');
 $assert(str_contains($measurement, 'send_to: MEASUREMENT_ID'), 'evenimentele nu au destinația GA4 explicită');
+$assert(!str_contains($measurement, 'if (!consent?.analytics && !consent?.marketing) return false;'), 'clickurile de contact sunt blocate complet când stocarea este refuzată');
+$assert(str_contains($measurement, 'event_category: "contact"'), 'clickurile de contact nu pot fi grupate clar în rapoarte');
+$assert(str_contains($measurement, 'transport_type: "beacon"'), 'clickurile de contact se pot pierde la navigarea imediată spre telefon sau WhatsApp');
+$assert(str_contains($measurement, 'page_title: limited(document.title'), 'evenimentele nu includ titlul paginii pentru raportare');
 $assert(str_contains($measurement, 'send_page_view: false'), 'configurarea directă GA4 ar putea dubla page_view');
 foreach ([
     'view_item_list', 'select_item', 'view_item', 'add_to_wishlist', 'remove_from_wishlist', 'add_to_cart',
@@ -53,6 +58,7 @@ $assert(str_contains($promotions, 'g-trots:promotions-viewed'), 'bannerul nu pub
 $assert(str_contains($checkout, 'g-trots:promotion-selected'), 'checkout-ul nu publică select_promotion');
 $assert(str_contains($account, 'trackRefundedOrders'), 'contul clientului nu publică refund');
 $assert(str_contains($site, '"generate_lead"'), 'formularul real de programare nu publică generate_lead');
+$assert(str_contains($contact, "track?.('generate_lead'") && str_contains($contact, "lead_source: 'formular_contact_whatsapp'"), 'formularul din pagina Contact nu publică generate_lead după validare');
 $assert(!str_contains($measurement, 'track("generate_lead"'), 'un simplu submit de formular ar produce un lead fals');
 $assert(str_contains($status, 'GTrotsPendingPurchase'), 'purchase nu este păstrat până la încărcarea componentei Google');
 $assert(str_contains($measurement, 'PAYMENT_OUTCOMES_KEY') && str_contains($measurement, 'trackPaymentOutcome'), 'Rezultatele plății nu au deduplicare și funcție dedicată.');

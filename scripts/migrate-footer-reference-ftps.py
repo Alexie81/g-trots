@@ -13,7 +13,7 @@ import ssl
 
 REMOTE_ROOT = "/g-trots.ro"
 PUBLIC_BASE = "https://g-trots.ro"
-TARGET_VERSION = "20260908-nav-v2"
+TARGET_VERSION = "20260919-contact-beacon-v2"
 
 
 def connect() -> FTP_TLS:

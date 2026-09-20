@@ -15,6 +15,7 @@ $mobileEditor = (string)file_get_contents($root . '/components/ShopProductsManag
 $desktopEditor = (string)file_get_contents($root . '/electron-app/renderer/js/shop-commerce.js');
 
 $assert(!str_contains($api, '$payload[\'stock_mode\'] = \'tracked\';'), 'API-ul anulează alegerea de stoc nelimitat pentru Boomag.');
+$assert(!str_contains($api, '$stockMode = \'tracked\';'), 'Validarea formularului anulează alegerea de stoc nelimitat pentru Boomag.');
 $assert(!str_contains($gomag, 'stock_mode = IF(LOWER(source_domain) = "boomag.ro", "tracked", stock_mode)'), 'Importul Boomag forțează produsele existente pe stoc urmărit.');
 $assert(!str_contains($gomag, 'supplier_stock_updated_at = NOW(), stock_mode = "tracked", stock_quantity ='), 'Sincronizarea Boomag anulează stocul nelimitat.');
 $assert(str_contains($mobileEditor, 'ramane nelimitat, indiferent de stocul furnizorului'), 'Editorul mobil nu explică suprascrierea stocului Boomag.');

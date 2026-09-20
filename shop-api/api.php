@@ -3488,9 +3488,9 @@ function productPayload(PDO $db, array $body, bool $allowInactiveSource = false)
         $sourceDomain = (string)$source['domain'];
     }
     // Lipsa unei surse este un produs manual G-Trots, nu produsul sursei
-    // implicite. Astfel Boomag nu ii poate rescrie pretul sau stocul.
+    // implicite. Pentru Boomag, cantitatea vine din feed, dar modul online
+    // ales explicit (urmarit sau nelimitat) trebuie pastrat.
     if (mb_strtolower(trim($sourceDomain)) === 'boomag.ro') {
-        $stockMode = 'tracked';
         $stockQuantity = 0;
     }
     return [

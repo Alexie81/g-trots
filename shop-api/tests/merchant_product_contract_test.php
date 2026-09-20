@@ -126,6 +126,7 @@ $assert(str_contains($gomag, 'stripeSyncProductSafe'), 'sincronizarea completă 
 $assert(str_contains($gomag, "'merchant_errors' => []"), 'importul Boomag nu raportează sincronizarea Merchant');
 $assert(str_contains($gomag, 'supplier_price_difference = ?'), 'importul Boomag nu păstrează marja fixă față de furnizor');
 $assert(!str_contains($api, '$payload[\'stock_mode\'] = \'tracked\';'), 'editorul API nu trebuie să anuleze stocul nelimitat ales pentru un produs Boomag');
+$assert(!str_contains($api, '$stockMode = \'tracked\';'), 'validarea produsului nu trebuie să anuleze stocul nelimitat ales pentru Boomag');
 $assert(!str_contains($gomag, 'stock_mode = IF(LOWER(source_domain) = "boomag.ro", "tracked", stock_mode)'), 'importul Boomag nu trebuie să forțeze produsele existente pe stoc urmărit');
 $assert(!str_contains($gomag, 'supplier_stock_updated_at = NOW(), stock_mode = "tracked", stock_quantity ='), 'sincronizarea Boomag nu trebuie să anuleze stocul nelimitat');
 $assert(str_contains($api, 'syncCommerceCatalogProducts'), 'promoțiile de produs nu resincronizează canalele de vânzare');

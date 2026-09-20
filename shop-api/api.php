@@ -265,7 +265,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026091401;
+    $schemaVersion = 2026092001;
     // Ruta normala face doar SELECT-ul indexat. Un CREATE TABLE IF NOT EXISTS la
     // fiecare request tot cere verificari de metadata si poate astepta lock-uri.
     try {
@@ -616,6 +616,13 @@ function ensureShopSchema(PDO $db): void {
             $db->exec("ALTER TABLE shop_products ADD COLUMN {$column} {$definition}");
         }
     }
+    // Migrare unica: un produs din catalogul Boomag deja receptionat prin NIR
+    // ramane disponibil online chiar daca feedul furnizorului este la zero.
+    $db->exec(
+        'UPDATE shop_products
+         SET stock_quantity = GREATEST(supplier_stock_quantity, FLOOR(GREATEST(accounting_stock_quantity, 0)))
+         WHERE LOWER(source_domain) = "boomag.ro" AND stock_mode = "tracked"'
+    );
     $stripeProductColumns = [
         'stripe_product_id' => 'VARCHAR(80) NULL AFTER view_count',
         'stripe_price_id' => 'VARCHAR(80) NULL AFTER stripe_product_id',
@@ -4305,6 +4312,32 @@ function syncCommerceCatalogProducts(PDO $db, array $config, array $productIds):
     return $result;
 }
 
+function nirResultProductIds(array $result): array {
+    $ids = [];
+    $documents = [$result];
+    foreach (['original', 'reversal', 'storno'] as $key) {
+        if (is_array($result[$key] ?? null)) $documents[] = $result[$key];
+    }
+    foreach ($documents as $document) {
+        foreach ((array)($document['lines'] ?? []) as $line) {
+            $productId = trim((string)($line['product_id'] ?? ''));
+            if ($productId !== '') $ids[$productId] = true;
+        }
+    }
+    return array_keys($ids);
+}
+
+function syncCommerceStockProducts(PDO $db, array $config, array $productIds): array {
+    $productIds = array_values(array_unique(array_filter(array_map(static fn($id): string => trim((string)$id), $productIds))));
+    $result = ['products' => count($productIds), 'stripe' => [], 'merchant' => [], 'shopify' => []];
+    foreach ($productIds as $productId) {
+        $result['stripe'][$productId] = stripeSyncProductSafe($db, $config, $productId);
+        $result['merchant'][$productId] = merchantSyncProductSafe($db, $config, $productId);
+        $result['shopify'][$productId] = shopifySyncProductSafe($db, $config, $productId);
+    }
+    return $result;
+}
+
 function promotionCustomerIds(PDO $db, string $couponId): array {
     $stmt = $db->prepare('SELECT customer_id FROM shop_customer_coupons WHERE coupon_id = ? ORDER BY customer_id ASC');
     $stmt->execute([$couponId]);
@@ -6342,18 +6375,24 @@ try {
 
     if ($action === 'confirmNir' && $method === 'POST') {
         shopNirRequire($currentUser, 'NIR_CONFIRM');
-        jsonResponse(shopNirConfirm($db, trim((string)($_GET['id'] ?? $body['id'] ?? '')), $body, $currentUser));
+        $result = shopNirConfirm($db, trim((string)($_GET['id'] ?? $body['id'] ?? '')), $body, $currentUser);
+        $result['catalog_stock_sync'] = syncCommerceStockProducts($db, $config, nirResultProductIds($result));
+        jsonResponse($result);
     }
 
     if ($action === 'reopenNir' && $method === 'POST') {
         shopNirRequire($currentUser, 'NIR_EDIT_DRAFT');
         shopNirRequire($currentUser, 'NIR_CONFIRM');
-        jsonResponse(shopNirReopenConfirmed($db, trim((string)($_GET['id'] ?? $body['id'] ?? '')), $body, $currentUser));
+        $result = shopNirReopenConfirmed($db, trim((string)($_GET['id'] ?? $body['id'] ?? '')), $body, $currentUser);
+        $result['catalog_stock_sync'] = syncCommerceStockProducts($db, $config, nirResultProductIds($result));
+        jsonResponse($result);
     }
 
     if (in_array($action, ['reverseNir', 'stornoNir'], true) && $method === 'POST') {
         shopNirRequire($currentUser, $action === 'stornoNir' ? 'NIR_STORNO' : 'NIR_REVERSE');
-        jsonResponse(shopNirReverse($db, trim((string)($_GET['id'] ?? $body['id'] ?? '')), $body, $currentUser));
+        $result = shopNirReverse($db, trim((string)($_GET['id'] ?? $body['id'] ?? '')), $body, $currentUser);
+        $result['catalog_stock_sync'] = syncCommerceStockProducts($db, $config, nirResultProductIds($result));
+        jsonResponse($result);
     }
 
     if ($action === 'uploadNirAttachment' && $method === 'POST') {
@@ -7430,7 +7469,11 @@ try {
             }
         }
         if (mb_strtolower(trim((string)$payload['source_domain'])) === 'boomag.ro') {
-            $payload['stock_quantity'] = (int)($current['supplier_stock_quantity'] ?? $current['stock_quantity'] ?? 0);
+            $payload['stock_quantity'] = boomagOnlineStockQuantity(
+                (int)($current['supplier_stock_quantity'] ?? 0),
+                $current['accounting_stock_quantity'] ?? 0,
+                (string)$payload['stock_mode']
+            );
             if (!$payload['is_accounting_stock_tracked'] && (float)($current['supplier_base_price'] ?? 0) > 0) {
                 $payload['cost_price'] = round((float)$current['supplier_base_price'], 2);
             }

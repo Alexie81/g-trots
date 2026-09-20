@@ -11,6 +11,29 @@ final class ShopNirHttpException extends RuntimeException {
     }
 }
 
+/**
+ * Dupa o receptie sau o stornare, un produs din catalogul Boomag cu stoc
+ * urmarit ramane vandabil din stocul fizic, indiferent cine este furnizorul
+ * documentului NIR. Implementarea este portabila intre MySQL si SQLite.
+ */
+function shopNirRefreshBoomagOnlineStock(PDO $db, string $productId): ?int {
+    $stmt = $db->prepare('SELECT source_domain, stock_mode, stock_quantity, supplier_stock_quantity, accounting_stock_quantity FROM shop_products WHERE id = ? LIMIT 1');
+    $stmt->execute([$productId]);
+    $product = $stmt->fetch();
+    if (!$product
+        || strtolower(trim((string)($product['source_domain'] ?? ''))) !== 'boomag.ro'
+        || strtolower(trim((string)($product['stock_mode'] ?? ''))) !== 'tracked') {
+        return null;
+    }
+    $supplierQuantity = max(0, (int)($product['supplier_stock_quantity'] ?? 0));
+    $physicalQuantity = max(0, (int)floor((float)($product['accounting_stock_quantity'] ?? 0)));
+    $onlineQuantity = max($supplierQuantity, $physicalQuantity);
+    if ((int)($product['stock_quantity'] ?? 0) !== $onlineQuantity) {
+        $db->prepare('UPDATE shop_products SET stock_quantity = ? WHERE id = ?')->execute([$onlineQuantity, $productId]);
+    }
+    return $onlineQuantity;
+}
+
 function shopNirActor(array $user): array {
     return [
         'id' => (string)($user['id'] ?? $user['user_id'] ?? ''),
@@ -1706,6 +1729,7 @@ function shopNirConfirm(PDO $db, string $id, array $body, array $user): array {
             if (!$product) throw new InvalidArgumentException('Un produs asociat nu mai există.');
             $displayCost = shopNirScaledToDecimal(shopNirDecimalToScaled($line['inventory_unit_cost_ron'], 2), 2);
             $updateProduct->execute([$line['stock_quantity'], $displayCost, $productId]);
+            shopNirRefreshBoomagOnlineStock($db, $productId);
             $readProductStock->execute([$productId]);
             $quantityAfter = (string)$readProductStock->fetchColumn();
             $movementId = uuidV4();
@@ -1797,6 +1821,7 @@ function shopNirReopenConfirmed(PDO $db, string $id, array $body, array $user): 
             $quantity = (string)$layer['original_quantity'];
             $subtractStock->execute([$quantity, $productId, $quantity]);
             if ($subtractStock->rowCount() !== 1) throw new ShopNirHttpException('Stocul contabil nu permite redeschiderea NIR-ului.', 409, ['product_id' => $productId]);
+            shopNirRefreshBoomagOnlineStock($db, $productId);
             $affectedProducts[$productId] = true;
         }
         $db->prepare('DELETE FROM shop_inventory_movements WHERE nir_document_id = ? AND movement_type = "NIR_IN"')->execute([$id]);
@@ -2249,6 +2274,7 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
             $stornoStockQuantity = (string)$data['stock_quantity'];
             $updateProduct->execute([$stornoStockQuantity, $productId, $stornoStockQuantity]);
             if ($updateProduct->rowCount() !== 1) throw new ShopNirHttpException('Stocul contabil nu permite stornarea cantității selectate.', 409, ['product_id' => $productId]);
+            shopNirRefreshBoomagOnlineStock($db, $productId);
             $readStock->execute([$productId]);
             $after = (string)$readStock->fetchColumn();
             $originalMovement->execute([(string)$layer['id']]);

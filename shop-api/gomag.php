@@ -508,13 +508,26 @@ function boomagResolveAcquisitionPrice(?float $supplierBase, float $currentCostP
     return max(0.0, round($currentCostPrice, 2));
 }
 
+/**
+ * Produsele din catalogul Boomag pot fi livrate din feedul furnizorului sau
+ * din stocul fizic receptionat prin NIR de la orice furnizor. Folosim valoarea
+ * mai mare, nu suma, ca sa nu numaram aceleasi bucati de doua ori cat timp
+ * feedul Boomag nu a reflectat inca achizitia.
+ */
+function boomagOnlineStockQuantity(int $supplierQuantity, $accountingQuantity, string $stockMode = 'tracked'): int {
+    $supplierQuantity = max(0, $supplierQuantity);
+    if (strtolower(trim($stockMode)) !== 'tracked') return $supplierQuantity;
+    $physicalQuantity = max(0, (int)floor((float)$accountingQuantity));
+    return max($supplierQuantity, $physicalQuantity);
+}
+
 function gomagSyncProductFromFeed(PDO $db, array $config, string $idOrSlug): array {
     $stmt = $db->prepare(
         'SELECT p.id, p.slug, p.sku, p.supplier_product_code, p.supplier_external_id,
                 LOWER(COALESCE(s.domain, p.source_domain, "")) AS source_domain,
-                p.cost_price, p.price, p.sale_price, p.discount_type, p.discount_value, p.stock_quantity,
+                p.cost_price, p.price, p.sale_price, p.discount_type, p.discount_value, p.stock_mode, p.stock_quantity,
                 p.supplier_stock_quantity, p.supplier_stock_status, p.supplier_base_price,
-                p.supplier_price_difference, p.is_accounting_stock_tracked
+                p.supplier_price_difference, p.accounting_stock_quantity, p.is_accounting_stock_tracked
          FROM shop_products p
          LEFT JOIN shop_product_sources s ON s.id = p.source_id
          WHERE p.id = ? OR p.slug = ?
@@ -574,7 +587,8 @@ function gomagSyncProductFromFeed(PDO $db, array $config, string $idOrSlug): arr
         || abs($nextPrice - $currentPrice) >= 0.005
         || (($product['sale_price'] === null) !== ($nextSalePrice === null))
         || ($nextSalePrice !== null && abs((float)$product['sale_price'] - $nextSalePrice) >= 0.005);
-    $stockChanged = (int)$product['stock_quantity'] !== $stock
+    $onlineStock = boomagOnlineStockQuantity($stock, $product['accounting_stock_quantity'] ?? 0, (string)($product['stock_mode'] ?? 'tracked'));
+    $stockChanged = (int)$product['stock_quantity'] !== $onlineStock
         || (int)$product['supplier_stock_quantity'] !== $stock
         || (bool)$product['supplier_stock_status'] !== $available;
     $feedSku = boomagNormalizeProductCode((string)($feedRow['sku'] ?? ''));
@@ -596,7 +610,7 @@ function gomagSyncProductFromFeed(PDO $db, array $config, string $idOrSlug): arr
         $nextCostPrice,
         $nextPrice,
         $nextSalePrice,
-        $stock,
+        $onlineStock,
         $stock,
         $available ? 1 : 0,
         (string)$product['id'],
@@ -1162,6 +1176,11 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
             $costPrice = $existing
                 ? boomagResolveAcquisitionPrice($price, (float)($existing['cost_price'] ?? 0), (bool)($existing['is_accounting_stock_tracked'] ?? true))
                 : 0.0;
+            $onlineStock = boomagOnlineStockQuantity(
+                $stock,
+                $existing['accounting_stock_quantity'] ?? 0,
+                (string)($existing['stock_mode'] ?? 'tracked')
+            );
             $slug = uniqueSlug($db, 'shop_products', $content['name'], $existing ? $productId : null);
             $specificationsJson = json_encode($content['specifications'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             $questionsJson = json_encode($content['questions'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -1204,7 +1223,7 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
                 );
                 $update->execute([
                     $categoryId, $manufacturerId, (string)$source['id'], $externalId, $supplierSku, $supplierSku, $ean !== '' ? $ean : null, $sourceUrl !== '' ? $sourceUrl : null,
-                    $price, $priceDifference, $costPrice, $publicPrice, $salePrice, $stock, $stock, $available ? 1 : 0,
+                    $price, $priceDifference, $costPrice, $publicPrice, $salePrice, $onlineStock, $stock, $available ? 1 : 0,
                     $content['name'], $slug, $content['short_description'], $content['description_title'], $content['description_html'],
                     $specificationsJson, $questionsJson, $content['meta_title'], $content['meta_description'], $productId,
                 ]);
@@ -1375,8 +1394,8 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
         'SELECT p.id, p.sku, p.supplier_product_code, p.supplier_external_id,
                 p.cost_price, p.price, p.sale_price, p.discount_type, p.discount_value,
                 p.supplier_base_price, p.supplier_price_difference,
-                p.stock_quantity, p.supplier_stock_quantity, p.supplier_stock_status,
-                p.is_accounting_stock_tracked
+                p.stock_mode, p.stock_quantity, p.supplier_stock_quantity, p.supplier_stock_status,
+                p.accounting_stock_quantity, p.is_accounting_stock_tracked
          FROM shop_products p
          WHERE p.source_id = ? OR LOWER(p.source_domain) = "boomag.ro"'
     );
@@ -1404,7 +1423,8 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
         $reset = $db->prepare(
             'UPDATE shop_products
              SET supplier_stock_quantity = 0, supplier_stock_status = 0,
-                 supplier_stock_updated_at = NOW(), stock_quantity = 0,
+                 supplier_stock_updated_at = NOW(),
+                 stock_quantity = IF(stock_mode = "tracked", GREATEST(0, FLOOR(accounting_stock_quantity)), 0),
                  updated_at = updated_at
              WHERE source_id = ? OR LOWER(source_domain) = "boomag.ro"'
         );
@@ -1432,6 +1452,11 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
             $available = boomagStockAvailable($row['stock_status'] ?? '0');
             $quantity = max(0, (int)floor((float)str_replace(',', '.', trim((string)($row['stock'] ?? '0')))));
             if (!$available) $quantity = 0;
+            $onlineQuantity = boomagOnlineStockQuantity(
+                $quantity,
+                $product['accounting_stock_quantity'] ?? 0,
+                (string)($product['stock_mode'] ?? 'tracked')
+            );
 
             $supplierBase = boomagFeedPrice($row);
             $difference = $product['supplier_price_difference'] === null
@@ -1464,7 +1489,7 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
                 || ($nextSalePrice !== null && abs((float)$product['sale_price'] - $nextSalePrice) >= 0.005);
             if ($priceChanged) $pricesChanged[$productId] = true;
 
-            $stockChanged = (int)$product['stock_quantity'] !== $quantity
+            $stockChanged = (int)$product['stock_quantity'] !== $onlineQuantity
                 || (int)$product['supplier_stock_quantity'] !== $quantity
                 || (bool)$product['supplier_stock_status'] !== $available;
             if ($stockChanged) $stocksChanged[$productId] = true;
@@ -1479,7 +1504,7 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
                 $nextSalePrice,
                 $quantity,
                 $available ? 1 : 0,
-                $quantity,
+                $onlineQuantity,
                 $productId,
             ]);
             $matched[$productId] = true;

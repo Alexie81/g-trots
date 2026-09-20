@@ -83,6 +83,41 @@
     ensureQuickToggle();
     bindControls(document);
     updateControls(root.dataset.theme || preferredTheme());
+    bindAccordionArtwork();
+  }
+
+  const artworkSections = new WeakSet();
+  function bindAccordionArtwork() {
+    document.querySelectorAll('.service-section, .faq-section').forEach(section => {
+      if (artworkSections.has(section)) return;
+      const heading = section.querySelector('.section-heading');
+      if (!heading) return;
+      artworkSections.add(section);
+      const update = () => {
+        const art = getComputedStyle(section, '::before');
+        const width = parseFloat(art.width);
+        const height = parseFloat(art.height);
+        if (!Number.isFinite(width) || !Number.isFinite(height)) return;
+        const [originX, originY] = art.transformOrigin.split(' ').map(parseFloat);
+        const matrix = new DOMMatrixReadOnly(art.transform === 'none' ? undefined : art.transform);
+        const cutoff = heading.offsetTop + heading.offsetHeight;
+        // Invert the rotated artwork's Y coordinate, keeping the cut horizontal
+        // in the section while retaining the image's original size and angle.
+        const edge = x => Math.max(0, Math.min(height,
+          (cutoff - parseFloat(art.top) - originY - matrix.f - matrix.b * (x - originX)) / matrix.d + originY
+        ));
+        section.style.setProperty('--gt-art-clip-left', `${edge(0).toFixed(2)}px`);
+        section.style.setProperty('--gt-art-clip-right', `${edge(width).toFixed(2)}px`);
+      };
+      update();
+      if ('ResizeObserver' in window) {
+        const observer = new ResizeObserver(update);
+        observer.observe(section);
+        observer.observe(heading);
+      }
+      window.addEventListener('resize', update, { passive: true });
+      document.fonts?.ready.then(update);
+    });
   }
 
   function ensureQuickToggle() {

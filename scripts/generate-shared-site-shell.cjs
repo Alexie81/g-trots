@@ -3,8 +3,8 @@ const path = require('path');
 
 const websiteRoot = path.resolve(__dirname, '..', 'website');
 const footerVersion = '20260920-public-theme-v11';
-const themeVersion = '20260920-public-theme-v11';
-const themeStyleVersion = '20260920-opaque-accordions-v1';
+const themeVersion = '20260920-art-clip-v1';
+const themeStyleVersion = '20260920-art-clip-v1';
 const legalCssVersion = '20260905-3';
 const concurrency = 4;
 

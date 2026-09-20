@@ -2433,15 +2433,14 @@ html[data-theme="dark"] .service-panel .service-item.is-selected,
 html[data-theme="dark"] .service-panel .service-item.is-expanded,
 html[data-theme="dark"] .faq-list details.is-expanded { background: linear-gradient(135deg,#153e6b,#0b294f) !important; }
 
-/* Accordion sections must not have vehicle artwork behind or between rows. */
+/* Preserve the original large artwork, including its position and rotation.
+   Only its visible area is clipped above the accordion, without rescaling it. */
 .service-section::before,
 .faq-section::before {
-  content: none !important;
-  display: none !important;
-  background-image: none !important;
+  clip-path: polygon(0 0, 100% 0, 100% var(--gt-art-clip-right, 0px), 0 var(--gt-art-clip-left, 0px));
 }
-
-/* Keep the separate service-guide illustration, with softly faded edges. */
+.service-section::before,
+.faq-section::before,
 .seo-hub::before {
   display: block !important;
   background-color: transparent !important;
@@ -2449,11 +2448,17 @@ html[data-theme="dark"] .faq-list details.is-expanded { background: linear-gradi
   -webkit-mask-image: radial-gradient(ellipse 74% 70% at 62% 52%,#000 42%,rgba(0,0,0,.9) 60%,transparent 100%) !important;
   mask-image: radial-gradient(ellipse 74% 70% at 62% 52%,#000 42%,rgba(0,0,0,.9) 60%,transparent 100%) !important;
 }
+.service-section::before { background-image: url("assets/vehicle-performance-scooter.webp") !important; }
+.faq-section::before { background-image: url("assets/vehicle-electric-moped.webp") !important; }
 .seo-hub::before { background-image: url("assets/vehicle-urban-scooter.webp") !important; }
+html[data-theme="light"] .service-section::before,
+html[data-theme="light"] .faq-section::before,
 html[data-theme="light"] .seo-hub::before {
   opacity: .66 !important;
   filter: contrast(1.04) saturate(.92) drop-shadow(0 2rem 3rem rgba(45,52,64,.16)) !important;
 }
+html[data-theme="dark"] .service-section::before,
+html[data-theme="dark"] .faq-section::before,
 html[data-theme="dark"] .seo-hub::before {
   opacity: .58 !important;
   filter: brightness(1.16) contrast(1.08) saturate(.88) drop-shadow(0 2rem 3.2rem rgba(0,5,18,.3)) !important;

@@ -1,5 +1,5 @@
 (() => {
-  const COMPONENT_VERSION = '20260920-public-theme-v11';
+  const COMPONENT_VERSION = '20260920-catalog-list-theme-v2';
   if (window.__gtLegalFooterVersion === COMPONENT_VERSION) return;
   window.__gtLegalFooterVersion = COMPONENT_VERSION;
   window.__gtLegalFooter = true;
@@ -46,6 +46,18 @@
     });
   }
   loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260920-public-theme-v1' });
+  // Generated catalogue pages may still reference a cached, older stylesheet.
+  // Keep it until the current revision loads, preserving its cascade position.
+  const catalogStyles = document.querySelector('link[rel="stylesheet"][href*="magazin.css"]');
+  if (catalogStyles && new URL(catalogStyles.href).searchParams.get('v') !== '20260920-list-theme-v2') {
+    const currentStyles = catalogStyles.cloneNode();
+    const currentUrl = new URL(catalogStyles.href);
+    currentUrl.searchParams.set('v', '20260920-list-theme-v2');
+    currentStyles.href = currentUrl.href;
+    currentStyles.onload = () => catalogStyles.remove();
+    currentStyles.onerror = () => currentStyles.remove();
+    catalogStyles.after(currentStyles);
+  }
   if (!document.querySelector('link[href*="theme.css"]')) {
     loadAsset('link', { rel: 'stylesheet', href: '/theme.css?v=20260920-public-theme-v11' });
   }

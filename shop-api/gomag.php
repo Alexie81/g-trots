@@ -583,7 +583,7 @@ function gomagSyncProductFromFeed(PDO $db, array $config, string $idOrSlug): arr
     $update = $db->prepare(
         'UPDATE shop_products
          SET sku = ?, supplier_product_code = ?, supplier_base_price = ?, supplier_price_difference = ?, supplier_price_updated_at = NOW(),
-             cost_price = ?, price = ?, sale_price = ?, stock_mode = "tracked", stock_quantity = ?,
+             cost_price = ?, price = ?, sale_price = ?, stock_quantity = ?,
              supplier_stock_quantity = ?, supplier_stock_status = ?, supplier_stock_updated_at = NOW(),
              updated_at = updated_at
          WHERE id = ?'
@@ -1191,7 +1191,6 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
                      source_domain = IF(content_status = "baseline", "boomag.ro", source_domain), source_url = IF(content_status = "baseline", ?, source_url),
                      supplier_base_price = ?, supplier_price_difference = ?, supplier_price_updated_at = NOW(),
                      cost_price = ?, price = ?, sale_price = ?, currency = IF(content_status = "baseline", "RON", currency),
-                     stock_mode = IF(LOWER(source_domain) = "boomag.ro", "tracked", stock_mode),
                      stock_quantity = IF(LOWER(source_domain) = "boomag.ro", ?, stock_quantity),
                      supplier_stock_quantity = IF(LOWER(source_domain) = "boomag.ro", ?, supplier_stock_quantity),
                      supplier_stock_status = IF(LOWER(source_domain) = "boomag.ro", ?, supplier_stock_status),
@@ -1405,7 +1404,7 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
         $reset = $db->prepare(
             'UPDATE shop_products
              SET supplier_stock_quantity = 0, supplier_stock_status = 0,
-                 supplier_stock_updated_at = NOW(), stock_mode = "tracked", stock_quantity = 0,
+                 supplier_stock_updated_at = NOW(), stock_quantity = 0,
                  updated_at = updated_at
              WHERE source_id = ? OR LOWER(source_domain) = "boomag.ro"'
         );
@@ -1415,7 +1414,7 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
              SET sku = ?, supplier_product_code = ?,
                  supplier_base_price = ?, supplier_price_difference = ?, supplier_price_updated_at = NOW(),
                  cost_price = ?, price = ?, sale_price = ?, supplier_stock_quantity = ?, supplier_stock_status = ?,
-                 supplier_stock_updated_at = NOW(), stock_mode = "tracked", stock_quantity = ?,
+                 supplier_stock_updated_at = NOW(), stock_quantity = ?,
                  updated_at = updated_at
              WHERE id = ?'
         );

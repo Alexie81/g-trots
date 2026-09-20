@@ -7430,7 +7430,6 @@ try {
             }
         }
         if (mb_strtolower(trim((string)$payload['source_domain'])) === 'boomag.ro') {
-            $payload['stock_mode'] = 'tracked';
             $payload['stock_quantity'] = (int)($current['supplier_stock_quantity'] ?? $current['stock_quantity'] ?? 0);
             if (!$payload['is_accounting_stock_tracked'] && (float)($current['supplier_base_price'] ?? 0) > 0) {
                 $payload['cost_price'] = round((float)$current['supplier_base_price'], 2);

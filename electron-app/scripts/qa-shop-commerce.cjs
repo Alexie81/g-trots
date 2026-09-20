@@ -120,6 +120,12 @@ app.whenReady().then(async () => {
     window.__qaBoomagSupplierPriceDisabled = document.getElementById('shop-product-supplier-base-price').disabled;
     window.__qaBoomagDifferenceDisabled = document.getElementById('shop-product-price-difference').disabled;
     window.__qaBoomagDifference = document.getElementById('shop-product-price-difference').value;
+    const stockMode = document.getElementById('shop-product-stock-mode');
+    window.__qaBoomagStockModeEnabled = !stockMode.disabled;
+    stockMode.value = 'unlimited';
+    stockMode.dispatchEvent(new Event('change', { bubbles:true }));
+    window.__qaBoomagUnlimitedStockSelected = stockMode.value === 'unlimited';
+    window.__qaBoomagUnlimitedStockHint = document.getElementById('shop-product-boomag-stock-hint').textContent;
   })()`);
   await win.webContents.executeJavaScript(`document.querySelector('[data-commerce-close="shop-product-modal"]').click()`);
   await sleep(220);
@@ -173,6 +179,9 @@ app.whenReady().then(async () => {
     boomagSupplierPriceDisabled: Boolean(window.__qaBoomagSupplierPriceDisabled),
     boomagDifferenceDisabled: Boolean(window.__qaBoomagDifferenceDisabled),
     boomagDifference: window.__qaBoomagDifference || '',
+    boomagStockModeEnabled: Boolean(window.__qaBoomagStockModeEnabled),
+    boomagUnlimitedStockSelected: Boolean(window.__qaBoomagUnlimitedStockSelected),
+    boomagUnlimitedStockHint: window.__qaBoomagUnlimitedStockHint || '',
     discountTypes: [...document.querySelectorAll('#shop-product-discount-type option')].map(option => option.value),
     hasSourceLinkField: Boolean(document.getElementById('shop-product-source-url')),
     sourceRows: document.querySelectorAll('#shop-sources-content .shop-settings-row').length,

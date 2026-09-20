@@ -22,6 +22,9 @@ $assert(str_contains($mobileEditor, 'Stocul online ramane nelimitat'), 'Editorul
 $assert(str_contains($desktopEditor, 'shop-product-boomag-stock-hint'), 'Editorul desktop nu afișează starea suprascrierii Boomag.');
 $assert(str_contains($mobileEditor, 'din Boomag sau din stocul fizic receptionat prin NIR'), 'Editorul mobil nu explică fallback-ul pe stocul fizic din NIR.');
 $assert(str_contains($desktopEditor, 'fizic NIR'), 'Editorul desktop nu afișează separat stocul fizic din NIR.');
+$assert(str_contains($desktopEditor, '<th>Stoc online</th><th>Stoc fizic</th><th>Stoc Boomag</th>'), 'Tabelul Produse de pe desktop nu separă cele trei tipuri de stoc.');
+$assert(str_contains($desktopEditor, 'shop-detail-stock-overview'), 'Fișa produsului de pe desktop nu afișează sumarul stocurilor.');
+$assert(str_contains($desktopEditor, 'confirmat prin NIR'), 'Fișa produsului nu explică proveniența stocului fizic.');
 $assert(!str_contains($desktopEditor, "if (supplierManaged) $('shop-product-stock-mode').value = 'tracked'"), 'Editorul desktop forțează încă stocul urmărit pentru Boomag.');
 
 echo "boomag_unlimited_stock_contract_test: OK\n";

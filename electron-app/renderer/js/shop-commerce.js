@@ -7,7 +7,7 @@
   const dashboardPreferences = readDashboardPreferences();
   const state = {
     products: [], orders: [], invoices: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], newsletterSubscribers: [], promotions: [], companies: [], receiptLocations: [], nirs: [], nirPermissions: [], nirWarehouses: [], nirReceiptLocations: [], invoiceThemeSettings: null, invoiceAutomationSettings: null, invoiceAutomationSaving: false, selectedInvoiceTheme: 'orange', invoiceSettingsDraft: { invoice_series: 'GT', next_number: 1, due_days: 7, default_notes: '' }, invoiceThemeSaving: false, invoiceQuery: '', invoiceStatusFilter: 'all', invoiceBusy: '', spvConnection: null, spvDraft: null, spvBusy: '', spvWaitingForOAuth: false, spvDiagnostics: null,
-    editingProduct: null, editingOrder: null, invoiceIssueOrder: null, invoiceDetail: null, editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, editingReceiptLocation: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
+    editingProduct: null, editingOrder: null, invoiceIssueOrder: null, invoiceDetail: null, shippingNoteOrder: null, shippingNoteBusy: '', editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, editingReceiptLocation: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
     productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, productTotal: 0, productSearchTimer: null, productLoadRequestId: 0, slugTouched: false, productQuery: '', orderQuery: '', orderSearchTimer: null, orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
     customerQuery: '', newsletterQuery: '', newsletterStatus: 'all', productSaveProgressTimer: null, inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirStornoDocument: null, nirSupplierReturnContext: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false, nirBundleDownloading: '', nirRegistryDownloadPeriod: 'current_month', nirRegistryDownloadContent: 'complete', nirRegistryDownloading: false, nirExportProgressTimer: null,
     pages: { products: 1, orders: 1, invoices: 1, inventory: 1, stockFlow: 1, stockMovements: 1, productSales: 1, productReviews: 1, productPurchases: 1, customers: 1, newsletter: 1, customerOrders: 1, nirs: 1 },
@@ -227,7 +227,7 @@
       ${dashboardCard('shop-automations', 'amber', 'FLUXURI', 'Automatizări', 'Emitere și trimitere automată a facturilor.')}
       ${dashboardCard('shop-spv', 'blue', 'ANAF', 'SPV - RO e-Factura', 'Conectarea și transmiterea facturilor vor fi configurate aici.')}
     `);
-    document.body.insertAdjacentHTML('beforeend', productModal() + productDetailModal() + productSaveProgressOverlay() + orderModal() + invoiceIssueModal() + invoiceDetailModal() + stockModal() + sourceModal() + supplierModal() + nirModal() + nirRegistryDownloadModal() + shippingModal() + customerModal() + promotionModal() + promotionStatsModal() + companyModal());
+    document.body.insertAdjacentHTML('beforeend', productModal() + productDetailModal() + productSaveProgressOverlay() + orderModal() + invoiceIssueModal() + shippingNoteModal() + invoiceDetailModal() + stockModal() + sourceModal() + supplierModal() + nirModal() + nirRegistryDownloadModal() + shippingModal() + customerModal() + promotionModal() + promotionStatsModal() + companyModal());
     wire();
     if ($('tab-shop-dashboard')?.classList.contains('active')) void loadShopView('shop-dashboard', { force: true });
   }
@@ -257,7 +257,7 @@
       ${section('05', 'Intrebari si raspunsuri', 'Continutul este afisat numai pe pagina acestui produs.')}<div class="shop-subeditor-head"><strong>INTREBARI PRODUS</strong><button type="button" id="shop-product-add-question">+ Adauga intrebare</button></div><div id="shop-product-questions" class="shop-product-subeditor"></div>
       ${section('06', 'Pret si reducere', 'Controleaza pretul G-Trots; pentru produsele Boomag, diferenta comerciala este pastrata automat la actualizarea feedului.')}
       <div class="shop-supplier-pricing" id="shop-product-boomag-pricing" hidden><div class="shop-supplier-pricing-head"><span><small>SINCRONIZARE BOOMAG</small><strong>Pretul public se pastreaza automat</strong></span><em><i></i>FEED ACTIV</em></div><div class="shop-commerce-columns"><label>Pret feed Boomag<input id="shop-product-supplier-base-price" type="number" step="0.01" disabled placeholder="Nesincronizat" /><small>Valoare preluata automat din feed.</small></label><label>Diferenta comerciala<input id="shop-product-price-difference" type="number" step="0.01" disabled placeholder="Nedisponibila" /><small>Calculata automat fata de pretul G-Trots.</small></label></div></div>
-      <div class="shop-commerce-columns three"><label>Pret G-Trots *<input id="shop-product-price" type="number" min="0" step="0.01" required /><small id="shop-product-price-hint" hidden>Editezi pretul public dorit; diferenta se recalculeaza automat.</small></label><label>Tip reducere<select id="shop-product-discount-type"><option value="percent">Procent (%)</option><option value="fixed">Suma fixa (lei)</option></select></label><label id="shop-product-discount-label">Reducere %<input id="shop-product-discount-value" type="number" min="0" step="0.01" /></label></div><div class="shop-nir-note"><b>Costul de achizitie nu se introduce manual.</b><span>Va fi calculat automat din NIR-uri si facturile de intrare, deoarece poate varia la fiecare receptie.</span></div><div class="shop-price-preview"><small>PRET PE SITE</small><strong id="shop-product-final-price">0,00 lei</strong></div>
+      <div class="shop-commerce-columns three"><label>Pret G-Trots *<input id="shop-product-price" type="number" min="0" step="0.01" required /><small id="shop-product-price-hint" hidden>Editezi pretul public dorit; diferenta se recalculeaza automat.</small></label><label>Tip reducere<select id="shop-product-discount-type"><option value="percent">Procent (%)</option><option value="fixed">Suma fixa (lei)</option></select></label><label id="shop-product-discount-label">Reducere %<input id="shop-product-discount-value" type="number" min="0" step="0.01" /></label></div><div class="shop-commerce-columns"><label>Unitate de măsură (U.M.)<input id="shop-product-unit" type="text" maxlength="20" value="buc" placeholder="buc" /><small>Se preia automat pe aviz.</small></label></div><div class="shop-nir-note"><b>Costul de achizitie nu se introduce manual.</b><span>Va fi calculat automat din NIR-uri si facturile de intrare, deoarece poate varia la fiecare receptie.</span></div><div class="shop-price-preview"><small>PRET PE SITE</small><strong id="shop-product-final-price">0,00 lei</strong></div>
       ${section('07', 'Catalog si compatibilitate', 'Leaga produsul de categorie, producator si brandurile compatibile.')}
       <div class="shop-commerce-columns"><div class="shop-field-group"><span>Categorii si subcategorii</span><div class="shop-multi-select" id="shop-product-category-select"><button type="button" id="shop-product-categories-toggle" aria-expanded="false"><span id="shop-product-categories-summary">Alege categoriile</span><b>⌄</b></button><div class="shop-brand-options shop-tree-options" id="shop-product-categories" hidden></div></div></div><div class="shop-field-group"><span>Producator</span><div class="shop-multi-select" id="shop-product-manufacturer-select"><button type="button" id="shop-product-manufacturer-toggle" aria-expanded="false"><span id="shop-product-manufacturer-summary">Alege producatorul</span><b>⌄</b></button><div class="shop-brand-options" id="shop-product-manufacturers" hidden></div></div></div></div><div class="shop-field-group"><span>Compatibilitati</span><div class="shop-multi-select" id="shop-product-brand-select"><button type="button" id="shop-product-brands-toggle" aria-expanded="false"><span id="shop-product-brands-summary">Alege marcile compatibile</span><b>⌄</b></button><div class="shop-brand-options" id="shop-product-brands" hidden></div></div></div>
       ${section('08', 'Garantia produsului', 'Se afiseaza public pe pagina produsului cand valoarea este mai mare de zero.')}
@@ -310,6 +310,22 @@
           <div class="shop-invoice-issue-note"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg><span>Numărul, tema și valorile rămân neschimbate la orice regenerare.</span></div>
         </div>
         <footer><button type="button" class="btn-ghost" data-commerce-close="shop-invoice-issue-modal">Renunță</button><button type="submit" class="btn-primary shop-invoice-issue-confirm" id="shop-invoice-issue-confirm"><svg viewBox="0 0 24 24"><path d="M6 2h9l4 4v16l-3-2-3 2-3-2-4 2V2Z"/><path d="M14 2v5h5M9 11h6m-6 4h4"/></svg><span>Emite factura</span></button></footer>
+      </form>
+    </div>`;
+  }
+  function shippingNoteModal() {
+    return `<div class="shop-commerce-overlay shop-shipping-note-overlay" id="shop-shipping-note-modal" hidden>
+      <form class="shop-commerce-modal compact shop-shipping-note-modal" id="shop-shipping-note-form">
+        <header><div><small>AVIZ DE ÎNSOȚIRE A MĂRFII</small><h2>Generează avizul</h2></div><button type="button" data-commerce-close="shop-shipping-note-modal">×</button></header>
+        <div class="shop-commerce-modal-scroll">
+          <div class="shop-shipping-note-summary"><span><small>COMANDĂ</small><strong id="shop-shipping-note-order">—</strong></span><span><small>CLIENT</small><strong id="shop-shipping-note-client">—</strong></span><span><small>PRODUSE</small><strong id="shop-shipping-note-products">0</strong></span></div>
+          <div class="shop-commerce-columns"><label>Numele delegatului<input id="shop-shipping-note-delegate" maxlength="500" value="-" /></label><label>CI - serie și număr<input id="shop-shipping-note-identity" maxlength="500" value="-" /></label></div>
+          <div class="shop-commerce-columns"><label>Mijloc transport / nr.<input id="shop-shipping-note-vehicle" maxlength="500" value="-" /></label><label>Ora livrării<input id="shop-shipping-note-time" maxlength="500" value="-" /></label></div>
+          <label>Loc încărcare<input id="shop-shipping-note-loading" maxlength="500" value="-" /></label>
+          <label>Expeditor · nume și semnătură<input id="shop-shipping-note-sender" maxlength="500" value="G-Trots Romania" /></label>
+          <label class="shop-shipping-note-stamp"><span><strong>Variantă cu ștampilă</strong><small>În PDF apare numai „ȘTAMPILĂ:”, fără chenar.</small></span><input id="shop-shipping-note-stamp" type="checkbox"><i></i></label>
+        </div>
+        <footer><button type="button" class="btn-ghost" data-commerce-close="shop-shipping-note-modal">Renunță</button><button type="submit" class="btn-primary" id="shop-shipping-note-confirm">Generează avizul</button></footer>
       </form>
     </div>`;
   }
@@ -578,6 +594,7 @@
     $('shop-product-form').addEventListener('submit', saveProduct);
     $('shop-order-form').addEventListener('submit', saveOrder);
     $('shop-invoice-issue-form').addEventListener('submit', submitInvoiceIssue);
+    $('shop-shipping-note-form').addEventListener('submit', submitShippingNote);
     $('shop-invoice-issue-send-email').addEventListener('change', syncInvoiceIssuePanel);
     $('shop-invoice-issue-send-return-email').addEventListener('change', syncInvoiceIssuePanel);
     $('shop-invoice-detail-link').addEventListener('click', () => void copyInvoicePublicLink(state.invoiceDetail?.id));
@@ -1554,7 +1571,7 @@
 
   function renderProducts(options = {}) {
     const pageCount = Math.max(1, Math.ceil(state.productTotal / state.pageSizes.products));
-    const rows = state.products.map(product => `<tr data-product-open="${product.id}"><td>${productPicture(product.images?.[0])}</td><td><strong>${esc(product.name)}</strong><small>/${esc(product.slug)}</small><em>${esc(product.sku || 'Fara SKU')} · ${esc(product.source_domain)}</em></td><td><b>${money(product.sale_price ?? product.price)}</b>${product.sale_price ? `<small class="old">${money(product.price)}</small>` : ''}</td><td>${stockBadge(product)}</td><td>${physicalStockBadge(product)}</td><td>${supplierStockBadge(product)}</td><td>${product.is_active ? '<span class="commerce-pill active">ACTIV</span>' : '<span class="commerce-pill inactive">INACTIV</span>'}</td><td><button class="commerce-icon edit" data-product-edit="${product.id}" title="Editeaza" aria-label="Editeaza produsul"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="commerce-icon delete" data-product-delete="${product.id}" title="Sterge" aria-label="Sterge produsul"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v6M14 10v6"/></svg></button></td></tr>`).join('');
+    const rows = state.products.map(product => `<tr data-product-open="${product.id}"><td>${productPicture(product.images?.[0])}</td><td><strong>${esc(product.name)}</strong><small>/${esc(product.slug)}</small><em>${esc(product.sku || 'Fara SKU')} · ${esc(product.source_domain)}</em></td><td><b>${money(product.promotion_price ?? product.sale_price ?? product.price)}</b>${product.promotion_price != null || product.sale_price != null ? `<small class="old">${money(product.price_before_promotion ?? product.price)}</small>` : ''}</td><td>${stockBadge(product)}</td><td>${physicalStockBadge(product)}</td><td>${supplierStockBadge(product)}</td><td>${product.is_active ? '<span class="commerce-pill active">ACTIV</span>' : '<span class="commerce-pill inactive">INACTIV</span>'}</td><td><button class="commerce-icon edit" data-product-edit="${product.id}" title="Editeaza" aria-label="Editeaza produsul"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="commerce-icon delete" data-product-delete="${product.id}" title="Sterge" aria-label="Sterge produsul"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v6M14 10v6"/></svg></button></td></tr>`).join('');
     const host = $('shop-products-content');
     const results = rows ? `<div class="shop-commerce-table-wrap"><table class="shop-commerce-table products"><thead><tr><th>Poza</th><th>Produs</th><th>Pret</th><th>Stoc online</th><th>Stoc fizic</th><th>Stoc Boomag</th><th>Status</th><th>Actiuni</th></tr></thead><tbody>${rows}</tbody></table></div>${pagination('products', state.productTotal, state.pages.products, pageCount, state.pageSizes.products)}` : empty('Niciun produs relevant', 'Incearca un termen apropiat, un cod, o marca sau o compatibilitate.');
     if (!host.querySelector('#shop-products-search') || !host.querySelector('#shop-products-results')) {
@@ -1716,7 +1733,7 @@
       renderCategoryDropdown(product?.category_ids?.length ? product.category_ids : (product?.category_id ? [product.category_id] : []));
       renderManufacturerDropdown(product?.manufacturer_id || '');
       renderBrandDropdown(product?.brand_ids || []);
-      const values = { 'shop-product-sku': product?.sku, 'shop-product-supplier-code': product?.supplier_product_code, 'shop-product-ean': product?.ean, 'shop-product-name': product?.name, 'shop-product-slug': product?.slug, 'shop-product-short': product?.short_description, 'shop-product-description-title': product?.description_title, 'shop-product-price': product?.price, 'shop-product-supplier-base-price': product?.supplier_base_price ?? '', 'shop-product-price-difference': product?.supplier_price_difference ?? '', 'shop-product-discount-value': product?.discount_value || '', 'shop-product-stock': product?.stock_quantity ?? 0, 'shop-product-low-stock': product?.low_stock_threshold ?? 3, 'shop-product-meta-title': product?.meta_title, 'shop-product-meta-description': product?.meta_description, 'shop-product-manufacturer-address': product?.manufacturer_address, 'shop-product-manufacturer-email': product?.manufacturer_email, 'shop-product-eu-name': product?.eu_responsible_person_name, 'shop-product-eu-address': product?.eu_responsible_person_address, 'shop-product-eu-email': product?.eu_responsible_person_email, 'shop-product-model': product?.product_model, 'shop-product-identifier': product?.product_identifier, 'shop-product-safety-warnings': product?.safety_warnings_ro, 'shop-product-safety-documents': (product?.safety_documents || []).join('\n'), 'shop-product-compliance-documents': (product?.compliance_documents || []).join('\n'), 'shop-product-legal-warranty': product?.legal_warranty_months ?? 24, 'shop-product-commercial-warranty': product?.commercial_warranty_months ?? '', 'shop-product-software-updates': product?.software_updates_until ?? '', 'shop-product-repairability': product?.repairability_info, 'shop-product-spare-parts': product?.spare_parts_info };
+      const values = { 'shop-product-sku': product?.sku, 'shop-product-supplier-code': product?.supplier_product_code, 'shop-product-ean': product?.ean, 'shop-product-name': product?.name, 'shop-product-slug': product?.slug, 'shop-product-short': product?.short_description, 'shop-product-description-title': product?.description_title, 'shop-product-price': product?.price, 'shop-product-supplier-base-price': product?.supplier_base_price ?? '', 'shop-product-price-difference': product?.supplier_price_difference ?? '', 'shop-product-discount-value': product?.discount_value || '', 'shop-product-unit': product?.unit_of_measure || 'buc', 'shop-product-stock': product?.stock_quantity ?? 0, 'shop-product-low-stock': product?.low_stock_threshold ?? 3, 'shop-product-meta-title': product?.meta_title, 'shop-product-meta-description': product?.meta_description, 'shop-product-manufacturer-address': product?.manufacturer_address, 'shop-product-manufacturer-email': product?.manufacturer_email, 'shop-product-eu-name': product?.eu_responsible_person_name, 'shop-product-eu-address': product?.eu_responsible_person_address, 'shop-product-eu-email': product?.eu_responsible_person_email, 'shop-product-model': product?.product_model, 'shop-product-identifier': product?.product_identifier, 'shop-product-safety-warnings': product?.safety_warnings_ro, 'shop-product-safety-documents': (product?.safety_documents || []).join('\n'), 'shop-product-compliance-documents': (product?.compliance_documents || []).join('\n'), 'shop-product-legal-warranty': product?.legal_warranty_months ?? 24, 'shop-product-commercial-warranty': product?.commercial_warranty_months ?? '', 'shop-product-software-updates': product?.software_updates_until ?? '', 'shop-product-repairability': product?.repairability_info, 'shop-product-spare-parts': product?.spare_parts_info };
       Object.entries(values).forEach(([key, value]) => $(key).value = value ?? '');
       if (!product) $('shop-product-legal-warranty').value = '';
       $('shop-product-discount-type').value = product?.discount_type || 'percent';
@@ -1854,7 +1871,7 @@
       const salePrice = discount ? Math.round((discountType === 'fixed' ? price - discount : price * (1 - discount / 100)) * 100) / 100 : null;
       const categoryIds = selectedCategoryIds();
       const primaryCategoryId = [...categoryIds].sort((a, b) => categoryDepth(b) - categoryDepth(a))[0] || null;
-      const payload = { source_id: source?.id || null, source_domain: source?.domain || 'g-trots.ro', source_url: '', supplier_product_code: $('shop-product-supplier-code').value.trim(), ean: $('shop-product-ean').value.trim(), name: $('shop-product-name').value.trim(), slug: $('shop-product-slug').value.trim(), short_description: $('shop-product-short').value.trim(), description_title: $('shop-product-description-title').value.trim(), description_html: richDescriptionHtml(), specifications: state.productSpecifications.map(item => ({ group: item.group.trim(), label: item.label.trim(), value: item.value.trim() })), questions: state.productQuestions.map(item => ({ question: item.question.trim(), answer: item.answer.trim() })), manufacturer_address: $('shop-product-manufacturer-address').value.trim(), manufacturer_email: $('shop-product-manufacturer-email').value.trim(), eu_responsible_person_name: $('shop-product-eu-name').value.trim(), eu_responsible_person_address: $('shop-product-eu-address').value.trim(), eu_responsible_person_email: $('shop-product-eu-email').value.trim(), product_model: $('shop-product-model').value.trim(), product_identifier: $('shop-product-identifier').value.trim(), safety_warnings_ro: $('shop-product-safety-warnings').value.trim(), safety_documents: $('shop-product-safety-documents').value.split(/\r?\n/).map(value => value.trim()).filter(Boolean), ce_marking_applicable: $('shop-product-ce').value === '' ? null : $('shop-product-ce').value === 'yes', compliance_documents: $('shop-product-compliance-documents').value.split(/\r?\n/).map(value => value.trim()).filter(Boolean), legal_warranty_months: $('shop-product-legal-warranty').value === '' ? null : Math.max(0, Number($('shop-product-legal-warranty').value)), commercial_warranty_months: $('shop-product-commercial-warranty').value === '' ? null : Math.max(0, Number($('shop-product-commercial-warranty').value)), software_updates_until: $('shop-product-software-updates').value || null, repairability_info: $('shop-product-repairability').value.trim(), spare_parts_info: $('shop-product-spare-parts').value.trim(), meta_title: $('shop-product-meta-title').value.trim(), meta_description: $('shop-product-meta-description').value.trim(), cost_price: costPrice, price, discount_type: discountType, discount_value: discount || null, discount_percent: discountType === 'percent' ? discount || null : null, sale_price: salePrice, category_id: primaryCategoryId, category_ids: categoryIds, manufacturer_id: $('shop-product-manufacturers').querySelector('input[type="radio"]:checked')?.value || null, brand_ids: Array.from($('shop-product-brands').querySelectorAll('input:checked')).map(input => input.value), stock_mode: $('shop-product-stock-mode').value, stock_quantity: Math.max(0, Number($('shop-product-stock').value || 0)), is_accounting_stock_tracked: $('shop-product-accounting-tracked').checked, low_stock_threshold: Math.max(0, Number($('shop-product-low-stock').value || 0)), currency: 'RON', is_active: $('shop-product-active').checked, is_featured: $('shop-product-featured').checked, images: state.productImages.map((image, index) => ({ id: image.id, base64: image.base64, alt_text: image.alt_text || $('shop-product-name').value.trim(), sort_order: index })) };
+      const payload = { source_id: source?.id || null, source_domain: source?.domain || 'g-trots.ro', source_url: '', supplier_product_code: $('shop-product-supplier-code').value.trim(), ean: $('shop-product-ean').value.trim(), name: $('shop-product-name').value.trim(), slug: $('shop-product-slug').value.trim(), short_description: $('shop-product-short').value.trim(), description_title: $('shop-product-description-title').value.trim(), description_html: richDescriptionHtml(), specifications: state.productSpecifications.map(item => ({ group: item.group.trim(), label: item.label.trim(), value: item.value.trim() })), questions: state.productQuestions.map(item => ({ question: item.question.trim(), answer: item.answer.trim() })), manufacturer_address: $('shop-product-manufacturer-address').value.trim(), manufacturer_email: $('shop-product-manufacturer-email').value.trim(), eu_responsible_person_name: $('shop-product-eu-name').value.trim(), eu_responsible_person_address: $('shop-product-eu-address').value.trim(), eu_responsible_person_email: $('shop-product-eu-email').value.trim(), product_model: $('shop-product-model').value.trim(), product_identifier: $('shop-product-identifier').value.trim(), safety_warnings_ro: $('shop-product-safety-warnings').value.trim(), safety_documents: $('shop-product-safety-documents').value.split(/\r?\n/).map(value => value.trim()).filter(Boolean), ce_marking_applicable: $('shop-product-ce').value === '' ? null : $('shop-product-ce').value === 'yes', compliance_documents: $('shop-product-compliance-documents').value.split(/\r?\n/).map(value => value.trim()).filter(Boolean), legal_warranty_months: $('shop-product-legal-warranty').value === '' ? null : Math.max(0, Number($('shop-product-legal-warranty').value)), commercial_warranty_months: $('shop-product-commercial-warranty').value === '' ? null : Math.max(0, Number($('shop-product-commercial-warranty').value)), software_updates_until: $('shop-product-software-updates').value || null, repairability_info: $('shop-product-repairability').value.trim(), spare_parts_info: $('shop-product-spare-parts').value.trim(), meta_title: $('shop-product-meta-title').value.trim(), meta_description: $('shop-product-meta-description').value.trim(), cost_price: costPrice, price, discount_type: discountType, discount_value: discount || null, discount_percent: discountType === 'percent' ? discount || null : null, sale_price: salePrice, category_id: primaryCategoryId, category_ids: categoryIds, manufacturer_id: $('shop-product-manufacturers').querySelector('input[type="radio"]:checked')?.value || null, brand_ids: Array.from($('shop-product-brands').querySelectorAll('input:checked')).map(input => input.value), unit_of_measure: $('shop-product-unit').value.trim() || 'buc', stock_mode: $('shop-product-stock-mode').value, stock_quantity: Math.max(0, Number($('shop-product-stock').value || 0)), is_accounting_stock_tracked: $('shop-product-accounting-tracked').checked, low_stock_threshold: Math.max(0, Number($('shop-product-low-stock').value || 0)), currency: 'RON', is_active: $('shop-product-active').checked, is_featured: $('shop-product-featured').checked, images: state.productImages.map((image, index) => ({ id: image.id, base64: image.base64, alt_text: image.alt_text || $('shop-product-name').value.trim(), sort_order: index })) };
       payload.legal_warranty_months = $('shop-product-legal-warranty').value === '' ? null : Math.max(0, Number($('shop-product-legal-warranty').value));
       if (!payload.name || !payload.slug || !Number.isFinite(price) || !Number.isFinite(costPrice) || costPrice < 0) throw new Error('Completeaza numele, slug-ul si preturile valide.');
       const saveMode = state.editingProduct ? 'edit' : 'create';
@@ -2275,6 +2292,113 @@
     finally { state.invoiceBusy = ''; button.disabled = false; }
   }
 
+  async function openShippingNoteIssue(orderId) {
+    const order = state.editingOrder?.id === orderId ? state.editingOrder : state.orders.find(item => item.id === orderId);
+    if (!order || state.shippingNoteBusy) return;
+    if (order.shipping_note) return;
+    state.shippingNoteBusy = order.id;
+    try {
+      const prepared = await window.SHOP_API.prepareShippingNote(order.id);
+      if (prepared.existing) {
+        const refreshed = await window.SHOP_API.getOrder(order.id);
+        state.orders = state.orders.map(item => item.id === refreshed.id ? refreshed : item);
+        renderOrderDetails(refreshed); renderOrders();
+        return;
+      }
+      state.shippingNoteOrder = order;
+      const expedition = prepared.draft?.expedition || {};
+      $('shop-shipping-note-order').textContent = order.order_number;
+      $('shop-shipping-note-client').textContent = orderCustomerDisplayName(order) || 'Client';
+      $('shop-shipping-note-products').textContent = String(order.items?.length || 0);
+      $('shop-shipping-note-delegate').value = expedition.delegate_name || '-';
+      $('shop-shipping-note-identity').value = expedition.identity_document || '-';
+      $('shop-shipping-note-vehicle').value = expedition.transport_vehicle || '-';
+      $('shop-shipping-note-time').value = expedition.delivery_time || '-';
+      $('shop-shipping-note-loading').value = expedition.loading_place || '-';
+      $('shop-shipping-note-sender').value = prepared.draft?.sender_name || 'G-Trots Romania';
+      $('shop-shipping-note-stamp').checked = false;
+      openModal('shop-shipping-note-modal');
+    } catch (error) { toast(error.message || 'Formularul avizului nu a putut fi pregătit.', 'error'); }
+    finally { state.shippingNoteBusy = ''; }
+  }
+
+  async function submitShippingNote(event) {
+    event.preventDefault();
+    const order = state.shippingNoteOrder;
+    if (!order || state.shippingNoteBusy) return;
+    const button = $('shop-shipping-note-confirm');
+    button.disabled = true;
+    state.shippingNoteBusy = order.id;
+    try {
+      const note = await window.SHOP_API.issueShippingNote(order.id, {
+        delegate_name: $('shop-shipping-note-delegate').value.trim() || '-',
+        identity_document: $('shop-shipping-note-identity').value.trim() || '-',
+        transport_vehicle: $('shop-shipping-note-vehicle').value.trim() || '-',
+        delivery_time: $('shop-shipping-note-time').value.trim() || '-',
+        loading_place: $('shop-shipping-note-loading').value.trim() || '-',
+        sender_name: $('shop-shipping-note-sender').value.trim() || 'G-Trots Romania',
+        with_stamp: $('shop-shipping-note-stamp').checked,
+      });
+      closeModal('shop-shipping-note-modal');
+      state.shippingNoteOrder = null;
+      toast(`${note.display_number} a fost generat.`);
+      const refreshed = await window.SHOP_API.getOrder(order.id);
+      state.orders = state.orders.map(item => item.id === refreshed.id ? refreshed : item);
+      if (state.editingOrder?.id === refreshed.id) renderOrderDetails(refreshed);
+      renderOrders();
+    } catch (error) { toast(error.message || 'Avizul nu a putut fi generat.', 'error'); }
+    finally { state.shippingNoteBusy = ''; button.disabled = false; }
+  }
+
+  async function shareShippingNote(note) {
+    if (!note?.id || state.shippingNoteBusy) return;
+    state.shippingNoteBusy = note.id;
+    try {
+      const file = await window.SHOP_API.getShippingNotePublicLink(note.id);
+      if (navigator.share) await navigator.share({ title: note.display_number, text: `Aviz ${note.display_number}`, url: file.url });
+      else await shell.openExternal(file.url);
+    } catch (error) {
+      if (error?.name !== 'AbortError') toast(error.message || 'Trimiterea PDF nu a putut fi deschisă.', 'error');
+    } finally { state.shippingNoteBusy = ''; }
+  }
+
+  async function downloadShippingNote(note) {
+    if (!note?.id || state.shippingNoteBusy) return;
+    state.shippingNoteBusy = note.id;
+    try { saveNirDownload(await window.SHOP_API.downloadShippingNote(note.id)); }
+    catch (error) { toast(error.message || 'Avizul nu a putut fi descărcat.', 'error'); }
+    finally { state.shippingNoteBusy = ''; }
+  }
+
+  async function emailShippingNote(note, order) {
+    if (!note?.id || state.shippingNoteBusy) return;
+    if (!order.customer_email) return toast('Comanda nu are o adresă de e-mail validă.', 'error');
+    state.shippingNoteBusy = note.id;
+    try {
+      const result = await window.SHOP_API.sendShippingNoteEmail(note.id);
+      if (!result.sent) throw new Error(result.error || 'E-mailul nu a fost trimis.');
+      toast(`Avizul a fost trimis la ${result.recipient}.`);
+      const refreshed = await window.SHOP_API.getOrder(order.id);
+      state.orders = state.orders.map(item => item.id === refreshed.id ? refreshed : item);
+      renderOrderDetails(refreshed); renderOrders();
+    } catch (error) { toast(error.message || 'Avizul nu a putut fi trimis.', 'error'); }
+    finally { state.shippingNoteBusy = ''; }
+  }
+
+  async function deleteShippingNote(note, order) {
+    if (!note?.id || !note.can_delete || state.shippingNoteBusy) return;
+    if (!confirm(`Ștergi ${note.display_number}? Numărul va fi refolosit de următorul aviz.`)) return;
+    state.shippingNoteBusy = note.id;
+    try {
+      await window.SHOP_API.deleteShippingNote(note.id);
+      toast(`${note.display_number} a fost șters; numărul a fost eliberat.`);
+      const refreshed = await window.SHOP_API.getOrder(order.id);
+      state.orders = state.orders.map(item => item.id === refreshed.id ? refreshed : item);
+      renderOrderDetails(refreshed); renderOrders();
+    } catch (error) { toast(error.message || 'Avizul nu a putut fi șters.', 'error'); }
+    finally { state.shippingNoteBusy = ''; }
+  }
+
   async function loadOrders() { loading('shop-orders-content', 'Se incarca comenzile...'); try { const orders = await window.SHOP_API.listOrders(); state.orders = Array.isArray(orders) ? orders : []; renderOrders(); } catch (error) { failure('shop-orders-content', error); } }
   function orderCustomerKind(order) {
     const company = String(order?.customer_type || '').toLowerCase() === 'company'
@@ -2485,6 +2609,9 @@
     const invoiceCard = order.invoice
       ? `<section class="shop-order-invoice-card issued"><span class="shop-order-invoice-icon">✓</span><div><small>FACTURĂ EMISĂ · TEMA ${esc(String(order.invoice.theme || '').toUpperCase())}</small><strong>${esc(order.invoice.display_number)}</strong><p>${order.invoice.status === 'paid' ? 'Plătită' : 'Neplătită'} · SPV ${order.invoice.spv_status === 'sent' ? 'trimisă' : 'netrimisă'} · ${invoiceMoney(order.invoice.total, order.invoice.currency)} · ieșire de stoc înregistrată</p></div><aside><button type="button" class="primary issue" data-order-invoice-open="${esc(order.invoice.id)}"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>Vezi factura</button></aside></section>`
       : `<section class="shop-order-invoice-card"><span class="shop-order-invoice-icon"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span><div><small>FACTURĂ FISCALĂ</small><strong>Factura nu este emisă</strong><p>La emitere se fixează tema și prețurile, se scade stocul și se stabilește proveniența din loturile de achiziție disponibile.</p></div><aside><button type="button" class="primary issue" data-order-invoice-issue="${esc(order.id)}">Emite factura</button></aside></section>`;
+    const shippingNoteCard = order.shipping_note
+      ? `<section class="shop-order-invoice-card shop-order-shipping-note issued"><span class="shop-order-invoice-icon">AVZ</span><div><small>AVIZ DE ÎNSOȚIRE</small><strong>${esc(order.shipping_note.display_number)}</strong><p>${order.shipping_note.with_stamp ? 'Cu ștampilă' : 'Fără ștampilă'} · comanda ${esc(order.order_number)}${order.shipping_note.email_sent_at ? ' · trimis pe e-mail' : ''}</p></div><aside class="shop-shipping-note-actions"><button type="button" data-shipping-note-share="${esc(order.shipping_note.id)}">Trimite PDF</button><button type="button" data-shipping-note-email="${esc(order.shipping_note.id)}" ${order.customer_email ? '' : 'disabled'}>E-mail</button><button type="button" data-shipping-note-download="${esc(order.shipping_note.id)}">Download</button>${order.shipping_note.can_delete ? `<button type="button" class="danger" data-shipping-note-delete="${esc(order.shipping_note.id)}">Șterge</button>` : ''}</aside></section>`
+      : `<section class="shop-order-invoice-card shop-order-shipping-note"><span class="shop-order-invoice-icon">AVZ</span><div><small>AVIZ DE ÎNSOȚIRE</small><strong>Aviz neemis</strong><p>Datele firmei, clientul și produsele se preiau automat din comandă.</p></div><aside><button type="button" class="primary issue" data-shipping-note-issue="${esc(order.id)}">Generează avizul</button></aside></section>`;
     const returnInvoiceCard = ['return_requested', 'return_refused', 'return_confirmed', 'refunded'].includes(order.status) && order.return_invoice
       ? `<section class="shop-order-invoice-card issued return"><span class="shop-order-invoice-icon">↩</span><div><small>FACTURĂ DE RETUR</small><strong>${esc(order.return_invoice.display_number)}</strong><p>Referință la ${esc(order.invoice?.display_number || 'factura pozitivă')} și comanda ${esc(order.order_number)} · SPV ${order.return_invoice.spv_status === 'sent' ? 'trimisă' : 'în așteptare'}</p></div><aside><button type="button" class="primary issue" data-order-invoice-open="${esc(order.return_invoice.id)}">Vezi returul</button></aside></section>`
       : '';
@@ -2515,7 +2642,7 @@
       <div class="shop-order-grid">${clientCard}${deliveryCard}</div>
       <div class="shop-order-items">${orderItemsHtml}</div>
       <div class="shop-order-total"><span>${isProductPromotion && orderDiscount > 0 ? 'Subtotal după reduceri' : 'Subtotal'}${hasVat ? ' (TVA inclus)' : ''} ${money(productsTotal)} · Livrare ${money(order.shipping_cost)}${globalDiscount}</span><strong>Total de plată${hasVat ? ' (TVA inclus)' : ''} ${money(order.total)}</strong></div>
-      ${invoiceCard}${returnInvoiceCard}${returnSummary}${returnPolicyLine}${orderTimeline(order)}${orderStatusPicker(order)}${returnRequestCard}
+      ${invoiceCard}${shippingNoteCard}${returnInvoiceCard}${returnSummary}${returnPolicyLine}${orderTimeline(order)}${orderStatusPicker(order)}${returnRequestCard}
       <label id="shop-order-cancellation-field" class="shop-order-cancellation-field" ${order.status === 'cancelled' ? '' : 'hidden'}><span><b>ANULARE COMANDĂ · MOTIV OBLIGATORIU</b><strong>${order.status === 'cancelled' ? 'Motivul înregistrat' : 'De ce anulăm comanda?'}</strong><small>Clientul va fi notificat automat, iar factura și stocul vor fi corectate după regulile fiscale.</small></span><textarea id="shop-order-cancellation-reason" rows="4" maxlength="1000" placeholder="Scrie motivul transmis clientului...">${esc(order.customer_cancellation_reason || '')}</textarea></label>
       <label class="shop-order-notify" data-notify-state="waiting"><input id="shop-order-notify" type="checkbox"><span class="shop-order-notify-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/></svg><i></i></span><span class="shop-order-notify-copy"><span class="shop-order-notify-eyebrow">NOTIFICARE CLIENT <b id="shop-order-notify-state">ALEGE STATUS</b></span><strong>Trimite actualizarea pe e-mail</strong><small id="shop-order-notify-helper"></small></span><span class="shop-order-notify-switch" aria-hidden="true"><i></i></span></label>
       <div class="shop-commerce-columns"><label>Status plată<select id="shop-order-payment-status">${['pending', 'paid', 'failed', 'refunded'].map(value => `<option value="${value}" ${order.payment_status === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label><label>Metodă de plată<input value="${order.payment_method === 'card' ? 'Card online' : 'Ramburs la curier'}" disabled></label></div>
@@ -2523,6 +2650,11 @@
     $('shop-order-details').querySelector('[data-order-call]')?.addEventListener('click', () => void openOrderContact('call', order.customer_phone));
     $('shop-order-details').querySelector('[data-order-whatsapp]')?.addEventListener('click', () => void openOrderContact('whatsapp', order.customer_phone));
     $('shop-order-details').querySelector('[data-order-invoice-issue]')?.addEventListener('click', () => openInvoiceIssue(order.id));
+    $('shop-order-details').querySelector('[data-shipping-note-issue]')?.addEventListener('click', () => void openShippingNoteIssue(order.id));
+    $('shop-order-details').querySelector('[data-shipping-note-share]')?.addEventListener('click', () => void shareShippingNote(order.shipping_note));
+    $('shop-order-details').querySelector('[data-shipping-note-email]')?.addEventListener('click', () => void emailShippingNote(order.shipping_note, order));
+    $('shop-order-details').querySelector('[data-shipping-note-download]')?.addEventListener('click', () => void downloadShippingNote(order.shipping_note));
+    $('shop-order-details').querySelector('[data-shipping-note-delete]')?.addEventListener('click', () => void deleteShippingNote(order.shipping_note, order));
     $('shop-order-details').querySelectorAll('[data-order-invoice-open]').forEach(button => button.addEventListener('click', event => { event.preventDefault(); navigateToIssuedInvoice(event.currentTarget.dataset.orderInvoiceOpen); }));
     $('shop-order-details').querySelectorAll('[data-order-product-open]').forEach(button => button.addEventListener('click', event => {
       event.preventDefault();

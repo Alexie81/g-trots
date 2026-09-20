@@ -150,6 +150,7 @@ type FormState = {
   supplier_price_difference: string;
   discount_type: 'percent' | 'fixed';
   discount_value: string;
+  unit_of_measure: string;
   category_id: string | null;
   category_ids: string[];
   manufacturer_id: string | null;
@@ -204,6 +205,7 @@ function emptyForm(): FormState {
     supplier_price_difference: '',
     discount_type: 'percent',
     discount_value: '',
+    unit_of_measure: 'buc',
     category_id: null,
     category_ids: [],
     manufacturer_id: null,
@@ -467,6 +469,7 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
         supplier_price_difference: full.supplier_price_difference == null ? '' : String(full.supplier_price_difference),
         discount_type: full.discount_type || 'percent',
         discount_value: full.discount_value ? String(full.discount_value) : '',
+        unit_of_measure: full.unit_of_measure || 'buc',
         category_id: full.category_id,
         category_ids: full.category_ids?.length ? full.category_ids : (full.category_id ? [full.category_id] : []),
         manufacturer_id: full.manufacturer_id,
@@ -660,6 +663,7 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
       discount_value: discount || null,
       discount_percent: discountType === 'percent' ? discount || null : null,
       currency: 'RON',
+      unit_of_measure: form.unit_of_measure.trim() || 'buc',
       stock_mode: form.stock_mode,
       stock_quantity: Math.max(0, Number.parseInt(form.stock_quantity || '0', 10) || 0),
       is_accounting_stock_tracked: form.is_accounting_stock_tracked,
@@ -780,7 +784,7 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
               <View style={styles.productTitleRow}><AutoScrollProductName value={product.name} style={styles.productName} />{product.is_featured ? <Star size={13} color="#F59E0B" fill="#F59E0B" /> : null}</View>
               <Text style={styles.productMeta}>{product.sku || 'Fara SKU'} · {product.source_domain}</Text>
               <View style={styles.productBottom}>
-                <Text style={styles.productPrice}>{money(product.sale_price ?? product.price)}</Text>
+                <Text style={styles.productPrice}>{money(product.promotion_price ?? product.sale_price ?? product.price)}</Text>
                 <Text style={[styles.stock, product.stock_mode === 'tracked' && product.stock_quantity <= product.low_stock_threshold && styles.stockLow]}>{product.stock_mode === 'unlimited' ? 'Nelimitat' : `${product.stock_quantity} buc.`}</Text>
               </View>
             </View>
@@ -889,6 +893,7 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
               <Choice label="Suma fixa (lei)" selected={discountType === 'fixed'} onPress={() => patchForm('discount_type', 'fixed')} />
             </View>
             <Field label="PRET G-TROTS *" value={form.price} onChangeText={(value) => patchForm('price', value)} placeholder="0,00" keyboardType="decimal-pad" hint={isBoomagProduct ? 'Editezi pretul public dorit. Daca lasi 0, se foloseste pretul valid al furnizorului si marja porneste de la 0.' : 'Acesta este pretul public folosit cand produsul nu are un pret de furnizor valid.'} />
+            <Field label="UNITATE DE MĂSURĂ (U.M.)" value={form.unit_of_measure} onChangeText={(value) => patchForm('unit_of_measure', value)} placeholder="buc" maxLength={20} hint="Se preia automat pe avizul de însoțire a mărfii." />
             <Field label={discountType === 'percent' ? 'REDUCERE %' : 'REDUCERE LEI'} value={form.discount_value || ''} onChangeText={(value) => patchForm('discount_value', value)} placeholder="0" keyboardType="decimal-pad" />
             {form.is_accounting_stock_tracked
               ? <View style={styles.nirNote}><Text style={styles.nirNoteTitle}>Costul real vine din documentele de intrare.</Text><Text style={styles.nirNoteText}>Loturile din NIR păstrează costul fiecărei recepții, iar retururile refac exact costul real al lotului vândut.</Text></View>

@@ -44,6 +44,8 @@ FILES = (
     "shopify.php",
     "invoice-theme.php",
     "invoice-service.php",
+    "shipping-note-service.php",
+    "shipping-note-pdf.php",
     "invoice-automation.php",
     "invoice-ubl.php",
     "invoice-xlsx.php",

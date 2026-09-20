@@ -486,6 +486,7 @@ export type ShopProduct = {
   discount_value: number | null;
   discount_percent: number;
   currency: string;
+  unit_of_measure: string;
   stock_mode: 'tracked' | 'unlimited';
   stock_quantity: number;
   supplier_stock_quantity: number;
@@ -569,6 +570,7 @@ export type ShopProductPayload = {
   discount_value: number | null;
   discount_percent?: number | null;
   currency: string;
+  unit_of_measure: string;
   stock_mode: 'tracked' | 'unlimited';
   stock_quantity: number;
   is_accounting_stock_tracked: boolean;
@@ -667,6 +669,7 @@ export type ShopOrderItem = {
   discounted_unit_price?: number;
   discounted_line_total?: number;
   image_url?: string;
+  unit_of_measure?: string;
 };
 
 export type ShopOrderReturnItem = {
@@ -811,6 +814,74 @@ export type ShopIssuedInvoice = {
   return_invoice_email?: ShopOrderEmailNotification;
 };
 
+export type ShopShippingNoteItem = {
+  order_item_id: string;
+  product_id: string | null;
+  name: string;
+  sku: string;
+  image_path?: string;
+  unit: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+};
+
+export type ShopShippingNotePayload = {
+  document_id: string;
+  series: string;
+  number: string;
+  issue_date: string;
+  currency: string;
+  total: number;
+  order_reference: string;
+  seller: ShopInvoiceParty;
+  buyer: Pick<ShopInvoiceParty, 'name' | 'address' | 'city' | 'county' | 'postal_code' | 'phone'>;
+  items: ShopShippingNoteItem[];
+  expedition: {
+    delegate_name: string;
+    identity_document: string;
+    transport_vehicle: string;
+    delivery_time: string;
+    loading_place: string;
+  };
+  sender_name: string;
+  with_stamp: boolean;
+};
+
+export type ShopShippingNote = {
+  id: string;
+  order_id: string;
+  order_number?: string;
+  series: string;
+  number: string;
+  display_number: string;
+  issue_date: string;
+  with_stamp: boolean;
+  currency: string;
+  total: number;
+  buyer_name?: string;
+  customer_email?: string;
+  issued_by?: string;
+  issued_at: string;
+  updated_at?: string;
+  email_sent_at: string | null;
+  email_last_error?: string | null;
+  can_delete: boolean;
+  payload?: ShopShippingNotePayload;
+  pdf_url?: string;
+  existing?: boolean;
+};
+
+export type ShopShippingNoteDraftInput = {
+  delegate_name: string;
+  identity_document: string;
+  transport_vehicle: string;
+  delivery_time: string;
+  loading_place: string;
+  sender_name: string;
+  with_stamp: boolean;
+};
+
 export type ShopOrder = {
   id: string;
   order_number: string;
@@ -883,6 +954,7 @@ export type ShopOrder = {
     return_invoice_email?: ShopOrderEmailNotification | null;
   };
   invoice?: ShopIssuedInvoice | null;
+  shipping_note?: ShopShippingNote | null;
   created_at: string;
   updated_at: string;
 };
@@ -1596,6 +1668,13 @@ export const shopApi = {
   getInvoicePublicLink: (token: string, id: string, format: 'pdf' | 'xlsx' | 'xml' = 'pdf') => shopCall<{ url: string; file_name: string; mime_type: string; format: 'pdf' | 'xlsx' | 'xml' }>('getInvoicePublicLink', token, undefined, id, 0, { format }),
   sendInvoiceEmail: (token: string, id: string) => shopCall<ShopOrderEmailNotification>('sendInvoiceEmail', token, { method: 'POST', body: JSON.stringify({ invoice_id: id }) }, id),
   deleteInvoice: (token: string, id: string) => shopCall<{ deleted: boolean; id: string; order_id: string; released_number: string }>('deleteInvoice', token, { method: 'DELETE' }, id),
+  prepareShippingNote: (token: string, orderId: string) => shopCall<{ existing: ShopShippingNote | null; draft: ShopShippingNotePayload | null }>('prepareShippingNote', token, undefined, orderId),
+  issueShippingNote: (token: string, orderId: string, payload: ShopShippingNoteDraftInput) => shopCall<ShopShippingNote>('issueShippingNote', token, { method: 'POST', body: JSON.stringify({ order_id: orderId, ...payload }) }, orderId),
+  getShippingNote: (token: string, id: string) => shopCall<ShopShippingNote>('getShippingNote', token, undefined, id),
+  downloadShippingNote: (token: string, id: string) => shopCall<{ file_name: string; mime_type: string; content_base64: string; public_url?: string; stored?: boolean }>('downloadShippingNote', token, undefined, id),
+  getShippingNotePublicLink: (token: string, id: string) => shopCall<{ url: string; file_name: string; mime_type: string }>('getShippingNotePublicLink', token, undefined, id),
+  sendShippingNoteEmail: (token: string, id: string) => shopCall<ShopOrderEmailNotification>('sendShippingNoteEmail', token, { method: 'POST', body: JSON.stringify({ shipping_note_id: id }) }, id),
+  deleteShippingNote: (token: string, id: string) => shopCall<{ deleted: boolean; id: string; order_id: string; released_number: string }>('deleteShippingNote', token, { method: 'DELETE' }, id),
   getSpvConnection: (token: string) => shopCall<ShopSpvConnection>('getSpvConnection', token),
   beginSpvOAuth: (token: string) => shopCall<{ authorization_url: string; expires_at: string; environment: 'test' | 'production' }>('beginSpvOAuth', token, { method: 'POST', body: '{}' }),
   testSpvConnection: (token: string) => shopCall<ShopSpvConnection>('testSpvConnection', token, { method: 'POST', body: '{}' }),

@@ -20,6 +20,7 @@ $invoiceService = (string)file_get_contents($root . '/shop-api/invoice-service.p
 
 $assert(str_contains($api, 'CREATE TABLE IF NOT EXISTS shop_shipping_notes'), 'Lipsește registrul avizelor.');
 $assert(str_contains($api, 'CREATE TABLE IF NOT EXISTS shop_shipping_note_sequences'), 'Lipsește secvența numerelor de aviz.');
+$assert(str_contains($api, '$schemaVersion = 2026092101;'), 'Versiunea schemei nu declanșează migrarea U.M. în producție.');
 $assert(str_contains($api, "unit_of_measure VARCHAR(20) NOT NULL DEFAULT 'buc'"), 'U.M. nu are implicit valoarea buc.');
 $assert(str_contains($api, "UPDATE shop_products SET unit_of_measure = 'buc'"), 'Produsele existente nu sunt completate cu U.M. buc.');
 $assert(str_contains($api, 'p.currency, p.unit_of_measure,'), 'Lista managerului nu încarcă U.M. salvată pe produs.');

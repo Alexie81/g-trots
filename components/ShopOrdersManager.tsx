@@ -18,11 +18,13 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, BadgeCheck, Ban, BellRing, Check, ChevronRight, CircleCheckBig, Clock3, CreditCard, Eye, FileCheck2, HandCoins, Mail, PackageCheck, PackageOpen, Pencil, Phone, RefreshCw, RotateCcw, Save, Search, Send, ShoppingCart, SlidersHorizontal, Star, TrendingUp, Truck, WalletCards, Warehouse, X } from 'lucide-react-native';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import { ArrowLeft, BadgeCheck, Ban, BellRing, Check, ChevronRight, CircleCheckBig, Clock3, CreditCard, Download, Eye, FileCheck2, FileText, HandCoins, Mail, PackageCheck, PackageOpen, Pencil, Phone, RefreshCw, RotateCcw, Save, Search, Send, Share2, ShoppingCart, SlidersHorizontal, Star, Trash2, TrendingUp, Truck, WalletCards, Warehouse, X } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
-import { shopApi, shopOrderCustomerDisplayName, ShopOrder, ShopOrderPage, ShopProductStats } from '@/services/shopApi';
+import { shopApi, shopOrderCustomerDisplayName, ShopOrder, ShopOrderPage, ShopProductStats, ShopShippingNoteDraftInput } from '@/services/shopApi';
 import ShopPagination from '@/components/ShopPagination';
 import { runWhenIdle } from '@/utils/runWhenIdle';
 
@@ -252,6 +254,9 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
   const [invoicePromptOrder, setInvoicePromptOrder] = useState<ShopOrder | null>(null);
   const [invoiceSendEmail, setInvoiceSendEmail] = useState(false);
   const [invoiceSendReturnEmail, setInvoiceSendReturnEmail] = useState(false);
+  const [shippingNoteOrder, setShippingNoteOrder] = useState<ShopOrder | null>(null);
+  const [shippingNoteBusy, setShippingNoteBusy] = useState<string | null>(null);
+  const [shippingNoteDraft, setShippingNoteDraft] = useState<ShopShippingNoteDraftInput>({ delegate_name: '-', identity_document: '-', transport_vehicle: '-', delivery_time: '-', loading_place: '-', sender_name: 'G-Trots Romania', with_stamp: false });
   const [deliveryEditing, setDeliveryEditing] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryCity, setDeliveryCity] = useState('');
@@ -397,6 +402,7 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
     setDeliveryCity('');
     setDeliveryCounty('');
     setDeliveryPostalCode('');
+    setShippingNoteOrder(null);
   }, []);
 
   const openProductPanel = useCallback(async (productId: string) => {
@@ -586,6 +592,112 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
     setInvoiceSendReturnEmail(false);
   };
 
+  const patchShippingNote = <K extends keyof ShopShippingNoteDraftInput>(key: K, value: ShopShippingNoteDraftInput[K]) => {
+    setShippingNoteDraft((current) => ({ ...current, [key]: value }));
+  };
+
+  const openShippingNoteForm = async (order: ShopOrder) => {
+    if (!token || shippingNoteBusy) return;
+    if (order.shipping_note) return;
+    setShippingNoteBusy(order.id);
+    try {
+      const prepared = await shopApi.prepareShippingNote(token, order.id);
+      if (prepared.existing) {
+        const apply = (item: ShopOrder) => item.id === order.id ? { ...item, shipping_note: prepared.existing } : item;
+        setOrders((current) => current.map(apply));
+        setSelected((current) => current ? apply(current) : current);
+        return;
+      }
+      const expedition = prepared.draft?.expedition;
+      setShippingNoteDraft({
+        delegate_name: expedition?.delegate_name || '-',
+        identity_document: expedition?.identity_document || '-',
+        transport_vehicle: expedition?.transport_vehicle || '-',
+        delivery_time: expedition?.delivery_time || '-',
+        loading_place: expedition?.loading_place || '-',
+        sender_name: prepared.draft?.sender_name || 'G-Trots Romania',
+        with_stamp: false,
+      });
+      setShippingNoteOrder(order);
+    } catch (prepareError) {
+      Alert.alert('Aviz indisponibil', prepareError instanceof Error ? prepareError.message : 'Formularul nu a putut fi pregătit.');
+    } finally { setShippingNoteBusy(null); }
+  };
+
+  const issueShippingNote = async () => {
+    if (!token || !shippingNoteOrder || shippingNoteBusy) return;
+    setShippingNoteBusy(shippingNoteOrder.id);
+    try {
+      const note = await shopApi.issueShippingNote(token, shippingNoteOrder.id, shippingNoteDraft);
+      clearOrdersSnapshots(token);
+      const apply = (item: ShopOrder) => item.id === shippingNoteOrder.id ? { ...item, shipping_note: note } : item;
+      setOrders((current) => current.map(apply));
+      setSelected((current) => current ? apply(current) : current);
+      setShippingNoteOrder(null);
+      Alert.alert(note.existing ? 'Aviz existent' : 'Aviz emis', `${note.display_number} este pregătit pentru trimitere sau descărcare.`);
+    } catch (issueError) {
+      Alert.alert('Avizul nu a putut fi emis', issueError instanceof Error ? issueError.message : 'Încearcă din nou.');
+    } finally { setShippingNoteBusy(null); }
+  };
+
+  const shareShippingNote = async (id: string, displayNumber: string) => {
+    if (!token || shippingNoteBusy) return;
+    setShippingNoteBusy(id);
+    try {
+      const file = await shopApi.downloadShippingNote(token, id);
+      const safeName = String(file.file_name || `${displayNumber}.pdf`).replace(/[\\/:*?"<>|]/g, '-');
+      const uri = `${FileSystem.cacheDirectory}${safeName}`;
+      await FileSystem.writeAsStringAsync(uri, file.content_base64, { encoding: FileSystem.EncodingType.Base64 });
+      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: `Trimite ${displayNumber}` });
+    } catch (shareError) {
+      Alert.alert('PDF indisponibil', shareError instanceof Error ? shareError.message : 'PDF-ul nu a putut fi deschis pentru trimitere.');
+    } finally { setShippingNoteBusy(null); }
+  };
+
+  const downloadShippingNote = async (id: string) => {
+    if (!token || shippingNoteBusy) return;
+    setShippingNoteBusy(id);
+    try {
+      const file = await shopApi.getShippingNotePublicLink(token, id);
+      await Linking.openURL(file.url);
+    } catch (downloadError) {
+      Alert.alert('Descărcare indisponibilă', downloadError instanceof Error ? downloadError.message : 'Linkul PDF nu a putut fi deschis.');
+    } finally { setShippingNoteBusy(null); }
+  };
+
+  const emailShippingNote = async (id: string) => {
+    if (!token || shippingNoteBusy) return;
+    setShippingNoteBusy(id);
+    try {
+      const result = await shopApi.sendShippingNoteEmail(token, id);
+      if (!result.sent) throw new Error(result.error || 'E-mailul nu a fost trimis.');
+      setSelected((current) => current?.shipping_note?.id === id ? { ...current, shipping_note: { ...current.shipping_note, email_sent_at: new Date().toISOString() } } : current);
+      Alert.alert('Aviz trimis', `PDF-ul a fost trimis la ${result.recipient || 'adresa clientului'}.`);
+    } catch (emailError) {
+      Alert.alert('E-mail netrimis', emailError instanceof Error ? emailError.message : 'Încearcă din nou.');
+    } finally { setShippingNoteBusy(null); }
+  };
+
+  const deleteShippingNote = (order: ShopOrder) => {
+    const note = order.shipping_note;
+    if (!token || !note || !note.can_delete || shippingNoteBusy) return;
+    Alert.alert('Ștergi ultimul aviz?', `${note.display_number} va fi șters, iar numărul va fi refolosit de următorul aviz.`, [
+      { text: 'Renunță', style: 'cancel' },
+      { text: 'Șterge', style: 'destructive', onPress: async () => {
+        setShippingNoteBusy(note.id);
+        try {
+          await shopApi.deleteShippingNote(token, note.id);
+          clearOrdersSnapshots(token);
+          const apply = (item: ShopOrder) => item.id === order.id ? { ...item, shipping_note: null } : item;
+          setOrders((current) => current.map(apply));
+          setSelected((current) => current ? apply(current) : current);
+        } catch (deleteError) {
+          Alert.alert('Avizul nu a fost șters', deleteError instanceof Error ? deleteError.message : 'Încearcă din nou.');
+        } finally { setShippingNoteBusy(null); }
+      } },
+    ]);
+  };
+
   if (loading && !loadedOnce) return <View style={styles.state}><ActivityIndicator color={Colors.orange} /><Text style={styles.stateText}>Se incarca comenzile...</Text></View>;
   if (error) return <View style={styles.state}><Text style={styles.error}>{error}</Text><TouchableOpacity style={styles.retry} onPress={() => void load()}><Text style={styles.retryText}>Incearca din nou</Text></TouchableOpacity></View>;
 
@@ -658,6 +770,19 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
               <View style={styles.invoicePanelIcon}>{selected.invoice ? <FileCheck2 size={22} color="#34D399" /> : <FileCheck2 size={22} color={Colors.orange} />}</View>
               <View style={styles.invoicePanelCopy}><Text style={styles.invoicePanelKicker}>FACTURĂ FISCALĂ</Text><Text style={styles.invoicePanelTitle}>{selected.invoice ? selected.invoice.display_number : 'Factura nu este emisă'}</Text><Text style={styles.invoicePanelText}>{selected.invoice ? `${selected.invoice.status === 'paid' ? 'Plătită' : 'Neplătită'} · tema ${selected.invoice.theme} · ${selected.invoice.total.toLocaleString('ro-RO')} ${selected.invoice.currency}` : 'Poți emite documentul simplu sau îl poți trimite imediat pe e-mail clientului.'}</Text></View>
               <TouchableOpacity disabled={Boolean(invoiceBusy)} style={[styles.invoicePanelButton, selected.invoice && styles.invoicePanelButtonIssued]} onPress={() => chooseInvoiceAction(selected)}>{invoiceBusy === selected.id || invoiceBusy === selected.invoice?.id ? <ActivityIndicator size="small" color="#FFFFFF" /> : selected.invoice ? <><FileCheck2 size={16} color="#FFFFFF" /><Text style={styles.invoicePanelButtonText}>Vezi factura</Text></> : <><Send size={16} color="#FFFFFF" /><Text style={styles.invoicePanelButtonText}>Emite</Text></>}</TouchableOpacity>
+            </View>
+            <View style={[styles.shippingNotePanel, selected.shipping_note && styles.shippingNotePanelIssued]}>
+              <View style={styles.shippingNoteHead}>
+                <View style={styles.invoicePanelIcon}><FileText size={22} color={selected.shipping_note ? '#60A5FA' : '#FFB36B'} /></View>
+                <View style={styles.invoicePanelCopy}><Text style={styles.shippingNoteKicker}>AVIZ DE ÎNSOȚIRE</Text><Text style={styles.invoicePanelTitle}>{selected.shipping_note ? selected.shipping_note.display_number : 'Aviz neemis'}</Text><Text style={styles.invoicePanelText}>{selected.shipping_note ? `${selected.shipping_note.with_stamp ? 'Cu ștampilă' : 'Fără ștampilă'} · comanda ${selected.order_number}` : 'Datele firmei, clientul și produsele se preiau automat.'}</Text></View>
+                {!selected.shipping_note ? <TouchableOpacity disabled={Boolean(shippingNoteBusy)} style={styles.shippingNoteIssue} onPress={() => void openShippingNoteForm(selected)}>{shippingNoteBusy === selected.id ? <ActivityIndicator size="small" color="#FFFFFF" /> : <><FileText size={16} color="#FFFFFF" /><Text style={styles.invoicePanelButtonText}>Generează</Text></>}</TouchableOpacity> : null}
+              </View>
+              {selected.shipping_note ? <View style={styles.shippingNoteActions}>
+                <TouchableOpacity disabled={Boolean(shippingNoteBusy)} style={styles.shippingNoteAction} onPress={() => void shareShippingNote(selected.shipping_note!.id, selected.shipping_note!.display_number)}><Share2 size={15} color="#93C5FD" /><Text style={styles.shippingNoteActionText}>Trimite PDF</Text></TouchableOpacity>
+                <TouchableOpacity disabled={!selected.customer_email || Boolean(shippingNoteBusy)} style={[styles.shippingNoteAction, !selected.customer_email && styles.disabled]} onPress={() => void emailShippingNote(selected.shipping_note!.id)}><Mail size={15} color="#93C5FD" /><Text style={styles.shippingNoteActionText}>E-mail</Text></TouchableOpacity>
+                <TouchableOpacity disabled={Boolean(shippingNoteBusy)} style={styles.shippingNoteAction} onPress={() => void downloadShippingNote(selected.shipping_note!.id)}><Download size={15} color="#93C5FD" /><Text style={styles.shippingNoteActionText}>Download</Text></TouchableOpacity>
+                {selected.shipping_note.can_delete ? <TouchableOpacity disabled={Boolean(shippingNoteBusy)} style={[styles.shippingNoteAction, styles.shippingNoteDelete]} onPress={() => deleteShippingNote(selected)}><Trash2 size={15} color="#FB7185" /><Text style={[styles.shippingNoteActionText, { color: '#FB7185' }]}>Șterge</Text></TouchableOpacity> : null}
+              </View> : null}
             </View>
             {(['return_requested', 'return_refused', 'return_confirmed', 'refunded'] as ShopOrder['status'][]).includes(selected.status) && selected.return_invoice ? <View style={[styles.invoicePanel, styles.invoicePanelIssued, { borderColor: '#2DD4BF66', backgroundColor: '#142522' }]}>
               <View style={[styles.invoicePanelIcon, { backgroundColor: '#2DD4BF1C' }]}><RotateCcw size={22} color="#2DD4BF" /></View>
@@ -745,6 +870,28 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
             </ScrollView> : null}
           </Animated.View> : null}
         </SafeAreaView>
+      </Modal>
+      <Modal visible={Boolean(shippingNoteOrder)} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !shippingNoteBusy && setShippingNoteOrder(null)}>
+        <Pressable style={styles.invoicePromptBackdrop} onPress={() => !shippingNoteBusy && setShippingNoteOrder(null)}>
+          <Pressable style={[styles.invoicePrompt, styles.shippingNotePrompt]} onPress={(event) => event.stopPropagation()}>
+            <ScrollView bounces={false} showsVerticalScrollIndicator={false} contentContainerStyle={styles.invoicePromptScroll}>
+              <View style={styles.invoicePromptHead}><View style={[styles.invoicePromptLogo, { borderColor: '#315E89', backgroundColor: '#172637' }]}><FileText size={26} color="#93C5FD" /></View><TouchableOpacity disabled={Boolean(shippingNoteBusy)} style={styles.invoicePromptClose} onPress={() => setShippingNoteOrder(null)}><X size={18} color={Colors.textSecondary} /></TouchableOpacity></View>
+              <Text style={[styles.invoicePromptEyebrow, { color: '#93C5FD' }]}>AVIZ DE ÎNSOȚIRE A MĂRFII</Text>
+              <Text style={styles.invoicePromptTitle}>Date privind expediția</Text>
+              <View style={styles.invoicePromptSummary}><View><Text style={styles.invoicePromptSummaryLabel}>COMANDĂ</Text><Text style={styles.invoicePromptSummaryValue}>{shippingNoteOrder?.order_number}</Text></View><View style={styles.invoicePromptSummaryRight}><Text style={styles.invoicePromptSummaryLabel}>PRODUSE</Text><Text style={[styles.invoicePromptSummaryTotal, { color: '#93C5FD' }]}>{shippingNoteOrder?.items?.length || 0}</Text></View></View>
+              {([
+                ['delegate_name', 'NUMELE DELEGATULUI'],
+                ['identity_document', 'CI - SERIE ȘI NUMĂR'],
+                ['transport_vehicle', 'MIJLOC TRANSPORT / NR.'],
+                ['delivery_time', 'ORA LIVRĂRII'],
+                ['loading_place', 'LOC ÎNCĂRCARE'],
+                ['sender_name', 'EXPEDITOR · NUME ȘI SEMNĂTURĂ'],
+              ] as Array<[keyof Omit<ShopShippingNoteDraftInput, 'with_stamp'>, string]>).map(([key, label]) => <View key={key} style={styles.shippingNoteField}><Text style={styles.shippingNoteFieldLabel}>{label}</Text><TextInput value={shippingNoteDraft[key]} onChangeText={(value) => patchShippingNote(key, value)} maxLength={500} placeholder="-" placeholderTextColor="#716970" style={styles.shippingNoteInput} /></View>)}
+              <TouchableOpacity activeOpacity={0.78} onPress={() => patchShippingNote('with_stamp', !shippingNoteDraft.with_stamp)} style={[styles.invoiceEmailSwitch, shippingNoteDraft.with_stamp && styles.shippingNoteStampActive]}><View style={styles.invoiceEmailCopy}><Text style={styles.invoiceEmailTitle}>Variantă cu ștampilă</Text><Text style={styles.invoiceEmailText}>În PDF apare numai „ȘTAMPILĂ:”, fără chenar.</Text></View><Switch value={shippingNoteDraft.with_stamp} onValueChange={(value) => patchShippingNote('with_stamp', value)} trackColor={{ false: '#5A545D', true: '#2563EB' }} thumbColor="#FFFFFF" ios_backgroundColor="#5A545D" /></TouchableOpacity>
+              <View style={styles.invoicePromptActions}><TouchableOpacity disabled={Boolean(shippingNoteBusy)} style={styles.invoicePromptCancel} onPress={() => setShippingNoteOrder(null)}><Text style={styles.invoicePromptCancelText}>Renunță</Text></TouchableOpacity><TouchableOpacity disabled={Boolean(shippingNoteBusy)} style={[styles.invoicePromptConfirm, { backgroundColor: '#2563EB' }]} onPress={() => void issueShippingNote()}>{shippingNoteBusy ? <ActivityIndicator color="#FFFFFF" /> : <><FileText size={18} color="#FFFFFF" /><Text style={styles.invoicePromptConfirmText}>Generează avizul</Text></>}</TouchableOpacity></View>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
       </Modal>
       <Modal visible={Boolean(invoicePromptOrder)} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !invoiceBusy && setInvoicePromptOrder(null)}>
         <Pressable style={styles.invoicePromptBackdrop} onPress={() => !invoiceBusy && setInvoicePromptOrder(null)}>
@@ -984,6 +1131,7 @@ const styles = StyleSheet.create({
   grandTotalLabel: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 13 },
   grandTotalValue: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 17, fontVariant: ['tabular-nums'] },
   invoicePanel: { minHeight: 108, flexDirection: 'row', alignItems: 'center', gap: 11, borderWidth: 1, borderColor: '#6B461F', borderRadius: 22, padding: 13, backgroundColor: '#241C15', marginTop: 10 }, invoicePanelIssued: { borderColor: '#235C48', backgroundColor: '#15241F' }, invoicePanelIcon: { width: 46, height: 46, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: '#FFFFFF0A' }, invoicePanelCopy: { flex: 1, minWidth: 0 }, invoicePanelKicker: { color: '#FFAD70', fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.9 }, invoicePanelTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 13, marginTop: 4 }, invoicePanelText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8.5, lineHeight: 13, marginTop: 4 }, invoicePanelButton: { minWidth: 84, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 15, paddingHorizontal: 12, backgroundColor: Colors.orange }, invoicePanelButtonIssued: { backgroundColor: '#14865A' }, invoicePanelButtonText: { color: '#FFFFFF', fontFamily: 'Inter-Bold', fontSize: 9 },
+  shippingNotePanel: { overflow: 'hidden', borderWidth: 1, borderColor: '#654823', borderRadius: 22, padding: 13, backgroundColor: '#211B16', marginTop: 10 }, shippingNotePanelIssued: { borderColor: '#315E89', backgroundColor: '#151F2A' }, shippingNoteHead: { flexDirection: 'row', alignItems: 'center', gap: 11 }, shippingNoteKicker: { color: '#93C5FD', fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.9 }, shippingNoteIssue: { minWidth: 88, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 15, paddingHorizontal: 11, backgroundColor: '#2563EB' }, shippingNoteActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#36506B', paddingTop: 10, marginTop: 11 }, shippingNoteAction: { minHeight: 39, flexGrow: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderWidth: 1, borderColor: '#365A80', borderRadius: 12, paddingHorizontal: 9, backgroundColor: '#182B3E' }, shippingNoteDelete: { borderColor: '#713B48', backgroundColor: '#321D24' }, shippingNoteActionText: { color: '#B8D8FA', fontFamily: 'Inter-Bold', fontSize: 8 }, shippingNotePrompt: { borderColor: '#315E89', backgroundColor: '#171E27' }, shippingNoteField: { marginTop: 11 }, shippingNoteFieldLabel: { color: '#93C5FD', fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.7, marginBottom: 5 }, shippingNoteInput: { minHeight: 48, borderWidth: 1, borderColor: '#3E5268', borderRadius: 14, paddingHorizontal: 12, color: Colors.textPrimary, backgroundColor: '#101720', fontFamily: 'Inter-SemiBold', fontSize: 10 }, shippingNoteStampActive: { borderColor: '#3B82F6', backgroundColor: '#172A42' },
   invoicePromptBackdrop: { flex: 1, justifyContent: 'center', padding: 18, backgroundColor: '#080709D9' }, invoicePrompt: { width: '100%', maxWidth: 510, maxHeight: '94%', alignSelf: 'center', overflow: 'hidden', borderWidth: 1, borderColor: '#6B4625', borderRadius: 31, padding: 20, backgroundColor: '#211C19', shadowColor: '#000000', shadowOpacity: 0.5, shadowRadius: 28, shadowOffset: { width: 0, height: 18 }, elevation: 14 }, invoicePromptScroll: { paddingBottom: 2 }, invoicePromptGlow: { position: 'absolute', width: 190, height: 190, borderRadius: 999, right: -80, top: -95, backgroundColor: '#FF8A0010' }, invoicePromptHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, invoicePromptLogo: { width: 54, height: 54, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#754A24', borderRadius: 18, backgroundColor: '#352316' }, invoicePromptClose: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: '#FFFFFF0A' }, invoicePromptEyebrow: { color: '#FFAD70', fontFamily: 'Inter-Bold', fontSize: 7.5, letterSpacing: 1, marginTop: 18 }, invoicePromptTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 25, letterSpacing: -0.5, marginTop: 6 }, invoicePromptSubtitle: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 10, lineHeight: 16, marginTop: 8 }, invoicePromptSummary: { minHeight: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderWidth: 1, borderColor: '#443B35', borderRadius: 19, padding: 14, backgroundColor: '#181719', marginTop: 16 }, invoicePromptSummaryRight: { alignItems: 'flex-end' }, invoicePromptSummaryLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8 }, invoicePromptSummaryValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 12, marginTop: 4 }, invoicePromptSummaryTotal: { color: '#FFAD70', fontFamily: 'Inter-Bold', fontSize: 15, marginTop: 4 }, invoiceEmailSwitch: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#514942', borderRadius: 22, paddingHorizontal: 13, paddingVertical: 12, backgroundColor: '#19181A', marginTop: 11, shadowColor: '#000000', shadowOpacity: 0.2, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 2 }, invoiceEmailSwitchActive: { borderColor: '#F07922', backgroundColor: '#302117' }, invoiceEmailSwitchDisabled: { opacity: 0.48 }, invoiceEmailIcon: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#6A4931', borderRadius: 16, backgroundColor: '#39271A' }, invoiceEmailIconActive: { borderColor: '#FF9A42', backgroundColor: '#E86F19' }, invoiceEmailCopy: { flex: 1, minWidth: 0 }, invoiceEmailTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }, invoiceEmailTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 12.5 }, invoiceEmailBadge: { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: '#FFFFFF0A' }, invoiceEmailBadgeActive: { backgroundColor: '#FF8A0024' }, invoiceEmailBadgeText: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 6, letterSpacing: 0.55 }, invoiceEmailBadgeTextActive: { color: '#FFC18A' }, invoiceEmailText: { color: '#AAA1A7', fontFamily: 'Inter-Regular', fontSize: 8.5, lineHeight: 13, marginTop: 5 }, invoiceEmailControl: { alignItems: 'center', gap: 4 }, invoiceEmailState: { color: '#8E878F', fontFamily: 'Inter-Bold', fontSize: 6.5, letterSpacing: 0.6 }, invoiceEmailStateActive: { color: '#FFB36B' }, invoicePromptNotice: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, padding: 11, backgroundColor: '#34D3990B', marginTop: 10 }, invoicePromptNoticeText: { flex: 1, color: '#9EDBC4', fontFamily: 'Inter-SemiBold', fontSize: 8.5, lineHeight: 13 }, invoicePromptActions: { flexDirection: 'row', gap: 9, marginTop: 15 }, invoicePromptCancel: { flex: 0.8, minHeight: 50, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#48434B', borderRadius: 17, backgroundColor: '#2A272D' }, invoicePromptCancelText: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 10 }, invoicePromptConfirm: { flex: 1.3, minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 17, backgroundColor: Colors.orange, shadowColor: Colors.orange, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 4 }, invoicePromptConfirmText: { color: '#FFFFFF', fontFamily: 'Inter-Bold', fontSize: 10 },
   timeline: { overflow: 'hidden', borderRadius: 22, padding: 14, backgroundColor: '#1B1B1F' }, timelineRow: { flexDirection: 'row', alignItems: 'stretch', gap: 11 }, timelineRail: { width: 38, alignItems: 'center' }, timelineDot: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#403C43', borderRadius: 12, backgroundColor: '#242228' }, timelineDotCurrent: { shadowColor: '#FF7A00', shadowOpacity: 0.28, shadowRadius: 9, shadowOffset: { width: 0, height: 4 }, elevation: 3 }, timelineLine: { width: 2, flex: 1, minHeight: 30, borderRadius: 99, backgroundColor: '#343138', marginVertical: 4 }, timelineCard: { flex: 1, minHeight: 78, borderWidth: 1, borderColor: 'transparent', borderRadius: 17, padding: 12, marginBottom: 8, backgroundColor: '#232126' }, timelineTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }, timelineTitle: { color: Colors.textSecondary, fontFamily: 'Inter-Bold', fontSize: 11 }, timelineCurrent: { fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8 }, timelineDescription: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 9, lineHeight: 14, marginTop: 4 }, timelineMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }, timelineDate: { color: Colors.textSecondary, fontFamily: 'Inter-Regular', fontSize: 8 }, timelineMail: { flexDirection: 'row', alignItems: 'center', gap: 4 }, timelineMailText: { color: '#34D399', fontFamily: 'Inter-Bold', fontSize: 6, letterSpacing: 0.45 }, timelinePending: { color: Colors.textMuted, fontFamily: 'Inter-SemiBold', fontSize: 7, marginTop: 8 },
   statusPicker: { overflow: 'hidden', borderWidth: 1, borderColor: '#37343B', borderRadius: 22, padding: 12, backgroundColor: '#1B1B1F' }, statusTrackRow: { minHeight: 64, flexDirection: 'row', alignItems: 'stretch', gap: 9 }, statusTrackRail: { width: 28, alignItems: 'center' }, statusTrackDot: { width: 27, height: 27, alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderWidth: 1, borderColor: '#4A4650', borderRadius: 10, backgroundColor: '#29272D' }, statusTrackIndex: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7 }, statusTrackLine: { width: 2, flex: 1, minHeight: 25, borderRadius: 99, backgroundColor: '#37343B', marginVertical: 3 }, statusOption: { flex: 1, minHeight: 55, flexDirection: 'row', alignItems: 'center', gap: 9, alignSelf: 'flex-start', borderWidth: 1, borderColor: '#36333A', borderRadius: 16, padding: 8, backgroundColor: '#211F24', marginBottom: 7 }, statusOptionLocked: { opacity: 0.46 }, statusOptionIcon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 12 }, statusOptionCopy: { flex: 1, minWidth: 0 }, statusOptionTitle: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 }, statusOptionText: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 12, marginTop: 2 }, radio: { width: 21, height: 21, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#5A555E', borderRadius: 99 },

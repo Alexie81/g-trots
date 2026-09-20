@@ -173,6 +173,7 @@ type FormState = {
   stock_mode: 'tracked' | 'unlimited';
   stock_quantity: string;
   supplier_stock_quantity: string;
+  accounting_stock_quantity: string;
   is_accounting_stock_tracked: boolean;
   low_stock_threshold: string;
   is_active: boolean;
@@ -226,6 +227,7 @@ function emptyForm(): FormState {
     stock_mode: 'tracked',
     stock_quantity: '0',
     supplier_stock_quantity: '0',
+    accounting_stock_quantity: '0',
     is_accounting_stock_tracked: true,
     low_stock_threshold: '3',
     is_active: true,
@@ -488,6 +490,7 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
         stock_mode: full.stock_mode,
         stock_quantity: String(full.stock_quantity),
         supplier_stock_quantity: String(full.supplier_stock_quantity || 0),
+        accounting_stock_quantity: String(full.accounting_stock_quantity || 0),
         is_accounting_stock_tracked: full.is_accounting_stock_tracked !== false,
         low_stock_threshold: String(full.low_stock_threshold),
         is_active: full.is_active,
@@ -903,10 +906,10 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
             <SectionTitle number="08" title="Garantia produsului" text="Este afisata public pe pagina produsului atunci cand are o valoare mai mare de zero." />
             <View style={styles.twoColumns}><View style={styles.column}><Field label="GARANTIE LEGALA · LUNI" value={form.legal_warranty_months} onChangeText={(value) => patchForm('legal_warranty_months', value)} keyboardType="number-pad" placeholder="24" /></View><View style={styles.column}><Field label="GARANTIE COMERCIALA · LUNI" value={form.commercial_warranty_months} onChangeText={(value) => patchForm('commercial_warranty_months', value)} keyboardType="number-pad" placeholder="Optional" /></View></View>
 
-            <SectionTitle number="09" title="Stoc" text={isBoomagProduct ? 'Alege daca stocul online urmareste feedul Boomag sau ramane nelimitat, indiferent de stocul furnizorului.' : 'Alege stoc online nelimitat sau cantitate urmarita automat.'} />
+            <SectionTitle number="09" title="Stoc" text={isBoomagProduct ? 'Alege stoc automat din Boomag sau din receptiile NIR, ori stoc nelimitat pentru aprovizionare din alte surse.' : 'Alege stoc online nelimitat sau cantitate urmarita automat.'} />
             <View style={styles.sourceRow}><Choice label="Stoc cu numar" selected={form.stock_mode === 'tracked'} onPress={() => patchForm('stock_mode', 'tracked')} /><Choice label="Stoc nelimitat" selected={form.stock_mode === 'unlimited'} onPress={() => patchForm('stock_mode', 'unlimited')} /></View>
             {isBoomagProduct
-              ? <View style={styles.nirNote}><Text style={styles.nirNoteTitle}>Stoc furnizor: {form.supplier_stock_quantity} buc.</Text><Text style={styles.nirNoteText}>{form.stock_mode === 'unlimited' ? 'Stocul online ramane nelimitat chiar daca Boomag ajunge la zero.' : `Stoc online: ${form.stock_quantity} buc. · Actualizare automata Boomag.`} Stocul conta ramane separat si va fi calculat din facturi.</Text></View>
+              ? <View style={styles.nirNote}><Text style={styles.nirNoteTitle}>Online: {form.stock_quantity} · Boomag: {form.supplier_stock_quantity} · Fizic NIR: {form.accounting_stock_quantity} buc.</Text><Text style={styles.nirNoteText}>{form.stock_mode === 'unlimited' ? 'Stocul online ramane nelimitat chiar daca Boomag si stocul fizic ajung la zero.' : 'Produsul ramane disponibil automat din Boomag sau din stocul fizic receptionat prin NIR, indiferent de furnizorul NIR.'}</Text></View>
               : form.stock_mode === 'tracked' ? <View style={styles.twoColumns}><View style={styles.column}><Field label="CANTITATE" value={form.stock_quantity} onChangeText={(value) => patchForm('stock_quantity', value)} placeholder="0" keyboardType="number-pad" /></View><View style={styles.column}><Field label="ALERTA SUB" value={form.low_stock_threshold} onChangeText={(value) => patchForm('low_stock_threshold', value)} placeholder="3" keyboardType="number-pad" /></View></View> : null}
             {isBoomagProduct && form.stock_mode === 'tracked' ? <Field label="ALERTA SUB" value={form.low_stock_threshold} onChangeText={(value) => patchForm('low_stock_threshold', value)} placeholder="3" keyboardType="number-pad" /> : null}
             <View style={[styles.toggleCard, styles.accountingToggleCard]}><View style={styles.toggleCopy}><Text style={styles.toggleTitle}>Urmărește în stocul contabil</Text><Text style={styles.toggleText}>Activ implicit. Oprit: produsul nu apare în Stocuri Conta și nu generează mișcări contabile. Stocul online rămâne editabil, iar facturarea și SPV funcționează normal.</Text></View><Switch accessibilityLabel="Urmărește în stocul contabil" value={form.is_accounting_stock_tracked} onValueChange={(value) => patchForm('is_accounting_stock_tracked', value)} trackColor={{ false: '#39363D', true: '#34D39955' }} thumbColor={form.is_accounting_stock_tracked ? '#34D399' : '#8A8A8A'} /></View>

@@ -4,6 +4,7 @@ const path = require('path');
 const websiteRoot = path.resolve(__dirname, '..', 'website');
 const footerVersion = '20260920-public-theme-v11';
 const themeVersion = '20260920-public-theme-v11';
+const themeStyleVersion = '20260920-opaque-accordions-v1';
 const legalCssVersion = '20260905-3';
 const concurrency = 4;
 
@@ -31,7 +32,7 @@ function updateHtml(source) {
   const themeBootstrapStylePattern = /<style\b[^>]*id=["']gt-theme-critical["'][^>]*>[\s\S]*?<\/style>\s*/gi;
   const themeBootstrap = `<script id="gt-theme-bootstrap">(()=>{const r=document.documentElement;try{const k='g-trots-color-theme-v1',s=localStorage.getItem(k),t=s==='light'||s==='dark'?s:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');r.dataset.theme=t;r.style.colorScheme=t}catch{const t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';r.dataset.theme=t;r.style.colorScheme=t}if(location.pathname.includes('/magazin/produs/')){r.classList.add('gt-product-booting');addEventListener('DOMContentLoaded',()=>requestAnimationFrame(()=>requestAnimationFrame(()=>r.classList.remove('gt-product-booting'))),{once:true});setTimeout(()=>r.classList.remove('gt-product-booting'),3000)}})();</script>\n<style id="gt-theme-critical">html[data-theme="light"],html[data-theme="light"] body{background:#f7f8fb;color:#171b24}html[data-theme="dark"],html[data-theme="dark"] body{background:#071a36;color:#f7f9ff}html.gt-product-booting body{opacity:0!important}html[data-theme="light"] .product-static-seo,html[data-theme="light"] .product-static-seo img{background:#fff!important;color:#171b24!important}html[data-theme="dark"] .product-static-seo,html[data-theme="dark"] .product-static-seo img{background:#0c274d!important;color:#f7f9ff!important}html[data-theme="light"] body.contact-body{background:#f7f8fb!important;color:#171b24!important}html[data-theme="light"] .contact-stage{background:radial-gradient(circle at 18% 34%,rgba(255,133,0,.13),transparent 29rem),linear-gradient(132deg,#fffaf5,#fff 55%,#f7f9fc)!important}html[data-theme="light"] .contact-whatsapp{background:rgba(255,255,255,.96)!important;color:#171b24!important}html[data-theme="light"] .contact-scooter{opacity:.18!important}</style>`;
   const themeScript = `<script src="/theme.js?v=${themeVersion}"></script>`;
-  const themeStyle = `<link rel="stylesheet" href="/theme.css?v=${themeVersion}">`;
+  const themeStyle = `<link rel="stylesheet" href="/theme.css?v=${themeStyleVersion}">`;
   html = html
     .replace(themeBootstrapScriptPattern, '')
     .replace(themeBootstrapStylePattern, '')

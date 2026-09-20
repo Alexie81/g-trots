@@ -2417,8 +2417,7 @@ html[data-theme="light"] .faq-list {
   backdrop-filter: none !important;
 }
 
-/* The decorative vehicle stays in the heading composition. Accordion surfaces
-   are deliberately opaque so the artwork never continues through their rows. */
+/* Accordion surfaces are opaque in every state. */
 html[data-theme="light"] .service-panel .service-item,
 html[data-theme="light"] .faq-list details {
   background: #fff !important;
@@ -2434,29 +2433,28 @@ html[data-theme="dark"] .service-panel .service-item.is-selected,
 html[data-theme="dark"] .service-panel .service-item.is-expanded,
 html[data-theme="dark"] .faq-list details.is-expanded { background: linear-gradient(135deg,#153e6b,#0b294f) !important; }
 
-/* Vehicle art: use only the transparent product cutout and fade its edges so
-   it never reads as a separate rectangle on either theme. */
+/* Accordion sections must not have vehicle artwork behind or between rows. */
 .service-section::before,
-.seo-hub::before,
 .faq-section::before {
+  content: none !important;
+  display: none !important;
+  background-image: none !important;
+}
+
+/* Keep the separate service-guide illustration, with softly faded edges. */
+.seo-hub::before {
   display: block !important;
   background-color: transparent !important;
   background-repeat: no-repeat !important;
   -webkit-mask-image: radial-gradient(ellipse 74% 70% at 62% 52%,#000 42%,rgba(0,0,0,.9) 60%,transparent 100%) !important;
   mask-image: radial-gradient(ellipse 74% 70% at 62% 52%,#000 42%,rgba(0,0,0,.9) 60%,transparent 100%) !important;
 }
-.service-section::before { background-image: url("assets/vehicle-performance-scooter.webp") !important; }
 .seo-hub::before { background-image: url("assets/vehicle-urban-scooter.webp") !important; }
-.faq-section::before { background-image: url("assets/vehicle-electric-moped.webp") !important; }
-html[data-theme="light"] .service-section::before,
-html[data-theme="light"] .seo-hub::before,
-html[data-theme="light"] .faq-section::before {
+html[data-theme="light"] .seo-hub::before {
   opacity: .66 !important;
   filter: contrast(1.04) saturate(.92) drop-shadow(0 2rem 3rem rgba(45,52,64,.16)) !important;
 }
-html[data-theme="dark"] .service-section::before,
-html[data-theme="dark"] .seo-hub::before,
-html[data-theme="dark"] .faq-section::before {
+html[data-theme="dark"] .seo-hub::before {
   opacity: .58 !important;
   filter: brightness(1.16) contrast(1.08) saturate(.88) drop-shadow(0 2rem 3.2rem rgba(0,5,18,.3)) !important;
 }
@@ -3529,7 +3527,7 @@ html[data-theme="light"] .faq-list details {
   margin-bottom: .55rem !important;
   border: 1px solid var(--gt-line) !important;
   border-radius: 1.15rem !important;
-  background: rgba(255,255,255,.94) !important;
+  background: #fff !important;
   box-shadow: 0 .55rem 1.4rem rgba(35,42,54,.055) !important;
 }
 html[data-theme="dark"] .service-panel .service-item,
@@ -3537,7 +3535,7 @@ html[data-theme="dark"] .faq-list details {
   margin-bottom: .55rem !important;
   border: 1px solid var(--gt-line) !important;
   border-radius: 1.15rem !important;
-  background: rgba(10,33,66,.94) !important;
+  background: #0a2142 !important;
   box-shadow: 0 .65rem 1.6rem rgba(0,8,24,.18) !important;
 }
 .service-panel .service-item + .service-item { border-top-width: 1px !important; }

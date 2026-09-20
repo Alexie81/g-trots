@@ -45,6 +45,8 @@ foreach (['IDENTIFICAREA DOCUMENTULUI', 'FURNIZOR / EXPEDITOR', 'CUMPĂRĂTOR / 
 }
 $assert(str_contains($pdf, "=== 'RON' ? 'lei'"), 'Valorile în RON nu sunt marcate cu lei.');
 $assert(str_contains($pdf, "!empty(\$document['with_stamp']) ? '<div class=\"stamp\"><strong>ȘTAMPILĂ:</strong></div>' : ''"), 'Varianta cu/fără ștampilă nu este condiționată corect.');
+$assert(str_contains($pdf, "trim((string)(\$item['name'] ?? '')) !== ''"), 'PDF-ul nu elimină pozițiile goale din tabel.');
+$assert(!preg_match('/for\s*\([^)]*\$rows/i', $pdf), 'PDF-ul nu trebuie să completeze tabelul cu rânduri goale până la un număr fix.');
 foreach (['Urmează factura', 'Fără factură', 'ALTA CAUZĂ', 'PRIMIRE ÎN GESTIUNE', 'PRIMIT DE'] as $forbidden) {
     $assert(!str_contains($pdf, $forbidden), "PDF-ul conține textul eliminat {$forbidden}.");
 }

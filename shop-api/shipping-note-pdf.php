@@ -54,7 +54,15 @@ final class GtrotsShippingNotePdf
         $series = strtoupper(trim((string)($payload['series'] ?? '')));
         $number = trim((string)($payload['number'] ?? ''));
         $date = trim((string)($payload['issue_date'] ?? ''));
-        $items = array_values(array_filter((array)($payload['items'] ?? []), 'is_array'));
+        $items = array_values(array_filter(
+            (array)($payload['items'] ?? []),
+            static function ($item): bool {
+                if (!is_array($item)) return false;
+                return trim((string)($item['name'] ?? '')) !== ''
+                    || trim((string)($item['order_item_id'] ?? '')) !== ''
+                    || trim((string)($item['product_id'] ?? '')) !== '';
+            }
+        ));
         if ($series === '' || $number === '' || $date === '' || !$items) {
             throw new InvalidArgumentException('Avizul trebuie să aibă serie, număr, dată și cel puțin un produs.');
         }

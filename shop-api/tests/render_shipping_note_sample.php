@@ -5,8 +5,9 @@ require_once __DIR__ . '/../shipping-note-pdf.php';
 
 $output = $argv[1] ?? dirname(__DIR__, 2) . '/reports/aviz-verificare.pdf';
 $withStamp = ($argv[2] ?? 'stamp') !== 'no-stamp';
+$itemCount = max(1, min(200, (int)($argv[3] ?? 42)));
 $items = [];
-for ($index = 1; $index <= 42; $index++) {
+for ($index = 1; $index <= $itemCount; $index++) {
     $quantity = ($index % 4) + 1;
     $unitPrice = 19.5 + $index;
     $items[] = [

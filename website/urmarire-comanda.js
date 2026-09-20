@@ -157,7 +157,11 @@
     }, { once: true }));
     stateHost.hidden = true;
     resultHost.hidden = false;
-    resultHost.scrollIntoView({ behavior: "smooth", block: "start" });
+    requestAnimationFrame(() => {
+      const headerOffset = Math.max(18, Math.min(112, window.innerHeight * .1));
+      const top = Math.max(0, resultHost.getBoundingClientRect().top + window.scrollY - headerOffset);
+      window.scrollTo({ top, behavior: "smooth" });
+    });
     if (cancellationIntent && order.can_cancel) window.setTimeout(openCancellation, 180);
     if (returnIntent && order.can_request_return) window.setTimeout(openReturn, 180);
   }
@@ -296,10 +300,46 @@
   returnIban.addEventListener("blur", () => validateReturnIban(Boolean(normalizeIban(returnIban.value))));
   document.addEventListener("keydown", event => { if (event.key !== "Escape") return; if (!returnModal.hidden) closeReturn(); else if (!cancelModal.hidden) closeCancellation(); });
   const token = params.get("token")?.trim() || "";
-  if (token) {
+  if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+  if (!token && !location.hash) requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "instant" }));
+
+  /* Local-only visual preview for checking the post-search layout without
+     exposing or changing a real order. */
+  const preview = ["127.0.0.1", "localhost"].includes(location.hostname) && params.get("preview") === "1";
+  if (preview) {
+    if (window.GTrotsOrderPreview?.order) document.body.classList.add("tracking-token-mode");
+    render(window.GTrotsOrderPreview?.order || {
+      order_number: "GT-PREVIEW-2026",
+      status: "processing",
+      created_at: "2026-09-20 12:30:00",
+      status_history: [
+        { to_status: "new", created_at: "2026-09-20 12:30:00" },
+        { to_status: "confirmed", created_at: "2026-09-20 12:36:00" },
+        { to_status: "processing", created_at: "2026-09-20 13:05:00" }
+      ],
+      items: [{ order_item_id: "preview-1", product_name: "Controller trotinetă electrică", quantity: 1, unit_price: 449, line_total: 449, image_url: "/assets/magazin-produse-v1.webp" }],
+      subtotal: 449,
+      discount_total: 0,
+      shipping_cost: 25,
+      total: 474,
+      currency: "RON",
+      shipping_method_name: "Curier standard",
+      payment_method: "cash_on_delivery",
+      customer_type: "individual",
+      customer_name: "Client demonstrativ",
+      customer_phone: "07xx xxx xxx",
+      address: "Adresă protejată",
+      city: "București",
+      county: "București",
+      can_cancel: false,
+      can_request_return: false,
+      vat_payer: false
+    });
+  }
+  if (token && !preview) {
     document.body.classList.add("tracking-token-mode");
     void load(`token=${encodeURIComponent(token)}`, { token });
   }
 })();
-if (!document.querySelector('link[href*="promotions.css"]')) { const link = document.createElement("link"); link.rel = "stylesheet"; link.href = "/promotions.css?v=20260828-marquee-v5"; document.head.append(link); }
-if (!document.querySelector('script[src*="promotions.js"]')) { const script = document.createElement("script"); script.src = "/promotions.js?v=20260828-global-v1"; document.head.append(script); }
+if (!window.GTrotsOrderPreview && !document.querySelector('link[href*="promotions.css"]')) { const link = document.createElement("link"); link.rel = "stylesheet"; link.href = "/promotions.css?v=20260828-marquee-v5"; document.head.append(link); }
+if (!window.GTrotsOrderPreview && !document.querySelector('script[src*="promotions.js"]')) { const script = document.createElement("script"); script.src = "/promotions.js?v=20260828-global-v1"; document.head.append(script); }

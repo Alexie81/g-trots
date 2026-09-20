@@ -433,7 +433,9 @@
   }
 
   async function initialize() {
-    let state = readState();
+    // Fixtures are accepted only on loopback and never touch checkout, storage or analytics.
+    const preview = ["127.0.0.1", "localhost"].includes(location.hostname) ? window.GTrotsOrderPreview : null;
+    let state = preview?.order || readState();
     const params = new URLSearchParams(window.location.search);
     const isFailed = document.body.dataset.checkoutStatus === "failed";
     let orderNumber = String(params.get("comanda") || state.orderNumber || "").trim();
@@ -441,7 +443,7 @@
     let status = String(params.get("status") || "").trim();
     const numberWrap = document.querySelector("[data-order-number-wrap]");
 
-    if (isFailed && status === "cancelled" && orderNumber && params.get("token")) {
+    if (!preview && isFailed && status === "cancelled" && orderNumber && params.get("token")) {
       try {
         await api("cancelStripeCheckout", {
           method: "POST",
@@ -453,7 +455,7 @@
       }
     }
 
-    if (!isFailed && method === "card" && params.get("session_id")) {
+    if (!preview && !isFailed && method === "card" && params.get("session_id")) {
       try {
         const result = await api("stripeCheckoutStatus", {
           method: "POST",
@@ -495,7 +497,7 @@
         setTextAll("[data-failure-title-accent]", "plata.");
         setTextAll("[data-status-lead]", "Nu s-a încasat nicio sumă. Produsele tale au rămas în coș și poți relua comanda oricând.");
         setTextAll("[data-failure-mark-title]", "Plată anulată");
-        setTextAll("[data-failure-mark-copy]", "Comanda și stocul au fost actualizate corect.");
+        setTextAll("[data-failure-mark-copy]", "Poți reveni la coș când dorești.");
       }
       const cartCount = (window.GTrotsCart?.get?.() || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
       setTextAll("[data-failure-cart-count]", cartCount
@@ -503,6 +505,7 @@
         : "Coșul tău rămâne disponibil");
       const reason = String(params.get("motiv") || "").trim();
       if (reason) setTextAll("[data-failure-reason]", reason);
+      if (preview) return;
       const eventName = status === "cancelled" ? "payment_cancelled" : "payment_failed";
       const outcome = {
         ...state,
@@ -532,7 +535,7 @@
       setTextAll("[data-payment-step-title]", "Plata este confirmată");
       setTextAll("[data-payment-step-copy]", "Plata a fost efectuată, iar comanda este confirmată.");
     } else if (method === "card") {
-      setTextAll("[data-status-lead]", "Comanda este confirmată în sistemul G-Trots. Plata cu cardul rămâne în curs de confirmare până la verificarea comenzii.");
+      setTextAll("[data-status-lead]", "Am înregistrat comanda și așteptăm confirmarea plății de la procesator. Nu este nevoie să repeți plata în acest moment.");
       setTextAll("[data-payment-step-title]", "Confirmăm plata cu cardul");
       setTextAll("[data-payment-step-copy]", state.paymentLabel || "Primești confirmarea după verificarea comenzii.");
     }
@@ -540,10 +543,13 @@
     if (state.shippingLabel) {
       setTextAll("[data-shipping-step-copy]", `${state.shippingLabel}. Primești confirmarea înainte ca produsele să plece spre tine.`);
     }
-    state = await enrichStateImages(state);
-    saveState(state);
+    if (!preview) {
+      state = await enrichStateImages(state);
+      saveState(state);
+    }
     renderReceipt(state, method);
-    if (status === "paid" || status === "cod") {
+    if (status === "paid") setTextAll("[data-order-total-label]", "Total achitat");
+    if (!preview && (status === "paid" || status === "cod")) {
       setupGoogleCustomerReviews(state, orderNumber);
       window.GTrotsPendingPurchase = state;
       document.dispatchEvent(new CustomEvent("g-trots:purchase-ready", { detail: state }));
@@ -559,5 +565,5 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialize, { once: true });
   else initialize();
 })();
-if (!document.querySelector('link[href*="promotions.css"]')) { const link = document.createElement("link"); link.rel = "stylesheet"; link.href = "/promotions.css?v=20260828-marquee-v5"; document.head.append(link); }
-if (!document.querySelector('script[src*="promotions.js"]')) { const script = document.createElement("script"); script.src = "/promotions.js?v=20260906-ga4-v2"; document.head.append(script); }
+if (!window.GTrotsOrderPreview && !document.querySelector('link[href*="promotions.css"]')) { const link = document.createElement("link"); link.rel = "stylesheet"; link.href = "/promotions.css?v=20260828-marquee-v5"; document.head.append(link); }
+if (!window.GTrotsOrderPreview && !document.querySelector('script[src*="promotions.js"]')) { const script = document.createElement("script"); script.src = "/promotions.js?v=20260906-ga4-v2"; document.head.append(script); }

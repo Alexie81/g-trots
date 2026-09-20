@@ -13,7 +13,7 @@ import ssl
 
 REMOTE_ROOT = "/g-trots.ro"
 PUBLIC_BASE = "https://g-trots.ro"
-TARGET_VERSION = "20260919-whatsapp-sticky-v4"
+TARGET_VERSION = "20260920-public-theme-v11"
 
 
 def connect() -> FTP_TLS:
@@ -42,9 +42,13 @@ $expectedToken = {token_php};
 if (!hash_equals($expectedToken, (string)($_GET['token'] ?? ''))) {{ http_response_code(404); exit; }}
 $target = 'legal-footer.js?v=' . {version_php};
 $targetTag = '<script src="/' . $target . '" defer></script>';
+$themeTarget = 'theme.js?v=' . {version_php};
+$themeTag = '<script src="/' . $themeTarget . '"></script>';
+$themeStyleTarget = 'theme.css?v=' . {version_php};
+$themeStyleTag = '<link rel="stylesheet" href="/' . $themeStyleTarget . '">';
 $favoritesTarget = 'favorites.js?v=' . {version_php};
 $excluded = ['download-app/index.html', 'fact/index.html', 'fs/index.html'];
-$result = ['ok' => true, 'scanned' => 0, 'excluded' => 0, 'removed_from_excluded' => 0, 'matched' => 0, 'changed' => 0, 'favorites_changed' => 0, 'inserted' => 0, 'already_current' => 0, 'missing' => [], 'failed' => []];
+$result = ['ok' => true, 'scanned' => 0, 'excluded' => 0, 'removed_from_excluded' => 0, 'matched' => 0, 'changed' => 0, 'favorites_changed' => 0, 'theme_changed' => 0, 'theme_inserted' => 0, 'theme_style_changed' => 0, 'theme_style_inserted' => 0, 'inserted' => 0, 'already_current' => 0, 'missing' => [], 'failed' => []];
 foreach ($excluded as $relative) {{
     $excludedPath = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
     if (!is_file($excludedPath)) {{ continue; }}
@@ -75,6 +79,30 @@ foreach ($iterator as $file) {{
     $contents = preg_replace('#favorites\\.js\\?v=[^"\\'<>\\s]+#', $favoritesTarget, $contents);
     if (!is_string($contents)) {{ $result['failed'][] = $path; continue; }}
     if ($contents !== $originalContents) {{ $result['favorites_changed']++; }}
+    if (preg_match('#<script\\b[^>]*src=["\\']/theme\\.js(?:\\?[^"\\']*)?["\\'][^>]*></script>#i', $contents)) {{
+        $themed = preg_replace('#<script\\b[^>]*src=["\\']/theme\\.js(?:\\?[^"\\']*)?["\\'][^>]*></script>#i', $themeTag, $contents, 1);
+        if (!is_string($themed)) {{ $result['failed'][] = $path; continue; }}
+        if ($themed !== $contents) {{ $result['theme_changed']++; }}
+        $contents = $themed;
+    }} else {{
+        $headPosition = stripos($contents, '</head>');
+        $contents = $headPosition === false
+            ? $themeTag . $contents
+            : substr($contents, 0, $headPosition) . $themeTag . substr($contents, $headPosition);
+        $result['theme_inserted']++;
+    }}
+    if (preg_match('#<link\\b[^>]*href=["\\']/theme\\.css(?:\\?[^"\\']*)?["\\'][^>]*>#i', $contents)) {{
+        $styled = preg_replace('#<link\\b[^>]*href=["\\']/theme\\.css(?:\\?[^"\\']*)?["\\'][^>]*>#i', $themeStyleTag, $contents, 1);
+        if (!is_string($styled)) {{ $result['failed'][] = $path; continue; }}
+        if ($styled !== $contents) {{ $result['theme_style_changed']++; }}
+        $contents = $styled;
+    }} else {{
+        $headPosition = stripos($contents, '</head>');
+        $contents = $headPosition === false
+            ? $themeStyleTag . $contents
+            : substr($contents, 0, $headPosition) . $themeStyleTag . substr($contents, $headPosition);
+        $result['theme_style_inserted']++;
+    }}
     if (!preg_match('#legal-footer\\.js\\?v=[^"\\'<>\\s]+#', $contents)) {{
         $injection = $targetTag;
         $bodyPosition = strripos($contents, '</body>');

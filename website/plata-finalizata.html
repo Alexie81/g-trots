@@ -2,6 +2,8 @@
 <html lang="ro">
   <head>
     <meta charset="UTF-8">
+    <script id="gt-theme-bootstrap">(()=>{const r=document.documentElement;try{const k='g-trots-color-theme-v1',s=localStorage.getItem(k),t=s==='light'||s==='dark'?s:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');r.dataset.theme=t;r.style.colorScheme=t}catch{const t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';r.dataset.theme=t;r.style.colorScheme=t}if(location.pathname.includes('/magazin/produs/')){r.classList.add('gt-product-booting');addEventListener('DOMContentLoaded',()=>requestAnimationFrame(()=>requestAnimationFrame(()=>r.classList.remove('gt-product-booting'))),{once:true});setTimeout(()=>r.classList.remove('gt-product-booting'),3000)}})();</script>
+<style id="gt-theme-critical">html[data-theme="light"],html[data-theme="light"] body{background:#f7f8fb;color:#171b24}html[data-theme="dark"],html[data-theme="dark"] body{background:#071a36;color:#f7f9ff}html.gt-product-booting body{opacity:0!important}html[data-theme="light"] .product-static-seo,html[data-theme="light"] .product-static-seo img{background:#fff!important;color:#171b24!important}html[data-theme="dark"] .product-static-seo,html[data-theme="dark"] .product-static-seo img{background:#0c274d!important;color:#f7f9ff!important}html[data-theme="light"] body.contact-body{background:#f7f8fb!important;color:#171b24!important}html[data-theme="light"] .contact-stage{background:radial-gradient(circle at 18% 34%,rgba(255,133,0,.13),transparent 29rem),linear-gradient(132deg,#fffaf5,#fff 55%,#f7f9fc)!important}html[data-theme="light"] .contact-whatsapp{background:rgba(255,255,255,.96)!important;color:#171b24!important}html[data-theme="light"] .contact-scooter{opacity:.18!important}</style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Comandă confirmată | G-Trots</title>
     <meta name="description" content="Confirmarea comenzii tale G-Trots.">
@@ -14,7 +16,10 @@
     <link rel="stylesheet" href="styles.css?v=20260827-shop-call">
     <link rel="stylesheet" href="favorites.css?v=20260909-nav-v2">
     <link rel="stylesheet" href="checkout.css?v=20260828-line-promotions-v1">
-  </head>
+                    <link rel="stylesheet" href="/order-experience.css?v=20260920-v1">
+  <script src="/theme.js?v=20260920-public-theme-v11"></script>
+  <link rel="stylesheet" href="/theme.css?v=20260920-public-theme-v11">
+</head>
   <body class="shop-page favorites-page checkout-page checkout-status-page is-success" data-checkout-status="success">
     <a class="skip-link" href="#status-content">Sari la confirmare</a>
     <header class="site-header"><div class="header-inner"><a class="logo" href="/" aria-label="G-Trots, pagina principală"><img src="assets/logo.png" width="1024" height="1024" alt=""><b><span>G</span>-Trots</b></a><nav class="main-nav" aria-label="Navigație principală"></nav><button class="menu-toggle" type="button" aria-label="Deschide meniul" aria-expanded="false"><span></span><span></span></button></div></header>
@@ -90,6 +95,6 @@
 
     <footer class="shell shop-footer"><div class="footer-inner"><a class="logo" href="/"><img src="assets/logo.png" width="1024" height="1024" alt=""><b><span>G</span>-Trots</b></a><p>Service și magazin pentru mobilitate electrică.</p><nav><a href="/">Acasă</a><a href="/magazin">Magazin</a><a href="/ghiduri-service-trotinete-electrice">Ghiduri</a><a href="/#contact">Contact</a></nav><a class="footer-phone" href="tel:+40762093915">0762 093 915</a><small>© 2026 G-Trots</small></div></footer>
 <script src="favorites.js?v=20260908-nav-v1" defer></script>
-<script src="checkout-status.js?v=20260912-payment-outcomes-v1" defer></script>
-<script src="/legal-footer.js?v=20260909-nav-v3" defer></script></body>
+<script src="checkout-status.js?v=20260920-order-experience-v1" defer></script>
+<script src="/legal-footer.js?v=20260920-public-theme-v11" defer></script></body>
 </html>

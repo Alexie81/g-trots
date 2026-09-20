@@ -170,7 +170,7 @@ function shopNewsletterProductEmail(array $config, array $subscriber, array $pro
 HTML;
     return [
         'subject' => 'Nou la G-Trots: ' . $title,
-        'html' => $html,
+        'html' => gtEmailLightDocument($html),
         'product_url' => $productUrl,
         'unsubscribe_url' => $unsubscribeUrl,
     ];

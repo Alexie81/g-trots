@@ -1970,6 +1970,10 @@ body.image-viewer-open {
   min-width: 0;
 }
 
+.related-products-grid.is-dragging { cursor:grabbing; scroll-snap-type:none; scroll-behavior:auto; user-select:none; }
+.related-products-grid.is-dragging * { cursor:grabbing!important; user-select:none; }
+.related-products-grid img { -webkit-user-drag:none; }
+
 .related-product-card .product-info h3 {
   min-height: 2.25em;
 }
@@ -2019,6 +2023,8 @@ body.image-viewer-open {
 
   .related-products-grid {
     margin: 0;
+    cursor: grab;
+    touch-action: pan-x pan-y pinch-zoom;
     padding: 0 1rem 0.45rem;
     display: flex;
     gap: 0.75rem;

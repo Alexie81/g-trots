@@ -798,6 +798,46 @@ function initializeRelatedCarousel(section) {
 
   previous?.addEventListener("click", () => goToRelatedProduct(activeIndex - 1));
   next?.addEventListener("click", () => goToRelatedProduct(activeIndex + 1));
+  // Touch keeps native scrolling. Mouse/pen can drag the same track without
+  // navigating the product link at the end of a drag.
+  let drag = null;
+  let suppressClickUntil = 0;
+  track.addEventListener("pointerdown", event => {
+    if (event.pointerType === "touch" || event.button !== 0 || track.scrollWidth <= track.clientWidth + 1) return;
+    if (event.target.closest("button, input, select, textarea")) return;
+    drag = { id:event.pointerId, x:event.clientX, y:event.clientY, left:track.scrollLeft, moved:false };
+  });
+  track.addEventListener("pointermove", event => {
+    if (!drag || event.pointerId !== drag.id) return;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    if (!drag.moved && Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 7) { drag = null; return; }
+    if (!drag.moved && Math.abs(dx) < 7) return;
+    if (!drag.moved) {
+      drag.moved = true;
+      track.classList.add("is-dragging");
+      track.setPointerCapture(event.pointerId);
+    }
+    event.preventDefault();
+    track.scrollLeft = drag.left - dx;
+  });
+  const finishDrag = event => {
+    if (!drag || event.pointerId !== drag.id) return;
+    if (drag.moved) suppressClickUntil = performance.now() + 350;
+    if (track.hasPointerCapture(event.pointerId)) track.releasePointerCapture(event.pointerId);
+    track.classList.remove("is-dragging");
+    drag = null;
+  };
+  track.addEventListener("pointerup", finishDrag);
+  track.addEventListener("pointercancel", finishDrag);
+  track.addEventListener("lostpointercapture", finishDrag);
+  track.addEventListener("pointerleave", event => { if (drag && !drag.moved) finishDrag(event); });
+  track.addEventListener("dragstart", event => event.preventDefault());
+  track.addEventListener("click", event => {
+    if (performance.now() >= suppressClickUntil) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
   track.addEventListener("scroll", () => {
     window.cancelAnimationFrame(scrollFrame);
     scrollFrame = window.requestAnimationFrame(() => {

@@ -2,6 +2,8 @@
 <html lang="ro">
   <head>
     <meta charset="UTF-8">
+    <script id="gt-theme-bootstrap">(()=>{const r=document.documentElement;try{const k='g-trots-color-theme-v1',s=localStorage.getItem(k),t=s==='light'||s==='dark'?s:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');r.dataset.theme=t;r.style.colorScheme=t}catch{const t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';r.dataset.theme=t;r.style.colorScheme=t}if(location.pathname.includes('/magazin/produs/')){r.classList.add('gt-product-booting');addEventListener('DOMContentLoaded',()=>requestAnimationFrame(()=>requestAnimationFrame(()=>r.classList.remove('gt-product-booting'))),{once:true});setTimeout(()=>r.classList.remove('gt-product-booting'),3000)}})();</script>
+<style id="gt-theme-critical">html[data-theme="light"],html[data-theme="light"] body{background:#f7f8fb;color:#171b24}html[data-theme="dark"],html[data-theme="dark"] body{background:#071a36;color:#f7f9ff}html.gt-product-booting body{opacity:0!important}html[data-theme="light"] .product-static-seo,html[data-theme="light"] .product-static-seo img{background:#fff!important;color:#171b24!important}html[data-theme="dark"] .product-static-seo,html[data-theme="dark"] .product-static-seo img{background:#0c274d!important;color:#f7f9ff!important}html[data-theme="light"] body.contact-body{background:#f7f8fb!important;color:#171b24!important}html[data-theme="light"] .contact-stage{background:radial-gradient(circle at 18% 34%,rgba(255,133,0,.13),transparent 29rem),linear-gradient(132deg,#fffaf5,#fff 55%,#f7f9fc)!important}html[data-theme="light"] .contact-whatsapp{background:rgba(255,255,255,.96)!important;color:#171b24!important}html[data-theme="light"] .contact-scooter{opacity:.18!important}</style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Plată nereușită | G-Trots</title>
     <meta name="description" content="Plata comenzii G-Trots nu a putut fi finalizată.">
@@ -14,45 +16,50 @@
     <link rel="stylesheet" href="styles.css?v=20260827-shop-call">
     <link rel="stylesheet" href="favorites.css?v=20260909-nav-v2">
     <link rel="stylesheet" href="checkout.css?v=20260828-line-promotions-v1">
-  </head>
+                    <link rel="stylesheet" href="/order-experience.css?v=20260920-v1">
+  <script src="/theme.js?v=20260920-public-theme-v11"></script>
+  <link rel="stylesheet" href="/theme.css?v=20260920-public-theme-v11">
+  <link rel="stylesheet" href="/payment-recovery.css?v=20260920-v2">
+</head>
   <body class="shop-page favorites-page checkout-page checkout-status-page is-failed" data-checkout-status="failed">
     <a class="skip-link" href="#status-content">Sari la starea plății</a>
     <header class="site-header"><div class="header-inner"><a class="logo" href="/" aria-label="G-Trots, pagina principală"><img src="assets/logo.png" width="1024" height="1024" alt=""><b><span>G</span>-Trots</b></a><nav class="main-nav" aria-label="Navigație principală"></nav><button class="menu-toggle" type="button" aria-label="Deschide meniul" aria-expanded="false"><span></span><span></span></button></div></header>
 
     <main class="order-result-main" id="status-content">
-      <section class="order-result-hero shell is-failed">
-        <div class="order-result-copy">
-          <span class="order-brand-chip"><img src="assets/logo.png" width="1024" height="1024" alt=""><strong><span>G</span>-Trots</strong><small>Magazin online</small></span>
-          <span class="checkout-eyebrow"><i></i> <span data-failure-eyebrow>Plata nu a fost confirmată</span></span>
-          <h1><span data-failure-title>Plata nu a putut fi</span><br><em data-failure-title-accent>finalizată.</em></h1>
-          <p data-status-lead>Nu s-a încasat nicio sumă. Produsele tale sunt păstrate în coș și poți relua plata imediat.</p>
-          <span class="failure-cart-saved"><span class="global-cart-icon" aria-hidden="true"><i></i><i></i></span><strong data-failure-cart-count>Produsele sunt păstrate în coș</strong></span>
-          <div class="order-result-actions">
-            <a href="/checkout">Încearcă din nou <span aria-hidden="true">↻</span></a>
-            <a href="/cos">Înapoi la coș</a>
+      <section class="payment-recovery shell" aria-labelledby="payment-recovery-title">
+        <div class="payment-recovery__hero">
+          <div class="payment-recovery__copy">
+            <span class="payment-recovery__status"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5M12 16h.01"/></svg><span data-failure-eyebrow>Plata nu a fost confirmată</span></span>
+            <h1 id="payment-recovery-title"><span data-failure-title>Plata nu s-a</span><br><em data-failure-title-accent>finalizat.</em></h1>
+            <p data-status-lead>Poți încerca din nou sau poți alege o altă metodă de plată. Produsele tale te așteaptă în coș.</p>
+            <div class="payment-recovery__actions">
+              <a class="payment-recovery__primary" href="/checkout">Reîncearcă plata <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></a>
+              <a class="payment-recovery__secondary" href="/cos">Înapoi la coș</a>
+            </div>
+            <p class="payment-recovery__saved"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12 4 4 8-8"/></svg><strong data-failure-cart-count>Produsele sunt păstrate în coș</strong></p>
           </div>
+          <aside class="payment-recovery__summary" aria-label="Starea plății">
+            <div class="payment-recovery__art" aria-hidden="true">
+              <div class="payment-recovery__card"><span>G-Trots<svg viewBox="0 0 24 24"><path d="M7 8h10v8H7zM10 8v8M7 12h10"/></svg></span><i></i><b>•••• &nbsp; •••• &nbsp; ••••</b><small>PLATĂ ONLINE</small></div>
+              <span class="payment-recovery__pause"><svg viewBox="0 0 24 24"><path d="M9 7v10M15 7v10"/></svg></span>
+            </div>
+            <div><strong data-failure-mark-title>Un pas de reluat.</strong><p data-failure-mark-copy>Revino la checkout când ești pregătit.</p></div>
+          </aside>
         </div>
-        <div class="order-result-mark" aria-hidden="true">
-          <span><img src="assets/logo.png" width="1024" height="1024" alt=""></span>
-          <i><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7 7 17"/></svg></i>
-          <strong data-failure-mark-title>Plata s-a oprit</strong>
-          <small data-failure-mark-copy>Poți reveni fără să pierzi coșul.</small>
+        <div class="payment-recovery__guidance">
+          <div class="payment-recovery__section-heading"><h2>Cum poți continua</h2><p data-failure-reason>Câteva lucruri simple, înainte de o nouă încercare.</p></div>
+          <ol class="payment-recovery__tips">
+            <li><span>01</span><div><h3>Verifică datele cardului</h3><p>Asigură-te că datele sunt corecte și că plățile online sunt active.</p></div></li>
+            <li><span>02</span><div><h3>Alege altă metodă</h3><p>Poți folosi alt card sau ramburs, dacă este disponibil la checkout.</p></div></li>
+            <li><span>03</span><div><h3>Revino la coș</h3><p>Verifică produsele și continuă comanda când dorești.</p></div></li>
+          </ol>
         </div>
-      </section>
-
-      <section class="payment-help-section shell" aria-labelledby="payment-help-title">
-        <header><span>Rezolvare rapidă</span><h2 id="payment-help-title">Ce poți face acum?</h2><p data-failure-reason>Alege una dintre variantele de mai jos. Dacă problema continuă, suntem aici să te ajutăm.</p></header>
-        <div class="payment-help-grid">
-          <article><span>01</span><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0 2 5"/><path d="M20 4v7h-7"/></svg></i><h3>Reîncearcă plata</h3><p>O întrerupere de conexiune poate opri confirmarea. Datele comenzii au rămas completate.</p><a href="/checkout">Reia checkout-ul <b>›</b></a></article>
-          <article><span>02</span><i><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 10h19M6.5 15h3"/></svg></i><h3>Verifică plata online</h3><p>Verifică datele cardului și dacă plățile online sunt active. Nicio sumă nu a fost încasată aici.</p><a href="/checkout">Verifică din nou <b>›</b></a></article>
-          <article><span>03</span><i><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M7 9.5A2.5 2.5 0 0 1 5.5 11M17 14.5a2.5 2.5 0 0 1 1.5-1.5"/></svg></i><h3>Alege plata ramburs</h3><p>Dacă rambursul este activ, îl poți selecta în checkout și vei achita direct curierului.</p><a href="/checkout">Alege metoda <b>›</b></a></article>
-        </div>
-        <aside class="payment-support-bar"><span><img src="assets/logo.png" width="1024" height="1024" alt="Sigla G-Trots"></span><div><small>Ai nevoie de ajutor?</small><strong>Rezolvăm împreună comanda.</strong><p>Spune-ne ce mesaj ai primit și te ajutăm imediat.</p></div><a data-status-whatsapp href="https://wa.me/40762093915" target="_blank" rel="noopener">Discută cu G-Trots <b>›</b></a></aside>
+        <aside class="payment-recovery__support"><span class="payment-recovery__support-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a8 8 0 0 1-8 8 8.8 8.8 0 0 1-3.5-.7L4 20l1.2-4.5a8 8 0 1 1 14.8-4Z"/><path d="M8 11.5h.01M12 11.5h.01M16 11.5h.01"/></svg></span><div><strong>Suntem aici să te ajutăm.</strong><p>Spune-ne ce s-a întâmplat și găsim împreună soluția.</p></div><a data-status-whatsapp href="https://wa.me/40762093915" target="_blank" rel="noopener">Scrie-ne pe WhatsApp <span aria-hidden="true">↗</span></a></aside>
       </section>
     </main>
 
     <footer class="shell shop-footer"><div class="footer-inner"><a class="logo" href="/"><img src="assets/logo.png" width="1024" height="1024" alt=""><b><span>G</span>-Trots</b></a><p>Service și magazin pentru mobilitate electrică.</p><nav><a href="/">Acasă</a><a href="/magazin">Magazin</a><a href="/ghiduri-service-trotinete-electrice">Ghiduri</a><a href="/#contact">Contact</a></nav><a class="footer-phone" href="tel:+40762093915">0762 093 915</a><small>© 2026 G-Trots</small></div></footer>
 <script src="favorites.js?v=20260908-nav-v1" defer></script>
-<script src="checkout-status.js?v=20260912-payment-outcomes-v1" defer></script>
-<script src="/legal-footer.js?v=20260909-nav-v3" defer></script></body>
+<script src="checkout-status.js?v=20260920-order-experience-v1" defer></script>
+<script src="/legal-footer.js?v=20260920-public-theme-v11" defer></script></body>
 </html>

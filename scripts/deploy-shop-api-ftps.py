@@ -31,6 +31,7 @@ FILES = (
     "openai-discovery-scope.json",
     "gomag.php",
     "order-emails.php",
+    "email-presentation.php",
     "email-image.php",
     "newsletter.php",
     "newsletter-unsubscribe.php",
@@ -62,10 +63,7 @@ FILES = (
 
 def connect() -> FTP_TLS:
     context = ssl.create_default_context()
-    # Hostingul folosește un certificat FTPS cu alt nume DNS. Conexiunea rămâne
-    # criptată, iar această excepție este limitată la hostul furnizat explicit.
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
+    # GT_FTP_HOST must match the hosting certificate; do not disable TLS checks.
     ftp = FTP_TLS(context=context, timeout=90)
     host = os.environ.get("GT_FTP_HOST", "ftp.cab-it.ro")
     username = os.environ.get("GT_FTP_USER", "")
@@ -73,6 +71,7 @@ def connect() -> FTP_TLS:
     if not username:
         raise RuntimeError("Lipsește utilizatorul FTPS (GT_FTP_USER).")
     ftp.connect(host, int(os.environ.get("GT_FTP_PORT", "21")))
+    ftp.host = os.environ.get("GT_FTP_TLS_SERVER_NAME", host)
     ftp.login(username, password)
     ftp.prot_p()
     ftp.set_pasv(True)

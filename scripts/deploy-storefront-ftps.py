@@ -56,6 +56,8 @@ FILES = (
     "contact.css",
     "contact.js",
     "legal-footer.js",
+    "theme.js",
+    "theme.css",
     "google-measurement.js",
     "meta-measurement.js",
     "legal-footer.css",
@@ -105,6 +107,7 @@ FILES = (
     "checkout.html",
     "checkout.js",
     "checkout-status.js",
+    "payment-recovery.css",
     "promotions.js",
     "plata-finalizata.html",
     "plata-esuata.html",
@@ -122,11 +125,10 @@ FILES = (
 
 def connect() -> FTP_TLS:
     context = ssl.create_default_context()
-    # Certificatul hostingului are alt nume DNS; traficul ramane criptat.
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
+    # Keep TLS verification enabled for the hosting provider's certificate.
     ftp = FTP_TLS(context=context, timeout=90)
     ftp.connect(os.environ["GT_FTP_HOST"], int(os.environ.get("GT_FTP_PORT", "21")))
+    ftp.host = os.environ.get("GT_FTP_TLS_SERVER_NAME", os.environ["GT_FTP_HOST"])
     password = os.environ.get("GT_FTP_PASS", "") or getpass("Parola FTPS: ")
     ftp.login(os.environ["GT_FTP_USER"], password)
     ftp.prot_p()

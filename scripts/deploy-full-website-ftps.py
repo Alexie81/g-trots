@@ -14,6 +14,7 @@ import json
 import os
 import secrets
 import ssl
+import subprocess
 import sys
 import zipfile
 
@@ -94,12 +95,14 @@ def iter_public_files(product_discovery_only: bool = False):
         yield path, relative
 
 
-def build_archive(target: Path, product_discovery_only: bool = False) -> dict:
+def build_archive_legacy(target: Path, product_discovery_only: bool = False) -> dict:
     files = sorted(iter_public_files(product_discovery_only), key=lambda item: item[1].as_posix())
     if not files:
         raise RuntimeError("Website-ul local nu conține fișiere publicabile.")
     total_bytes = 0
-    with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as archive:
+    # One disk write avoids thousands of tiny ZIP header rewrites on Windows.
+    archive_buffer = BytesIO()
+    with zipfile.ZipFile(archive_buffer, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as archive:
         for index, (path, relative) in enumerate(files, start=1):
             archive.write(path, relative.as_posix())
             total_bytes += path.stat().st_size
@@ -112,6 +115,8 @@ def build_archive(target: Path, product_discovery_only: bool = False) -> dict:
             "uncompressed_bytes": total_bytes,
         }
         archive.writestr(".codex-release-manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+    target.write_bytes(archive_buffer.getbuffer())
+    archive_buffer.close()
     digest = hashlib.sha256(target.read_bytes()).hexdigest()
     with zipfile.ZipFile(target, "r") as archive:
         bad = archive.testzip()
@@ -127,12 +132,33 @@ def build_archive(target: Path, product_discovery_only: bool = False) -> dict:
     }
 
 
+def build_archive(target: Path, product_discovery_only: bool = False) -> dict:
+    files = sorted(iter_public_files(product_discovery_only), key=lambda item: item[1].as_posix())
+    if not files:
+        raise RuntimeError("No public files to package.")
+    total_bytes = sum(path.stat().st_size for path, _ in files)
+    manifest = {"version": 1, "generated_at": datetime.now(timezone.utc).isoformat(),
+                "files": len(files), "uncompressed_bytes": total_bytes}
+    package_input = target.with_suffix(".input.json")
+    package_input.write_text(json.dumps({"files": [relative.as_posix() for _, relative in files],
+                                         "manifest": manifest}), encoding="utf-8")
+    subprocess.run(["node", str(PROJECT_ROOT / "scripts/package-public-website.cjs"),
+                    str(WEBSITE_ROOT), str(target), str(package_input)], check=True)
+    digest = hashlib.sha256(target.read_bytes()).hexdigest()
+    with zipfile.ZipFile(target, "r") as archive:
+        bad = archive.testzip()
+        if bad:
+            raise RuntimeError(f"Invalid archive entry: {bad}")
+        entries = len(archive.infolist())
+    if entries != len(files) + 1:
+        raise RuntimeError("Archive entry count mismatch.")
+    return {"files": len(files), "entries": entries, "uncompressed_bytes": total_bytes,
+            "archive_bytes": target.stat().st_size, "sha256": digest}
+
+
 def connect() -> FTP_TLS:
     context = ssl.create_default_context()
-    # Certificatul furnizorului FTPS nu include numele ftp.cab-it.ro. Fluxul de
-    # date rămâne criptat, iar excepția este limitată la conexiunea explicită.
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
+    # GT_FTP_HOST must match the hosting certificate; do not disable TLS checks.
     ftp = FTP_TLS(context=context, timeout=180)
     host = os.environ.get("GT_FTP_HOST", "ftp.cab-it.ro")
     username = os.environ.get("GT_FTP_USER", "")
@@ -140,6 +166,7 @@ def connect() -> FTP_TLS:
         raise RuntimeError("Lipsește utilizatorul FTPS (GT_FTP_USER).")
     password = os.environ.get("GT_FTP_PASS", "") or getpass("Parola FTPS: ")
     ftp.connect(host, int(os.environ.get("GT_FTP_PORT", "21")))
+    ftp.host = os.environ.get("GT_FTP_TLS_SERVER_NAME", host)
     ftp.login(username, password)
     ftp.prot_p()
     ftp.set_pasv(True)

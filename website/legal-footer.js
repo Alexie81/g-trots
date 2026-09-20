@@ -1,5 +1,5 @@
 (() => {
-  const COMPONENT_VERSION = '20260919-whatsapp-sticky-v4';
+  const COMPONENT_VERSION = '20260920-public-theme-v11';
   if (window.__gtLegalFooterVersion === COMPONENT_VERSION) return;
   window.__gtLegalFooterVersion = COMPONENT_VERSION;
   window.__gtLegalFooter = true;
@@ -45,7 +45,13 @@
       onload() { this.media = 'all'; },
     });
   }
-  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260919-whatsapp-sticky-v4' });
+  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260920-public-theme-v1' });
+  if (!document.querySelector('link[href*="theme.css"]')) {
+    loadAsset('link', { rel: 'stylesheet', href: '/theme.css?v=20260920-public-theme-v11' });
+  }
+  if (!document.querySelector('script[src*="theme.js"]')) {
+    loadAsset('script', { src: '/theme.js?v=20260920-public-theme-v11', async: false });
+  }
   if (!document.querySelector('script[src*="google-measurement.js"]')) {
     loadAsset('script', { src: '/google-measurement.js?v=20260919-contact-beacon-v2', async: true });
   }
@@ -420,6 +426,17 @@ ${navigationHtml}
       </div>`;
   }
 
+  function themeControl() {
+    return `
+      <div class="gt-theme-control">
+        <span>Aspect website</span>
+        <button class="gt-theme-switch" type="button" data-theme-toggle aria-label="Schimbă tema website-ului">
+          <span data-theme-option="light"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/></svg>Zi</span>
+          <span data-theme-option="dark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.4 15.1A8.5 8.5 0 0 1 8.9 3.6 8.5 8.5 0 1 0 20.4 15.1Z"/></svg>Noapte</span>
+        </button>
+      </div>`;
+  }
+
   function render(company) {
     ensureWhatsAppSticky(company);
     if (document.querySelector('[data-gt-legal-footer]')) return;
@@ -484,6 +501,7 @@ ${navigationHtml}
       <div class="gt-site-footer__bottom">
         <a class="cab-it-credit" href="https://cab-it.ro/" target="_blank" rel="noopener noreferrer"><span>Designed by</span><img src="https://cab-it.ro/assets/img/brand/cab-it-header-symbol-clean.webp" width="44" height="44" loading="lazy" decoding="async" alt="Sigla CAB-IT Expert"><strong>cab-it.ro</strong></a>
         <span class="gt-site-footer__copyright">© ${new Date().getFullYear()} ${esc(tradeName)}</span>
+        ${themeControl()}
       </div>`;
 
     if (trackingContent) host.append(trackingContent);
@@ -492,6 +510,7 @@ ${navigationHtml}
       if (window.GTrotsConsent?.open) window.GTrotsConsent.open();
       else document.dispatchEvent(new CustomEvent('g-trots:open-consent'));
     });
+    window.GTrotsTheme?.refresh?.();
     if (!existingFooter) document.body.append(host);
     appendOrganizationSchema(company);
     renderCompanyProfiles(company);

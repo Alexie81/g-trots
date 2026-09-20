@@ -327,6 +327,51 @@ final class GtrotsInvoiceService
         ];
     }
 
+    /** Pure email rendering; no database, attachment generation or sending. */
+    public static function buildEmail(array $invoice, array $config): array
+    {
+        $number = trim((string)$invoice['series'] . ' ' . (string)$invoice['invoice_number']);
+        $isReturn = (string)($invoice['invoice_type'] ?? '') === 'return' || (string)($invoice['document_status'] ?? '') === 'return';
+        $buyer = htmlspecialchars((string)($invoice['customer_name'] ?? $invoice['buyer_name'] ?? 'client'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $safeNumber = htmlspecialchars($number, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $safeCurrency = htmlspecialchars((string)$invoice['currency'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $safeOrderNumber = htmlspecialchars((string)($invoice['order_number'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $safeLogoUrl = htmlspecialchars((string)($config['order_email_logo_url'] ?? 'https://g-trots.ro/assets/logo.png'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $issueDate = htmlspecialchars(date('d.m.Y', strtotime((string)($invoice['issue_date'] ?? 'now'))), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $total = number_format((float)$invoice['total'], 2, ',', '.') . ' ' . $safeCurrency;
+        $statusText = $isReturn
+            ? 'Factura de retur corectează factura inițială pentru produsele și sumele indicate în documentul PDF.'
+            : (self::effectiveStatus($invoice) === 'paid' ? 'Factura este achitată.' : 'Factura este emisă și este în așteptarea plății.');
+        $heading = $isReturn ? 'FACTURĂ DE RETUR EMISĂ' : 'FACTURĂ EMISĂ';
+        $title = $isReturn ? 'Factura de retur ' . $safeNumber : 'Factura ' . $safeNumber;
+        $accent = $isReturn ? '#fb7185' : '#ff8a00';
+        $accentBackground = $isReturn ? '#301a20' : '#2c2117';
+        $statusLabel = $isReturn ? 'RETUR' : (self::effectiveStatus($invoice) === 'paid' ? 'ACHITATĂ' : 'EMISĂ');
+        $intro = $isReturn
+            ? 'Găsești atașată factura de retur în format PDF.'
+            : 'Găsești factura atașată acestui e-mail în format PDF.';
+        $html = '<!doctype html><html lang="ro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"></head>'
+            . '<body style="margin:0;background:transparent;color:#fff8f3;font-family:Roboto,\'Segoe UI\',Arial,sans-serif;-webkit-font-smoothing:antialiased">'
+            . '<div style="display:none;max-height:0;overflow:hidden;opacity:0">' . $title . ' este atașată în format PDF.</div>'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:transparent"><tr><td align="center" style="padding:30px 14px">'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:650px;overflow:hidden;border:1px solid #3f3a42;border-radius:34px;background:#1d1b20">'
+            . '<tr><td style="height:8px;background:' . $accent . '"></td></tr><tr><td style="padding:28px 30px 32px">'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="width:62px"><img src="' . $safeLogoUrl . '" width="54" height="54" alt="G-Trots România" style="display:block;width:54px;height:54px;border-radius:18px"></td>'
+            . '<td><strong style="display:block;color:#fff8f3;font-size:17px;line-height:1.2">G-Trots România</strong><span style="display:block;margin-top:4px;color:#9f979f;font-size:9px;font-weight:800;letter-spacing:.1em">SERVICE &amp; MAGAZIN</span></td>'
+            . '<td align="right"><span style="display:inline-block;padding:9px 12px;border:1px solid ' . $accent . '55;border-radius:999px;background:' . $accentBackground . ';color:' . $accent . ';font-size:9px;font-weight:900;letter-spacing:.08em">●&nbsp; ' . $statusLabel . '</span></td></tr></table>'
+            . '<div style="padding:31px 0 22px"><span style="display:block;color:' . $accent . ';font-size:9px;font-weight:900;letter-spacing:.14em">DOCUMENT FISCAL · ' . $heading . '</span>'
+            . '<h1 style="margin:10px 0 12px;color:#fff8f3;font-size:38px;line-height:1.04;letter-spacing:-.045em">' . $title . '</h1>'
+            . '<p style="margin:0;color:#b1a9b2;font-size:14px;line-height:1.65">Bună, ' . $buyer . '. ' . $intro . '</p></div>'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #454048;border-radius:24px;background:#151318"><tr>'
+            . '<td style="padding:19px 20px"><span style="display:block;color:#8f8790;font-size:8px;font-weight:900;letter-spacing:.11em">TOTAL DOCUMENT</span><strong style="display:block;margin-top:7px;color:' . $accent . ';font-size:25px;line-height:1.1">' . $total . '</strong><span style="display:block;margin-top:7px;color:#aaa2ac;font-size:10px;line-height:1.5">' . $statusText . '</span></td>'
+            . '<td align="right" style="width:155px;padding:19px 20px;border-left:1px solid #37333a"><span style="display:block;color:#8f8790;font-size:8px;font-weight:900;letter-spacing:.1em">DATA EMITERII</span><strong style="display:block;margin-top:7px;color:#eee8ef;font-size:12px">' . $issueDate . '</strong><span style="display:block;margin-top:12px;color:#8f8790;font-size:8px;font-weight:900;letter-spacing:.1em">COMANDA</span><strong style="display:block;margin-top:5px;color:#ffb77a;font-size:10px;overflow-wrap:anywhere">' . $safeOrderNumber . '</strong></td>'
+            . '</tr></table>'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:15px;border:1px solid #4a4035;border-radius:20px;background:#272018"><tr><td style="width:48px;padding:14px 0 14px 15px"><span style="display:block;width:38px;height:38px;line-height:38px;text-align:center;border-radius:13px;background:' . $accent . ';color:#1d1510;font-size:10px;font-weight:1000">PDF</span></td><td style="padding:14px"><strong style="display:block;color:#fff8f3;font-size:12px">Document atașat</strong><span style="display:block;margin-top:4px;color:#9f979f;font-size:10px;line-height:1.45">Factura este inclusă în acest e-mail doar în format PDF.</span></td></tr></table>'
+            . '<p style="margin:23px 0 0;text-align:center;color:#756e77;font-size:10px;line-height:1.65">Document generat automat pentru comanda <strong style="color:#aaa2ac">' . $safeOrderNumber . '</strong>.<br>Ai nevoie de ajutor? Răspunde direct la acest mesaj.</p>'
+            . '</td></tr></table></td></tr></table></body></html>';
+        return ['subject' => ($isReturn ? 'Factura de retur ' : 'Factura ') . $number . ' – G-Trots România', 'html' => gtEmailLightDocument($html)];
+    }
+
     public static function sendEmail(PDO $db, string $id, array $config): array
     {
         $invoice = self::find($db, trim($id));
@@ -340,46 +385,8 @@ final class GtrotsInvoiceService
 
         try {
             $pdfFile = self::download($db, (string)$invoice['id'], 'pdf', $config);
-            $number = trim((string)$invoice['series'] . ' ' . (string)$invoice['invoice_number']);
-            $isReturn = (string)($invoice['invoice_type'] ?? '') === 'return' || (string)($invoice['document_status'] ?? '') === 'return';
-            $buyer = htmlspecialchars((string)($invoice['customer_name'] ?? $invoice['buyer_name'] ?? 'client'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $safeNumber = htmlspecialchars($number, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $safeCurrency = htmlspecialchars((string)$invoice['currency'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $safeOrderNumber = htmlspecialchars((string)($invoice['order_number'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $safeLogoUrl = htmlspecialchars((string)($config['order_email_logo_url'] ?? 'https://g-trots.ro/assets/logo.png'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $issueDate = htmlspecialchars(date('d.m.Y', strtotime((string)($invoice['issue_date'] ?? 'now'))), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $total = number_format((float)$invoice['total'], 2, ',', '.') . ' ' . $safeCurrency;
-            $statusText = $isReturn
-                ? 'Factura de retur corectează integral factura inițială aferentă comenzii anulate.'
-                : (self::effectiveStatus($invoice) === 'paid' ? 'Factura este achitată.' : 'Factura este emisă și este în așteptarea plății.');
-            $heading = $isReturn ? 'FACTURĂ DE RETUR EMISĂ' : 'FACTURĂ EMISĂ';
-            $title = $isReturn ? 'Factura de retur ' . $safeNumber : 'Factura ' . $safeNumber;
-            $accent = $isReturn ? '#fb7185' : '#ff8a00';
-            $accentBackground = $isReturn ? '#301a20' : '#2c2117';
-            $statusLabel = $isReturn ? 'RETUR' : (self::effectiveStatus($invoice) === 'paid' ? 'ACHITATĂ' : 'EMISĂ');
-            $intro = $isReturn
-                ? 'Găsești atașată factura de retur în format PDF.'
-                : 'Găsești factura atașată acestui e-mail în format PDF.';
-            $html = '<!doctype html><html lang="ro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"></head>'
-                . '<body style="margin:0;background:transparent;color:#fff8f3;font-family:Roboto,\'Segoe UI\',Arial,sans-serif;-webkit-font-smoothing:antialiased">'
-                . '<div style="display:none;max-height:0;overflow:hidden;opacity:0">' . $title . ' este atașată în format PDF.</div>'
-                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:transparent"><tr><td align="center" style="padding:30px 14px">'
-                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:650px;overflow:hidden;border:1px solid #3f3a42;border-radius:34px;background:#1d1b20">'
-                . '<tr><td style="height:8px;background:' . $accent . '"></td></tr><tr><td style="padding:28px 30px 32px">'
-                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="width:62px"><img src="' . $safeLogoUrl . '" width="54" height="54" alt="G-Trots România" style="display:block;width:54px;height:54px;border-radius:18px"></td>'
-                . '<td><strong style="display:block;color:#fff8f3;font-size:17px;line-height:1.2">G-Trots România</strong><span style="display:block;margin-top:4px;color:#9f979f;font-size:9px;font-weight:800;letter-spacing:.1em">SERVICE &amp; MAGAZIN</span></td>'
-                . '<td align="right"><span style="display:inline-block;padding:9px 12px;border:1px solid ' . $accent . '55;border-radius:999px;background:' . $accentBackground . ';color:' . $accent . ';font-size:9px;font-weight:900;letter-spacing:.08em">●&nbsp; ' . $statusLabel . '</span></td></tr></table>'
-                . '<div style="padding:31px 0 22px"><span style="display:block;color:' . $accent . ';font-size:9px;font-weight:900;letter-spacing:.14em">DOCUMENT FISCAL · ' . $heading . '</span>'
-                . '<h1 style="margin:10px 0 12px;color:#fff8f3;font-size:38px;line-height:1.04;letter-spacing:-.045em">' . $title . '</h1>'
-                . '<p style="margin:0;color:#b1a9b2;font-size:14px;line-height:1.65">Bună, ' . $buyer . '. ' . $intro . '</p></div>'
-                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #454048;border-radius:24px;background:#151318"><tr>'
-                . '<td style="padding:19px 20px"><span style="display:block;color:#8f8790;font-size:8px;font-weight:900;letter-spacing:.11em">TOTAL DOCUMENT</span><strong style="display:block;margin-top:7px;color:' . $accent . ';font-size:25px;line-height:1.1">' . $total . '</strong><span style="display:block;margin-top:7px;color:#aaa2ac;font-size:10px;line-height:1.5">' . $statusText . '</span></td>'
-                . '<td align="right" style="width:155px;padding:19px 20px;border-left:1px solid #37333a"><span style="display:block;color:#8f8790;font-size:8px;font-weight:900;letter-spacing:.1em">DATA EMITERII</span><strong style="display:block;margin-top:7px;color:#eee8ef;font-size:12px">' . $issueDate . '</strong><span style="display:block;margin-top:12px;color:#8f8790;font-size:8px;font-weight:900;letter-spacing:.1em">COMANDA</span><strong style="display:block;margin-top:5px;color:#ffb77a;font-size:10px;overflow-wrap:anywhere">' . $safeOrderNumber . '</strong></td>'
-                . '</tr></table>'
-                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:15px;border:1px solid #4a4035;border-radius:20px;background:#272018"><tr><td style="width:48px;padding:14px 0 14px 15px"><span style="display:block;width:38px;height:38px;line-height:38px;text-align:center;border-radius:13px;background:' . $accent . ';color:#1d1510;font-size:10px;font-weight:1000">PDF</span></td><td style="padding:14px"><strong style="display:block;color:#fff8f3;font-size:12px">Document atașat</strong><span style="display:block;margin-top:4px;color:#9f979f;font-size:10px;line-height:1.45">Factura este inclusă în acest e-mail doar în format PDF.</span></td></tr></table>'
-                . '<p style="margin:23px 0 0;text-align:center;color:#756e77;font-size:10px;line-height:1.65">Document generat automat pentru comanda <strong style="color:#aaa2ac">' . $safeOrderNumber . '</strong>.<br>Ai nevoie de ajutor? Răspunde direct la acest mesaj.</p>'
-                . '</td></tr></table></td></tr></table></body></html>';
-            gtSmtpSend($config, $recipient, ($isReturn ? 'Factura de retur ' : 'Factura ') . $number . ' – G-Trots România', $html, array_map(static fn(array $file): array => [
+            $email = self::buildEmail($invoice, $config);
+            gtSmtpSend($config, $recipient, $email['subject'], $email['html'], array_map(static fn(array $file): array => [
                 'file_name' => (string)$file['file_name'],
                 'mime_type' => (string)$file['mime_type'],
                 'content' => base64_decode((string)$file['content_base64'], true) ?: '',

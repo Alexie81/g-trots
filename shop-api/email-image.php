@@ -5,7 +5,7 @@ declare(strict_types=1);
 // livrează exclusiv imaginile locale ale produselor în format JPEG, fără să
 // accepte URL-uri externe sau căi arbitrare de pe server.
 $file = basename(trim((string)($_GET['file'] ?? '')));
-if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{4,180}\.webp$/i', $file)) {
+if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,180}\.webp$/i', $file)) {
     http_response_code(404);
     exit;
 }
@@ -64,4 +64,3 @@ if (class_exists('Imagick')) {
 }
 
 http_response_code(415);
-

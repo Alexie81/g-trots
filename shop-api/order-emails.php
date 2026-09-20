@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/email-presentation.php';
 
 function gtOrderStatuses(): array {
     return [
@@ -152,7 +153,7 @@ function gtEmailCompatibleImageUrl(string $imageUrl, array $config): string {
     $path = (string)($parts['path'] ?? '');
     if (!in_array($host, ['g-trots.ro', 'www.g-trots.ro'], true) || !str_starts_with($path, '/shop-api/uploads/products/')) return $imageUrl;
     $file = basename($path);
-    if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{4,180}\.webp$/i', $file)) return $imageUrl;
+    if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,180}\.webp$/i', $file)) return $imageUrl;
     $base = rtrim((string)($config['public_base_url'] ?? 'https://g-trots.ro/shop-api'), '/');
     return $base . '/email-image.php?file=' . rawurlencode($file);
 }
@@ -228,6 +229,10 @@ function gtEmailReturnDecisionSummary(array $order): string {
 
 function gtBuildOrderEmail(array $order, array $config, string $status): array {
     $meta = gtOrderStatusMeta($status);
+    if ($status === 'confirmed' && ($order['payment_method'] ?? '') !== 'card') {
+        $meta['message'] = 'Am verificat și confirmat comanda ta. Vei achita produsele la livrare.';
+        $meta['eyebrow'] = 'COMANDĂ CONFIRMATĂ';
+    }
     $currency = (string)($order['currency'] ?? 'RON');
     $trackingUrl = gtEmailTrackingUrl($order, $config);
     $logoUrl = (string)($config['order_email_logo_url'] ?? 'https://g-trots.ro/assets/logo.png');
@@ -356,7 +361,7 @@ function gtBuildOrderEmail(array $order, array $config, string $status): array {
 <p style="margin:25px 0 0;text-align:center;color:#756e77;font-size:10px;line-height:1.65">Ai nevoie de ajutor? Răspunde direct la acest mesaj.<br><strong style="color:#aaa2ac">G-Trots România</strong> · g-trots.ro</p>
 </td></tr></table></td></tr></table></body></html>
 HTML;
-    return ['subject' => $subject, 'html' => $html, 'tracking_url' => $trackingUrl];
+    return ['subject' => $subject, 'html' => gtEmailLightDocument($html), 'tracking_url' => $trackingUrl];
 }
 
 function gtSmtpRead($socket): string {
@@ -379,6 +384,7 @@ function gtSmtpCommand($socket, string $command, array $expectedCodes): string {
 }
 
 function gtSmtpSend(array $config, string $recipient, string $subject, string $html, array $attachments = [], array $extraHeaders = []): void {
+    $html = gtEmailLightDocument($html);
     $host = trim((string)($config['smtp_host'] ?? ''));
     $port = (int)($config['smtp_port'] ?? 465);
     $encryption = strtolower(trim((string)($config['smtp_encryption'] ?? 'ssl')));
@@ -460,7 +466,7 @@ function gtSmtpSend(array $config, string $recipient, string $subject, string $h
     }
 }
 
-function gtSendPasswordResetEmail(array $customer, array $config, string $token): void {
+function gtBuildPasswordResetEmail(array $customer, array $config, string $token): array {
     $recipient = mb_strtolower(trim((string)($customer['email'] ?? '')));
     if (!filter_var($recipient, FILTER_VALIDATE_EMAIL) || !preg_match('/^[a-f0-9]{64}$/', $token)) {
         throw new RuntimeException('Datele pentru resetarea parolei nu sunt valide.');
@@ -486,7 +492,12 @@ function gtSendPasswordResetEmail(array $customer, array $config, string $token)
 <p style="margin:24px 0 0;text-align:center;color:#756e77;font-size:10px;line-height:1.65"><strong style="color:#aaa2ac">G-Trots România</strong> · g-trots.ro</p>
 </td></tr></table></td></tr></table></body></html>
 HTML;
-    gtSmtpSend($config, $recipient, 'Resetează parola contului tău G-Trots', $html);
+    return ['subject' => 'Resetează parola contului tău G-Trots', 'html' => gtEmailLightDocument($html)];
+}
+
+function gtSendPasswordResetEmail(array $customer, array $config, string $token): void {
+    $email = gtBuildPasswordResetEmail($customer, $config, $token);
+    gtSmtpSend($config, mb_strtolower(trim((string)($customer['email'] ?? ''))), $email['subject'], $email['html']);
 }
 
 function gtSendOrderStatusEmail(array $order, array $config, string $status): array {
@@ -507,7 +518,7 @@ function gtSendOrderStatusEmail(array $order, array $config, string $status): ar
     }
 }
 
-function gtSendOrderCancellationEmail(array $order, array $config, array $details = []): array {
+function gtBuildOrderCancellationEmail(array $order, array $config, array $details = []): array {
     $recipient = trim((string)($order['customer_email'] ?? ''));
     if (!filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
         return ['sent' => false, 'recipient' => $recipient, 'error' => 'Comanda nu are o adresă de e-mail validă.'];
@@ -546,8 +557,15 @@ function gtSendOrderCancellationEmail(array $order, array $config, array $detail
 <p style="margin:22px 0 0;text-align:center;color:#756e77;font-size:10px;line-height:1.6">Ai nevoie de ajutor? Răspunde direct la acest mesaj.<br><strong style="color:#aaa2ac">G-Trots România</strong> · g-trots.ro</p>
 </td></tr></table></td></tr></table></body></html>
 HTML;
+    return ['subject' => 'Comanda ' . (string)($order['order_number'] ?? '') . ' a fost anulată', 'html' => gtEmailLightDocument($html), 'tracking_url' => $trackingUrl];
+}
+
+function gtSendOrderCancellationEmail(array $order, array $config, array $details = []): array {
+    $recipient = trim((string)($order['customer_email'] ?? ''));
     try {
-        gtSmtpSend($config, $recipient, 'Comanda ' . (string)($order['order_number'] ?? '') . ' a fost anulată', $html);
+        $email = gtBuildOrderCancellationEmail($order, $config, $details);
+        if (!isset($email['html'])) return $email;
+        gtSmtpSend($config, $recipient, $email['subject'], $email['html']);
         return ['sent' => true, 'recipient' => $recipient, 'tracking_url' => gtEmailTrackingUrl($order, $config)];
     } catch (Throwable $error) {
         error_log('[G-Trots cancellation email] ' . $error->getMessage());
@@ -555,7 +573,7 @@ HTML;
     }
 }
 
-function gtSendOrderReturnRequestEmail(array $order, array $config): array {
+function gtBuildOrderReturnRequestEmail(array $order, array $config): array {
     $recipient = trim((string)($order['customer_email'] ?? ''));
     if (!filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
         return ['sent' => false, 'recipient' => $recipient, 'error' => 'Comanda nu are o adresă de e-mail validă.'];
@@ -595,8 +613,15 @@ function gtSendOrderReturnRequestEmail(array $order, array $config): array {
 <p style="margin:22px 0 0;text-align:center;color:#756e77;font-size:10px;line-height:1.6">Ai nevoie de ajutor? Răspunde direct la acest mesaj.<br><strong style="color:#aaa2ac">G-Trots România</strong> · g-trots.ro</p>
 </td></tr></table></td></tr></table></body></html>
 HTML;
+    return ['subject' => 'Am primit solicitarea de retur · ' . (string)($order['order_number'] ?? ''), 'html' => gtEmailLightDocument($html), 'tracking_url' => $trackingUrl];
+}
+
+function gtSendOrderReturnRequestEmail(array $order, array $config): array {
+    $recipient = trim((string)($order['customer_email'] ?? ''));
     try {
-        gtSmtpSend($config, $recipient, 'Am primit solicitarea de retur · ' . (string)($order['order_number'] ?? ''), $html);
+        $email = gtBuildOrderReturnRequestEmail($order, $config);
+        if (!isset($email['html'])) return $email;
+        gtSmtpSend($config, $recipient, $email['subject'], $email['html']);
         return ['sent' => true, 'recipient' => $recipient, 'tracking_url' => gtEmailTrackingUrl($order, $config)];
     } catch (Throwable $error) {
         error_log('[G-Trots return request email] ' . $error->getMessage());
@@ -604,7 +629,7 @@ HTML;
     }
 }
 
-function gtSendOrderReturnConfirmedEmail(array $order, array $config): array {
+function gtBuildOrderReturnConfirmedEmail(array $order, array $config): array {
     $recipient = trim((string)($order['customer_email'] ?? ''));
     if (!filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
         return ['sent' => false, 'recipient' => $recipient, 'error' => 'Comanda nu are o adresă de e-mail validă.'];
@@ -637,8 +662,15 @@ function gtSendOrderReturnConfirmedEmail(array $order, array $config): array {
 <p style="margin:22px 0 0;text-align:center;color:#756e77;font-size:10px;line-height:1.6">Ai nevoie de ajutor? Răspunde direct la acest mesaj.<br><strong style="color:#aaa2ac">G-Trots România</strong> · g-trots.ro</p>
 </td></tr></table></td></tr></table></body></html>
 HTML;
+    return ['subject' => 'Retur confirmat · ' . (string)($order['order_number'] ?? ''), 'html' => gtEmailLightDocument($html), 'tracking_url' => $trackingUrl];
+}
+
+function gtSendOrderReturnConfirmedEmail(array $order, array $config): array {
+    $recipient = trim((string)($order['customer_email'] ?? ''));
     try {
-        gtSmtpSend($config, $recipient, 'Retur confirmat · ' . (string)($order['order_number'] ?? ''), $html);
+        $email = gtBuildOrderReturnConfirmedEmail($order, $config);
+        if (!isset($email['html'])) return $email;
+        gtSmtpSend($config, $recipient, $email['subject'], $email['html']);
         return ['sent' => true, 'recipient' => $recipient, 'tracking_url' => gtEmailTrackingUrl($order, $config)];
     } catch (Throwable $error) {
         error_log('[G-Trots return confirmation email] ' . $error->getMessage());

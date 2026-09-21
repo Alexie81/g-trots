@@ -460,18 +460,23 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
   const selectOrderItemProduct = useCallback((product: ShopProduct) => {
     if (!itemPickerTarget) return;
     const sitePrice = Number(product.sale_price && product.sale_price > 0 ? product.sale_price : product.price);
-    setOrderItemDrafts((current) => current.map((item) => item.order_item_id === itemPickerTarget ? {
-      ...item,
-      product_id: product.id,
-      product_name: product.name,
-      product_sku: product.sku || product.supplier_product_code || '',
-      image_url: product.images?.[0]?.url || '',
-      unit_of_measure: product.unit_of_measure || 'buc',
-      unit_price: sitePrice > 0 ? sitePrice.toFixed(2) : '0.00',
-    } : item));
+    setOrderItemDrafts((current) => {
+      const next = current.map((item) => item.order_item_id === itemPickerTarget ? {
+        ...item,
+        product_id: product.id,
+        product_name: product.name,
+        product_sku: product.sku || product.supplier_product_code || '',
+        image_url: product.images?.[0]?.url || '',
+        unit_of_measure: product.unit_of_measure || 'buc',
+        unit_price: sitePrice > 0 ? sitePrice.toFixed(2) : '0.00',
+      } : item);
+      const stillReplacing = Boolean(selected && next.some((draft) => draft.product_id !== String(selected.items.find((item) => item.id === draft.order_item_id)?.product_id || '')));
+      if (!stillReplacing && selected) setShippingCostDraft(Number(selected.shipping_cost || 0).toFixed(2));
+      return next;
+    });
     setItemPickerTarget(null);
     setItemProductSearch('');
-  }, [itemPickerTarget]);
+  }, [itemPickerTarget, selected]);
 
   const openProductPanel = useCallback(async (productId: string) => {
     if (!token || !productId) return;
@@ -518,13 +523,12 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
     const changedOrderItems = orderItemDrafts.filter((draft) => {
       const original = selected.items.find((item) => item.id === draft.order_item_id);
       if (!original) return false;
-      const originalPrice = Number(original.discounted_unit_price ?? original.unit_price);
-      return draft.product_id !== String(original.product_id || '') || Math.abs(Number(draft.unit_price.replace(',', '.')) - originalPrice) >= 0.005;
+      return draft.product_id !== String(original.product_id || '');
     });
     const parsedShippingCost = Number(shippingCostDraft.replace(',', '.'));
     const parsedReturnShippingCost = Number(returnShippingCostDraft.replace(',', '.'));
     const itemsChanged = changedOrderItems.length > 0;
-    const shippingChanged = Number.isFinite(parsedShippingCost) && Math.abs(parsedShippingCost - Number(selected.shipping_cost || 0)) >= 0.005;
+    const shippingChanged = itemsChanged && Number.isFinite(parsedShippingCost) && Math.abs(parsedShippingCost - Number(selected.shipping_cost || 0)) >= 0.005;
     const needsCorrectionShippingChoice = Boolean(selected.invoice?.spv_status === 'sent' && (itemsChanged || shippingChanged));
     const needsReturnShippingChoice = (status === 'return_confirmed' || status === 'refunded') && !(['return_confirmed', 'refunded'] as ShopOrder['status'][]).includes(selected.status);
     const hasChanges = status !== selected.status
@@ -815,6 +819,8 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
   if (loading && !loadedOnce) return <View style={styles.state}><ActivityIndicator color={Colors.orange} /><Text style={styles.stateText}>Se incarca comenzile...</Text></View>;
   if (error) return <View style={styles.state}><Text style={styles.error}>{error}</Text><TouchableOpacity style={styles.retry} onPress={() => void load()}><Text style={styles.retryText}>Incearca din nou</Text></TouchableOpacity></View>;
 
+  const hasProductReplacementDraft = Boolean(selected && orderItemDrafts.some((draft) => draft.product_id !== String(selected.items.find((item) => item.id === draft.order_item_id)?.product_id || '')));
+
   return (
     <View style={styles.wrap}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroller} contentContainerStyle={styles.stats}>
@@ -872,6 +878,7 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
             <Text style={styles.sectionLabel}>PRODUSE · PREȚURI DE VÂNZARE</Text>
             <View style={styles.items}>{orderItemDrafts.map((item) => {
               const editable = !(['completed', 'return_requested', 'return_refused', 'return_confirmed', 'refunded', 'cancelled'] as ShopOrder['status'][]).includes(selected.status);
+              const productChanged = item.product_id !== String(selected.items.find((original) => original.id === item.order_item_id)?.product_id || '');
               return <View key={item.order_item_id} style={[styles.item, styles.itemEditable]}>
                 {item.image_url ? <Image source={{ uri: item.image_url }} style={styles.itemImage} resizeMode="contain" /> : <View style={styles.itemQty}><Text style={styles.itemQtyText}>{item.quantity}×</Text></View>}
                 <View style={styles.itemCopy}>
@@ -879,16 +886,16 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
                   <Text selectable style={styles.itemSku}>{item.quantity} {item.unit_of_measure} · {item.product_sku || 'Fără cod'}</Text>
                   <View style={styles.itemEditRow}>
                     <TouchableOpacity disabled={!editable} style={[styles.itemChangeButton, !editable && styles.disabled]} onPress={() => openItemProductPicker(item.order_item_id)}><Pencil size={13} color="#93C5FD" /><Text style={styles.itemChangeText}>Schimbă produsul</Text></TouchableOpacity>
-                    <View style={styles.itemPriceField}><Text style={styles.itemPriceLabel}>PREȚ VÂNZARE</Text><TextInput editable={editable} selectTextOnFocus keyboardType="decimal-pad" value={item.unit_price} onChangeText={(value) => setOrderItemDrafts((current) => current.map((entry) => entry.order_item_id === item.order_item_id ? { ...entry, unit_price: value } : entry))} style={styles.itemPriceInput} /><Text style={styles.itemPriceCurrency}>lei</Text></View>
+                    <View style={[styles.itemPriceField, !productChanged && styles.fieldLocked]}><Text style={styles.itemPriceLabel}>PREȚ VÂNZARE</Text><TextInput editable={editable && productChanged} selectTextOnFocus keyboardType="decimal-pad" value={item.unit_price} onChangeText={(value) => setOrderItemDrafts((current) => current.map((entry) => entry.order_item_id === item.order_item_id ? { ...entry, unit_price: value } : entry))} style={styles.itemPriceInput} /><Text style={styles.itemPriceCurrency}>lei</Text></View>
                   </View>
                 </View>
                 <Text style={styles.itemTotal}>{money((Number(item.unit_price.replace(',', '.')) || 0) * item.quantity)}</Text>
                 {item.product_id ? <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Deschide fișa produsului ${item.product_name}`} activeOpacity={0.72} style={styles.itemOpen} onPress={() => void openProductPanel(item.product_id)}><ChevronRight size={19} color="#FFFFFF" strokeWidth={2.7} /></TouchableOpacity> : null}
               </View>;
             })}</View>
-            <View style={styles.shippingCostEditor}><View style={styles.shippingCostCopy}><Truck size={18} color="#A78BFA" /><View><Text style={styles.shippingCostLabel}>COST TRANSPORT</Text><Text style={styles.shippingCostHelp}>Preluat din comandă și editabil până la livrare.</Text></View></View><View style={styles.shippingCostField}><TextInput editable={!(['completed', 'return_requested', 'return_refused', 'return_confirmed', 'refunded', 'cancelled'] as ShopOrder['status'][]).includes(selected.status)} selectTextOnFocus keyboardType="decimal-pad" value={shippingCostDraft} onChangeText={setShippingCostDraft} style={styles.shippingCostInput} /><Text style={styles.shippingCostCurrency}>lei</Text></View></View>
+            <View style={[styles.shippingCostEditor, !hasProductReplacementDraft && styles.fieldLocked]}><View style={styles.shippingCostCopy}><Truck size={18} color="#A78BFA" /><View><Text style={styles.shippingCostLabel}>COST TRANSPORT</Text><Text style={styles.shippingCostHelp}>{hasProductReplacementDraft ? 'Preluat din comandă și editabil pentru această înlocuire.' : 'Devine editabil după ce alegi produsul înlocuitor.'}</Text></View></View><View style={styles.shippingCostField}><TextInput editable={hasProductReplacementDraft} selectTextOnFocus keyboardType="decimal-pad" value={shippingCostDraft} onChangeText={setShippingCostDraft} style={styles.shippingCostInput} /><Text style={styles.shippingCostCurrency}>lei</Text></View></View>
             {selected.invoice ? <Text style={styles.itemCorrectionHint}>{selected.invoice.spv_status === 'sent' ? 'Factura este în SPV: la salvare se emit automat returul parțial, NIR-ul poziției vechi și factura noii poziții.' : selected.invoice.spv_status === 'processing' ? 'Factura este în transmitere către SPV; modificarea va fi disponibilă după răspunsul ANAF.' : 'Factura nu este trimisă în SPV: la salvare se actualizează aceeași factură și se mută automat ieșirea de stoc.'}</Text> : null}
-            {selected.invoice?.spv_status === 'sent' && !(['completed', 'return_requested', 'return_refused', 'return_confirmed', 'refunded', 'cancelled'] as ShopOrder['status'][]).includes(selected.status) ? <View style={styles.returnShippingChoice}>
+            {hasProductReplacementDraft && selected.invoice?.spv_status === 'sent' && !(['completed', 'return_requested', 'return_refused', 'return_confirmed', 'refunded', 'cancelled'] as ShopOrder['status'][]).includes(selected.status) ? <View style={styles.returnShippingChoice}>
               <Text style={styles.returnShippingChoiceTitle}>CINE SUPORTĂ TRANSPORTUL RETURULUI?</Text>
               <View style={styles.returnShippingChoiceRow}>{(['customer', 'company'] as const).map((payer) => <TouchableOpacity key={payer} onPress={() => setReturnShippingPayer(payer)} style={[styles.returnShippingChoiceButton, returnShippingPayer === payer && styles.returnShippingChoiceButtonActive]}><View style={[styles.radio, returnShippingPayer === payer && styles.radioActive]}>{returnShippingPayer === payer ? <Check size={12} color="#15110D" strokeWidth={3} /> : null}</View><Text style={styles.returnShippingChoiceText}>{payer === 'customer' ? 'Clientul' : 'Firma'}</Text></TouchableOpacity>)}</View>
               {returnShippingPayer === 'customer' ? <View style={styles.returnShippingAmountRow}><Text style={styles.returnShippingAmountLabel}>VALOARE TRANSPORT RETUR</Text><View style={styles.shippingCostField}><TextInput selectTextOnFocus keyboardType="decimal-pad" value={returnShippingCostDraft} onChangeText={setReturnShippingCostDraft} style={styles.shippingCostInput} /><Text style={styles.shippingCostCurrency}>lei</Text></View></View> : <Text style={styles.returnShippingChoiceHelp}>Alegerea este obligatorie; suma este reținută numai dacă alegi Clientul.</Text>}
@@ -1291,6 +1298,7 @@ const styles = StyleSheet.create({
   itemPriceField: { minHeight: 39, flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#5B493A', borderRadius: 12, paddingHorizontal: 9, backgroundColor: '#211A15' },
   itemPriceLabel: { color: '#B8A18D', fontFamily: 'Inter-Bold', fontSize: 6.5, letterSpacing: 0.4 },
   itemPriceInput: { width: 74, paddingVertical: 0, color: '#FFB36B', fontFamily: 'Inter-Bold', fontSize: 12, textAlign: 'right' },
+  fieldLocked: { opacity: 0.48 },
   itemPriceCurrency: { color: '#FFB36B', fontFamily: 'Inter-Bold', fontSize: 9 },
   shippingCostEditor: { minHeight: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderWidth: 1, borderColor: '#4C4170', borderRadius: 18, padding: 12, backgroundColor: '#1D1928', marginTop: 9 },
   returnShippingChoice: { borderWidth: 1, borderColor: '#62527D', borderRadius: 18, padding: 12, backgroundColor: '#211B2B', marginTop: 9, gap: 10 },

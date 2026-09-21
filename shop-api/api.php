@@ -4888,11 +4888,18 @@ function shopAdminApplyOrderItemEdits(PDO $db, array $order, array $updates, arr
         $currentQuantity = max(1, (int)($currentItem['quantity'] ?? 1));
         $currentLine = (float)($currentItem['discounted_line_total'] ?? $currentItem['line_total'] ?? 0);
         $currentUnitPrice = round($currentLine / $currentQuantity, 2);
-        if ($productId !== (string)($currentItem['product_id'] ?? '') || abs($unitPrice - $currentUnitPrice) >= 0.005) {
-            $patches[$itemId] = ['product_id' => $productId, 'unit_price' => $unitPrice];
+        if ($productId === (string)($currentItem['product_id'] ?? '')) {
+            if (abs($unitPrice - $currentUnitPrice) >= 0.005) {
+                throw new InvalidArgumentException('Prețul poate fi modificat numai când înlocuiești produsul cu un alt produs.');
+            }
+            continue;
         }
+        $patches[$itemId] = ['product_id' => $productId, 'unit_price' => $unitPrice];
     }
-    if (!$patches && !$shippingChanged) return false;
+    if (!$patches && $shippingChanged) {
+        throw new InvalidArgumentException('Costul transportului poate fi modificat numai împreună cu înlocuirea unui produs.');
+    }
+    if (!$patches) return false;
 
     $correctedItemIds = array_keys($patches);
     $returnSelection = [];

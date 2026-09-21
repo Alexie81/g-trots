@@ -7939,6 +7939,21 @@ try {
         jsonResponse(orderRow($db, $row, $config, true));
     }
 
+    if ($action === 'sendOrderStatusEmail' && $method === 'POST') {
+        $id = trim((string)($_GET['id'] ?? ($body['order_id'] ?? '')));
+        if ($id === '') throw new InvalidArgumentException('Comanda nu a fost selectată.');
+        $stmt = $db->prepare('SELECT o.*, COALESCE(o.return_shipping_cost_snapshot, sm.return_cost, 0) AS configured_return_shipping_cost' . GtrotsInvoiceService::orderJoinColumns() . GtrotsShippingNoteService::orderJoinColumns() . ' FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id' . GtrotsInvoiceService::orderJoinSql('o') . GtrotsShippingNoteService::orderJoinSql('o') . ' WHERE o.id = ? OR o.order_number = ? LIMIT 1');
+        $stmt->execute([$id, $id]);
+        $row = $stmt->fetch();
+        if (!$row) jsonResponse(['error' => 'Comanda nu există.'], 404);
+        $order = orderRow($db, $row, $config, true);
+        $emailResult = gtSendCurrentOrderStatusEmail($order, $config);
+        jsonResponse(array_merge([
+            'requested' => true,
+            'status' => (string)$order['status'],
+        ], $emailResult));
+    }
+
     if ($action === 'updateOrder' && in_array($method, ['PUT', 'PATCH'], true)) {
         $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
         $statuses = ['new', 'confirmed', 'processing', 'shipped', 'completed', 'return_requested', 'return_refused', 'return_confirmed', 'refunded', 'cancelled'];

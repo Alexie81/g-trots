@@ -1661,6 +1661,7 @@ export const shopApi = {
   },
   getOrder: (token: string, id: string) => shopCall<ShopOrder>('getOrder', token, undefined, id),
   updateOrder: (token: string, id: string, payload: Pick<ShopOrder, 'status' | 'payment_status'> & { admin_notes: string; notify_customer: boolean; cancellation_reason?: string; return_reason?: string; return_bank_iban?: string; return_bank_account_holder?: string; return_items?: Array<{ order_item_id: string; quantity?: number; decision_status?: 'accepted' | 'partial' | 'refused'; accepted_quantity?: number; refused_quantity?: number; decision_reason?: string }>; address?: string; city?: string; county?: string; postal_code?: string }) => shopCall<ShopOrder>('updateOrder', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
+  sendOrderStatusEmail: (token: string, id: string) => shopCall<ShopOrderEmailNotification>('sendOrderStatusEmail', token, { method: 'POST', body: JSON.stringify({ order_id: id }) }, id),
   issueInvoice: (token: string, orderId: string, sendEmail = false, sendReturnEmail = false) => shopCall<ShopIssuedInvoice>('issueInvoice', token, { method: 'POST', body: JSON.stringify({ order_id: orderId, send_email: sendEmail, send_return_email: sendReturnEmail }) }, orderId),
   listInvoices: (token: string) => shopCall<ShopIssuedInvoice[]>('listInvoices', token),
   getInvoice: (token: string, id: string) => shopCall<ShopIssuedInvoice>('getInvoice', token, undefined, id),

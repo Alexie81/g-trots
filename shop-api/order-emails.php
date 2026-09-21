@@ -518,6 +518,19 @@ function gtSendOrderStatusEmail(array $order, array $config, string $status): ar
     }
 }
 
+/**
+ * Retrimite informarea aferentă statusului deja salvat, fără să modifice
+ * statusul, istoricul comenzii, stocul sau documentele fiscale.
+ */
+function gtSendCurrentOrderStatusEmail(array $order, array $config): array {
+    $status = (string)($order['status'] ?? 'new');
+    return match ($status) {
+        'return_requested' => gtSendOrderReturnRequestEmail($order, $config),
+        'return_confirmed' => gtSendOrderReturnConfirmedEmail($order, $config),
+        default => gtSendOrderStatusEmail($order, $config, $status),
+    };
+}
+
 function gtBuildOrderCancellationEmail(array $order, array $config, array $details = []): array {
     $recipient = trim((string)($order['customer_email'] ?? ''));
     if (!filter_var($recipient, FILTER_VALIDATE_EMAIL)) {

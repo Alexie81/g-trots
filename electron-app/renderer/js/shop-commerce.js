@@ -2248,11 +2248,11 @@
     $('shop-invoice-issue-total').textContent = `${new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2 }).format(Number(order.total || 0))} ${order.currency || 'RON'}`;
     $('shop-invoice-issue-email').textContent = order.customer_email ? `Doar PDF-ul va fi trimis la ${order.customer_email}` : 'Comanda nu are o adresă de e-mail validă.';
     $('shop-invoice-issue-email-title').textContent = paired ? 'Trimite factura pozitivă' : 'Trimite și pe e-mail';
-    $('shop-invoice-issue-send-email').checked = false;
+    $('shop-invoice-issue-send-email').checked = Boolean(order.customer_email);
     $('shop-invoice-issue-send-email').disabled = !order.customer_email;
     $('shop-invoice-return-email-option').hidden = !paired;
     $('shop-invoice-issue-return-email').textContent = order.customer_email ? `PDF separat la ${order.customer_email}` : 'Comanda nu are o adresă de e-mail validă.';
-    $('shop-invoice-issue-send-return-email').checked = false;
+    $('shop-invoice-issue-send-return-email').checked = paired && Boolean(order.customer_email);
     $('shop-invoice-issue-send-return-email').disabled = !order.customer_email;
     syncInvoiceIssuePanel();
     openModal('shop-invoice-issue-modal');
@@ -2573,6 +2573,23 @@
     if (stateBadge) stateBadge.textContent = !hasEmail ? 'FĂRĂ E-MAIL' : isCancellation ? 'AUTOMAT' : isReturnRequest || isReturnConfirmation ? 'OPȚIONAL' : !changed ? 'ALEGE STATUS' : notify.checked ? 'ACTIVATĂ' : 'PREGĂTITĂ';
     document.querySelectorAll('.shop-order-status-option').forEach(label => label.classList.toggle('selected', label.querySelector('input')?.checked));
   }
+  async function sendCurrentOrderStatus() {
+    const order = state.editingOrder;
+    const button = $('shop-order-send-current-status');
+    if (!order || !button || button.disabled) return;
+    button.disabled = true;
+    button.classList.add('busy');
+    try {
+      const notification = await window.SHOP_API.sendOrderStatusEmail(order.id);
+      if (!notification?.sent) throw new Error(notification?.error || 'E-mailul nu a putut fi trimis.');
+      toast(`Statusul curent al comenzii ${order.order_number} a fost trimis la ${notification.recipient || order.customer_email}.`, 'success');
+    } catch (error) {
+      toast(error.message || 'Statusul curent nu a putut fi trimis.', 'error');
+    } finally {
+      button.classList.remove('busy');
+      button.disabled = !order.customer_email;
+    }
+  }
   function renderOrderDetails(order) {
     state.editingOrder = order;
     $('shop-order-title').textContent = order.order_number;
@@ -2646,6 +2663,7 @@
       ${invoiceCard}${shippingNoteCard}${returnInvoiceCard}${returnSummary}${returnPolicyLine}${orderTimeline(order)}${orderStatusPicker(order)}${returnRequestCard}
       <label id="shop-order-cancellation-field" class="shop-order-cancellation-field" ${order.status === 'cancelled' ? '' : 'hidden'}><span><b>ANULARE COMANDĂ · MOTIV OBLIGATORIU</b><strong>${order.status === 'cancelled' ? 'Motivul înregistrat' : 'De ce anulăm comanda?'}</strong><small>Clientul va fi notificat automat, iar factura și stocul vor fi corectate după regulile fiscale.</small></span><textarea id="shop-order-cancellation-reason" rows="4" maxlength="1000" placeholder="Scrie motivul transmis clientului...">${esc(order.customer_cancellation_reason || '')}</textarea></label>
       <label class="shop-order-notify" data-notify-state="waiting"><input id="shop-order-notify" type="checkbox"><span class="shop-order-notify-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/></svg><i></i></span><span class="shop-order-notify-copy"><span class="shop-order-notify-eyebrow">NOTIFICARE CLIENT <b id="shop-order-notify-state">ALEGE STATUS</b></span><strong>Trimite actualizarea pe e-mail</strong><small id="shop-order-notify-helper"></small></span><span class="shop-order-notify-switch" aria-hidden="true"><i></i></span></label>
+      <button type="button" id="shop-order-send-current-status" class="shop-order-current-status-send" ${order.customer_email ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="m5 7 7 6 7-6"/></svg><span><strong>Trimite statusul curent</strong><small>${order.customer_email ? `Retrimite acum statusul „${esc(statusShortLabels[order.status] || order.status)}” la ${esc(order.customer_email)}` : 'Comanda nu are o adresă de e-mail.'}</small></span><i>TRIMITE</i></button>
       <div class="shop-commerce-columns"><label>Status plată<select id="shop-order-payment-status">${['pending', 'paid', 'failed', 'refunded'].map(value => `<option value="${value}" ${order.payment_status === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label><label>Metodă de plată<input value="${order.payment_method === 'card' ? 'Card online' : 'Ramburs la curier'}" readonly></label></div>
       <label>Notițe interne<textarea id="shop-order-admin-notes" rows="4">${esc(order.admin_notes || '')}</textarea></label>${order.customer_notes ? `<div class="shop-order-note"><small>OBSERVAȚII CLIENT</small>${esc(order.customer_notes)}</div>` : ''}`;
     $('shop-order-details').querySelector('[data-order-call]')?.addEventListener('click', () => void openOrderContact('call', order.customer_phone));
@@ -2675,8 +2693,13 @@
       if (helper) helper.hidden = !deliveryEditing;
       if (deliveryEditing) deliveryInputs[0]?.focus();
     });
-    document.querySelectorAll('input[name="shop-order-status"]').forEach(input => input.addEventListener('change', syncOrderNotify));
+    document.querySelectorAll('input[name="shop-order-status"]').forEach(input => input.addEventListener('change', () => {
+      const notify = $('shop-order-notify');
+      if (notify) notify.checked = Boolean(order.customer_email) && input.value !== order.status;
+      syncOrderNotify();
+    }));
     $('shop-order-notify')?.addEventListener('change', syncOrderNotify);
+    $('shop-order-send-current-status')?.addEventListener('click', () => void sendCurrentOrderStatus());
     $('shop-order-details').querySelectorAll('.shop-order-return-item').forEach(row => {
       const syncReturnRow = acceptedValue => {
         const requested = Number(row.dataset.requested || 0);

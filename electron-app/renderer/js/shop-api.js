@@ -206,6 +206,7 @@
     listOrders: () => call('listOrders'),
     getOrder: (id) => call('getOrder', {}, id),
     updateOrder: (id, payload) => call('updateOrder', json('PUT', payload), id),
+    sendOrderStatusEmail: (id) => call('sendOrderStatusEmail', json('POST', { order_id: id }), id),
     issueInvoice: (orderId, sendEmail = false, sendReturnEmail = false) => call('issueInvoice', json('POST', { order_id: orderId, send_email: sendEmail, send_return_email: sendReturnEmail }), orderId),
     listInvoices: () => call('listInvoices'),
     getInvoice: (id) => call('getInvoice', {}, id),

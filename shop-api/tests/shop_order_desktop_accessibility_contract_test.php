@@ -22,6 +22,7 @@ shopOrderDesktopAssert(str_contains($commerce, 'input.readOnly = !deliveryEditin
 shopOrderDesktopAssert(str_contains($commerce, "item.unit_of_measure || 'buc'"), 'Cantitatea nu afișează unitatea de măsură.');
 shopOrderDesktopAssert(str_contains($styles, '#shop-order-details * { -webkit-user-select:text!important; user-select:text!important; }'), 'Toate valorile comenzii nu sunt selectabile pe desktop.');
 shopOrderDesktopAssert(str_contains($styles, '#shop-order-details input[readonly] { cursor:text; }'), 'Câmpurile readonly nu indică selecția textului.');
+shopOrderDesktopAssert(str_contains($styles, '#shop-order-modal .shop-commerce-modal > header > div,'), 'Numărul comenzii din antet nu este selectabil pentru copiere.');
 shopOrderDesktopAssert(str_contains($styles, '#shop-product-detail-modal.over-order { place-items: center;'), 'Fișa produsului din comandă nu este centrată.');
 shopOrderDesktopAssert(!str_contains($styles, '#shop-product-detail-modal.over-order { place-items: center end;'), 'Fișa produsului este încă ancorată în dreapta.');
 

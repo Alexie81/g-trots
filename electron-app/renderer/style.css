@@ -16201,6 +16201,9 @@ body::after {
 #shop-order-modal .shop-commerce-modal-scroll { padding:26px; }
 #shop-order-modal .shop-commerce-modal > header small { font-size:12px; }
 #shop-order-modal .shop-commerce-modal > header h2 { font-size:25px; }
+#shop-order-modal .shop-commerce-modal > header > div,
+#shop-order-modal .shop-commerce-modal > header small,
+#shop-order-modal .shop-commerce-modal > header h2 { -webkit-user-select:text!important; user-select:text!important; }
 #shop-order-modal .shop-commerce-modal > footer button { font-size:14px; }
 #shop-order-details,
 #shop-order-details * { -webkit-user-select:text!important; user-select:text!important; }

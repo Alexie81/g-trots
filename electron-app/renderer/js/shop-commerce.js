@@ -2264,8 +2264,9 @@
       label?.classList.toggle('active', Boolean(toggle?.checked));
       label?.classList.toggle('disabled', Boolean(toggle?.disabled));
     });
+    const sendEmailToggle = $('shop-invoice-issue-send-email');
     const text = $('shop-invoice-issue-confirm')?.querySelector('span');
-    if (text) text.textContent = state.invoiceIssueOrder?.status === 'return_confirmed' ? 'Emite ambele' : toggle?.checked ? 'Emite și trimite' : 'Emite factura';
+    if (text) text.textContent = state.invoiceIssueOrder?.status === 'return_confirmed' ? 'Emite ambele' : sendEmailToggle?.checked ? 'Emite și trimite' : 'Emite factura';
   }
   async function submitInvoiceIssue(event) {
     event.preventDefault();

@@ -20,6 +20,9 @@ foreach (['CANTITATE', 'COD PRODUS', 'PREȚ UNITAR', 'shop-order-product-meta', 
 shopOrderDesktopAssert(str_contains($commerce, 'value="${esc(value || \'\')}" readonly'), 'Datele de livrare blocate nu sunt selectabile pentru copiere.');
 shopOrderDesktopAssert(str_contains($commerce, 'input.readOnly = !deliveryEditing'), 'Editarea adresei nu comută sigur între readonly și editabil.');
 shopOrderDesktopAssert(str_contains($commerce, "item.unit_of_measure || 'buc'"), 'Cantitatea nu afișează unitatea de măsură.');
+shopOrderDesktopAssert(str_contains($commerce, "const sendEmailToggle = \$('shop-invoice-issue-send-email');"), 'Panoul de emitere a facturii nu citește comutatorul de e-mail în domeniul corect.');
+shopOrderDesktopAssert(!str_contains($commerce, ": toggle?.checked ? 'Emite și trimite'"), 'Panoul de emitere folosește încă variabila toggle în afara domeniului ei.');
+shopOrderDesktopAssert(substr_count($commerce, 'openInvoiceIssue(') >= 3, 'Ambele butoane de emitere nu sunt conectate la panoul facturii.');
 shopOrderDesktopAssert(str_contains($styles, '#shop-order-details * { -webkit-user-select:text!important; user-select:text!important; }'), 'Toate valorile comenzii nu sunt selectabile pe desktop.');
 shopOrderDesktopAssert(str_contains($styles, '#shop-order-details input[readonly] { cursor:text; }'), 'Câmpurile readonly nu indică selecția textului.');
 shopOrderDesktopAssert(str_contains($styles, '#shop-order-modal .shop-commerce-modal > header > div,'), 'Numărul comenzii din antet nu este selectabil pentru copiere.');

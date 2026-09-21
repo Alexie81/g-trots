@@ -17,7 +17,7 @@ dashboardContractAssert(str_contains($api, '$revenue = round((float)($summary[\'
 dashboardContractAssert(!str_contains($api, 'collected_return_deduction'), 'Rezumatul comenzilor nu trebuie să scadă din nou factura de retur dintr-o comandă deja exclusă prin status.');
 dashboardContractAssert(str_contains($api, 'WHEN movement_type IN ("return", "RETURN_IN") THEN -ABS'), 'Costul FIFO al returului trebuie să inverseze costul vânzării.');
 dashboardContractAssert(str_contains($api, 'acquisition_total_cost_snapshot') && str_contains($api, '$onlineOnlyCostSummary'), 'Costul produselor necontabile trebuie fixat în comandă și inclus în profit fără fluctuații ulterioare.');
-dashboardContractAssert(str_contains($api, 'WHEN operation_type = "supplier_receipt" THEN ABS(inventory_cost_total_ron)') && str_contains($api, 'WHEN operation_type = "supplier_return" THEN -ABS(inventory_cost_total_ron)'), 'Achizițiile trebuie să provină din NIR-urile furnizorului și storno-urile lor.');
+dashboardContractAssert(str_contains($api, 'WHEN operation_type = "supplier_receipt" THEN ABS(grand_total_ron)') && str_contains($api, 'WHEN operation_type = "supplier_return" THEN -ABS(grand_total_ron)'), 'Achizițiile trebuie să provină din valoarea totală cu TVA a NIR-urilor furnizorului și a storno-urilor lor.');
 dashboardContractAssert(str_contains($api, "'cost_of_goods_sold' => \$costOfGoodsSold") && str_contains($api, 'round($revenue - $costOfGoodsSold, 2)'), 'Profitul trebuie să folosească separat costul FIFO al mărfii vândute.');
 dashboardContractAssert(str_contains($api, 'returns_count') && str_contains($api, 'returns_total'), 'API-ul trebuie să expună numărul și valoarea retururilor.');
 dashboardContractAssert(str_contains($api, 'AS pending_cash') && str_contains($api, "'pending_cash' => \$pendingCash"), 'API-ul trebuie să expună rambursurile active rămase de încasat.');
@@ -39,5 +39,14 @@ $db->exec("INSERT INTO shop_orders VALUES
     ('completed', 'pending', 90)");
 $collected = (float)$db->query('SELECT COALESCE(SUM(CASE WHEN payment_status = "paid" AND status NOT IN ("cancelled", "return_confirmed", "refunded") THEN total ELSE 0 END), 0) FROM shop_orders')->fetchColumn();
 dashboardContractAssert($collected === 140.0, 'Încasările trebuie să includă numai comenzile plătite eligibile, indiferent dacă au factură.');
+
+$db->exec('CREATE TABLE shop_nir_documents (status TEXT, operation_type TEXT, inventory_cost_total_ron NUMERIC, grand_total_ron NUMERIC, confirmed_at TEXT, created_at TEXT)');
+$db->exec("INSERT INTO shop_nir_documents VALUES
+    ('confirmed', 'supplier_receipt', 122.32, 148.00, '2026-09-21 10:00:00', '2026-09-21 09:00:00'),
+    ('confirmed', 'supplier_receipt', 50.00, 60.50, '2026-09-21 11:00:00', '2026-09-21 09:30:00'),
+    ('confirmed', 'supplier_return', 10.00, 12.10, '2026-09-21 12:00:00', '2026-09-21 09:45:00'),
+    ('draft', 'supplier_receipt', 500.00, 605.00, NULL, '2026-09-21 13:00:00')");
+$acquisitions = (float)$db->query('SELECT COALESCE(SUM(CASE WHEN operation_type = "supplier_receipt" THEN ABS(grand_total_ron) WHEN operation_type = "supplier_return" THEN -ABS(grand_total_ron) ELSE 0 END), 0) FROM shop_nir_documents WHERE status = "confirmed"')->fetchColumn();
+dashboardContractAssert($acquisitions === 196.4, 'Achizițiile trebuie să însumeze totalurile cu TVA și să scadă retururile confirmate, fără a include ciornele.');
 
 echo "dashboard_return_statistics_contract_test: OK\n";

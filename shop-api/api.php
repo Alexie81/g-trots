@@ -7194,8 +7194,8 @@ try {
 
         $acquisitionSummaryStatement = $db->prepare(
             'SELECT COALESCE(SUM(CASE
-                        WHEN operation_type = "supplier_receipt" THEN ABS(inventory_cost_total_ron)
-                        WHEN operation_type = "supplier_return" THEN -ABS(inventory_cost_total_ron)
+                        WHEN operation_type = "supplier_receipt" THEN ABS(grand_total_ron)
+                        WHEN operation_type = "supplier_return" THEN -ABS(grand_total_ron)
                         ELSE 0
                     END), 0) AS acquisitions
              FROM shop_nir_documents
@@ -7280,8 +7280,8 @@ try {
         $acquisitionsDailyStatement = $db->prepare(
             'SELECT ' . $nirBucketExpression . ' AS day,
                     COALESCE(SUM(CASE
-                        WHEN n.operation_type = "supplier_receipt" THEN ABS(n.inventory_cost_total_ron)
-                        WHEN n.operation_type = "supplier_return" THEN -ABS(n.inventory_cost_total_ron)
+                        WHEN n.operation_type = "supplier_receipt" THEN ABS(n.grand_total_ron)
+                        WHEN n.operation_type = "supplier_return" THEN -ABS(n.grand_total_ron)
                         ELSE 0
                     END), 0) AS acquisitions
              FROM shop_nir_documents n

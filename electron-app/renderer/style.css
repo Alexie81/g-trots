@@ -16326,6 +16326,37 @@ body::after {
 .shop-order-product-picker [data-picker-product] > em { display:grid; gap:5px; color:#93c5fd; font-style:normal; text-align:right; }
 .shop-order-product-picker [data-picker-product] > em small { color:#7f9fbe; font-size:9px; font-weight:900; letter-spacing:.06em; }
 .shop-order-product-picker [data-picker-product] > em b { font-size:14px; }
+.shop-order-replacement-dialog { position:fixed; inset:0; z-index:10060; display:grid; place-items:center; padding:20px; background:rgba(6,7,10,.9); backdrop-filter:blur(10px); }
+.shop-order-replacement-dialog > section { width:min(560px,calc(100vw - 28px)); max-height:min(850px,92vh); overflow:auto; border:1px solid #62527d; border-radius:28px; padding:21px; color:#f8f4f9; background:#1d1928; box-shadow:0 28px 90px rgba(0,0,0,.62); }
+.shop-order-replacement-dialog.price-only > section { border-color:#365a80; background:#171a20; }
+.shop-order-replacement-dialog header { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.shop-order-replacement-dialog header span { display:grid; gap:5px; }
+.shop-order-replacement-dialog header small { color:#c4b5fd; font-size:10px; font-weight:900; letter-spacing:.09em; }
+.shop-order-replacement-dialog.price-only header small { color:#93c5fd; }
+.shop-order-replacement-dialog header strong { color:#fffaf6; font-size:26px; }
+.shop-order-replacement-dialog header button { width:42px; height:42px; border:0; border-radius:13px; color:#c8c1c9; background:#ffffff0a; font-size:27px; cursor:pointer; }
+.shop-order-replacement-dialog > section > p { margin:13px 0 0; color:#aaa1ad; font-size:12px; line-height:1.6; }
+.shop-order-replacement-dialog article { min-height:80px; display:grid; grid-template-columns:58px minmax(0,1fr); align-items:center; gap:12px; margin-top:16px; border:1px solid #353b45; border-radius:17px; padding:10px; background:#20232a; }
+.shop-order-replacement-dialog article img,.shop-order-replacement-dialog article .placeholder { width:58px; height:58px; object-fit:contain; border-radius:14px; background:#f7f2ed; }
+.shop-order-replacement-dialog article .placeholder { display:grid; place-items:center; color:#2563eb; }
+.shop-order-replacement-dialog article span { min-width:0; display:grid; gap:6px; }
+.shop-order-replacement-dialog article strong { color:#fffaf6; font-size:14px; }
+.shop-order-replacement-dialog article small { color:#918a94; font-size:11px; }
+.shop-order-replacement-dialog .money { min-height:66px; display:flex; align-items:center; justify-content:space-between; gap:14px; margin-top:14px; border:1px solid #4c4170; border-radius:17px; padding:10px 13px; color:#c4b5fd; background:#111016; font-size:10px; font-weight:900; letter-spacing:.06em; }
+.shop-order-replacement-dialog .money > span:last-child { display:flex; align-items:center; gap:7px; border-radius:12px; padding:6px 10px; background:#211b2b; }
+.shop-order-replacement-dialog .money input { width:115px; min-height:35px; border:0; padding:0; color:#fff; background:transparent; font-size:18px; font-weight:900; text-align:right; }
+.shop-order-replacement-dialog .money i { color:#c4b5fd; font-size:12px; font-style:normal; }
+.shop-order-replacement-dialog fieldset { display:grid; gap:11px; margin:13px 0 0; border:1px solid #62527d; border-radius:18px; padding:13px 15px; background:#211b2b; }
+.shop-order-replacement-dialog fieldset legend { padding:0 5px; color:#c4b5fd; font-size:10px; font-weight:900; letter-spacing:.07em; }
+.shop-order-replacement-dialog fieldset > div { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+.shop-order-replacement-dialog fieldset > div label { min-height:44px; display:flex; align-items:center; gap:9px; border:1px solid #51465f; border-radius:13px; padding:9px 11px; background:#171319; cursor:pointer; }
+.shop-order-replacement-dialog fieldset input[type="radio"] { accent-color:#f07922; }
+.shop-order-replacement-dialog fieldset .money { margin:0; }
+.shop-order-replacement-dialog fieldset > small { color:#a89db2; font-size:10px; line-height:1.5; }
+.shop-order-replacement-dialog footer { display:grid; grid-template-columns:.8fr 1.3fr; gap:10px; margin-top:16px; }
+.shop-order-replacement-dialog footer button { min-height:52px; border:1px solid #48434b; border-radius:17px; color:#d4ccd5; background:#2a272d; font-size:12px; font-weight:900; cursor:pointer; }
+.shop-order-replacement-dialog footer button.primary { border-color:#7c3aed; color:#fff; background:#7c3aed; }
+.shop-order-replacement-dialog.price-only footer button.primary { border-color:#2563eb; background:#2563eb; }
 
 @media(max-width:760px) {
   #shop-order-modal .shop-commerce-modal.compact { width:calc(100vw - 12px); }

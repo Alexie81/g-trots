@@ -7,7 +7,7 @@
   const dashboardPreferences = readDashboardPreferences();
   const state = {
     products: [], orders: [], invoices: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], newsletterSubscribers: [], promotions: [], companies: [], receiptLocations: [], nirs: [], nirPermissions: [], nirWarehouses: [], nirReceiptLocations: [], invoiceThemeSettings: null, invoiceAutomationSettings: null, invoiceAutomationSaving: false, selectedInvoiceTheme: 'orange', invoiceSettingsDraft: { invoice_series: 'GT', next_number: 1, due_days: 7, default_notes: '' }, invoiceThemeSaving: false, invoiceQuery: '', invoiceStatusFilter: 'all', invoiceBusy: '', spvConnection: null, spvDraft: null, spvBusy: '', spvWaitingForOAuth: false, spvDiagnostics: null,
-    editingProduct: null, editingOrder: null, orderItemDrafts: [], orderProductPickerTimer: null, invoiceIssueOrder: null, invoiceDetail: null, shippingNoteOrder: null, shippingNoteBusy: '', editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, editingReceiptLocation: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
+    editingProduct: null, editingOrder: null, orderItemDrafts: [], orderProductPickerTimer: null, orderReplacementTransportConfirmed: false, orderReplacementShippingCost: 0, orderReplacementReturnPayer: '', orderReplacementReturnCost: 0, invoiceIssueOrder: null, invoiceDetail: null, shippingNoteOrder: null, shippingNoteBusy: '', editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, editingReceiptLocation: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
     productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, productTotal: 0, productSearchTimer: null, productLoadRequestId: 0, slugTouched: false, productQuery: '', orderQuery: '', orderSearchTimer: null, orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
     customerQuery: '', newsletterQuery: '', newsletterStatus: 'all', productSaveProgressTimer: null, inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirStornoDocument: null, nirSupplierReturnContext: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false, nirBundleDownloading: '', nirRegistryDownloadPeriod: 'current_month', nirRegistryDownloadContent: 'complete', nirRegistryDownloading: false, nirExportProgressTimer: null,
     pages: { products: 1, orders: 1, invoices: 1, inventory: 1, stockFlow: 1, stockMovements: 1, productSales: 1, productReviews: 1, productPurchases: 1, customers: 1, newsletter: 1, customerOrders: 1, nirs: 1 },
@@ -323,7 +323,7 @@
           <div class="shop-commerce-columns"><label>Mijloc transport / nr.<input id="shop-shipping-note-vehicle" maxlength="500" value="-" /></label><label>Ora livrării<input id="shop-shipping-note-time" maxlength="500" value="-" /></label></div>
           <label>Loc încărcare<input id="shop-shipping-note-loading" maxlength="500" value="-" /></label>
           <label>Expeditor · nume și semnătură<input id="shop-shipping-note-sender" maxlength="500" value="G-Trots Romania" /></label>
-          <label class="shop-shipping-note-stamp"><span><strong>Variantă cu ștampilă</strong><small>În PDF apare numai „ȘTAMPILĂ:”, fără chenar.</small></span><input id="shop-shipping-note-stamp" type="checkbox"><i></i></label>
+          <label class="shop-shipping-note-stamp"><span><strong>Variantă cu ștampilă</strong><small>În PDF apare ștampila salvată în Datele firmei, fără chenar.</small></span><input id="shop-shipping-note-stamp" type="checkbox"><i></i></label>
         </div>
         <footer><button type="button" class="btn-ghost" data-commerce-close="shop-shipping-note-modal">Renunță</button><button type="submit" class="btn-primary" id="shop-shipping-note-confirm">Generează avizul</button></footer>
       </form>
@@ -2594,6 +2594,78 @@
     clearTimeout(state.orderProductPickerTimer);
     document.getElementById('shop-order-product-picker')?.remove();
   }
+  function closeOrderReplacementDialog() {
+    document.getElementById('shop-order-replacement-dialog')?.remove();
+  }
+  function openOrderReplacementTransportDialog() {
+    const order = state.editingOrder;
+    if (!order || order.status !== 'completed' || !order.invoice) return;
+    closeOrderReplacementDialog();
+    const overlay = document.createElement('div');
+    overlay.id = 'shop-order-replacement-dialog';
+    overlay.className = 'shop-order-replacement-dialog';
+    const returnCost = Number(state.orderReplacementReturnCost || 0).toFixed(2);
+    const shippingCost = Number(state.orderReplacementShippingCost || 0).toFixed(2);
+    overlay.innerHTML = `<section><header><span><small>COMANDĂ LIVRATĂ ȘI FACTURATĂ</small><strong>Transportul înlocuirii</strong></span><button type="button" data-replacement-close aria-label="Închide">×</button></header><p>Se emit factura de retur pentru produsul vechi și o factură nouă pentru produsul înlocuitor. Completează separat cele două valori.</p><label class="money"><span>TRANSPORT PE FACTURA NOUĂ</span><span><input data-replacement-shipping inputmode="decimal" value="${shippingCost}"><i>lei</i></span></label><fieldset><legend>CINE SUPORTĂ TRANSPORTUL RETURULUI?</legend><div><label><input type="radio" name="shop-order-replacement-return-payer" value="customer" ${state.orderReplacementReturnPayer === 'customer' ? 'checked' : ''}><span>Clientul</span></label><label><input type="radio" name="shop-order-replacement-return-payer" value="company" ${state.orderReplacementReturnPayer === 'company' ? 'checked' : ''}><span>Firma</span></label></div><label class="money return-cost" ${state.orderReplacementReturnPayer === 'company' ? 'hidden' : ''}><span>VALOARE TRANSPORT RETUR</span><span><input data-replacement-return-cost inputmode="decimal" value="${returnCost}"><i>lei</i></span></label><small>Alegerea este obligatorie. Valoarea inițială este preluată din comandă și poate fi modificată.</small></fieldset><footer><button type="button" data-replacement-back>Înapoi</button><button type="button" class="primary" data-replacement-confirm>Confirmă transportul</button></footer></section>`;
+    document.body.appendChild(overlay);
+    const syncPayer = () => {
+      const payer = overlay.querySelector('input[name="shop-order-replacement-return-payer"]:checked')?.value || '';
+      const returnField = overlay.querySelector('.return-cost');
+      if (returnField) returnField.hidden = payer === 'company';
+    };
+    overlay.querySelectorAll('input[name="shop-order-replacement-return-payer"]').forEach(input => input.addEventListener('change', syncPayer));
+    const close = () => closeOrderReplacementDialog();
+    overlay.querySelector('[data-replacement-close]').addEventListener('click', close);
+    overlay.querySelector('[data-replacement-back]').addEventListener('click', close);
+    overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
+    overlay.querySelector('[data-replacement-confirm]').addEventListener('click', () => {
+      const nextShipping = Number(String(overlay.querySelector('[data-replacement-shipping]').value || '').replace(',', '.'));
+      const payer = overlay.querySelector('input[name="shop-order-replacement-return-payer"]:checked')?.value || '';
+      const nextReturn = Number(String(overlay.querySelector('[data-replacement-return-cost]').value || '').replace(',', '.'));
+      if (!Number.isFinite(nextShipping) || nextShipping < 0) return toast('Introdu costul transportului pentru factura nouă.', 'error');
+      if (!['customer', 'company'].includes(payer)) return toast('Alege dacă transportul returului este suportat de client sau de firmă.', 'error');
+      if (payer === 'customer' && (!Number.isFinite(nextReturn) || nextReturn < 0)) return toast('Introdu valoarea transportului de retur suportat de client.', 'error');
+      state.orderReplacementShippingCost = nextShipping;
+      state.orderReplacementReturnPayer = payer;
+      state.orderReplacementReturnCost = payer === 'customer' ? nextReturn : 0;
+      state.orderReplacementTransportConfirmed = true;
+      closeOrderReplacementDialog();
+      renderOrderDetails(state.editingOrder, true);
+    });
+    setTimeout(() => overlay.querySelector('[data-replacement-shipping]')?.focus(), 30);
+  }
+  function openOrderReplacementPriceDialog(orderItemId, product) {
+    closeOrderReplacementDialog();
+    const price = Number(product.sale_price) > 0 ? Number(product.sale_price) : Number(product.price || 0);
+    const image = product.images?.[0]?.url;
+    const overlay = document.createElement('div');
+    overlay.id = 'shop-order-replacement-dialog';
+    overlay.className = 'shop-order-replacement-dialog price-only';
+    overlay.innerHTML = `<section><header><span><small>PRODUS ÎNLOCUITOR</small><strong>Prețul de vânzare</strong></span><button type="button" data-replacement-close aria-label="Închide">×</button></header><p>Prețul afișat pe site este completat automat. Modifică-l doar dacă produsul a fost vândut la alt preț în această comandă.</p><article>${image ? `<img src="${esc(image)}" alt="">` : '<b class="placeholder">P</b>'}<span><strong>${esc(product.name)}</strong><small>${esc(product.sku || product.supplier_product_code || 'Fără cod')}</small></span></article><label class="money"><span>PREȚ VÂNZARE</span><span><input data-replacement-price inputmode="decimal" value="${price.toFixed(2)}"><i>lei</i></span></label><footer><button type="button" data-replacement-back>Renunță</button><button type="button" class="primary" data-replacement-confirm>Confirmă prețul</button></footer></section>`;
+    document.body.appendChild(overlay);
+    const close = () => closeOrderReplacementDialog();
+    overlay.querySelector('[data-replacement-close]').addEventListener('click', close);
+    overlay.querySelector('[data-replacement-back]').addEventListener('click', close);
+    overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
+    overlay.querySelector('[data-replacement-confirm]').addEventListener('click', () => {
+      const salePrice = Number(String(overlay.querySelector('[data-replacement-price]').value || '').replace(',', '.'));
+      if (!Number.isFinite(salePrice) || salePrice <= 0) return toast('Introdu un preț de vânzare mai mare decât zero.', 'error');
+      const original = (state.editingOrder?.items || []).find(item => item.id === orderItemId);
+      if (original && String(original.product_id || '') === String(product.id || '')) return toast('Alege un produs diferit de cel existent în comandă.', 'error');
+      state.orderItemDrafts = state.orderItemDrafts.map(item => item.order_item_id === orderItemId ? { ...item, product_id: product.id, product_name: product.name, product_sku: product.sku || product.supplier_product_code || '', image_url: product.images?.[0]?.url || '', unit_of_measure: product.unit_of_measure || 'buc', unit_price: salePrice } : item);
+      const deliveredAndInvoiced = state.editingOrder?.status === 'completed' && Boolean(state.editingOrder?.invoice);
+      if (deliveredAndInvoiced) {
+        state.orderReplacementShippingCost = Number(state.editingOrder.shipping_cost || 0);
+        state.orderReplacementReturnPayer = '';
+        state.orderReplacementReturnCost = Number(state.editingOrder.return_shipping_cost ?? state.editingOrder.configured_return_shipping_cost ?? state.editingOrder.shipping_cost ?? 0);
+        state.orderReplacementTransportConfirmed = false;
+      }
+      closeOrderReplacementDialog();
+      renderOrderDetails(state.editingOrder, true);
+      if (deliveredAndInvoiced) openOrderReplacementTransportDialog();
+    });
+    setTimeout(() => overlay.querySelector('[data-replacement-price]')?.focus(), 30);
+  }
   function openOrderProductPicker(orderItemId) {
     closeOrderProductPicker();
     const overlay = document.createElement('div');
@@ -2613,10 +2685,8 @@
       results.querySelectorAll('[data-picker-product]').forEach(button => button.addEventListener('click', () => {
         const product = products.find(item => item.id === button.dataset.pickerProduct);
         if (!product) return;
-        const price = Number(product.sale_price) > 0 ? Number(product.sale_price) : Number(product.price || 0);
-        state.orderItemDrafts = state.orderItemDrafts.map(item => item.order_item_id === orderItemId ? { ...item, product_id: product.id, product_name: product.name, product_sku: product.sku || product.supplier_product_code || '', image_url: product.images?.[0]?.url || '', unit_of_measure: product.unit_of_measure || 'buc', unit_price: price } : item);
         closeOrderProductPicker();
-        renderOrderDetails(state.editingOrder, true);
+        openOrderReplacementPriceDialog(orderItemId, product);
       }));
     };
     const search = async () => {
@@ -2636,15 +2706,20 @@
     state.editingOrder = order;
     $('shop-order-title').textContent = order.order_number;
     const orderItems = Array.isArray(order.items) ? order.items : [];
-    if (!preserveItemDrafts) state.orderItemDrafts = orderItems.map(item => ({ order_item_id: item.id, product_id: item.product_id || '', product_name: item.product_name, product_sku: item.product_sku || '', image_url: item.image_url || '', unit_of_measure: item.unit_of_measure || 'buc', quantity: Number(item.quantity || 0), unit_price: Number(item.discounted_unit_price ?? item.unit_price ?? 0) }));
-    const orderItemsEditable = !['completed', 'return_requested', 'return_refused', 'return_confirmed', 'refunded', 'cancelled'].includes(order.status);
-    const hasProductReplacementDraft = state.orderItemDrafts.some(item => item.product_id !== String(orderItems.find(original => original.id === item.order_item_id)?.product_id || ''));
+    if (!preserveItemDrafts) {
+      state.orderItemDrafts = orderItems.map(item => ({ order_item_id: item.id, product_id: item.product_id || '', product_name: item.product_name, product_sku: item.product_sku || '', image_url: item.image_url || '', unit_of_measure: item.unit_of_measure || 'buc', quantity: Number(item.quantity || 0), unit_price: Number(item.discounted_unit_price ?? item.unit_price ?? 0) }));
+      state.orderReplacementTransportConfirmed = false;
+      state.orderReplacementShippingCost = Number(order.shipping_cost || 0);
+      state.orderReplacementReturnPayer = '';
+      state.orderReplacementReturnCost = Number(order.return_shipping_cost ?? order.configured_return_shipping_cost ?? order.shipping_cost ?? 0);
+    }
+    const orderItemsEditable = !['return_requested', 'return_refused', 'return_confirmed', 'refunded', 'cancelled'].includes(order.status)
+      && (order.status !== 'completed' || (Boolean(order.invoice) && order.invoice?.spv_status !== 'processing'));
     const isProductPromotion = order.promotion_scope === 'product';
     const orderDiscount = Math.max(0, Number(order.discount_total || 0));
     const orderItemsHtml = state.orderItemDrafts.map(item => {
       const productOpen = item.product_id ? `<button type="button" class="shop-order-product-open" data-order-product-open="${esc(item.product_id)}" aria-label="Deschide fișa produsului ${esc(item.product_name)}" title="Deschide fișa produsului"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>` : '';
-      const productChanged = item.product_id !== String(orderItems.find(original => original.id === item.order_item_id)?.product_id || '');
-      return `<div class="shop-order-product-line editable" data-order-item-line="${esc(item.order_item_id)}">${item.image_url ? `<img src="${esc(item.image_url)}" alt="">` : `<b class="shop-order-product-placeholder">${quantity(item.quantity)}×</b>`}<span class="shop-order-product-copy"><strong>${esc(item.product_name)}</strong><span class="shop-order-product-meta"><span><small>CANTITATE</small><b>${quantity(item.quantity)} ${esc(item.unit_of_measure || 'buc')}</b></span><span><small>COD PRODUS</small><b>${esc(item.product_sku || 'Fără cod')}</b></span><button type="button" data-order-item-change="${esc(item.order_item_id)}" ${orderItemsEditable ? '' : 'disabled'}>Schimbă produsul</button><label class="${productChanged ? '' : 'locked'}"><small>PREȚ VÂNZARE</small><span><input data-order-item-price="${esc(item.order_item_id)}" inputmode="decimal" value="${Number(item.unit_price || 0).toFixed(2)}" ${orderItemsEditable && productChanged ? '' : 'disabled'}><i>lei</i></span></label></span></span><em class="shop-order-line-total">${money(Number(item.unit_price || 0) * Number(item.quantity || 0))}</em>${productOpen}</div>`;
+      return `<div class="shop-order-product-line editable" data-order-item-line="${esc(item.order_item_id)}">${item.image_url ? `<img src="${esc(item.image_url)}" alt="">` : `<b class="shop-order-product-placeholder">${quantity(item.quantity)}×</b>`}<span class="shop-order-product-copy"><strong>${esc(item.product_name)}</strong><span class="shop-order-product-meta"><span><small>CANTITATE</small><b>${quantity(item.quantity)} ${esc(item.unit_of_measure || 'buc')}</b></span><span><small>COD PRODUS</small><b>${esc(item.product_sku || 'Fără cod')}</b></span><span><small>PREȚ UNITAR</small><b>${money(item.unit_price)}</b></span><button type="button" data-order-item-change="${esc(item.order_item_id)}" ${orderItemsEditable ? '' : 'disabled'}>Schimbă produsul</button></span></span><em class="shop-order-line-total">${money(Number(item.unit_price || 0) * Number(item.quantity || 0))}</em>${productOpen}</div>`;
     }).join('');
     const productsTotal = state.orderItemDrafts.reduce((sum, item) => sum + Number(item.unit_price || 0) * Number(item.quantity || 0), 0);
     const globalDiscount = !isProductPromotion && orderDiscount > 0
@@ -2703,13 +2778,12 @@
       ? `<section class="shop-order-return-summary"><small>${order.return_policy_type === 'b2b_commercial' ? 'RETUR COMERCIAL PJ' : 'DREPT DE RETRAGERE PF'}</small><strong>Termenul cererii: ${esc(dateTime(order.return_deadline_at))}</strong></section>`
       : '';
     const returnRequestCard = `<section id="shop-order-return-field" class="shop-order-return-field" ${['return_requested','return_refused','return_confirmed','refunded'].includes(order.status) ? '' : 'hidden'}><header><span>RETUR · VERIFICARE PE CANTITATE</span><strong>${returnLocked ? 'Decizia returului' : 'Acceptă și refuză exact cantitatea verificată'}</strong><small>Poți accepta o parte și refuza restul din același produs. Factura de retur și NIR-ul includ exclusiv cantitățile acceptate; motivul refuzului este comunicat clientului.</small></header><label>Motivul returului<textarea id="shop-order-return-reason" rows="4" maxlength="1000" ${order.return_reason ? 'disabled' : ''} placeholder="Scrie motivul returului...">${esc(order.return_reason || '')}</textarea></label><div class="shop-commerce-columns"><label>Titular cont<input id="shop-order-return-holder" maxlength="180" ${order.return_reason ? 'disabled' : ''} value="${esc(order.return_bank_account_holder || '')}" placeholder="Numele titularului"></label><label>IBAN rambursare<input id="shop-order-return-iban" maxlength="40" ${order.return_reason ? 'disabled' : ''} value="${esc(order.return_bank_iban || '')}" placeholder="RO..." autocomplete="off"></label></div><div class="shop-order-return-items">${returnDecisionHtml}</div>${returnLocked ? '' : returnShippingChoice}<footer><span>Cost retur <b>−${money(returnCost)}</b></span><span>Estimare restituire <strong>${money(returnRefund)}</strong></span></footer></section>`;
+    const displayedShippingCost = order.status === 'completed' && state.orderReplacementTransportConfirmed ? Number(state.orderReplacementShippingCost || 0) : Number(order.shipping_cost || 0);
     $('shop-order-details').innerHTML = `
       <div class="shop-order-grid">${clientCard}${deliveryCard}</div>
       <div class="shop-order-items">${orderItemsHtml}</div>
-      <div class="shop-order-shipping-editor ${hasProductReplacementDraft ? '' : 'locked'}"><span><svg viewBox="0 0 24 24"><path d="M3 6h11v10H3zM14 9h4l3 3v4h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg><b>COST TRANSPORT</b><small>${hasProductReplacementDraft ? 'Preluat din comandă și editabil pentru această înlocuire.' : 'Devine editabil după ce alegi produsul înlocuitor.'}</small></span><label><input id="shop-order-shipping-cost" inputmode="decimal" value="${Number(order.shipping_cost || 0).toFixed(2)}" ${hasProductReplacementDraft ? '' : 'disabled'}><i>lei</i></label></div>
-      ${order.invoice ? `<p class="shop-order-correction-hint">${order.invoice.spv_status === 'sent' ? 'Factura este în SPV: se emit automat returul parțial, NIR-ul poziției vechi și factura noii poziții.' : order.invoice.spv_status === 'processing' ? 'Factura este în transmitere către SPV; modificarea devine disponibilă după răspunsul ANAF.' : 'Factura nu este trimisă în SPV: aceeași factură și ieșirea de stoc se actualizează automat.'}</p>` : ''}
-      ${hasProductReplacementDraft && orderItemsEditable && order.invoice?.spv_status === 'sent' ? returnShippingChoice : ''}
-      <div class="shop-order-total"><span>Produse${hasVat ? ' (TVA inclus)' : ''} <b data-order-products-total>${money(productsTotal)}</b> · Transport <b data-order-shipping-total>${money(order.shipping_cost)}</b>${globalDiscount}</span><strong>Total de plată${hasVat ? ' (TVA inclus)' : ''} <b data-order-grand-total>${money(productsTotal + Number(order.shipping_cost || 0))}</b></strong></div>
+      ${order.invoice ? `<p class="shop-order-correction-hint">${order.invoice.spv_status === 'processing' ? 'Factura este în transmitere către SPV; modificarea devine disponibilă după răspunsul ANAF.' : order.status === 'completed' ? 'Comanda este livrată și facturată: după alegerea produsului confirmi separat prețul și transportul, apoi se emit returul poziției vechi și factura produsului nou.' : order.invoice.spv_status === 'sent' ? 'Factura este în SPV: se emit automat returul parțial, NIR-ul poziției vechi și factura noii poziții.' : 'Factura nu este trimisă în SPV: aceeași factură și ieșirea de stoc se actualizează automat.'}</p>` : ''}
+      <div class="shop-order-total"><span>Produse${hasVat ? ' (TVA inclus)' : ''} <b data-order-products-total>${money(productsTotal)}</b> · Transport <b data-order-shipping-total>${money(displayedShippingCost)}</b>${globalDiscount}</span><strong>Total de plată${hasVat ? ' (TVA inclus)' : ''} <b data-order-grand-total>${money(productsTotal + displayedShippingCost)}</b></strong></div>
       ${invoiceCard}${shippingNoteCard}${returnInvoiceCard}${returnSummary}${returnPolicyLine}${orderTimeline(order)}${orderStatusPicker(order)}${returnRequestCard}
       <label id="shop-order-cancellation-field" class="shop-order-cancellation-field" ${order.status === 'cancelled' ? '' : 'hidden'}><span><b>ANULARE COMANDĂ · MOTIV OBLIGATORIU</b><strong>${order.status === 'cancelled' ? 'Motivul înregistrat' : 'De ce anulăm comanda?'}</strong><small>Clientul va fi notificat automat, iar factura și stocul vor fi corectate după regulile fiscale.</small></span><textarea id="shop-order-cancellation-reason" rows="4" maxlength="1000" placeholder="Scrie motivul transmis clientului...">${esc(order.customer_cancellation_reason || '')}</textarea></label>
       <label class="shop-order-notify" data-notify-state="waiting"><input id="shop-order-notify" type="checkbox"><span class="shop-order-notify-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/></svg><i></i></span><span class="shop-order-notify-copy"><span class="shop-order-notify-eyebrow">NOTIFICARE CLIENT <b id="shop-order-notify-state">ALEGE STATUS</b></span><strong>Trimite actualizarea pe e-mail</strong><small id="shop-order-notify-helper"></small></span><span class="shop-order-notify-switch" aria-hidden="true"><i></i></span></label>
@@ -2745,21 +2819,6 @@
       void openProductDetail(button.dataset.orderProductOpen, { overOrder: true });
     }));
     $('shop-order-details').querySelectorAll('[data-order-item-change]').forEach(button => button.addEventListener('click', () => openOrderProductPicker(button.dataset.orderItemChange)));
-    const refreshOrderDraftTotals = () => {
-      const products = state.orderItemDrafts.reduce((sum, item) => sum + Number(item.unit_price || 0) * Number(item.quantity || 0), 0);
-      const shipping = Number(String($('shop-order-shipping-cost')?.value || '0').replace(',', '.')) || 0;
-      $('shop-order-details').querySelector('[data-order-products-total]').textContent = money(products);
-      $('shop-order-details').querySelector('[data-order-shipping-total]').textContent = money(shipping);
-      $('shop-order-details').querySelector('[data-order-grand-total]').textContent = money(products + shipping);
-    };
-    $('shop-order-details').querySelectorAll('[data-order-item-price]').forEach(input => input.addEventListener('input', () => {
-      state.orderItemDrafts = state.orderItemDrafts.map(item => item.order_item_id === input.dataset.orderItemPrice ? { ...item, unit_price: Number(String(input.value || '0').replace(',', '.')) || 0 } : item);
-      const row = input.closest('[data-order-item-line]');
-      const draft = state.orderItemDrafts.find(item => item.order_item_id === input.dataset.orderItemPrice);
-      if (row && draft) row.querySelector('.shop-order-line-total').textContent = money(Number(draft.unit_price || 0) * Number(draft.quantity || 0));
-      refreshOrderDraftTotals();
-    }));
-    $('shop-order-shipping-cost')?.addEventListener('input', refreshOrderDraftTotals);
     const deliveryEditButton = $('shop-order-details').querySelector('[data-order-delivery-edit]');
     const deliveryInputs = ['shop-order-address', 'shop-order-city', 'shop-order-county', 'shop-order-postal-code'].map(id => $(id)).filter(Boolean);
     const deliveryOriginal = deliveryInputs.map(input => input.value);
@@ -2842,22 +2901,25 @@
       const city = $('shop-order-city')?.value.trim() || '';
       const county = $('shop-order-county')?.value.trim() || '';
       const postalCode = $('shop-order-postal-code')?.value.trim() || '';
-      const shippingCost = Number(String($('shop-order-shipping-cost')?.value || '0').replace(',', '.'));
-      if (!Number.isFinite(shippingCost) || shippingCost < 0) throw new Error('Introdu un cost de transport egal sau mai mare decât zero.');
       const changedOrderItems = state.orderItemDrafts.filter(draft => {
         const original = (state.editingOrder.items || []).find(item => item.id === draft.order_item_id);
         if (!original) return false;
         return draft.product_id !== String(original.product_id || '');
       });
       if (changedOrderItems.some(item => !item.product_id || !Number.isFinite(Number(item.unit_price)) || Number(item.unit_price) <= 0)) throw new Error('Alege produsul și introdu un preț de vânzare mai mare decât zero.');
-      const shippingChanged = changedOrderItems.length > 0 && Math.abs(shippingCost - Number(state.editingOrder.shipping_cost || 0)) >= 0.005;
-      const needsCorrectionShippingChoice = state.editingOrder.invoice?.spv_status === 'sent' && (changedOrderItems.length > 0 || shippingChanged);
+      const isDeliveredReplacement = state.editingOrder.status === 'completed' && Boolean(state.editingOrder.invoice) && changedOrderItems.length > 0;
+      if (isDeliveredReplacement && !state.orderReplacementTransportConfirmed) {
+        openOrderReplacementTransportDialog();
+        return;
+      }
+      const shippingCost = isDeliveredReplacement ? Number(state.orderReplacementShippingCost) : Number(state.editingOrder.shipping_cost || 0);
+      if (isDeliveredReplacement && (!Number.isFinite(shippingCost) || shippingCost < 0)) throw new Error('Introdu un cost de transport egal sau mai mare decât zero.');
       const needsReturnShippingChoice = ['return_confirmed','refunded'].includes(status) && !['return_confirmed','refunded'].includes(state.editingOrder.status);
-      const returnShippingPayer = document.querySelector('input[name="shop-order-return-shipping-payer"]:checked')?.value || '';
       const visibleShippingChoice = Array.from(document.querySelectorAll('[data-return-shipping-choice]')).find(choice => choice.offsetParent !== null);
-      const returnShippingCost = Number(String(visibleShippingChoice?.querySelector('[data-return-shipping-cost]')?.value || '0').replace(',', '.'));
-      if ((needsCorrectionShippingChoice || needsReturnShippingChoice) && !['customer','company'].includes(returnShippingPayer)) throw new Error('Alege dacă transportul returului este suportat de client sau de firmă.');
-      if ((needsCorrectionShippingChoice || needsReturnShippingChoice) && returnShippingPayer === 'customer' && (!Number.isFinite(returnShippingCost) || returnShippingCost < 0)) throw new Error('Introdu valoarea transportului de retur suportat de client.');
+      const returnShippingPayer = isDeliveredReplacement ? state.orderReplacementReturnPayer : (visibleShippingChoice?.querySelector('input[name="shop-order-return-shipping-payer"]:checked')?.value || '');
+      const returnShippingCost = isDeliveredReplacement ? Number(state.orderReplacementReturnCost) : Number(String(visibleShippingChoice?.querySelector('[data-return-shipping-cost]')?.value || '0').replace(',', '.'));
+      if ((isDeliveredReplacement || needsReturnShippingChoice) && !['customer','company'].includes(returnShippingPayer)) throw new Error('Alege dacă transportul returului este suportat de client sau de firmă.');
+      if ((isDeliveredReplacement || needsReturnShippingChoice) && returnShippingPayer === 'customer' && (!Number.isFinite(returnShippingCost) || returnShippingCost < 0)) throw new Error('Introdu valoarea transportului de retur suportat de client.');
       const savedReturnIban = String(state.editingOrder.return_bank_iban || '').trim().toUpperCase().replace(/\s+/g, '');
       const hasChanges = status !== state.editingOrder.status
         || paymentStatus !== state.editingOrder.payment_status
@@ -2870,7 +2932,6 @@
         || returnHolder !== String(state.editingOrder.return_bank_account_holder || '').trim()
         || returnIban !== savedReturnIban
         || changedOrderItems.length > 0
-        || shippingChanged
         || (['return_requested','return_refused','return_confirmed','refunded'].includes(status) && JSON.stringify(returnItems.map(item => ({ order_item_id: item.order_item_id, decision_status: item.decision_status || 'pending', accepted_quantity: Number(item.accepted_quantity || 0), decision_reason: item.decision_reason }))) !== JSON.stringify((state.editingOrder.return_items || []).map(item => ({ order_item_id: item.order_item_id, decision_status: item.decision_status || 'pending', accepted_quantity: Number(item.accepted_quantity || 0), decision_reason: item.decision_reason || '' }))));
       if (!hasChanges) {
         toast('Comanda este deja salvată. Nu a fost trimis niciun e-mail.', 'info');
@@ -2883,8 +2944,8 @@
       if (status === 'return_refused' && (returnItems.some(item => item.accepted_quantity > 0) || returnItems.some(item => item.decision_reason.length < 3))) throw new Error('Pentru Retur refuzat, cantitatea acceptată trebuie să fie zero și fiecare produs trebuie motivat. Dacă accepți cel puțin o bucată, folosește Retur confirmat.');
       if (['return_confirmed','refunded'].includes(status) && (returnItems.some(item => !item.decision_status) || !returnItems.some(item => item.accepted_quantity > 0))) throw new Error('Evaluează toate produsele și acceptă cel puțin o bucată înainte de confirmarea returului.');
       if (['return_confirmed','refunded'].includes(status) && returnItems.some(item => item.refused_quantity > 0 && item.decision_reason.length < 3)) throw new Error('Scrie motivul pentru fiecare cantitate refuzată integral sau parțial. Motivul va apărea în e-mailul clientului.');
-      const shippingChoiceRequired = needsCorrectionShippingChoice || needsReturnShippingChoice;
-      const updated = await window.SHOP_API.updateOrder(state.editingOrder.id, { status, payment_status: paymentStatus, admin_notes: adminNotes, notify_customer: status !== state.editingOrder.status && (status === 'cancelled' ? true : Boolean($('shop-order-notify')?.checked)), cancellation_reason: status === 'cancelled' ? cancellationReason : undefined, return_reason: returnTarget ? returnReason : undefined, return_bank_iban: returnTarget ? returnIban : undefined, return_bank_account_holder: returnTarget ? returnHolder : undefined, return_shipping_payer: shippingChoiceRequired ? returnShippingPayer : undefined, return_shipping_cost: shippingChoiceRequired ? (returnShippingPayer === 'customer' ? returnShippingCost : 0) : undefined, return_items: returnTarget ? returnItems : undefined, items: changedOrderItems.length ? changedOrderItems.map(item => ({ order_item_id: item.order_item_id, product_id: item.product_id, unit_price: Number(item.unit_price) })) : undefined, shipping_cost: shippingChanged ? shippingCost : undefined, address, city, county, postal_code: postalCode });
+      const shippingChoiceRequired = isDeliveredReplacement || needsReturnShippingChoice;
+      const updated = await window.SHOP_API.updateOrder(state.editingOrder.id, { status, payment_status: paymentStatus, admin_notes: adminNotes, notify_customer: status !== state.editingOrder.status && (status === 'cancelled' ? true : Boolean($('shop-order-notify')?.checked)), cancellation_reason: status === 'cancelled' ? cancellationReason : undefined, return_reason: returnTarget ? returnReason : undefined, return_bank_iban: returnTarget ? returnIban : undefined, return_bank_account_holder: returnTarget ? returnHolder : undefined, return_shipping_payer: shippingChoiceRequired ? returnShippingPayer : undefined, return_shipping_cost: shippingChoiceRequired ? (returnShippingPayer === 'customer' ? returnShippingCost : 0) : undefined, return_items: returnTarget ? returnItems : undefined, items: changedOrderItems.length ? changedOrderItems.map(item => ({ order_item_id: item.order_item_id, product_id: item.product_id, unit_price: Number(item.unit_price) })) : undefined, shipping_cost: isDeliveredReplacement ? shippingCost : undefined, charge_replacement_shipping: isDeliveredReplacement || undefined, address, city, county, postal_code: postalCode });
       closeModal('shop-order-modal');
       const email = updated.email_notification;
       const automation = updated.invoice_automation;

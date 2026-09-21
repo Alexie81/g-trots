@@ -4818,14 +4818,15 @@ function orderRow(PDO $db, array $row, ?array $config = null, bool $withHistory 
 }
 
 /**
- * Replaces products and fixes their final gross sale price before fiscal or
- * delivery documents exist. Downstream invoices, e-mails, shipping notes and
- * stock issues will therefore use the edited order lines.
+ * Replaces products and fixes their final gross sale price. Unsent documents
+ * are revised in place; delivered or SPV-sent orders receive the required
+ * return/NIR correction and a new invoice for the replacement position.
  */
-function shopAdminApplyOrderItemEdits(PDO $db, array $order, array $updates, array $actor, array $config, ?float $shippingCostOverride = null, ?string $returnShippingPayer = null, ?float $returnShippingCostOverride = null): bool {
+function shopAdminApplyOrderItemEdits(PDO $db, array $order, array $updates, array $actor, array $config, ?float $shippingCostOverride = null, ?string $returnShippingPayer = null, ?float $returnShippingCostOverride = null, bool $chargeReplacementShipping = false): bool {
     $orderId = (string)$order['id'];
-    if (in_array((string)$order['status'], ['completed', 'return_requested', 'return_refused', 'return_confirmed', 'refunded', 'cancelled'], true)) {
-        throw new InvalidArgumentException('Produsele pot fi schimbate numai cât timp comanda nu este Livrată și nu a intrat în retur sau anulare.');
+    $isDeliveredReplacement = (string)$order['status'] === 'completed';
+    if (in_array((string)$order['status'], ['return_requested', 'return_refused', 'return_confirmed', 'refunded', 'cancelled'], true)) {
+        throw new InvalidArgumentException('Produsele nu pot fi schimbate după intrarea comenzii în retur, rambursare sau anulare.');
     }
     $oldShippingCost = max(0.0, round((float)($order['shipping_cost'] ?? 0), 2));
     $shippingCost = $shippingCostOverride === null ? $oldShippingCost : max(0.0, round($shippingCostOverride, 2));
@@ -4840,7 +4841,7 @@ function shopAdminApplyOrderItemEdits(PDO $db, array $order, array $updates, arr
     );
     $invoiceStmt->execute([$orderId]);
     $issuedInvoice = $invoiceStmt->fetch() ?: null;
-    $requiresFiscalCorrection = false;
+    $requiresReplacementDocuments = false;
     if ($issuedInvoice) {
         $spvStatus = (string)($issuedInvoice['spv_status'] ?? 'not_sent');
         if ((string)($issuedInvoice['invoice_type'] ?? '') === 'corrected_invoice') {
@@ -4849,20 +4850,30 @@ function shopAdminApplyOrderItemEdits(PDO $db, array $order, array $updates, arr
         if ($spvStatus === 'processing') {
             throw new InvalidArgumentException('Factura este în curs de transmitere către SPV. Așteaptă răspunsul ANAF înainte de schimbarea produsului.');
         }
-        if ($spvStatus === 'sent') {
-            if (!in_array($returnShippingPayer, ['customer', 'company'], true)) {
-                throw new InvalidArgumentException('Alege cine suportă transportul returului înainte de corecția unei facturi trimise în SPV.');
-            }
-            if ($returnShippingPayer === 'customer' && ($returnShippingCostOverride === null || $returnShippingCostOverride < 0 || $returnShippingCostOverride > 99999999.99)) {
-                throw new InvalidArgumentException('Introdu valoarea transportului de retur suportat de client.');
-            }
+        if ($spvStatus === 'sent' || $isDeliveredReplacement) {
             $existingCorrection = $db->prepare('SELECT invoice_type FROM shop_invoices WHERE order_id = ? AND invoice_type IN ("return", "correction_return", "corrected_invoice") LIMIT 1' . $lock);
             $existingCorrection->execute([$orderId]);
             if ($existingCorrection->fetchColumn()) {
                 throw new InvalidArgumentException('Comanda are deja documente de corecție fiscală și nu mai poate fi modificată prin acest formular.');
             }
-            $requiresFiscalCorrection = true;
+            $requiresReplacementDocuments = true;
         }
+    }
+    if ($isDeliveredReplacement && !$issuedInvoice) {
+        throw new InvalidArgumentException('Pentru o comandă livrată, înlocuirea poate fi făcută numai după emiterea facturii inițiale.');
+    }
+    if ($isDeliveredReplacement) {
+        if (!$chargeReplacementShipping || $shippingCostOverride === null) {
+            throw new InvalidArgumentException('Confirmă separat costul transportului pentru factura produsului înlocuitor.');
+        }
+        if (!in_array($returnShippingPayer, ['customer', 'company'], true)) {
+            throw new InvalidArgumentException('Alege cine suportă transportul returului.');
+        }
+        if ($returnShippingPayer === 'customer' && ($returnShippingCostOverride === null || $returnShippingCostOverride < 0 || $returnShippingCostOverride > 99999999.99)) {
+            throw new InvalidArgumentException('Introdu valoarea transportului de retur suportat de client.');
+        }
+    } elseif ($shippingChanged) {
+        throw new InvalidArgumentException('Transportul poate fi modificat numai la înlocuirea unui produs dintr-o comandă livrată și facturată.');
     }
 
     $itemStmt = $db->prepare('SELECT * FROM shop_order_items WHERE order_id = ? ORDER BY id' . $lock);
@@ -4919,35 +4930,19 @@ function shopAdminApplyOrderItemEdits(PDO $db, array $order, array $updates, arr
             'line_refund_value' => $lineRefund,
         ];
     }
-    if ($requiresFiscalCorrection && $returnSelection) {
+    if ($requiresReplacementDocuments && $returnSelection) {
         GtrotsInvoiceService::issueReturn(
             $db,
             $orderId,
             'Corecție produs, preț și/sau transport în comanda ' . (string)($order['order_number'] ?? '')
-                . ($returnShippingPayer === 'customer' ? ' · transport suportat de client' : ' · transport suportat de firmă'),
+                . ($isDeliveredReplacement ? ($returnShippingPayer === 'customer' ? ' · transport suportat de client' : ' · transport suportat de firmă') : ''),
             $actor,
             $config,
             false,
             $returnSelection,
-            $returnShippingPayer === 'customer' ? round((float)$returnShippingCostOverride, 2) : 0.0
+            $isDeliveredReplacement && $returnShippingPayer === 'customer' ? round((float)$returnShippingCostOverride, 2) : 0.0
         );
     }
-    if (!$patches) {
-        $productTotal = round(max(0.0, (float)($order['total'] ?? 0) - $oldShippingCost), 2);
-        $total = round($productTotal + $shippingCost, 2);
-        $vatRate = !empty($order['vat_payer']) ? max(0.0, min(100.0, (float)($order['vat_rate'] ?? 0))) : 0.0;
-        $vatTotal = $vatRate > 0 ? round($total * $vatRate / (100 + $vatRate), 2) : 0.0;
-        $netTotal = round($total - $vatTotal, 2);
-        $db->prepare('UPDATE shop_orders SET shipping_cost = ?, total = ?, vat_total = ?, net_total = ? WHERE id = ?')
-            ->execute([$shippingCost, $total, $vatTotal, $netTotal, $orderId]);
-        if ($issuedInvoice) {
-            if ($requiresFiscalCorrection) GtrotsInvoiceService::issueCorrection($db, $orderId, (string)$issuedInvoice['id'], $actor, [], $shippingCost > 0);
-            else GtrotsInvoiceService::reviseUnsentForOrder($db, $orderId, $actor);
-        }
-        GtrotsShippingNoteService::reviseForOrder($db, $orderId);
-        return true;
-    }
-
     $productIds = [];
     foreach ($items as $item) {
         $itemId = (string)$item['id'];
@@ -5028,8 +5023,8 @@ function shopAdminApplyOrderItemEdits(PDO $db, array $order, array $updates, arr
     )->execute([round($subtotal, 2), $shippingCost, $total, $vatTotal, $netTotal, $orderId]);
 
     if ($issuedInvoice) {
-        if ($requiresFiscalCorrection) {
-            GtrotsInvoiceService::issueCorrection($db, $orderId, (string)$issuedInvoice['id'], $actor, $correctedItemIds, $shippingCost > 0);
+        if ($requiresReplacementDocuments) {
+            GtrotsInvoiceService::issueCorrection($db, $orderId, (string)$issuedInvoice['id'], $actor, $correctedItemIds, $isDeliveredReplacement && $shippingCost > 0);
         } else {
             GtrotsInvoiceService::reviseUnsentForOrder($db, $orderId, $actor);
         }
@@ -8377,7 +8372,8 @@ try {
                     array_key_exists('return_shipping_payer', $body) ? trim((string)$body['return_shipping_payer']) : null,
                     array_key_exists('return_shipping_cost', $body) && is_numeric(str_replace(',', '.', trim((string)$body['return_shipping_cost'])))
                         ? round((float)str_replace(',', '.', trim((string)$body['return_shipping_cost'])), 2)
-                        : null
+                        : null,
+                    boolValue($body['charge_replacement_shipping'] ?? false)
                 );
             }
             $address = trim((string)($body['address'] ?? $current['address'] ?? ''));

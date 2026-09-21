@@ -556,16 +556,16 @@ final class GtrotsInvoiceService
     }
 
     /**
-     * Issues the replacement positive invoice after a sent invoice has been
-     * neutralised by its credit note and customer-return NIR.
+     * Issues the replacement positive invoice after the original invoice has
+     * been neutralised by its credit note and customer-return NIR.
      */
     public static function issueCorrection(PDO $db, string $orderId, string $originalInvoiceId, array $actor, array $orderItemIds, bool $includeShipping = false): array
     {
         $existing = self::findByOrderType($db, $orderId, 'corrected_invoice', true);
         if ($existing) return self::row($existing, true, false);
         $original = self::findForUpdate($db, $originalInvoiceId);
-        if (!$original || (string)($original['spv_status'] ?? '') !== 'sent') {
-            throw new InvalidArgumentException('Factura inițială trimisă în SPV nu mai este disponibilă pentru corecție.');
+        if (!$original || (string)($original['spv_status'] ?? '') === 'processing') {
+            throw new InvalidArgumentException('Factura inițială nu este disponibilă pentru emiterea facturii produsului înlocuitor.');
         }
         $orderStmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ? LIMIT 1');
         $orderStmt->execute([$orderId]);

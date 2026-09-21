@@ -82,10 +82,11 @@ final class GtrotsShippingNoteService
     {
         $note = self::find($db, trim($id));
         if (!$note) throw new InvalidArgumentException('Avizul nu există.');
+        $note = self::hydrateStampPayload($db, $note);
         $result = self::detail($db, $note);
         if (self::storageEnabled($config)) {
-            $settings = self::storageSettings($note, $config);
-            if (is_file((string)$settings['path'])) $result['pdf_url'] = (string)$settings['url'];
+            $settings = self::storedPdf($note, $config, !empty($note['_stamp_payload_updated']));
+            $result['pdf_url'] = (string)$settings['url'];
         }
         return $result;
     }
@@ -94,8 +95,9 @@ final class GtrotsShippingNoteService
     {
         $note = self::find($db, trim($id));
         if (!$note) throw new InvalidArgumentException('Avizul nu există.');
+        $note = self::hydrateStampPayload($db, $note);
         if (self::storageEnabled($config)) {
-            $stored = self::storedPdf($note, $config);
+            $stored = self::storedPdf($note, $config, !empty($note['_stamp_payload_updated']));
             $pdf = file_get_contents((string)$stored['path']);
             if (!is_string($pdf)) throw new RuntimeException('PDF-ul avizului nu a putut fi citit.');
             return ['file_name' => (string)$stored['file_name'], 'mime_type' => 'application/pdf', 'content_base64' => base64_encode($pdf), 'public_url' => (string)$stored['url'], 'stored' => true];
@@ -111,7 +113,8 @@ final class GtrotsShippingNoteService
         $note = self::find($db, trim($id));
         if (!$note) throw new InvalidArgumentException('Avizul nu există.');
         if (!self::storageEnabled($config)) throw new RuntimeException('Stocarea publică a avizelor nu este configurată.');
-        $stored = self::storedPdf($note, $config);
+        $note = self::hydrateStampPayload($db, $note);
+        $stored = self::storedPdf($note, $config, !empty($note['_stamp_payload_updated']));
         return ['url' => (string)$stored['url'], 'file_name' => (string)$stored['file_name'], 'mime_type' => 'application/pdf'];
     }
 
@@ -176,6 +179,7 @@ final class GtrotsShippingNoteService
         if (!self::storageEnabled($config)) return;
         $note = self::findByOrder($db, trim($orderId), false);
         if (!$note) return;
+        $note = self::hydrateStampPayload($db, $note);
         try { self::storedPdf($note, $config, true); }
         catch (Throwable $error) { error_log('[G-Trots shipping note refresh] ' . $error->getMessage()); }
     }
@@ -260,7 +264,7 @@ final class GtrotsShippingNoteService
         if (!$items) throw new InvalidArgumentException('Comanda nu conține produse pentru aviz.');
         $isCompany = (string)($order['customer_type'] ?? '') === 'company';
         $buyerName = $isCompany && trim((string)($order['company_name'] ?? '')) !== '' ? (string)$order['company_name'] : (string)$order['customer_name'];
-        $seller = ['name' => (string)$company['legal_name'], 'trade_name' => (string)($company['trade_name'] ?? ''), 'cui' => (string)($company['cui'] ?? ''), 'registration_number' => (string)($company['registration_number'] ?? ''), 'address' => (string)($company['address'] ?? ''), 'city' => (string)($company['city'] ?? ''), 'county' => (string)($company['county'] ?? ''), 'phone' => (string)($company['phone'] ?? ''), 'email' => (string)($company['email'] ?? '')];
+        $seller = ['name' => (string)$company['legal_name'], 'trade_name' => (string)($company['trade_name'] ?? ''), 'cui' => (string)($company['cui'] ?? ''), 'registration_number' => (string)($company['registration_number'] ?? ''), 'address' => (string)($company['address'] ?? ''), 'city' => (string)($company['city'] ?? ''), 'county' => (string)($company['county'] ?? ''), 'phone' => (string)($company['phone'] ?? ''), 'email' => (string)($company['email'] ?? ''), 'stamp_path' => (string)($company['stamp_path'] ?? '')];
         $buyer = ['name' => $buyerName, 'phone' => (string)($order['customer_phone'] ?? ''), 'address' => (string)($order['address'] ?? ''), 'city' => (string)($order['city'] ?? ''), 'county' => (string)($order['county'] ?? ''), 'postal_code' => (string)($order['postal_code'] ?? '')];
         $editable = static fn(string $key, string $default = '-'): string => mb_substr(trim((string)($input[$key] ?? $default)) ?: $default, 0, 500);
         return ['document_id' => $id, 'series' => $series, 'number' => $number, 'issue_date' => $date, 'currency' => strtoupper((string)($order['currency'] ?? 'RON')) ?: 'RON', 'total' => round($total, 2), 'order_reference' => (string)$order['order_number'], 'seller' => $seller, 'buyer' => $buyer, 'items' => $items, 'expedition' => ['delegate_name' => $editable('delegate_name'), 'identity_document' => $editable('identity_document'), 'transport_vehicle' => $editable('transport_vehicle'), 'delivery_time' => $editable('delivery_time'), 'loading_place' => $editable('loading_place')], 'sender_name' => $editable('sender_name', 'G-Trots Romania'), 'with_stamp' => !empty($input['with_stamp'])];
@@ -309,6 +313,23 @@ final class GtrotsShippingNoteService
         $payload = json_decode((string)($note['payload_json'] ?? ''), true, 512, JSON_THROW_ON_ERROR);
         if (!is_array($payload)) throw new RuntimeException('Datele avizului nu mai sunt disponibile.');
         return $payload;
+    }
+
+    private static function hydrateStampPayload(PDO $db, array $note): array
+    {
+        if (empty($note['with_stamp'])) return $note;
+        $payload = self::payload($note);
+        $seller = (array)($payload['seller'] ?? []);
+        $stampPath = trim((string)(self::company($db)['stamp_path'] ?? ''));
+        if (trim((string)($seller['stamp_path'] ?? '')) === $stampPath) return $note;
+        $seller['stamp_path'] = $stampPath;
+        $payload['seller'] = $seller;
+        $encoded = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $db->prepare('UPDATE shop_shipping_notes SET payload_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+            ->execute([$encoded, (string)$note['id']]);
+        $note['payload_json'] = $encoded;
+        $note['_stamp_payload_updated'] = true;
+        return $note;
     }
 
     private static function canDelete(PDO $db, array $note, bool $lock = false): bool

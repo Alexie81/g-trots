@@ -6,6 +6,7 @@ require_once __DIR__ . '/../shipping-note-pdf.php';
 $output = $argv[1] ?? dirname(__DIR__, 2) . '/reports/aviz-verificare.pdf';
 $withStamp = ($argv[2] ?? 'stamp') !== 'no-stamp';
 $itemCount = max(1, min(200, (int)($argv[3] ?? 42)));
+$stampPath = (string)($argv[4] ?? 'assets/images/logo.png');
 $items = [];
 for ($index = 1; $index <= $itemCount; $index++) {
     $quantity = ($index % 4) + 1;
@@ -28,7 +29,7 @@ $payload = [
     'currency' => 'RON',
     'total' => array_sum(array_column($items, 'line_total')),
     'order_reference' => 'GT-2026-0001',
-    'seller' => ['name' => 'G-Trots România SRL', 'cui' => 'RO12345678', 'registration_number' => 'J40/1234/2026', 'address' => 'Adresă firmă', 'city' => 'București', 'county' => 'București', 'phone' => '0700 000 000', 'email' => 'contact@g-trots.ro'],
+    'seller' => ['name' => 'G-Trots România SRL', 'cui' => 'RO12345678', 'registration_number' => 'J40/1234/2026', 'address' => 'Adresă firmă', 'city' => 'București', 'county' => 'București', 'phone' => '0700 000 000', 'email' => 'contact@g-trots.ro', 'stamp_path' => $stampPath],
     'buyer' => ['name' => 'Client demonstrație', 'phone' => '0712 345 678', 'address' => 'Strada Exemplu 10', 'city' => 'Brașov', 'county' => 'Brașov', 'postal_code' => '500001'],
     'items' => $items,
     'expedition' => ['delegate_name' => '-', 'identity_document' => '-', 'transport_vehicle' => '-', 'delivery_time' => '-', 'loading_place' => '-'],

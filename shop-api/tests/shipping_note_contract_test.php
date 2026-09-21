@@ -36,6 +36,8 @@ $assert(str_contains($service, "'delegate_name' => \$editable('delegate_name')")
 $assert(str_contains($service, "'sender_name' => \$editable('sender_name', 'G-Trots Romania')"), 'Expeditorul implicit nu este configurat.');
 $assert(str_contains($service, "\$item['discounted_line_total'] ?? \$item['line_total']"), 'Avizul nu fixează valoarea efectivă a produsului din comandă.');
 $assert(str_contains($service, "\$item['unit_of_measure'] ?? ''"), 'Avizul nu preia U.M. de pe produs.');
+$assert(str_contains($service, "'stamp_path' => (string)(\$company['stamp_path'] ?? '')"), 'Avizul nu preia imaginea ștampilei din datele firmei.');
+$assert(str_contains($service, 'hydrateStampPayload'), 'Avizele cu ștampilă emise anterior nu sunt actualizate cu imaginea salvată.');
 $assert(str_contains($service, 'Poți șterge numai ultimul aviz emis.'), 'Ștergerea ultimului aviz nu este protejată.');
 $assert(str_contains($service, 'resetSequence'), 'Numărul șters nu este eliberat pentru reutilizare.');
 $assert(!str_contains($invoiceService, 'shop_shipping_notes'), 'Integrarea avizelor nu trebuie să modifice serviciul fiscal al facturilor.');
@@ -44,7 +46,9 @@ foreach (['IDENTIFICAREA DOCUMENTULUI', 'FURNIZOR / EXPEDITOR', 'CUMPĂRĂTOR / 
     $assert(str_contains($pdf, $label), "PDF-ul nu conține {$label}.");
 }
 $assert(str_contains($pdf, "=== 'RON' ? 'lei'"), 'Valorile în RON nu sunt marcate cu lei.');
-$assert(str_contains($pdf, "!empty(\$document['with_stamp']) ? '<div class=\"stamp\"><strong>ȘTAMPILĂ:</strong></div>' : ''"), 'Varianta cu/fără ștampilă nu este condiționată corect.');
+$assert(str_contains($pdf, "\$stampImage = self::imageDataUri((string)(\$seller['stamp_path'] ?? ''))"), 'PDF-ul nu încarcă imaginea ștampilei.');
+$assert(str_contains($pdf, "!empty(\$document['with_stamp'])"), 'Varianta cu/fără ștampilă nu este condiționată corect.');
+$assert(str_contains($pdf, "'<img src=\"' . self::e(\$stampImage)"), 'Imaginea ștampilei nu este inserată în PDF.');
 $assert(str_contains($pdf, "trim((string)(\$item['name'] ?? '')) !== ''"), 'PDF-ul nu elimină pozițiile goale din tabel.');
 $assert(!preg_match('/for\s*\([^)]*\$rows/i', $pdf), 'PDF-ul nu trebuie să completeze tabelul cu rânduri goale până la un număr fix.');
 foreach (['Urmează factura', 'Fără factură', 'ALTA CAUZĂ', 'PRIMIRE ÎN GESTIUNE', 'PRIMIT DE'] as $forbidden) {

@@ -7,7 +7,7 @@
   const dashboardPreferences = readDashboardPreferences();
   const state = {
     products: [], orders: [], invoices: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], newsletterSubscribers: [], promotions: [], companies: [], receiptLocations: [], nirs: [], nirPermissions: [], nirWarehouses: [], nirReceiptLocations: [], invoiceThemeSettings: null, invoiceAutomationSettings: null, invoiceAutomationSaving: false, selectedInvoiceTheme: 'orange', invoiceSettingsDraft: { invoice_series: 'GT', next_number: 1, due_days: 7, default_notes: '' }, invoiceThemeSaving: false, invoiceQuery: '', invoiceStatusFilter: 'all', invoiceBusy: '', spvConnection: null, spvDraft: null, spvBusy: '', spvWaitingForOAuth: false, spvDiagnostics: null,
-    editingProduct: null, editingOrder: null, invoiceIssueOrder: null, invoiceDetail: null, shippingNoteOrder: null, shippingNoteBusy: '', editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, editingReceiptLocation: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
+    editingProduct: null, editingOrder: null, orderItemDrafts: [], orderProductPickerTimer: null, invoiceIssueOrder: null, invoiceDetail: null, shippingNoteOrder: null, shippingNoteBusy: '', editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, editingReceiptLocation: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
     productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, productTotal: 0, productSearchTimer: null, productLoadRequestId: 0, slugTouched: false, productQuery: '', orderQuery: '', orderSearchTimer: null, orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
     customerQuery: '', newsletterQuery: '', newsletterStatus: 'all', productSaveProgressTimer: null, inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirStornoDocument: null, nirSupplierReturnContext: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false, nirBundleDownloading: '', nirRegistryDownloadPeriod: 'current_month', nirRegistryDownloadContent: 'complete', nirRegistryDownloading: false, nirExportProgressTimer: null,
     pages: { products: 1, orders: 1, invoices: 1, inventory: 1, stockFlow: 1, stockMovements: 1, productSales: 1, productReviews: 1, productPurchases: 1, customers: 1, newsletter: 1, customerOrders: 1, nirs: 1 },
@@ -2590,24 +2590,61 @@
       button.disabled = !order.customer_email;
     }
   }
-  function renderOrderDetails(order) {
+  function closeOrderProductPicker() {
+    clearTimeout(state.orderProductPickerTimer);
+    document.getElementById('shop-order-product-picker')?.remove();
+  }
+  function openOrderProductPicker(orderItemId) {
+    closeOrderProductPicker();
+    const overlay = document.createElement('div');
+    overlay.id = 'shop-order-product-picker';
+    overlay.className = 'shop-order-product-picker';
+    overlay.innerHTML = `<section><header><span><small>SCHIMBĂ PRODUSUL</small><strong>Caută în catalog</strong></span><button type="button" data-picker-close aria-label="Închide">×</button></header><label><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input autofocus placeholder="Denumire, cod, SKU sau EAN"><i data-picker-loading></i></label><div data-picker-results><p>Scrie denumirea sau codul produsului.</p></div></section>`;
+    document.body.appendChild(overlay);
+    const input = overlay.querySelector('input');
+    const results = overlay.querySelector('[data-picker-results]');
+    const loading = overlay.querySelector('[data-picker-loading]');
+    const renderResults = products => {
+      results.innerHTML = products.length ? products.map(product => {
+        const image = product.images?.[0]?.url;
+        const price = Number(product.sale_price) > 0 ? Number(product.sale_price) : Number(product.price || 0);
+        return `<button type="button" data-picker-product="${esc(product.id)}">${image ? `<img src="${esc(image)}" alt="">` : '<b class="placeholder">P</b>'}<span><strong>${esc(product.name)}</strong><small>${esc(product.sku || product.supplier_product_code || 'Fără cod')} · stoc ${product.stock_mode === 'unlimited' ? 'nelimitat' : quantity(product.stock_quantity)}</small></span><em><small>PREȚ SITE</small><b>${money(price)}</b></em></button>`;
+      }).join('') : '<p>Nu am găsit produse. Încearcă denumirea sau codul.</p>';
+      results.querySelectorAll('[data-picker-product]').forEach(button => button.addEventListener('click', () => {
+        const product = products.find(item => item.id === button.dataset.pickerProduct);
+        if (!product) return;
+        const price = Number(product.sale_price) > 0 ? Number(product.sale_price) : Number(product.price || 0);
+        state.orderItemDrafts = state.orderItemDrafts.map(item => item.order_item_id === orderItemId ? { ...item, product_id: product.id, product_name: product.name, product_sku: product.sku || product.supplier_product_code || '', image_url: product.images?.[0]?.url || '', unit_of_measure: product.unit_of_measure || 'buc', unit_price: price } : item);
+        closeOrderProductPicker();
+        renderOrderDetails(state.editingOrder, true);
+      }));
+    };
+    const search = async () => {
+      const query = input.value.trim();
+      if (!query) { results.innerHTML = '<p>Scrie denumirea sau codul produsului.</p>'; return; }
+      loading.classList.add('active');
+      try { renderResults(await window.SHOP_API.listProductOptions({ q: query, limit: 50 })); }
+      catch (error) { results.innerHTML = `<p>${esc(error.message || 'Produsele nu au putut fi încărcate.')}</p>`; }
+      finally { loading.classList.remove('active'); }
+    };
+    input.addEventListener('input', () => { clearTimeout(state.orderProductPickerTimer); state.orderProductPickerTimer = setTimeout(() => void search(), 220); });
+    overlay.querySelector('[data-picker-close]').addEventListener('click', closeOrderProductPicker);
+    overlay.addEventListener('click', event => { if (event.target === overlay) closeOrderProductPicker(); });
+    setTimeout(() => input.focus(), 30);
+  }
+  function renderOrderDetails(order, preserveItemDrafts = false) {
     state.editingOrder = order;
     $('shop-order-title').textContent = order.order_number;
     const orderItems = Array.isArray(order.items) ? order.items : [];
+    if (!preserveItemDrafts) state.orderItemDrafts = orderItems.map(item => ({ order_item_id: item.id, product_id: item.product_id || '', product_name: item.product_name, product_sku: item.product_sku || '', image_url: item.image_url || '', unit_of_measure: item.unit_of_measure || 'buc', quantity: Number(item.quantity || 0), unit_price: Number(item.discounted_unit_price ?? item.unit_price ?? 0) }));
+    const orderItemsEditable = !['completed', 'return_requested', 'return_refused', 'return_confirmed', 'refunded', 'cancelled'].includes(order.status);
     const isProductPromotion = order.promotion_scope === 'product';
     const orderDiscount = Math.max(0, Number(order.discount_total || 0));
-    const orderItemsHtml = orderItems.map(item => {
-      const hasDiscount = isProductPromotion && Number(item.discount_total || 0) > 0;
-      const unitPrice = hasDiscount
-        ? `<del>${money(item.unit_price)}</del><b>${money(item.discounted_unit_price ?? item.unit_price)}</b>`
-        : money(item.unit_price);
-      const lineTotal = hasDiscount
-        ? `<del>${money(item.line_total)}</del><b>${money(item.discounted_line_total ?? item.line_total)}</b>`
-        : money(item.line_total);
+    const orderItemsHtml = state.orderItemDrafts.map(item => {
       const productOpen = item.product_id ? `<button type="button" class="shop-order-product-open" data-order-product-open="${esc(item.product_id)}" aria-label="Deschide fișa produsului ${esc(item.product_name)}" title="Deschide fișa produsului"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>` : '';
-      return `<div class="shop-order-product-line">${item.image_url ? `<img src="${esc(item.image_url)}" alt="">` : `<b class="shop-order-product-placeholder">${quantity(item.quantity)}×</b>`}<span class="shop-order-product-copy"><strong>${esc(item.product_name)}</strong><span class="shop-order-product-meta"><span><small>CANTITATE</small><b>${quantity(item.quantity)} ${esc(item.unit_of_measure || 'buc')}</b></span><span><small>COD PRODUS</small><b>${esc(item.product_sku || 'Fără cod')}</b></span><span><small>PREȚ UNITAR</small><b class="${hasDiscount ? 'discounted' : ''}">${unitPrice}</b></span></span></span><em class="shop-order-line-total ${hasDiscount ? 'discounted' : ''}">${lineTotal}</em>${productOpen}</div>`;
+      return `<div class="shop-order-product-line editable" data-order-item-line="${esc(item.order_item_id)}">${item.image_url ? `<img src="${esc(item.image_url)}" alt="">` : `<b class="shop-order-product-placeholder">${quantity(item.quantity)}×</b>`}<span class="shop-order-product-copy"><strong>${esc(item.product_name)}</strong><span class="shop-order-product-meta"><span><small>CANTITATE</small><b>${quantity(item.quantity)} ${esc(item.unit_of_measure || 'buc')}</b></span><span><small>COD PRODUS</small><b>${esc(item.product_sku || 'Fără cod')}</b></span><button type="button" data-order-item-change="${esc(item.order_item_id)}" ${orderItemsEditable ? '' : 'disabled'}>Schimbă produsul</button><label><small>PREȚ VÂNZARE</small><span><input data-order-item-price="${esc(item.order_item_id)}" inputmode="decimal" value="${Number(item.unit_price || 0).toFixed(2)}" ${orderItemsEditable ? '' : 'disabled'}><i>lei</i></span></label></span></span><em class="shop-order-line-total">${money(Number(item.unit_price || 0) * Number(item.quantity || 0))}</em>${productOpen}</div>`;
     }).join('');
-    const productsTotal = Number(order.subtotal || 0) - (isProductPromotion ? orderDiscount : 0);
+    const productsTotal = state.orderItemDrafts.reduce((sum, item) => sum + Number(item.unit_price || 0) * Number(item.quantity || 0), 0);
     const globalDiscount = !isProductPromotion && orderDiscount > 0
       ? `<small class="shop-order-discount">Reducere${order.promotion_code ? ` · ${esc(order.promotion_code)}` : ''} <b>−${money(orderDiscount)}</b></small>`
       : '';
@@ -2630,12 +2667,20 @@
     const shippingNoteCard = order.shipping_note
       ? `<section class="shop-order-invoice-card shop-order-shipping-note issued"><span class="shop-order-invoice-icon">AVZ</span><div><small>AVIZ DE ÎNSOȚIRE</small><strong>${esc(order.shipping_note.display_number)}</strong><p>${order.shipping_note.with_stamp ? 'Cu ștampilă' : 'Fără ștampilă'} · comanda ${esc(order.order_number)}${order.shipping_note.email_sent_at ? ' · trimis pe e-mail' : ''}</p></div><aside class="shop-shipping-note-actions"><button type="button" data-shipping-note-share="${esc(order.shipping_note.id)}">Trimite PDF</button><button type="button" data-shipping-note-email="${esc(order.shipping_note.id)}" ${order.customer_email ? '' : 'disabled'}>E-mail</button><button type="button" data-shipping-note-download="${esc(order.shipping_note.id)}">Download</button>${order.shipping_note.can_delete ? `<button type="button" class="danger" data-shipping-note-delete="${esc(order.shipping_note.id)}">Șterge</button>` : ''}</aside></section>`
       : `<section class="shop-order-invoice-card shop-order-shipping-note"><span class="shop-order-invoice-icon">AVZ</span><div><small>AVIZ DE ÎNSOȚIRE</small><strong>Aviz neemis</strong><p>Datele firmei, clientul și produsele se preiau automat din comandă.</p></div><aside><button type="button" class="primary issue" data-shipping-note-issue="${esc(order.id)}">Generează avizul</button></aside></section>`;
-    const returnInvoiceCard = ['return_requested', 'return_refused', 'return_confirmed', 'refunded'].includes(order.status) && order.return_invoice
-      ? `<section class="shop-order-invoice-card issued return"><span class="shop-order-invoice-icon">↩</span><div><small>FACTURĂ DE RETUR</small><strong>${esc(order.return_invoice.display_number)}</strong><p>Referință la ${esc(order.invoice?.display_number || 'factura pozitivă')} și comanda ${esc(order.order_number)} · SPV ${order.return_invoice.spv_status === 'sent' ? 'trimisă' : 'în așteptare'}</p></div><aside><button type="button" class="primary issue" data-order-invoice-open="${esc(order.return_invoice.id)}">Vezi returul</button></aside></section>`
+    const returnInvoiceCard = order.return_invoice
+      ? `<section class="shop-order-invoice-card issued return"><span class="shop-order-invoice-icon">↩</span><div><small>${order.return_invoice.invoice_type === 'correction_return' ? 'FACTURĂ NEGATIVĂ DE CORECȚIE' : 'FACTURĂ DE RETUR'}</small><strong>${esc(order.return_invoice.display_number)}</strong><p>Referință fiscală și comanda ${esc(order.order_number)} · SPV ${order.return_invoice.spv_status === 'sent' ? 'trimisă' : 'în așteptare'}</p></div><aside><button type="button" class="primary issue" data-order-invoice-open="${esc(order.return_invoice.id)}">Vezi returul</button></aside></section>`
       : '';
     const returnCost = Number(order.return_shipping_cost ?? order.configured_return_shipping_cost ?? 0);
     const returnRefund = Number(order.return_refund_amount ?? Math.max(0, Number(order.total || 0) - returnCost));
     const returnLocked = ['return_confirmed', 'refunded'].includes(order.status);
+    const returnShippingPayer = ['customer', 'company'].includes(order.return_shipping_payer) ? order.return_shipping_payer : '';
+    const returnShippingCostValue = Number(order.return_shipping_cost ?? order.configured_return_shipping_cost ?? order.shipping_cost ?? 0).toFixed(2);
+    const returnShippingChoice = `<section class="shop-order-return-shipping-choice" data-return-shipping-choice>
+      <small>CINE SUPORTĂ TRANSPORTUL RETURULUI?</small>
+      <div><label><input type="radio" name="shop-order-return-shipping-payer" value="customer" ${returnShippingPayer === 'customer' ? 'checked' : ''}><span>Clientul</span></label><label><input type="radio" name="shop-order-return-shipping-payer" value="company" ${returnShippingPayer === 'company' ? 'checked' : ''}><span>Firma</span></label></div>
+      <label class="shop-order-return-shipping-amount" ${returnShippingPayer === 'company' ? 'hidden' : ''}><span>Valoare transport retur</span><span><input data-return-shipping-cost inputmode="decimal" value="${returnShippingCostValue}"><i>lei</i></span></label>
+      <p>Alegerea este obligatorie. Valoarea este preluată de la data comenzii și poate fi modificată.</p>
+    </section>`;
     const returnDecisionItems = (Array.isArray(order.return_items) && order.return_items.length ? order.return_items : orderItems.map(item => ({ order_item_id: item.id, product_name: item.product_name, product_sku: item.product_sku, requested_quantity: item.quantity, decision_status: 'pending', accepted_quantity: item.quantity, decision_reason: '' })));
     const returnDecisionHtml = returnDecisionItems.map(item => {
       const requested = Number(item.requested_quantity || 0);
@@ -2655,11 +2700,14 @@
     const returnPolicyLine = order.return_deadline_at
       ? `<section class="shop-order-return-summary"><small>${order.return_policy_type === 'b2b_commercial' ? 'RETUR COMERCIAL PJ' : 'DREPT DE RETRAGERE PF'}</small><strong>Termenul cererii: ${esc(dateTime(order.return_deadline_at))}</strong></section>`
       : '';
-    const returnRequestCard = `<section id="shop-order-return-field" class="shop-order-return-field" ${['return_requested','return_refused','return_confirmed','refunded'].includes(order.status) ? '' : 'hidden'}><header><span>RETUR · VERIFICARE PE CANTITATE</span><strong>${returnLocked ? 'Decizia returului' : 'Acceptă și refuză exact cantitatea verificată'}</strong><small>Poți accepta o parte și refuza restul din același produs. Factura de retur și NIR-ul includ exclusiv cantitățile acceptate; motivul refuzului este comunicat clientului.</small></header><label>Motivul returului<textarea id="shop-order-return-reason" rows="4" maxlength="1000" ${order.return_reason ? 'disabled' : ''} placeholder="Scrie motivul returului...">${esc(order.return_reason || '')}</textarea></label><div class="shop-commerce-columns"><label>Titular cont<input id="shop-order-return-holder" maxlength="180" ${order.return_reason ? 'disabled' : ''} value="${esc(order.return_bank_account_holder || '')}" placeholder="Numele titularului"></label><label>IBAN rambursare<input id="shop-order-return-iban" maxlength="40" ${order.return_reason ? 'disabled' : ''} value="${esc(order.return_bank_iban || '')}" placeholder="RO..." autocomplete="off"></label></div><div class="shop-order-return-items">${returnDecisionHtml}</div><footer><span>Cost retur <b>−${money(returnCost)}</b></span><span>Estimare restituire <strong>${money(returnRefund)}</strong></span></footer></section>`;
+    const returnRequestCard = `<section id="shop-order-return-field" class="shop-order-return-field" ${['return_requested','return_refused','return_confirmed','refunded'].includes(order.status) ? '' : 'hidden'}><header><span>RETUR · VERIFICARE PE CANTITATE</span><strong>${returnLocked ? 'Decizia returului' : 'Acceptă și refuză exact cantitatea verificată'}</strong><small>Poți accepta o parte și refuza restul din același produs. Factura de retur și NIR-ul includ exclusiv cantitățile acceptate; motivul refuzului este comunicat clientului.</small></header><label>Motivul returului<textarea id="shop-order-return-reason" rows="4" maxlength="1000" ${order.return_reason ? 'disabled' : ''} placeholder="Scrie motivul returului...">${esc(order.return_reason || '')}</textarea></label><div class="shop-commerce-columns"><label>Titular cont<input id="shop-order-return-holder" maxlength="180" ${order.return_reason ? 'disabled' : ''} value="${esc(order.return_bank_account_holder || '')}" placeholder="Numele titularului"></label><label>IBAN rambursare<input id="shop-order-return-iban" maxlength="40" ${order.return_reason ? 'disabled' : ''} value="${esc(order.return_bank_iban || '')}" placeholder="RO..." autocomplete="off"></label></div><div class="shop-order-return-items">${returnDecisionHtml}</div>${returnLocked ? '' : returnShippingChoice}<footer><span>Cost retur <b>−${money(returnCost)}</b></span><span>Estimare restituire <strong>${money(returnRefund)}</strong></span></footer></section>`;
     $('shop-order-details').innerHTML = `
       <div class="shop-order-grid">${clientCard}${deliveryCard}</div>
       <div class="shop-order-items">${orderItemsHtml}</div>
-      <div class="shop-order-total"><span>${isProductPromotion && orderDiscount > 0 ? 'Subtotal după reduceri' : 'Subtotal'}${hasVat ? ' (TVA inclus)' : ''} ${money(productsTotal)} · Livrare ${money(order.shipping_cost)}${globalDiscount}</span><strong>Total de plată${hasVat ? ' (TVA inclus)' : ''} ${money(order.total)}</strong></div>
+      <div class="shop-order-shipping-editor"><span><svg viewBox="0 0 24 24"><path d="M3 6h11v10H3zM14 9h4l3 3v4h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg><b>COST TRANSPORT</b><small>Preluat din comandă și editabil până la livrare.</small></span><label><input id="shop-order-shipping-cost" inputmode="decimal" value="${Number(order.shipping_cost || 0).toFixed(2)}" ${orderItemsEditable ? '' : 'disabled'}><i>lei</i></label></div>
+      ${order.invoice ? `<p class="shop-order-correction-hint">${order.invoice.spv_status === 'sent' ? 'Factura este în SPV: se emit automat returul parțial, NIR-ul poziției vechi și factura noii poziții.' : order.invoice.spv_status === 'processing' ? 'Factura este în transmitere către SPV; modificarea devine disponibilă după răspunsul ANAF.' : 'Factura nu este trimisă în SPV: aceeași factură și ieșirea de stoc se actualizează automat.'}</p>` : ''}
+      ${orderItemsEditable && order.invoice?.spv_status === 'sent' ? returnShippingChoice : ''}
+      <div class="shop-order-total"><span>Produse${hasVat ? ' (TVA inclus)' : ''} <b data-order-products-total>${money(productsTotal)}</b> · Transport <b data-order-shipping-total>${money(order.shipping_cost)}</b>${globalDiscount}</span><strong>Total de plată${hasVat ? ' (TVA inclus)' : ''} <b data-order-grand-total>${money(productsTotal + Number(order.shipping_cost || 0))}</b></strong></div>
       ${invoiceCard}${shippingNoteCard}${returnInvoiceCard}${returnSummary}${returnPolicyLine}${orderTimeline(order)}${orderStatusPicker(order)}${returnRequestCard}
       <label id="shop-order-cancellation-field" class="shop-order-cancellation-field" ${order.status === 'cancelled' ? '' : 'hidden'}><span><b>ANULARE COMANDĂ · MOTIV OBLIGATORIU</b><strong>${order.status === 'cancelled' ? 'Motivul înregistrat' : 'De ce anulăm comanda?'}</strong><small>Clientul va fi notificat automat, iar factura și stocul vor fi corectate după regulile fiscale.</small></span><textarea id="shop-order-cancellation-reason" rows="4" maxlength="1000" placeholder="Scrie motivul transmis clientului...">${esc(order.customer_cancellation_reason || '')}</textarea></label>
       <label class="shop-order-notify" data-notify-state="waiting"><input id="shop-order-notify" type="checkbox"><span class="shop-order-notify-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/></svg><i></i></span><span class="shop-order-notify-copy"><span class="shop-order-notify-eyebrow">NOTIFICARE CLIENT <b id="shop-order-notify-state">ALEGE STATUS</b></span><strong>Trimite actualizarea pe e-mail</strong><small id="shop-order-notify-helper"></small></span><span class="shop-order-notify-switch" aria-hidden="true"><i></i></span></label>
@@ -2675,11 +2723,41 @@
     $('shop-order-details').querySelector('[data-shipping-note-download]')?.addEventListener('click', () => void downloadShippingNote(order.shipping_note));
     $('shop-order-details').querySelector('[data-shipping-note-delete]')?.addEventListener('click', () => void deleteShippingNote(order.shipping_note, order));
     $('shop-order-details').querySelectorAll('[data-order-invoice-open]').forEach(button => button.addEventListener('click', event => { event.preventDefault(); navigateToIssuedInvoice(event.currentTarget.dataset.orderInvoiceOpen); }));
+    $('shop-order-details').querySelectorAll('[data-return-shipping-choice]').forEach(choice => {
+      const refresh = () => {
+        const payer = document.querySelector('input[name="shop-order-return-shipping-payer"]:checked')?.value || '';
+        const amount = choice.querySelector('.shop-order-return-shipping-amount');
+        if (amount) amount.hidden = payer === 'company';
+      };
+      choice.querySelectorAll('input[name="shop-order-return-shipping-payer"]').forEach(input => input.addEventListener('change', () => {
+        $('shop-order-details').querySelectorAll('[data-return-shipping-choice]').forEach(section => {
+          const amount = section.querySelector('.shop-order-return-shipping-amount');
+          if (amount) amount.hidden = input.value === 'company';
+        });
+      }));
+      refresh();
+    });
     $('shop-order-details').querySelectorAll('[data-order-product-open]').forEach(button => button.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
       void openProductDetail(button.dataset.orderProductOpen, { overOrder: true });
     }));
+    $('shop-order-details').querySelectorAll('[data-order-item-change]').forEach(button => button.addEventListener('click', () => openOrderProductPicker(button.dataset.orderItemChange)));
+    const refreshOrderDraftTotals = () => {
+      const products = state.orderItemDrafts.reduce((sum, item) => sum + Number(item.unit_price || 0) * Number(item.quantity || 0), 0);
+      const shipping = Number(String($('shop-order-shipping-cost')?.value || '0').replace(',', '.')) || 0;
+      $('shop-order-details').querySelector('[data-order-products-total]').textContent = money(products);
+      $('shop-order-details').querySelector('[data-order-shipping-total]').textContent = money(shipping);
+      $('shop-order-details').querySelector('[data-order-grand-total]').textContent = money(products + shipping);
+    };
+    $('shop-order-details').querySelectorAll('[data-order-item-price]').forEach(input => input.addEventListener('input', () => {
+      state.orderItemDrafts = state.orderItemDrafts.map(item => item.order_item_id === input.dataset.orderItemPrice ? { ...item, unit_price: Number(String(input.value || '0').replace(',', '.')) || 0 } : item);
+      const row = input.closest('[data-order-item-line]');
+      const draft = state.orderItemDrafts.find(item => item.order_item_id === input.dataset.orderItemPrice);
+      if (row && draft) row.querySelector('.shop-order-line-total').textContent = money(Number(draft.unit_price || 0) * Number(draft.quantity || 0));
+      refreshOrderDraftTotals();
+    }));
+    $('shop-order-shipping-cost')?.addEventListener('input', refreshOrderDraftTotals);
     const deliveryEditButton = $('shop-order-details').querySelector('[data-order-delivery-edit]');
     const deliveryInputs = ['shop-order-address', 'shop-order-city', 'shop-order-county', 'shop-order-postal-code'].map(id => $(id)).filter(Boolean);
     const deliveryOriginal = deliveryInputs.map(input => input.value);
@@ -2762,6 +2840,22 @@
       const city = $('shop-order-city')?.value.trim() || '';
       const county = $('shop-order-county')?.value.trim() || '';
       const postalCode = $('shop-order-postal-code')?.value.trim() || '';
+      const shippingCost = Number(String($('shop-order-shipping-cost')?.value || '0').replace(',', '.'));
+      if (!Number.isFinite(shippingCost) || shippingCost < 0) throw new Error('Introdu un cost de transport egal sau mai mare decât zero.');
+      const changedOrderItems = state.orderItemDrafts.filter(draft => {
+        const original = (state.editingOrder.items || []).find(item => item.id === draft.order_item_id);
+        if (!original) return false;
+        return draft.product_id !== String(original.product_id || '') || Math.abs(Number(draft.unit_price || 0) - Number(original.discounted_unit_price ?? original.unit_price ?? 0)) >= 0.005;
+      });
+      if (changedOrderItems.some(item => !item.product_id || !Number.isFinite(Number(item.unit_price)) || Number(item.unit_price) <= 0)) throw new Error('Alege produsul și introdu un preț de vânzare mai mare decât zero.');
+      const shippingChanged = Math.abs(shippingCost - Number(state.editingOrder.shipping_cost || 0)) >= 0.005;
+      const needsCorrectionShippingChoice = state.editingOrder.invoice?.spv_status === 'sent' && (changedOrderItems.length > 0 || shippingChanged);
+      const needsReturnShippingChoice = ['return_confirmed','refunded'].includes(status) && !['return_confirmed','refunded'].includes(state.editingOrder.status);
+      const returnShippingPayer = document.querySelector('input[name="shop-order-return-shipping-payer"]:checked')?.value || '';
+      const visibleShippingChoice = Array.from(document.querySelectorAll('[data-return-shipping-choice]')).find(choice => choice.offsetParent !== null);
+      const returnShippingCost = Number(String(visibleShippingChoice?.querySelector('[data-return-shipping-cost]')?.value || '0').replace(',', '.'));
+      if ((needsCorrectionShippingChoice || needsReturnShippingChoice) && !['customer','company'].includes(returnShippingPayer)) throw new Error('Alege dacă transportul returului este suportat de client sau de firmă.');
+      if ((needsCorrectionShippingChoice || needsReturnShippingChoice) && returnShippingPayer === 'customer' && (!Number.isFinite(returnShippingCost) || returnShippingCost < 0)) throw new Error('Introdu valoarea transportului de retur suportat de client.');
       const savedReturnIban = String(state.editingOrder.return_bank_iban || '').trim().toUpperCase().replace(/\s+/g, '');
       const hasChanges = status !== state.editingOrder.status
         || paymentStatus !== state.editingOrder.payment_status
@@ -2773,6 +2867,8 @@
         || returnReason !== String(state.editingOrder.return_reason || '').trim()
         || returnHolder !== String(state.editingOrder.return_bank_account_holder || '').trim()
         || returnIban !== savedReturnIban
+        || changedOrderItems.length > 0
+        || shippingChanged
         || (['return_requested','return_refused','return_confirmed','refunded'].includes(status) && JSON.stringify(returnItems.map(item => ({ order_item_id: item.order_item_id, decision_status: item.decision_status || 'pending', accepted_quantity: Number(item.accepted_quantity || 0), decision_reason: item.decision_reason }))) !== JSON.stringify((state.editingOrder.return_items || []).map(item => ({ order_item_id: item.order_item_id, decision_status: item.decision_status || 'pending', accepted_quantity: Number(item.accepted_quantity || 0), decision_reason: item.decision_reason || '' }))));
       if (!hasChanges) {
         toast('Comanda este deja salvată. Nu a fost trimis niciun e-mail.', 'info');
@@ -2785,7 +2881,8 @@
       if (status === 'return_refused' && (returnItems.some(item => item.accepted_quantity > 0) || returnItems.some(item => item.decision_reason.length < 3))) throw new Error('Pentru Retur refuzat, cantitatea acceptată trebuie să fie zero și fiecare produs trebuie motivat. Dacă accepți cel puțin o bucată, folosește Retur confirmat.');
       if (['return_confirmed','refunded'].includes(status) && (returnItems.some(item => !item.decision_status) || !returnItems.some(item => item.accepted_quantity > 0))) throw new Error('Evaluează toate produsele și acceptă cel puțin o bucată înainte de confirmarea returului.');
       if (['return_confirmed','refunded'].includes(status) && returnItems.some(item => item.refused_quantity > 0 && item.decision_reason.length < 3)) throw new Error('Scrie motivul pentru fiecare cantitate refuzată integral sau parțial. Motivul va apărea în e-mailul clientului.');
-      const updated = await window.SHOP_API.updateOrder(state.editingOrder.id, { status, payment_status: paymentStatus, admin_notes: adminNotes, notify_customer: status !== state.editingOrder.status && (status === 'cancelled' ? true : Boolean($('shop-order-notify')?.checked)), cancellation_reason: status === 'cancelled' ? cancellationReason : undefined, return_reason: returnTarget ? returnReason : undefined, return_bank_iban: returnTarget ? returnIban : undefined, return_bank_account_holder: returnTarget ? returnHolder : undefined, return_items: returnTarget ? returnItems : undefined, address, city, county, postal_code: postalCode });
+      const shippingChoiceRequired = needsCorrectionShippingChoice || needsReturnShippingChoice;
+      const updated = await window.SHOP_API.updateOrder(state.editingOrder.id, { status, payment_status: paymentStatus, admin_notes: adminNotes, notify_customer: status !== state.editingOrder.status && (status === 'cancelled' ? true : Boolean($('shop-order-notify')?.checked)), cancellation_reason: status === 'cancelled' ? cancellationReason : undefined, return_reason: returnTarget ? returnReason : undefined, return_bank_iban: returnTarget ? returnIban : undefined, return_bank_account_holder: returnTarget ? returnHolder : undefined, return_shipping_payer: shippingChoiceRequired ? returnShippingPayer : undefined, return_shipping_cost: shippingChoiceRequired ? (returnShippingPayer === 'customer' ? returnShippingCost : 0) : undefined, return_items: returnTarget ? returnItems : undefined, items: changedOrderItems.length ? changedOrderItems.map(item => ({ order_item_id: item.order_item_id, product_id: item.product_id, unit_price: Number(item.unit_price) })) : undefined, shipping_cost: shippingChanged ? shippingCost : undefined, address, city, county, postal_code: postalCode });
       closeModal('shop-order-modal');
       const email = updated.email_notification;
       const automation = updated.invoice_automation;
@@ -4111,24 +4208,40 @@
 
   const nirToday = () => new Date().toISOString().slice(0, 10);
   const nirNowTime = () => new Date().toTimeString().slice(0, 5);
-  const blankNirLine = () => ({ product_id: null, product_name: '', supplier_product_reference_id: null, supplier_product_code: '', supplier_product_name: '', supplier_ean: '', purchase_unit: 'buc', stock_unit: 'buc', invoiced_quantity: '1', received_quantity: '1', accepted_quantity: '1', rejected_quantity: '0', conversion_factor: '1', unit_price: '0', discount_percent: '0', vat_rate: '19', difference_reason: null, difference_notes: '', mismatch_reason: '', is_stock_item: true });
+  const blankNirLine = () => ({ product_id: null, product_name: '', supplier_product_reference_id: null, supplier_product_code: '', supplier_product_name: '', supplier_ean: '', purchase_unit: 'buc', stock_unit: 'buc', invoiced_quantity: '1', received_quantity: '1', accepted_quantity: '1', rejected_quantity: '0', conversion_factor: '1', unit_price: '0', price_entry_mode: 'unit_net', discount_percent: '0', vat_rate: '19', line_net: '0', line_total: '0', difference_reason: null, difference_notes: '', mismatch_reason: '', is_stock_item: true });
   const nirLocalLineTotals = (line, exchangeRate = 1) => {
     const numeric = value => Number(String(value ?? 0).replace(',', '.')) || 0;
     const quantity = Math.max(0, numeric(line.accepted_quantity));
     const conversion = Math.max(0, numeric(line.conversion_factor || 1));
-    const price = Math.max(0, numeric(line.unit_price));
+    let price = Math.max(0, numeric(line.unit_price));
     const discount = Math.min(100, Math.max(0, numeric(line.discount_percent)));
     const vatRate = Math.min(100, Math.max(0, numeric(line.vat_rate)));
     const rate = Math.max(0, numeric(exchangeRate || 1));
     const allocatedCost = Math.max(0, numeric(line.allocated_cost_ron));
-    const net = quantity * price * (1 - discount / 100);
-    const vat = net * vatRate / 100;
+    const mode = line.price_entry_mode || 'unit_net';
+    let net = quantity * price * (1 - discount / 100);
+    let total = net * (1 + vatRate / 100);
+    if (mode === 'line_net') {
+      net = Math.max(0, numeric(line.line_net));
+      total = net * (1 + vatRate / 100);
+      const beforeDiscount = discount < 100 ? net / (1 - discount / 100) : 0;
+      price = quantity > 0 ? beforeDiscount / quantity : 0;
+    } else if (mode === 'line_gross') {
+      total = Math.max(0, numeric(line.line_total));
+      net = total / (1 + vatRate / 100);
+      const beforeDiscount = discount < 100 ? net / (1 - discount / 100) : 0;
+      price = quantity > 0 ? beforeDiscount / quantity : 0;
+    }
+    const vat = total - net;
     const netRon = net * rate;
     const vatRon = vat * rate;
     const stockQuantity = quantity * conversion;
     const inventoryTotalRon = netRon + allocatedCost;
-    return { netRon, vatRon, totalRon: netRon + vatRon, stockQuantity, inventoryTotalRon, inventoryUnitCostRon: stockQuantity > 0 ? inventoryTotalRon / stockQuantity : 0 };
+    return { net, vat, total, unitPrice: price, netRon, vatRon, totalRon: total * rate, stockQuantity, inventoryTotalRon, inventoryUnitCostRon: stockQuantity > 0 ? inventoryTotalRon / stockQuantity : 0 };
   };
+  const nirEditableDecimal = (value, decimals = 2) => Number.isFinite(Number(value))
+    ? Number(value).toFixed(decimals).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
+    : '0';
   const nirCurrencyCodes = (() => {
     try { return Intl.supportedValuesOf('currency'); }
     catch { return 'AED AFN ALL AMD ANG AOA ARS AUD AWG AZN BAM BBD BDT BGN BHD BIF BMD BND BOB BRL BSD BTN BWP BYN BZD CAD CDF CHF CLP CNY COP CRC CUP CVE CZK DJF DKK DOP DZD EGP ERN ETB EUR FJD FKP GBP GEL GHS GIP GMD GNF GTQ GYD HKD HNL HTG HUF IDR ILS INR IQD IRR ISK JMD JOD JPY KES KGS KHR KMF KPW KRW KWD KYD KZT LAK LBP LKR LRD LSL LYD MAD MDL MGA MKD MMK MNT MOP MRU MUR MVR MWK MXN MYR MZN NAD NGN NIO NOK NPR NZD OMR PAB PEN PGK PHP PKR PLN PYG QAR RON RSD RUB RWF SAR SBD SCR SDG SEK SGD SHP SLE SOS SRD SSP STN SVC SYP SZL THB TJS TMT TND TOP TRY TTD TWD TZS UAH UGX USD UYU UZS VES VND VUV WST XAF XCD XOF XPF YER ZAR ZMW ZWG'.split(' '); }
@@ -4365,10 +4478,16 @@
       const summaryTotal = row?.querySelector('.shop-nir-summary-facts>strong');
       const lineTotal = row?.querySelector('.shop-nir-line-total span:first-child strong');
       const unitCost = row?.querySelector('.shop-nir-line-total span:last-child b');
+      const unitPriceInput = row?.querySelector('[data-nir-line-field="unit_price"]');
+      const netInput = row?.querySelector('[data-nir-line-field="line_net"]');
+      const grossInput = row?.querySelector('[data-nir-line-field="line_total"]');
       if (summaryQuantity) summaryQuantity.textContent = `${line.accepted_quantity || 0} ${line.stock_unit || 'buc'}`;
       if (summaryTotal) summaryTotal.textContent = money(totals.totalRon);
       if (lineTotal) lineTotal.textContent = money(totals.totalRon);
       if (unitCost) unitCost.textContent = `${money(totals.inventoryUnitCostRon)}/u`;
+      if (unitPriceInput && window.document.activeElement !== unitPriceInput && line.price_entry_mode !== 'unit_net') unitPriceInput.value = nirEditableDecimal(totals.unitPrice, 6);
+      if (netInput && window.document.activeElement !== netInput && line.price_entry_mode !== 'line_net') netInput.value = nirEditableDecimal(totals.net);
+      if (grossInput && window.document.activeElement !== grossInput && line.price_entry_mode !== 'line_gross') grossInput.value = nirEditableDecimal(totals.total);
     }
     const quantities = (document.lines || []).reduce((summary, line, index) => ({
       invoiced: summary.invoiced + Number(line.invoiced_quantity || 0),
@@ -4524,7 +4643,7 @@
       <div class="shop-nir-line-details"><div class="shop-nir-line-details-inner"><div class="shop-nir-line-panels">
         <section class="shop-nir-line-panel identity"><header><span class="shop-nir-panel-icon">${nirUiIcon('product')}<i>01</i></span><div><strong>Ce produs este?</strong><small>Îl caut automat după cod, EAN sau denumirea memorată pentru furnizor.</small></div></header><div class="shop-nir-supplier-context"><small>DENUMIRE FURNIZOR</small><strong>${esc(supplierName)}</strong></div><div class="shop-nir-field-grid">${field('COD FURNIZOR', 'supplier_product_code', line.supplier_product_code, 'placeholder="Optional · ex: COD-1025" autocomplete="off"')}${field('DENUMIRE PE FACTURA', 'supplier_product_name', line.supplier_product_name, 'placeholder="Denumirea exacta de pe factura"')}</div><div class="shop-nir-code-feedback ${matched ? 'ok' : ''}" data-nir-code-state="${index}">${nirUiIcon(matched ? 'check' : 'search')}<span><b>${matched ? 'Produs recunoscut' : 'Cautare automata dupa cod sau nume'}</b><small>${matched ? esc(line.product_name || '') : 'La prima achizitie alegi produsul intern; apoi aceasta denumire se recunoaste automat la acel furnizor.'}</small></span></div><div class="shop-nir-product-link"><div><small>PRODUS INTERN</small><strong>${esc(line.product_name || 'Niciun produs asociat')}</strong><span class="${matched ? 'ok' : 'warn'}">${matched ? (line.resolution_status === 'matched_name' ? 'Denumirea furnizorului este asociata produsului intern.' : 'Codul furnizorului este asociat produsului intern.') : 'Daca nu este gasit automat, alege produsul din catalog.'}</span></div>${editable && isStockItem ? `<span class="shop-nir-line-actions"><button type="button" class="primary" data-nir-product="${index}">${matched ? 'Schimba produsul' : 'Alege produsul'}</button></span>` : ''}</div><p class="shop-nir-panel-help">SKU-ul intern este independent. Același produs poate avea coduri și denumiri diferite la fiecare furnizor.</p></section>
         <section class="shop-nir-line-panel reception"><header><span class="shop-nir-panel-icon">${nirUiIcon('calendar')}<i>02</i></span><div><strong>Verifica marfa</strong><small>Compara factura cu ce ai primit si acceptat</small></div></header><div class="shop-nir-quantities">${field('FACTURAT', 'invoiced_quantity', line.invoiced_quantity, 'type="number" min="0" step="0.0001"')}${field('RECEPTIONAT', 'received_quantity', received, 'type="number" min="0" step="0.0001"')}${field('ACCEPTAT', 'accepted_quantity', line.accepted_quantity, 'type="number" min="0" step="0.0001"')}</div><div class="shop-nir-units">${field('UM ACHIZITIE', 'purchase_unit', line.purchase_unit || 'buc', 'placeholder="buc"')}<i>→</i>${field('UM STOC', 'stock_unit', line.stock_unit || 'buc', 'placeholder="buc"')}</div>${differenceFields}</section>
-        <section class="shop-nir-line-panel pricing"><header><span class="shop-nir-panel-icon">${nirUiIcon('currency')}<i>03</i></span><div><strong>Completeaza costul</strong><small>Pretul, discountul, TVA-ul si totalul pozitiei</small></div></header><div class="shop-nir-price-fields">${field(`PRET UNITAR · ${esc(state.nirEditor?.currency || 'RON')}`, 'unit_price', line.unit_price, 'type="number" min="0" step="0.000001"')}${field('DISCOUNT %', 'discount_percent', line.discount_percent, 'type="number" min="0" max="100" step="0.01"')}${field('TVA %', 'vat_rate', line.vat_rate, 'type="number" min="0" max="100" step="0.01"')}${field('COST SUPLIMENTAR RON', 'allocated_cost_ron', line.allocated_cost_ron || '0', 'type="number" min="0" step="0.01"')}</div><div class="shop-nir-line-total"><span><small>TOTAL POZITIE</small><strong>${money(editable ? localTotals.totalRon : line.line_total_ron || 0)}</strong></span><span><small>COST UNITAR CONTABIL</small><b>${money(editable ? localTotals.inventoryUnitCostRon : line.inventory_unit_cost_ron || 0)}/u</b></span></div>${priceComparison}</section>
+        <section class="shop-nir-line-panel pricing"><header><span class="shop-nir-panel-icon">${nirUiIcon('currency')}<i>03</i></span><div><strong>Completeaza costul</strong><small>Pretul, valorile fara/cu TVA si costul pozitiei</small></div></header><div class="shop-nir-price-fields">${field(`PRET UNITAR · ${esc(state.nirEditor?.currency || 'RON')}`, 'unit_price', editable && line.price_entry_mode !== 'unit_net' ? nirEditableDecimal(localTotals.unitPrice, 6) : line.unit_price, 'type="number" min="0" step="0.000001"')}${field('DISCOUNT %', 'discount_percent', line.discount_percent, 'type="number" min="0" max="100" step="0.01"')}${field('TVA %', 'vat_rate', line.vat_rate, 'type="number" min="0" max="100" step="0.01"')}${field('COST SUPLIMENTAR RON', 'allocated_cost_ron', line.allocated_cost_ron || '0', 'type="number" min="0" step="0.01"')}${field(`VALOARE FARA TVA · ${esc(state.nirEditor?.currency || 'RON')}`, 'line_net', editable && line.price_entry_mode === 'line_net' ? line.line_net || '0' : nirEditableDecimal(localTotals.net), 'type="number" min="0" step="0.01"')}${field(`VALOARE CU TVA · ${esc(state.nirEditor?.currency || 'RON')}`, 'line_total', editable && line.price_entry_mode === 'line_gross' ? line.line_total || '0' : nirEditableDecimal(localTotals.total), 'type="number" min="0" step="0.01"')}</div><div class="shop-nir-line-total"><span><small>TOTAL POZITIE</small><strong>${money(editable ? localTotals.totalRon : line.line_total_ron || 0)}</strong></span><span><small>COST UNITAR CONTABIL</small><b>${money(editable ? localTotals.inventoryUnitCostRon : line.inventory_unit_cost_ron || 0)}/u</b></span></div>${priceComparison}</section>
       </div>${editable ? `<footer class="shop-nir-line-footer"><span>Asocierea si costul se memoreaza numai cand salvezi NIR-ul.</span><button type="button" class="danger" data-nir-remove="${index}" aria-label="Sterge produsul" title="Sterge produsul">${nirUiIcon('trash')}</button></footer>` : ''}</div></div>
     </details>`;
   }
@@ -4749,6 +4868,9 @@
       const line = state.nirEditor.lines[lineIndex]; if (!line) return;
       const lineField = input.dataset.nirLineField;
       line[lineField] = lineField === 'is_stock_item' ? input.checked : input.value;
+      if (lineField === 'unit_price') line.price_entry_mode = 'unit_net';
+      if (lineField === 'line_net') line.price_entry_mode = 'line_net';
+      if (lineField === 'line_total') line.price_entry_mode = 'line_gross';
       if (lineField === 'invoiced_quantity') {
         line.received_quantity = input.value;
         line.accepted_quantity = input.value;
@@ -4758,7 +4880,7 @@
         if (receivedInput) receivedInput.value = input.value;
         if (acceptedInput) acceptedInput.value = input.value;
       }
-      const calculatedFields = ['invoiced_quantity', 'received_quantity', 'accepted_quantity', 'conversion_factor', 'unit_price', 'discount_percent', 'vat_rate', 'allocated_cost_ron'];
+      const calculatedFields = ['invoiced_quantity', 'received_quantity', 'accepted_quantity', 'conversion_factor', 'unit_price', 'line_net', 'line_total', 'discount_percent', 'vat_rate', 'allocated_cost_ron'];
       if (calculatedFields.includes(lineField)) {
         line._expanded = true;
         scheduleNirAutosave();

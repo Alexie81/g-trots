@@ -147,7 +147,7 @@ final class GtrotsOrderReturnRequest
         return self::request($db, ['id' => trim($orderId)], $details, $config, 'staff', $changedBy, $notifyCustomer);
     }
 
-    public static function reviewByStaff(PDO $db, string $orderId, array $decisions, array $actor): array
+    public static function reviewByStaff(PDO $db, string $orderId, array $decisions, array $actor, ?string $returnShippingPayer = null, ?float $returnShippingCostOverride = null): array
     {
         if (!$decisions) throw new InvalidArgumentException('Alege pentru fiecare produs dacă este acceptat sau refuzat la retur.');
         $changedBy = mb_substr(trim((string)($actor['display_name'] ?? $actor['username'] ?? 'Administrator')), 0, 180);
@@ -158,6 +158,12 @@ final class GtrotsOrderReturnRequest
             $order = $orderStmt->fetch();
             if (!$order || !in_array((string)$order['status'], ['return_requested', 'return_refused'], true)) {
                 throw new InvalidArgumentException('Produsele pot fi evaluate numai înainte de confirmarea returului.');
+            }
+            if ($returnShippingPayer !== null && !in_array($returnShippingPayer, ['customer', 'company'], true)) {
+                throw new InvalidArgumentException('Alege dacă transportul returului este suportat de client sau de firmă.');
+            }
+            if ($returnShippingPayer === 'customer' && ($returnShippingCostOverride === null || $returnShippingCostOverride < 0 || $returnShippingCostOverride > 99999999.99)) {
+                throw new InvalidArgumentException('Introdu valoarea transportului de retur suportat de client.');
             }
             $itemsStmt = $db->prepare('SELECT * FROM shop_order_return_items WHERE order_id = ? ORDER BY created_at, id' . (self::isSqlite($db) ? '' : ' FOR UPDATE'));
             $itemsStmt->execute([$orderId]);
@@ -202,10 +208,18 @@ final class GtrotsOrderReturnRequest
             // Livrarea inițială se rambursează doar dacă solicitarea inițială
             // a fost integrală și a fost depusă în fereastra legală B2C.
             $deliveryRefund = $isFull ? max(0.0, round((float)($order['return_delivery_refund'] ?? 0), 2)) : 0.0;
-            $returnCost = max(0.0, round((float)($order['return_shipping_cost'] ?? 0), 2));
+            $savedPayer = in_array((string)($order['return_shipping_payer'] ?? ''), ['customer', 'company'], true)
+                ? (string)$order['return_shipping_payer']
+                : null;
+            $effectivePayer = $returnShippingPayer ?? $savedPayer;
+            $returnCost = $effectivePayer === 'company'
+                ? 0.0
+                : ($returnShippingCostOverride !== null
+                    ? max(0.0, round($returnShippingCostOverride, 2))
+                    : max(0.0, round((float)($order['return_shipping_cost'] ?? self::shippingQuote($db, $order)['return_cost']), 2)));
             $refund = max(0.0, round($itemsGross + $deliveryRefund - $returnCost, 2));
-            $db->prepare('UPDATE shop_orders SET return_items_gross = ?, return_delivery_refund = ?, return_is_full = ?, return_refund_amount = ? WHERE id = ?')
-                ->execute([$itemsGross, $deliveryRefund, $isFull ? 1 : 0, $refund, $orderId]);
+            $db->prepare('UPDATE shop_orders SET return_items_gross = ?, return_delivery_refund = ?, return_is_full = ?, return_shipping_cost = ?, return_shipping_payer = ?, return_refund_amount = ? WHERE id = ?')
+                ->execute([$itemsGross, $deliveryRefund, $isFull ? 1 : 0, $returnCost, $effectivePayer, $refund, $orderId]);
             $db->commit();
             return ['reviewed' => true, 'accepted_count' => count($acceptedItems), 'return_items_gross' => $itemsGross, 'return_delivery_refund' => $deliveryRefund, 'return_refund_amount' => $refund];
         } catch (Throwable $error) {
@@ -296,7 +310,7 @@ final class GtrotsOrderReturnRequest
             $update = $db->prepare(
                 "UPDATE shop_orders
                  SET status = 'return_requested', return_reason = ?, return_bank_iban = ?, return_bank_account_holder = ?,
-                     return_shipping_cost = ?, return_refund_amount = ?, return_requested_at = CURRENT_TIMESTAMP,
+                     return_shipping_cost = ?, return_shipping_payer = NULL, return_refund_amount = ?, return_requested_at = CURRENT_TIMESTAMP,
                      return_request_source = ?, return_request_email_sent_at = NULL, return_request_email_error = NULL,
                      return_policy_type = ?, return_deadline_at = ?, return_items_gross = ?, return_delivery_refund = ?, return_is_full = ?,
                      withdrawal_statement = ?, withdrawal_submitted_at = ?, withdrawal_confirmation_email_sent_at = NULL,

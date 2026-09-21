@@ -100,6 +100,8 @@ function shopNirCalculateLine(array $line, bool $includeVatInInventoryCost = fal
     $acceptedQuantity = shopNirDecimalToScaled($line['accepted_quantity'] ?? $line['quantity'] ?? 0, 4, 'Cantitatea acceptată');
     $conversionFactor = shopNirDecimalToScaled($line['conversion_factor'] ?? 1, 6, 'Factorul de conversie');
     $unitPrice = shopNirDecimalToScaled($line['unit_price'] ?? 0, 6, 'Prețul unitar');
+    $priceEntryMode = strtolower(trim((string)($line['price_entry_mode'] ?? 'unit_net')));
+    if (!in_array($priceEntryMode, ['unit_net', 'line_net', 'line_gross'], true)) $priceEntryMode = 'unit_net';
     $discountPercent = shopNirDecimalToScaled($line['discount_percent'] ?? 0, 4, 'Discountul');
     $vatRate = shopNirDecimalToScaled($line['vat_rate'] ?? 0, 4, 'Cota TVA');
     $exchangeRate = shopNirDecimalToScaled($line['exchange_rate'] ?? 1, 8, 'Cursul valutar');
@@ -113,14 +115,41 @@ function shopNirCalculateLine(array $line, bool $includeVatInInventoryCost = fal
     if ($exchangeRate <= 0) throw new InvalidArgumentException('Cursul valutar trebuie să fie mai mare decât zero.');
 
     $stockQuantity = shopNirMultiplyScaled($acceptedQuantity, 4, $conversionFactor, 6, 4);
-    $gross = shopNirMultiplyScaled($acceptedQuantity, 4, $unitPrice, 6, 6);
-    $discount = shopNirDivideRounded(shopNirMultiplyScaled($gross, 6, $discountPercent, 4, 6), 100);
-    $net = $gross - $discount;
-    $vat = shopNirDivideRounded(shopNirMultiplyScaled($net, 6, $vatRate, 4, 6), 100);
-    $total = $net + $vat;
+    if ($priceEntryMode === 'line_net') {
+        $net = shopNirDecimalToScaled($line['line_net'] ?? 0, 6, 'Valoarea fără TVA');
+        if ($net < 0) throw new InvalidArgumentException('Valoarea fără TVA nu poate fi negativă.');
+        if ($discountPercent >= 1000000 && $net > 0) throw new InvalidArgumentException('Discountul de 100% nu poate avea o valoare fără TVA pozitivă.');
+        $gross = $discountPercent < 1000000
+            ? shopNirDivideRounded($net * 1000000, 1000000 - $discountPercent)
+            : 0;
+        $discount = $gross - $net;
+        $unitPrice = $acceptedQuantity > 0 ? shopNirDivideRounded($gross * 10000, $acceptedQuantity) : 0;
+        $vat = shopNirDivideRounded(shopNirMultiplyScaled($net, 6, $vatRate, 4, 6), 100);
+        $total = $net + $vat;
+    } elseif ($priceEntryMode === 'line_gross') {
+        $total = shopNirDecimalToScaled($line['line_total'] ?? 0, 6, 'Valoarea cu TVA');
+        if ($total < 0) throw new InvalidArgumentException('Valoarea cu TVA nu poate fi negativă.');
+        $net = shopNirDivideRounded($total * 1000000, 1000000 + $vatRate);
+        $vat = $total - $net;
+        if ($discountPercent >= 1000000 && $net > 0) throw new InvalidArgumentException('Discountul de 100% nu poate avea o valoare cu TVA pozitivă.');
+        $gross = $discountPercent < 1000000
+            ? shopNirDivideRounded($net * 1000000, 1000000 - $discountPercent)
+            : 0;
+        $discount = $gross - $net;
+        $unitPrice = $acceptedQuantity > 0 ? shopNirDivideRounded($gross * 10000, $acceptedQuantity) : 0;
+    } else {
+        $gross = shopNirMultiplyScaled($acceptedQuantity, 4, $unitPrice, 6, 6);
+        $discount = shopNirDivideRounded(shopNirMultiplyScaled($gross, 6, $discountPercent, 4, 6), 100);
+        $net = $gross - $discount;
+        $vat = shopNirDivideRounded(shopNirMultiplyScaled($net, 6, $vatRate, 4, 6), 100);
+        $total = $net + $vat;
+    }
     $netRon = shopNirMultiplyScaled($net, 6, $exchangeRate, 8, 2);
-    $vatRon = shopNirMultiplyScaled($vat, 6, $exchangeRate, 8, 2);
-    $totalRon = $netRon + $vatRon;
+    // Totalul introdus de pe factura furnizorului rămâne valoarea de control.
+    // TVA-ul în lei preia eventualul ban rezultat din rotunjire, în loc să
+    // modifice totalul (de ex. 148,00 în factură -> 148,01 în NIR).
+    $totalRon = shopNirMultiplyScaled($total, 6, $exchangeRate, 8, 2);
+    $vatRon = $totalRon - $netRon;
     $inventoryTotalRon = ($includeVatInInventoryCost ? $totalRon : $netRon) + $allocatedCostRon;
     $inventoryUnitCost = $stockQuantity > 0
         ? shopNirDivideRounded($inventoryTotalRon * (10 ** 8), $stockQuantity)
@@ -131,6 +160,7 @@ function shopNirCalculateLine(array $line, bool $includeVatInInventoryCost = fal
         'conversion_factor' => shopNirScaledToDecimal($conversionFactor, 6),
         'stock_quantity' => shopNirScaledToDecimal($stockQuantity, 4),
         'unit_price' => shopNirScaledToDecimal($unitPrice, 6),
+        'price_entry_mode' => $priceEntryMode,
         'discount_percent' => shopNirScaledToDecimal($discountPercent, 4),
         'vat_rate' => shopNirScaledToDecimal($vatRate, 4),
         'exchange_rate' => shopNirScaledToDecimal($exchangeRate, 8),

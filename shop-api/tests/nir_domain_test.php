@@ -60,6 +60,31 @@ nirAssertSame('30.000000', $discount['line_discount'], 'discount procentual');
 nirAssertSame('270.000000', $discount['line_net'], 'net după discount');
 nirAssertSame('51.300000', $discount['line_vat'], 'TVA după discount');
 
+$exactInvoiceTotal = shopNirCalculateLine([
+    'accepted_quantity' => '1', 'conversion_factor' => '1', 'unit_price' => '124.38',
+    'price_entry_mode' => 'line_gross', 'line_total' => '148.00',
+    'discount_percent' => '0', 'vat_rate' => '19', 'exchange_rate' => '1',
+]);
+nirAssertSame('line_gross', $exactInvoiceTotal['price_entry_mode'], 'reține valoarea cu TVA ca sursă de calcul');
+nirAssertSame('148.000000', $exactInvoiceTotal['line_total'], 'păstrează exact totalul facturii pe poziție');
+nirAssertSame('148.00', $exactInvoiceTotal['line_total_ron'], 'nu mai transformă 148,00 în 148,01');
+nirAssertSame('124.369748', $exactInvoiceTotal['line_net'], 'deduce baza fără TVA din totalul exact');
+
+$exactCurrentVatTotal = shopNirCalculateLine([
+    'accepted_quantity' => '1', 'conversion_factor' => '1',
+    'price_entry_mode' => 'line_net', 'line_net' => '122.31',
+    'discount_percent' => '0', 'vat_rate' => '21', 'exchange_rate' => '1',
+]);
+nirAssertSame('148.00', $exactCurrentVatTotal['line_total_ron'], '122,31 fără TVA la cota 21% produce exact 148,00 cu TVA');
+
+$exactNet = shopNirCalculateLine([
+    'accepted_quantity' => '2', 'conversion_factor' => '1',
+    'price_entry_mode' => 'line_net', 'line_net' => '100.00',
+    'discount_percent' => '0', 'vat_rate' => '19', 'exchange_rate' => '1',
+]);
+nirAssertSame('50.000000', $exactNet['unit_price'], 'deduce prețul unitar din valoarea fără TVA');
+nirAssertSame('119.00', $exactNet['line_total_ron'], 'calculează totalul din valoarea fără TVA editată');
+
 $eur = shopNirCalculateLine([
     'accepted_quantity' => '2', 'conversion_factor' => '12', 'unit_price' => '10',
     'discount_percent' => '0', 'vat_rate' => '19', 'exchange_rate' => '4.97',

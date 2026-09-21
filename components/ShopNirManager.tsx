@@ -116,8 +116,11 @@ const makeLine = (): ShopNirLine => ({
   rejected_quantity: '0',
   conversion_factor: '1',
   unit_price: '0',
+  price_entry_mode: 'unit_net',
   discount_percent: '0',
   vat_rate: '19',
+  line_net: '0',
+  line_total: '0',
   difference_reason: null, difference_notes: '', mismatch_reason: '',
 });
 
@@ -156,16 +159,36 @@ function localLineTotals(line: ShopNirLine, exchangeRate = '1') {
   const numeric = (value: unknown) => Number(String(value ?? 0).replace(',', '.')) || 0;
   const quantity = Math.max(0, numeric(line.accepted_quantity));
   const conversion = Math.max(0, numeric(line.conversion_factor || 1));
-  const price = Math.max(0, numeric(line.unit_price));
+  let price = Math.max(0, numeric(line.unit_price));
   const discount = Math.min(100, Math.max(0, numeric(line.discount_percent)));
   const vatRate = Math.min(100, Math.max(0, numeric(line.vat_rate)));
   const rate = Math.max(0, numeric(exchangeRate || 1));
   const allocatedCost = Math.max(0, numeric(line.allocated_cost_ron));
-  const netRon = quantity * price * (1 - discount / 100) * rate;
-  const vatRon = netRon * vatRate / 100;
+  const mode = line.price_entry_mode || 'unit_net';
+  let net = quantity * price * (1 - discount / 100);
+  let total = net * (1 + vatRate / 100);
+  if (mode === 'line_net') {
+    net = Math.max(0, numeric(line.line_net));
+    total = net * (1 + vatRate / 100);
+    const beforeDiscount = discount < 100 ? net / (1 - discount / 100) : 0;
+    price = quantity > 0 ? beforeDiscount / quantity : 0;
+  } else if (mode === 'line_gross') {
+    total = Math.max(0, numeric(line.line_total));
+    net = total / (1 + vatRate / 100);
+    const beforeDiscount = discount < 100 ? net / (1 - discount / 100) : 0;
+    price = quantity > 0 ? beforeDiscount / quantity : 0;
+  }
+  const vat = total - net;
+  const netRon = net * rate;
+  const vatRon = vat * rate;
   const stockQuantity = quantity * conversion;
   const inventoryTotalRon = netRon + allocatedCost;
-  return { netRon, vatRon, totalRon: netRon + vatRon, stockQuantity, inventoryUnitCostRon: stockQuantity > 0 ? inventoryTotalRon / stockQuantity : 0 };
+  return { net, vat, total, unitPrice: price, netRon, vatRon, totalRon: total * rate, stockQuantity, inventoryUnitCostRon: stockQuantity > 0 ? inventoryTotalRon / stockQuantity : 0 };
+}
+
+function editableDecimal(value: number, decimals = 2) {
+  if (!Number.isFinite(value)) return '0';
+  return value.toFixed(decimals).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
 }
 
 function stornoLineQuantity(line: ShopNirLine) {
@@ -1658,8 +1681,9 @@ function NirLineCard({ line, index, editable, supplierName, currency, exchangeRa
       <Field label="FACTOR CONVERSIE" value={line.conversion_factor} onChangeText={(conversion_factor) => onPatch({ conversion_factor })} placeholder="1" editable={editable} keyboardType="decimal-pad" />
     </LineStage>
     <LineStage number="3" title="Completează costul" subtitle={`Preț în ${currency}, TVA și costuri suplimentare`} icon={<CircleDollarSign size={17} color="#F59E0B" />}>
-      <View style={styles.grid2}><Field label={`PREȚ UNITAR · ${currency}`} value={line.unit_price} onChangeText={(unit_price) => onPatch({ unit_price })} placeholder="0.00" editable={editable} keyboardType="decimal-pad" /><Field label="DISCOUNT %" value={line.discount_percent} onChangeText={(discount_percent) => onPatch({ discount_percent })} placeholder="0" editable={editable} keyboardType="decimal-pad" /></View>
+      <View style={styles.grid2}><Field label={`PREȚ UNITAR · ${currency}`} value={editable && line.price_entry_mode !== 'unit_net' ? editableDecimal(calculated.unitPrice, 6) : line.unit_price} onChangeText={(unit_price) => onPatch({ unit_price, price_entry_mode: 'unit_net' })} placeholder="0.00" editable={editable} keyboardType="decimal-pad" /><Field label="DISCOUNT %" value={line.discount_percent} onChangeText={(discount_percent) => onPatch({ discount_percent })} placeholder="0" editable={editable} keyboardType="decimal-pad" /></View>
       <View style={styles.grid2}><Field label="TVA %" value={line.vat_rate} onChangeText={(vat_rate) => onPatch({ vat_rate })} placeholder="19" editable={editable} keyboardType="decimal-pad" /><Field label="COST SUPLIMENTAR RON" value={line.allocated_cost_ron || '0'} onChangeText={(allocated_cost_ron) => onPatch({ allocated_cost_ron })} placeholder="0" editable={editable} keyboardType="decimal-pad" /></View>
+      <View style={styles.grid2}><Field label={`VALOARE FĂRĂ TVA · ${currency}`} value={editable && line.price_entry_mode === 'line_net' ? line.line_net || '0' : editableDecimal(calculated.net)} onChangeText={(line_net) => onPatch({ line_net, price_entry_mode: 'line_net' })} placeholder="0.00" editable={editable} keyboardType="decimal-pad" /><Field label={`VALOARE CU TVA · ${currency}`} value={editable && line.price_entry_mode === 'line_gross' ? line.line_total || '0' : editableDecimal(calculated.total)} onChangeText={(line_total) => onPatch({ line_total, price_entry_mode: 'line_gross' })} placeholder="0.00" editable={editable} keyboardType="decimal-pad" /></View>
       {line.price_comparison && <View style={[styles.priceComparison, line.price_comparison.is_significant && styles.priceComparisonWarning]}><View><Text style={styles.priceComparisonLabel}>ULTIMA ACHIZIȚIE · ACELAȘI FURNIZOR</Text><Text style={styles.priceComparisonValue}>{line.price_comparison.last_supplier ? `${money(line.price_comparison.last_supplier.unit_net_price_ron)} / unitate` : 'Fără istoric la acest furnizor'}</Text></View><View style={styles.priceComparisonMeta}><Text style={styles.priceComparisonMetaText}>Minim recent: {line.price_comparison.recent_minimum_unit_net_price_ron ? money(line.price_comparison.recent_minimum_unit_net_price_ron) : '—'}</Text>{line.price_comparison.variance_percent !== null && <Text style={[styles.priceComparisonVariance, line.price_comparison.is_significant && { color: Colors.warning }]}>{Number(line.price_comparison.variance_percent) > 0 ? '+' : ''}{line.price_comparison.variance_percent}%</Text>}</View>{line.price_comparison.is_significant && <Text style={styles.priceComparisonAlert}>Prețul diferă semnificativ. Verifică valoarea înainte de confirmare.</Text>}</View>}
       <View style={styles.lineTotal}><View><Text style={styles.lineTotalLabel}>TOTAL POZIȚIE ÎN RON</Text><Text style={styles.lineTotalHint}>Se recalculează instant, fără salvare</Text><Text style={styles.lineTotalCost}>Cost contabil: {money(String(calculated.inventoryUnitCostRon))}/u</Text></View><Text style={styles.lineTotalValue}>{money(editable ? String(calculated.totalRon) : line.line_total_ron)}</Text></View>
     </LineStage>

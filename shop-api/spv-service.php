@@ -455,7 +455,7 @@ final class GtrotsSpvService
         $settings = self::settings($db);
         $rows = $db->query("SELECT id, invoice_type, issue_date, issued_at FROM shop_invoices WHERE spv_status <> 'sent' ORDER BY issued_at ASC")->fetchAll();
         foreach ($rows as $invoice) {
-            self::enqueue($db, (string)$invoice['id'], (string)($invoice['invoice_type'] ?? 'invoice') === 'return' ? 'credit_note' : 'invoice');
+            self::enqueue($db, (string)$invoice['id'], in_array((string)($invoice['invoice_type'] ?? 'invoice'), ['return', 'correction_return'], true) ? 'credit_note' : 'invoice');
         }
         if (!self::isSqlite($db)) {
             $db->exec("UPDATE shop_spv_outbox o INNER JOIN shop_invoices i ON i.id=o.invoice_id SET o.status='accepted', o.accepted_at=COALESCE(o.accepted_at,i.spv_sent_at), o.sent_at=COALESCE(o.sent_at,i.spv_sent_at) WHERE i.spv_status='sent'");
@@ -476,7 +476,7 @@ final class GtrotsSpvService
         if ($invoiceId === '') throw new InvalidArgumentException('Factura nu a fost selectată.');
         $invoice = self::invoice($db, $invoiceId);
         if ((string)$invoice['spv_status'] === 'sent') return ['invoice' => GtrotsInvoiceService::get($db, $invoiceId, $config), 'job' => self::invoiceState($db, $invoiceId), 'already_sent' => true];
-        self::enqueue($db, $invoiceId, (string)$invoice['invoice_type'] === 'return' ? 'credit_note' : 'invoice');
+        self::enqueue($db, $invoiceId, in_array((string)$invoice['invoice_type'], ['return', 'correction_return'], true) ? 'credit_note' : 'invoice');
         if (!self::isSqlite($db)) {
             $db->prepare("UPDATE shop_spv_outbox SET status='queued', scheduled_at=CURRENT_TIMESTAMP, next_attempt_at=CURRENT_TIMESTAMP, last_error=NULL WHERE invoice_id=? AND status <> 'processing'")->execute([$invoiceId]);
         }
@@ -880,7 +880,7 @@ final class GtrotsSpvService
         $token = self::accessToken($db, $config);
         $environment = self::environment((string)($job['environment'] ?? self::settings($db)['environment']));
         $base = self::apiBase($config, $environment);
-        $standard = (string)($job['document_kind'] ?? '') === 'credit_note' || (string)($invoice['invoice_type'] ?? '') === 'return' ? 'CN' : 'UBL';
+        $standard = (string)($job['document_kind'] ?? '') === 'credit_note' || in_array((string)($invoice['invoice_type'] ?? ''), ['return', 'correction_return'], true) ? 'CN' : 'UBL';
         $url = $base . '/upload?standard=' . $standard . '&cif=' . rawurlencode($cif);
         $db->prepare("UPDATE shop_spv_outbox SET status='uploading', attempts=attempts+1, last_error=NULL WHERE invoice_id=?")->execute([$invoiceId]);
         try {

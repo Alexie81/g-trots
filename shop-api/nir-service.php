@@ -1329,6 +1329,7 @@ function shopNirPrepareLines(PDO $db, array $lines, array $header): array {
             'conversion_factor' => $calculated['conversion_factor'],
             'stock_quantity' => $isStockItem ? $calculated['stock_quantity'] : '0.0000',
             'unit_price' => $calculated['unit_price'],
+            'price_entry_mode' => $calculated['price_entry_mode'],
             'discount_percent' => $calculated['discount_percent'],
             'discount_value' => $calculated['line_discount'],
             'vat_rate' => $calculated['vat_rate'],
@@ -1374,17 +1375,17 @@ function shopNirWriteLines(PDO $db, string $documentId, array $prepared): void {
         'INSERT INTO shop_nir_lines
          (id, nir_document_id, line_number, product_id, supplier_product_reference_id, supplier_product_code, supplier_product_code_normalized,
           supplier_product_name, supplier_ean, supplier_description, raw_description, product_snapshot_name, sku_snapshot, ean_snapshot,
-          purchase_unit, stock_unit, invoiced_quantity, received_quantity, accepted_quantity, rejected_quantity, conversion_factor, stock_quantity, unit_price,
+          purchase_unit, stock_unit, invoiced_quantity, received_quantity, accepted_quantity, rejected_quantity, conversion_factor, stock_quantity, unit_price, price_entry_mode,
           discount_percent, discount_value, vat_rate, line_net, line_vat, line_total, line_net_ron, line_vat_ron, line_total_ron, allocated_cost_ron,
           inventory_unit_cost_ron, inventory_cost_total_ron, resolution_status, match_method, match_confidence, is_stock_item,
           difference_reason, difference_notes, mismatch_reason)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     foreach ($prepared['lines'] as $line) {
         $stmt->execute([
             $line['id'], $documentId, $line['line_number'], $line['product_id'], $line['supplier_product_reference_id'], $line['supplier_product_code'], $line['supplier_product_code_normalized'],
             $line['supplier_product_name'], $line['supplier_ean'], $line['supplier_description'], $line['raw_description'], $line['product_snapshot_name'], $line['sku_snapshot'], $line['ean_snapshot'],
-            $line['purchase_unit'], $line['stock_unit'], $line['invoiced_quantity'], $line['received_quantity'], $line['accepted_quantity'], $line['rejected_quantity'], $line['conversion_factor'], $line['stock_quantity'], $line['unit_price'],
+            $line['purchase_unit'], $line['stock_unit'], $line['invoiced_quantity'], $line['received_quantity'], $line['accepted_quantity'], $line['rejected_quantity'], $line['conversion_factor'], $line['stock_quantity'], $line['unit_price'], $line['price_entry_mode'],
             $line['discount_percent'], $line['discount_value'], $line['vat_rate'], $line['line_net'], $line['line_vat'], $line['line_total'], $line['line_net_ron'], $line['line_vat_ron'], $line['line_total_ron'], $line['allocated_cost_ron'],
             $line['inventory_unit_cost_ron'], $line['inventory_cost_total_ron'], $line['resolution_status'], $line['match_method'], $line['match_confidence'], $line['is_stock_item'],
             $line['difference_reason'], $line['difference_notes'], $line['mismatch_reason'],

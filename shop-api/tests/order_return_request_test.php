@@ -35,7 +35,7 @@ $db->exec('CREATE TABLE shop_orders (
     id TEXT PRIMARY KEY, order_number TEXT, status TEXT, customer_email TEXT, tracking_token TEXT,
     customer_name TEXT, customer_type TEXT, company_name TEXT, shipping_method_id TEXT, shipping_method_name TEXT, return_shipping_cost_snapshot REAL, shipping_cost REAL, total REAL, currency TEXT, admin_notes TEXT, created_at TEXT, updated_at TEXT,
     return_reason TEXT, return_bank_iban TEXT, return_bank_account_holder TEXT,
-    return_shipping_cost REAL, return_refund_amount REAL, return_requested_at TEXT,
+    return_shipping_cost REAL, return_shipping_payer TEXT, return_refund_amount REAL, return_requested_at TEXT,
     return_request_source TEXT, return_request_email_sent_at TEXT, return_request_email_error TEXT,
     return_policy_type TEXT, return_deadline_at TEXT, return_items_gross REAL, return_delivery_refund REAL, return_is_full INTEGER,
     withdrawal_statement TEXT, withdrawal_submitted_at TEXT, withdrawal_confirmation_email_sent_at TEXT

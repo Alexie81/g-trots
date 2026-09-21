@@ -1060,6 +1060,7 @@ function ensureShopSchema(PDO $db): void {
             conversion_factor DECIMAL(18,6) NOT NULL DEFAULT 1.000000,
             stock_quantity DECIMAL(18,4) NOT NULL DEFAULT 0,
             unit_price DECIMAL(18,6) NOT NULL DEFAULT 0,
+            price_entry_mode VARCHAR(20) NOT NULL DEFAULT 'unit_net',
             discount_percent DECIMAL(9,4) NOT NULL DEFAULT 0,
             discount_value DECIMAL(18,6) NOT NULL DEFAULT 0,
             vat_rate DECIMAL(9,4) NOT NULL DEFAULT 0,
@@ -1098,6 +1099,7 @@ function ensureShopSchema(PDO $db): void {
         'sku_snapshot' => 'VARCHAR(120) NULL AFTER product_snapshot_name',
         'ean_snapshot' => 'VARCHAR(120) NULL AFTER sku_snapshot',
         'received_quantity' => 'DECIMAL(18,4) NOT NULL DEFAULT 0 AFTER invoiced_quantity',
+        'price_entry_mode' => "VARCHAR(20) NOT NULL DEFAULT 'unit_net' AFTER unit_price",
         'discount_value' => 'DECIMAL(18,6) NOT NULL DEFAULT 0 AFTER discount_percent',
         'match_method' => "VARCHAR(30) NOT NULL DEFAULT 'unmatched' AFTER resolution_status",
         'match_confidence' => 'DECIMAL(5,4) NOT NULL DEFAULT 0 AFTER match_method',
@@ -1599,6 +1601,7 @@ function ensureShopSchema(PDO $db): void {
             return_bank_iban VARCHAR(64) NULL,
             return_bank_account_holder VARCHAR(180) NULL,
             return_shipping_cost DECIMAL(12,2) NULL,
+            return_shipping_payer VARCHAR(20) NULL,
             return_refund_amount DECIMAL(12,2) NULL,
             return_requested_at DATETIME NULL,
             return_request_source VARCHAR(30) NULL,
@@ -1727,7 +1730,8 @@ function ensureShopSchema(PDO $db): void {
         'return_bank_iban' => 'VARCHAR(64) NULL AFTER return_reason',
         'return_bank_account_holder' => 'VARCHAR(180) NULL AFTER return_bank_iban',
         'return_shipping_cost' => 'DECIMAL(12,2) NULL AFTER return_bank_account_holder',
-        'return_refund_amount' => 'DECIMAL(12,2) NULL AFTER return_shipping_cost',
+        'return_shipping_payer' => 'VARCHAR(20) NULL AFTER return_shipping_cost',
+        'return_refund_amount' => 'DECIMAL(12,2) NULL AFTER return_shipping_payer',
         'return_requested_at' => 'DATETIME NULL AFTER return_refund_amount',
         'return_request_source' => 'VARCHAR(30) NULL AFTER return_requested_at',
         'return_request_email_sent_at' => 'DATETIME NULL AFTER return_request_source',
@@ -2418,7 +2422,7 @@ function customerOrderResponse(array $order): array {
         'customer_phone', 'customer_type', 'customer_contact_name', 'customer_display_name', 'company_name', 'company_cui', 'company_registration_number', 'company_address',
         'address', 'city', 'county', 'postal_code', 'customer_notes', 'shipping_method_name',
         'subtotal', 'discount_total', 'promotion_code', 'promotion_scope', 'shipping_cost', 'total', 'vat_payer', 'currency', 'tracking_token', 'items', 'status_history',
-        'return_reason', 'return_shipping_cost', 'return_refund_amount', 'return_requested_at', 'return_request_source', 'return_bank_account_holder',
+        'return_reason', 'return_shipping_cost', 'return_shipping_payer', 'return_refund_amount', 'return_requested_at', 'return_request_source', 'return_bank_account_holder',
         'return_policy_type', 'return_deadline_at', 'return_eligibility', 'return_items',
         'withdrawal_statement', 'withdrawal_submitted_at', 'withdrawal_confirmation_email_sent_at', 'created_at', 'updated_at'
     ];
@@ -4806,11 +4810,225 @@ function orderRow(PDO $db, array $row, ?array $config = null, bool $withHistory 
         $row['return_items'] = [];
         $row['return_eligibility'] = [];
     }
-    foreach (['issued_invoice_id', 'issued_invoice_series', 'issued_invoice_number', 'issued_invoice_theme', 'issued_invoice_spv_status', 'issued_invoice_spv_sent_at', 'issued_invoice_date', 'issued_invoice_at', 'return_invoice_join_id', 'return_invoice_join_series', 'return_invoice_join_number', 'return_invoice_join_original_id', 'return_invoice_join_theme', 'return_invoice_join_spv_status', 'return_invoice_join_spv_sent_at', 'return_invoice_join_date', 'return_invoice_join_total', 'return_invoice_join_currency', 'return_invoice_join_email_sent_at', 'return_invoice_join_at', 'shipping_note_join_id', 'shipping_note_join_series', 'shipping_note_join_number', 'shipping_note_join_date', 'shipping_note_join_stamp', 'shipping_note_join_total', 'shipping_note_join_currency', 'shipping_note_join_email_sent_at', 'shipping_note_join_at'] as $invoiceColumn) {
+    foreach (['issued_invoice_id', 'issued_invoice_series', 'issued_invoice_number', 'issued_invoice_theme', 'issued_invoice_spv_status', 'issued_invoice_spv_sent_at', 'issued_invoice_date', 'issued_invoice_at', 'issued_invoice_total', 'issued_invoice_currency', 'return_invoice_join_id', 'return_invoice_join_series', 'return_invoice_join_number', 'return_invoice_join_type', 'return_invoice_join_original_id', 'return_invoice_join_theme', 'return_invoice_join_spv_status', 'return_invoice_join_spv_sent_at', 'return_invoice_join_date', 'return_invoice_join_total', 'return_invoice_join_currency', 'return_invoice_join_email_sent_at', 'return_invoice_join_at', 'shipping_note_join_id', 'shipping_note_join_series', 'shipping_note_join_number', 'shipping_note_join_date', 'shipping_note_join_stamp', 'shipping_note_join_total', 'shipping_note_join_currency', 'shipping_note_join_email_sent_at', 'shipping_note_join_at'] as $invoiceColumn) {
         unset($row[$invoiceColumn]);
     }
     if ($withHistory) $row['status_history'] = orderStatusHistory($db, (string)$row['id']);
     return $row;
+}
+
+/**
+ * Replaces products and fixes their final gross sale price before fiscal or
+ * delivery documents exist. Downstream invoices, e-mails, shipping notes and
+ * stock issues will therefore use the edited order lines.
+ */
+function shopAdminApplyOrderItemEdits(PDO $db, array $order, array $updates, array $actor, array $config, ?float $shippingCostOverride = null, ?string $returnShippingPayer = null, ?float $returnShippingCostOverride = null): bool {
+    $orderId = (string)$order['id'];
+    if (in_array((string)$order['status'], ['completed', 'return_requested', 'return_refused', 'return_confirmed', 'refunded', 'cancelled'], true)) {
+        throw new InvalidArgumentException('Produsele pot fi schimbate numai cât timp comanda nu este Livrată și nu a intrat în retur sau anulare.');
+    }
+    $oldShippingCost = max(0.0, round((float)($order['shipping_cost'] ?? 0), 2));
+    $shippingCost = $shippingCostOverride === null ? $oldShippingCost : max(0.0, round($shippingCostOverride, 2));
+    if ($shippingCost > 99999999.99) throw new InvalidArgumentException('Costul transportului este prea mare.');
+    $shippingChanged = abs($shippingCost - $oldShippingCost) >= 0.005;
+    $lock = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite' ? '' : ' FOR UPDATE';
+    $invoiceStmt = $db->prepare(
+        'SELECT * FROM shop_invoices
+         WHERE order_id = ? AND invoice_type IN ("corrected_invoice", "invoice")
+         ORDER BY CASE WHEN invoice_type = "corrected_invoice" THEN 0 ELSE 1 END, issued_at DESC
+         LIMIT 1' . $lock
+    );
+    $invoiceStmt->execute([$orderId]);
+    $issuedInvoice = $invoiceStmt->fetch() ?: null;
+    $requiresFiscalCorrection = false;
+    if ($issuedInvoice) {
+        $spvStatus = (string)($issuedInvoice['spv_status'] ?? 'not_sent');
+        if ((string)($issuedInvoice['invoice_type'] ?? '') === 'corrected_invoice') {
+            throw new InvalidArgumentException('Comanda are deja o factură pozitivă de corecție. Pentru o nouă modificare este necesară verificarea fiscală a documentelor existente.');
+        }
+        if ($spvStatus === 'processing') {
+            throw new InvalidArgumentException('Factura este în curs de transmitere către SPV. Așteaptă răspunsul ANAF înainte de schimbarea produsului.');
+        }
+        if ($spvStatus === 'sent') {
+            if (!in_array($returnShippingPayer, ['customer', 'company'], true)) {
+                throw new InvalidArgumentException('Alege cine suportă transportul returului înainte de corecția unei facturi trimise în SPV.');
+            }
+            if ($returnShippingPayer === 'customer' && ($returnShippingCostOverride === null || $returnShippingCostOverride < 0 || $returnShippingCostOverride > 99999999.99)) {
+                throw new InvalidArgumentException('Introdu valoarea transportului de retur suportat de client.');
+            }
+            $existingCorrection = $db->prepare('SELECT invoice_type FROM shop_invoices WHERE order_id = ? AND invoice_type IN ("return", "correction_return", "corrected_invoice") LIMIT 1' . $lock);
+            $existingCorrection->execute([$orderId]);
+            if ($existingCorrection->fetchColumn()) {
+                throw new InvalidArgumentException('Comanda are deja documente de corecție fiscală și nu mai poate fi modificată prin acest formular.');
+            }
+            $requiresFiscalCorrection = true;
+        }
+    }
+
+    $itemStmt = $db->prepare('SELECT * FROM shop_order_items WHERE order_id = ? ORDER BY id' . $lock);
+    $itemStmt->execute([$orderId]);
+    $items = $itemStmt->fetchAll();
+    if (!$items) throw new InvalidArgumentException('Comanda nu conține produse care pot fi editate.');
+    $itemsById = [];
+    foreach ($items as $item) $itemsById[(string)$item['id']] = $item;
+
+    $patches = [];
+    foreach (array_values($updates) as $update) {
+        if (!is_array($update)) throw new InvalidArgumentException('O modificare de produs are format invalid.');
+        $itemId = trim((string)($update['order_item_id'] ?? ''));
+        if ($itemId === '' || !isset($itemsById[$itemId]) || isset($patches[$itemId])) {
+            throw new InvalidArgumentException('Poziția de comandă selectată nu este validă.');
+        }
+        $productId = trim((string)($update['product_id'] ?? ''));
+        $unitPrice = round((float)str_replace(',', '.', trim((string)($update['unit_price'] ?? ''))), 2);
+        if ($productId === '' || $unitPrice <= 0 || $unitPrice > 99999999.99) {
+            throw new InvalidArgumentException('Alege produsul și introdu un preț de vânzare mai mare decât zero.');
+        }
+        $currentItem = $itemsById[$itemId];
+        $currentQuantity = max(1, (int)($currentItem['quantity'] ?? 1));
+        $currentLine = (float)($currentItem['discounted_line_total'] ?? $currentItem['line_total'] ?? 0);
+        $currentUnitPrice = round($currentLine / $currentQuantity, 2);
+        if ($productId !== (string)($currentItem['product_id'] ?? '') || abs($unitPrice - $currentUnitPrice) >= 0.005) {
+            $patches[$itemId] = ['product_id' => $productId, 'unit_price' => $unitPrice];
+        }
+    }
+    if (!$patches && !$shippingChanged) return false;
+
+    $correctedItemIds = array_keys($patches);
+    $returnSelection = [];
+    foreach ($correctedItemIds as $itemId) {
+        $item = $itemsById[$itemId];
+        $quantity = max(1, (int)($item['quantity'] ?? 1));
+        $lineRefund = round((float)($item['discounted_line_total'] ?? $item['line_total'] ?? 0), 2);
+        $returnSelection[] = [
+            'order_item_id' => $itemId,
+            'product_id' => (string)($item['product_id'] ?? ''),
+            'product_name' => (string)($item['product_name'] ?? 'Produs'),
+            'product_sku' => (string)($item['product_sku'] ?? ''),
+            'ordered_quantity' => $quantity,
+            'requested_quantity' => $quantity,
+            'accepted_quantity' => $quantity,
+            'unit_refund_value' => $quantity > 0 ? round($lineRefund / $quantity, 2) : 0,
+            'line_refund_value' => $lineRefund,
+        ];
+    }
+    if ($requiresFiscalCorrection && $returnSelection) {
+        GtrotsInvoiceService::issueReturn(
+            $db,
+            $orderId,
+            'Corecție produs, preț și/sau transport în comanda ' . (string)($order['order_number'] ?? '')
+                . ($returnShippingPayer === 'customer' ? ' · transport suportat de client' : ' · transport suportat de firmă'),
+            $actor,
+            $config,
+            false,
+            $returnSelection,
+            $returnShippingPayer === 'customer' ? round((float)$returnShippingCostOverride, 2) : 0.0
+        );
+    }
+    if (!$patches) {
+        $productTotal = round(max(0.0, (float)($order['total'] ?? 0) - $oldShippingCost), 2);
+        $total = round($productTotal + $shippingCost, 2);
+        $vatRate = !empty($order['vat_payer']) ? max(0.0, min(100.0, (float)($order['vat_rate'] ?? 0))) : 0.0;
+        $vatTotal = $vatRate > 0 ? round($total * $vatRate / (100 + $vatRate), 2) : 0.0;
+        $netTotal = round($total - $vatTotal, 2);
+        $db->prepare('UPDATE shop_orders SET shipping_cost = ?, total = ?, vat_total = ?, net_total = ? WHERE id = ?')
+            ->execute([$shippingCost, $total, $vatTotal, $netTotal, $orderId]);
+        if ($issuedInvoice) {
+            if ($requiresFiscalCorrection) GtrotsInvoiceService::issueCorrection($db, $orderId, (string)$issuedInvoice['id'], $actor, [], $shippingCost > 0);
+            else GtrotsInvoiceService::reviseUnsentForOrder($db, $orderId, $actor);
+        }
+        GtrotsShippingNoteService::reviseForOrder($db, $orderId);
+        return true;
+    }
+
+    $productIds = [];
+    foreach ($items as $item) {
+        $itemId = (string)$item['id'];
+        $productId = (string)($patches[$itemId]['product_id'] ?? $item['product_id'] ?? '');
+        if ($productId === '' || isset($productIds[$productId])) {
+            throw new InvalidArgumentException('Același produs nu poate apărea de două ori în comandă. Păstrează o singură poziție pentru fiecare produs.');
+        }
+        $productIds[$productId] = true;
+    }
+
+    $productStmt = $db->prepare('SELECT * FROM shop_products WHERE id = ? AND is_active = 1 FOR UPDATE');
+    $products = [];
+    foreach (array_keys($productIds) as $productId) {
+        $productStmt->execute([$productId]);
+        $product = $productStmt->fetch();
+        if (!$product) throw new InvalidArgumentException('Un produs selectat nu mai este activ în catalog.');
+        $products[$productId] = $product;
+    }
+
+    $globalDiscount = (string)($order['promotion_scope'] ?? '') === 'global' ? max(0.0, (float)($order['discount_total'] ?? 0)) : 0.0;
+    $grossTotal = array_reduce($items, static fn(float $sum, array $item): float => $sum + max(0.0, (float)$item['line_total']), 0.0);
+    $allocatedGlobalDiscount = 0.0;
+    $updateItem = $db->prepare(
+        'UPDATE shop_order_items
+         SET product_id = ?, product_name = ?, product_sku = ?, unit_price = ?, line_total = ?, discount_total = 0,
+             discounted_unit_price = ?, discounted_line_total = ?, acquisition_unit_cost_snapshot = ?, acquisition_total_cost_snapshot = ?
+         WHERE id = ? AND order_id = ?'
+    );
+    $subtotal = 0.0;
+    $lastIndex = array_key_last($items);
+    foreach ($items as $index => $item) {
+        $itemId = (string)$item['id'];
+        $quantity = max(1, (int)$item['quantity']);
+        $productId = (string)($patches[$itemId]['product_id'] ?? $item['product_id']);
+        $product = $products[$productId];
+        $productWasChanged = isset($patches[$itemId]) && $productId !== (string)($item['product_id'] ?? '');
+        if ($productWasChanged && (string)$product['stock_mode'] === 'tracked' && (int)$product['stock_quantity'] < $quantity) {
+            throw new InvalidArgumentException('Stoc insuficient pentru ' . (string)$product['name'] . '. Disponibil ' . (int)$product['stock_quantity'] . ', necesar ' . $quantity . '.');
+        }
+
+        if (isset($patches[$itemId])) {
+            $unitPrice = (float)$patches[$itemId]['unit_price'];
+        } else {
+            $effectiveLine = (float)($item['discount_total'] ?? 0) > 0
+                ? (float)($item['discounted_line_total'] ?? $item['line_total'])
+                : (float)$item['line_total'];
+            if ($globalDiscount > 0) {
+                $lineDiscount = $index === $lastIndex
+                    ? max(0.0, $globalDiscount - $allocatedGlobalDiscount)
+                    : round($grossTotal > 0 ? $globalDiscount * ((float)$item['line_total'] / $grossTotal) : 0, 2);
+                $allocatedGlobalDiscount += $lineDiscount;
+                $effectiveLine = max(0.0, (float)$item['line_total'] - $lineDiscount);
+            }
+            $unitPrice = round($effectiveLine / $quantity, 2);
+        }
+        if ($unitPrice <= 0) throw new InvalidArgumentException('Prețul final al fiecărui produs trebuie să fie mai mare decât zero.');
+        $lineTotal = round($unitPrice * $quantity, 2);
+        $acquisitionUnitCost = productOrderAcquisitionUnitCost($product);
+        $updateItem->execute([
+            $productId, (string)$product['name'], (string)($product['sku'] ?? ''), $unitPrice, $lineTotal,
+            $unitPrice, $lineTotal, $acquisitionUnitCost,
+            $acquisitionUnitCost === null ? null : round($acquisitionUnitCost * $quantity, 2),
+            $itemId, $orderId,
+        ]);
+        $subtotal += $lineTotal;
+    }
+
+    if (trim((string)($order['promotion_id'] ?? '')) !== '') releasePromotionUsage($db, $orderId);
+    $total = round($subtotal + $shippingCost, 2);
+    $vatRate = !empty($order['vat_payer']) ? max(0.0, min(100.0, (float)($order['vat_rate'] ?? 0))) : 0.0;
+    $vatTotal = $vatRate > 0 ? round($total * $vatRate / (100 + $vatRate), 2) : 0.0;
+    $netTotal = round($total - $vatTotal, 2);
+    $db->prepare(
+        'UPDATE shop_orders
+         SET subtotal = ?, discount_total = 0, promotion_id = NULL, promotion_code = NULL, promotion_scope = NULL,
+             shipping_cost = ?, total = ?, vat_total = ?, net_total = ?
+         WHERE id = ?'
+    )->execute([round($subtotal, 2), $shippingCost, $total, $vatTotal, $netTotal, $orderId]);
+
+    if ($issuedInvoice) {
+        if ($requiresFiscalCorrection) {
+            GtrotsInvoiceService::issueCorrection($db, $orderId, (string)$issuedInvoice['id'], $actor, $correctedItemIds, $shippingCost > 0);
+        } else {
+            GtrotsInvoiceService::reviseUnsentForOrder($db, $orderId, $actor);
+        }
+    }
+    GtrotsShippingNoteService::reviseForOrder($db, $orderId);
+    return true;
 }
 
 function publicTrackingOrder(array $order): array {
@@ -6938,8 +7156,8 @@ try {
 
         $invoiceSummaryStatement = $db->prepare(
             'SELECT COALESCE(SUM(CASE WHEN invoice_type = "invoice" THEN ABS(total) ELSE 0 END), 0) AS gross_revenue,
-                    COALESCE(SUM(CASE WHEN invoice_type = "return" THEN ABS(total) ELSE 0 END), 0) AS returns_total,
-                    SUM(CASE WHEN invoice_type = "return" THEN 1 ELSE 0 END) AS returns_count
+                    COALESCE(SUM(CASE WHEN invoice_type = "return" THEN ABS(total) WHEN invoice_type = "correction_return" THEN ABS(total) ELSE 0 END), 0) AS returns_total,
+                    SUM(CASE WHEN invoice_type = "return" THEN 1 WHEN invoice_type = "correction_return" THEN 1 ELSE 0 END) AS returns_count
              FROM shop_invoices
              WHERE issued_at >= ? AND issued_at < ?'
         );
@@ -7023,8 +7241,8 @@ try {
         $invoicesDailyStatement = $db->prepare(
             'SELECT ' . $invoiceBucketExpression . ' AS day,
                     COALESCE(SUM(CASE WHEN i.invoice_type = "invoice" THEN ABS(i.total) ELSE 0 END), 0) AS gross_revenue,
-                    COALESCE(SUM(CASE WHEN i.invoice_type = "return" THEN ABS(i.total) ELSE 0 END), 0) AS returns_total,
-                    SUM(CASE WHEN i.invoice_type = "return" THEN 1 ELSE 0 END) AS returns_count
+                    COALESCE(SUM(CASE WHEN i.invoice_type IN ("return", "correction_return") THEN ABS(i.total) ELSE 0 END), 0) AS returns_total,
+                    SUM(CASE WHEN i.invoice_type IN ("return", "correction_return") THEN 1 ELSE 0 END) AS returns_count
              FROM shop_invoices i
              WHERE i.issued_at >= ? AND i.issued_at < ?
              GROUP BY ' . $invoiceBucketExpression . '
@@ -7411,19 +7629,20 @@ try {
             $orderParams[] = $supplierId;
         }
 
-        $sql = "SELECT p.id, p.name, p.sku, p.supplier_product_code, p.stock_mode, p.stock_quantity,
+        $sql = "SELECT p.id, p.name, p.sku, p.supplier_product_code, p.price, p.sale_price, p.supplier_base_price, p.currency,
+                       p.unit_of_measure, p.stock_mode, p.stock_quantity,
                        (SELECT pi.image_path
                         FROM shop_product_images pi
                         WHERE pi.product_id = p.id
                         ORDER BY pi.sort_order ASC, pi.created_at ASC
                         LIMIT 1) AS image_path
                 FROM shop_products p
-                WHERE " . implode(' OR ', $conditions) . "
+                WHERE p.is_active = 1 AND (" . implode(' OR ', $conditions) . ")
                 ORDER BY " . $associationOrder . "p.name ASC, p.id ASC
                 LIMIT " . $limit;
         $stmt = $db->prepare($sql);
         $stmt->execute(array_merge($params, $orderParams));
-        $rows = $stmt->fetchAll();
+        $rows = applyCatalogPromotionPrices($db, $stmt->fetchAll(), null);
         $referencesByProduct = [];
         if ($supplierId !== '' && $rows) {
             $productIds = array_values(array_unique(array_map(static fn(array $row): string => (string)$row['id'], $rows)));
@@ -7451,11 +7670,19 @@ try {
                 ];
             }
             $reference = $referencesByProduct[(string)$row['id']] ?? null;
+            $baseSitePrice = function_exists('productPublicBasePrice') ? productPublicBasePrice($row) : max(0.0, (float)($row['price'] ?? 0), (float)($row['supplier_base_price'] ?? 0));
+            $sitePrice = ($row['promotion_price'] ?? null) !== null
+                ? (float)$row['promotion_price']
+                : (((float)($row['sale_price'] ?? 0)) > 0 ? (float)$row['sale_price'] : $baseSitePrice);
             return [
                 'id' => (string)$row['id'],
                 'name' => (string)$row['name'],
                 'sku' => (string)($row['sku'] ?? ''),
                 'supplier_product_code' => (string)($row['supplier_product_code'] ?? ''),
+                'price' => round($baseSitePrice, 2),
+                'sale_price' => $sitePrice > 0 ? round($sitePrice, 2) : null,
+                'currency' => strtoupper(trim((string)($row['currency'] ?? 'RON'))) ?: 'RON',
+                'unit_of_measure' => trim((string)($row['unit_of_measure'] ?? '')) ?: 'buc',
                 'stock_mode' => (string)($row['stock_mode'] ?? 'tracked'),
                 'stock_quantity' => (int)($row['stock_quantity'] ?? 0),
                 'images' => $images,
@@ -7896,7 +8123,7 @@ try {
                 'SELECT COUNT(*) AS returns_count,
                         COALESCE(SUM(ABS(i.total)), 0) AS returns_total
                  FROM shop_invoices i
-                 WHERE i.invoice_type = "return"'
+                 WHERE i.invoice_type IN ("return", "correction_return")'
             )->fetch() ?: [];
             $db->commit();
         } catch (Throwable $error) {
@@ -7982,6 +8209,17 @@ try {
             'bank_account_holder' => (string)($body['return_bank_account_holder'] ?? ''),
             'items' => (array)($body['return_items'] ?? []),
         ];
+        $returnShippingPayer = array_key_exists('return_shipping_payer', $body)
+            ? trim((string)$body['return_shipping_payer'])
+            : null;
+        $returnShippingCostOverride = null;
+        if (array_key_exists('return_shipping_cost', $body)) {
+            $returnShippingCostText = str_replace(',', '.', trim((string)$body['return_shipping_cost']));
+            if ($returnShippingCostText === '' || !is_numeric($returnShippingCostText)) {
+                throw new InvalidArgumentException('Valoarea transportului de retur nu este validă.');
+            }
+            $returnShippingCostOverride = round((float)$returnShippingCostText, 2);
+        }
         $directReturnConfirmation = null;
         if ($status === 'cancelled' && $requestedStatusChanged) {
             $cancellation = GtrotsOrderCancellation::cancelByStaff(
@@ -8037,7 +8275,17 @@ try {
                 $currentStatus = 'return_requested';
             }
             if ((string)$currentStatus !== 'return_confirmed') {
-                GtrotsOrderReturnRequest::reviewByStaff($db, $id, (array)($body['return_items'] ?? []), (array)$currentUser);
+                if (!in_array($returnShippingPayer, ['customer', 'company'], true)) {
+                    throw new InvalidArgumentException('Alege dacă transportul returului este suportat de client sau de firmă.');
+                }
+                GtrotsOrderReturnRequest::reviewByStaff(
+                    $db,
+                    $id,
+                    (array)($body['return_items'] ?? []),
+                    (array)$currentUser,
+                    $returnShippingPayer,
+                    $returnShippingCostOverride
+                );
                 $confirmation = GtrotsOrderReturnConfirmation::confirm($db, $id, $config, (array)$currentUser, $notifyCustomer);
                 $stmt = $db->prepare('SELECT o.*, COALESCE(o.return_shipping_cost_snapshot, sm.return_cost, 0) AS configured_return_shipping_cost' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o LEFT JOIN shop_shipping_methods sm ON sm.id = o.shipping_method_id' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? LIMIT 1');
                 $stmt->execute([$id]);
@@ -8080,19 +8328,51 @@ try {
                 $currentStatus = 'return_requested';
             }
             if (in_array((string)$currentStatus, ['return_requested', 'return_refused'], true)) {
-                GtrotsOrderReturnRequest::reviewByStaff($db, $id, (array)($body['return_items'] ?? []), (array)$currentUser);
+                if (!in_array($returnShippingPayer, ['customer', 'company'], true)) {
+                    throw new InvalidArgumentException('Alege dacă transportul returului este suportat de client sau de firmă.');
+                }
+                GtrotsOrderReturnRequest::reviewByStaff(
+                    $db,
+                    $id,
+                    (array)($body['return_items'] ?? []),
+                    (array)$currentUser,
+                    $returnShippingPayer,
+                    $returnShippingCostOverride
+                );
                 $directReturnConfirmation = GtrotsOrderReturnConfirmation::confirm($db, $id, $config, (array)$currentUser, false);
             }
         }
         $historyId = null;
         $statusChanged = false;
         $paymentChanged = false;
+        $itemsChanged = false;
         $db->beginTransaction();
         try {
             $stmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ? FOR UPDATE');
             $stmt->execute([$id]);
             $current = $stmt->fetch();
             if (!$current) throw new InvalidArgumentException('Comanda nu exista.');
+            if (array_key_exists('items', $body) || array_key_exists('shipping_cost', $body)) {
+                if (array_key_exists('items', $body) && !is_array($body['items'])) throw new InvalidArgumentException('Lista produselor modificate nu este validă.');
+                $shippingCostOverride = null;
+                if (array_key_exists('shipping_cost', $body)) {
+                    $shippingText = str_replace(',', '.', trim((string)$body['shipping_cost']));
+                    if ($shippingText === '' || !is_numeric($shippingText)) throw new InvalidArgumentException('Costul transportului nu este valid.');
+                    $shippingCostOverride = round((float)$shippingText, 2);
+                }
+                $itemsChanged = shopAdminApplyOrderItemEdits(
+                    $db,
+                    $current,
+                    (array)($body['items'] ?? []),
+                    (array)$currentUser,
+                    $config,
+                    $shippingCostOverride,
+                    array_key_exists('return_shipping_payer', $body) ? trim((string)$body['return_shipping_payer']) : null,
+                    array_key_exists('return_shipping_cost', $body) && is_numeric(str_replace(',', '.', trim((string)$body['return_shipping_cost'])))
+                        ? round((float)str_replace(',', '.', trim((string)$body['return_shipping_cost'])), 2)
+                        : null
+                );
+            }
             $address = trim((string)($body['address'] ?? $current['address'] ?? ''));
             $city = trim((string)($body['city'] ?? $current['city'] ?? ''));
             $county = trim((string)($body['county'] ?? $current['county'] ?? ''));
@@ -8140,7 +8420,8 @@ try {
             if ($db->inTransaction()) $db->rollBack();
             throw $error;
         }
-        if ($paymentChanged) GtrotsInvoiceService::refreshStoredForOrder($db, $id, $config);
+        if ($paymentChanged || $itemsChanged) GtrotsInvoiceService::refreshStoredForOrder($db, $id, $config);
+        if ($itemsChanged) GtrotsShippingNoteService::refreshStoredForOrder($db, $id, $config);
         $stmt = $db->prepare('SELECT o.*' . GtrotsInvoiceService::orderJoinColumns() . GtrotsShippingNoteService::orderJoinColumns() . ' FROM shop_orders o' . GtrotsInvoiceService::orderJoinSql('o') . GtrotsShippingNoteService::orderJoinSql('o') . ' WHERE o.id = ?');
         $stmt->execute([$id]);
         $order = orderRow($db, $stmt->fetch(), $config, true);

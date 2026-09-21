@@ -165,6 +165,7 @@ export type ShopNirLine = {
   stornable_quantity?: string;
   is_fully_storned?: boolean;
   unit_price: string;
+  price_entry_mode?: 'unit_net' | 'line_net' | 'line_gross';
   discount_percent: string;
   vat_rate: string;
   allocated_cost_ron?: string;
@@ -784,7 +785,7 @@ export type ShopIssuedInvoice = {
   number: string;
   display_number: string;
   status: 'paid' | 'unpaid' | 'return';
-  invoice_type?: 'invoice' | 'return';
+  invoice_type?: 'invoice' | 'return' | 'correction_return' | 'corrected_invoice';
   original_invoice_id?: string | null;
   theme: ShopInvoiceTheme;
   issue_date: string;
@@ -916,6 +917,7 @@ export type ShopOrder = {
   return_bank_iban_masked?: string | null;
   return_bank_account_holder?: string | null;
   return_shipping_cost?: number | null;
+  return_shipping_payer?: 'customer' | 'company' | null;
   configured_return_shipping_cost?: number;
   return_refund_amount?: number | null;
   return_requested_at?: string | null;
@@ -1660,7 +1662,7 @@ export const shopApi = {
     }
   },
   getOrder: (token: string, id: string) => shopCall<ShopOrder>('getOrder', token, undefined, id),
-  updateOrder: (token: string, id: string, payload: Pick<ShopOrder, 'status' | 'payment_status'> & { admin_notes: string; notify_customer: boolean; cancellation_reason?: string; return_reason?: string; return_bank_iban?: string; return_bank_account_holder?: string; return_items?: Array<{ order_item_id: string; quantity?: number; decision_status?: 'accepted' | 'partial' | 'refused'; accepted_quantity?: number; refused_quantity?: number; decision_reason?: string }>; address?: string; city?: string; county?: string; postal_code?: string }) => shopCall<ShopOrder>('updateOrder', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
+  updateOrder: (token: string, id: string, payload: Pick<ShopOrder, 'status' | 'payment_status'> & { admin_notes: string; notify_customer: boolean; cancellation_reason?: string; return_reason?: string; return_bank_iban?: string; return_bank_account_holder?: string; return_shipping_payer?: 'customer' | 'company'; return_shipping_cost?: number; return_items?: Array<{ order_item_id: string; quantity?: number; decision_status?: 'accepted' | 'partial' | 'refused'; accepted_quantity?: number; refused_quantity?: number; decision_reason?: string }>; items?: Array<{ order_item_id: string; product_id: string; unit_price: number }>; shipping_cost?: number; address?: string; city?: string; county?: string; postal_code?: string }) => shopCall<ShopOrder>('updateOrder', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
   sendOrderStatusEmail: (token: string, id: string) => shopCall<ShopOrderEmailNotification>('sendOrderStatusEmail', token, { method: 'POST', body: JSON.stringify({ order_id: id }) }, id),
   issueInvoice: (token: string, orderId: string, sendEmail = false, sendReturnEmail = false) => shopCall<ShopIssuedInvoice>('issueInvoice', token, { method: 'POST', body: JSON.stringify({ order_id: orderId, send_email: sendEmail, send_return_email: sendReturnEmail }) }, orderId),
   listInvoices: (token: string) => shopCall<ShopIssuedInvoice[]>('listInvoices', token),

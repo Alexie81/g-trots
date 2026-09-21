@@ -147,6 +147,39 @@ final class GtrotsShippingNoteService
         }
     }
 
+    public static function reviseForOrder(PDO $db, string $orderId): ?array
+    {
+        $note = self::findByOrder($db, trim($orderId), true);
+        if (!$note) return null;
+        $order = self::order($db, $orderId, false);
+        $company = self::company($db);
+        $oldPayload = self::payload($note);
+        $expedition = (array)($oldPayload['expedition'] ?? []);
+        $input = [
+            'delegate_name' => (string)($expedition['delegate_name'] ?? '-'),
+            'identity_document' => (string)($expedition['identity_document'] ?? '-'),
+            'transport_vehicle' => (string)($expedition['transport_vehicle'] ?? '-'),
+            'delivery_time' => (string)($expedition['delivery_time'] ?? '-'),
+            'loading_place' => (string)($expedition['loading_place'] ?? '-'),
+            'sender_name' => (string)($oldPayload['sender_name'] ?? 'G-Trots Romania'),
+            'with_stamp' => !empty($oldPayload['with_stamp']),
+        ];
+        $payload = self::buildPayload($db, $order, $company, (string)$note['id'], (string)$note['series'], (string)$note['shipping_note_number'], (string)$note['issue_date'], $input);
+        $encoded = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $db->prepare('UPDATE shop_shipping_notes SET currency = ?, total = ?, buyer_name = ?, payload_json = ?, email_sent_at = NULL, email_last_error = NULL WHERE id = ?')
+            ->execute([(string)$payload['currency'], (float)$payload['total'], (string)$payload['buyer']['name'], $encoded, (string)$note['id']]);
+        return self::find($db, (string)$note['id']);
+    }
+
+    public static function refreshStoredForOrder(PDO $db, string $orderId, array $config): void
+    {
+        if (!self::storageEnabled($config)) return;
+        $note = self::findByOrder($db, trim($orderId), false);
+        if (!$note) return;
+        try { self::storedPdf($note, $config, true); }
+        catch (Throwable $error) { error_log('[G-Trots shipping note refresh] ' . $error->getMessage()); }
+    }
+
     public static function delete(PDO $db, string $id, array $config): array
     {
         $id = trim($id);
@@ -356,11 +389,11 @@ final class GtrotsShippingNoteService
         return ['directory' => $directory, 'path' => $directory . DIRECTORY_SEPARATOR . $storedName, 'url' => $publicBase . '/' . rawurlencode($storedName), 'file_name' => self::friendlyName($note)];
     }
 
-    private static function storedPdf(array $note, array $config): array
+    private static function storedPdf(array $note, array $config, bool $force = false): array
     {
         $settings = self::storageSettings($note, $config);
         if (!is_dir((string)$settings['directory']) && !mkdir((string)$settings['directory'], 0775, true) && !is_dir((string)$settings['directory'])) throw new RuntimeException('Directorul avizelor nu a putut fi creat.');
-        if (!is_file((string)$settings['path']) || (int)@filesize((string)$settings['path']) <= 0) {
+        if ($force || !is_file((string)$settings['path']) || (int)@filesize((string)$settings['path']) <= 0) {
             require_once __DIR__ . '/shipping-note-pdf.php';
             $bytes = GtrotsShippingNotePdf::render(self::payload($note));
             if (file_put_contents((string)$settings['path'], $bytes, LOCK_EX) === false) throw new RuntimeException('PDF-ul avizului nu a putut fi salvat.');

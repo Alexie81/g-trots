@@ -2528,7 +2528,7 @@
     return `<div class="shop-order-detail-row"><small>${esc(label)}</small><span class="${strong ? 'strong' : ''}">${esc(String(value || '').trim() || '—')}</span></div>`;
   }
   function orderDeliveryInput(label, id, value, strong = false) {
-    return `<label class="shop-order-delivery-field ${strong ? 'strong' : ''}"><small>${esc(label)}</small><input id="${id}" value="${esc(value || '')}" disabled></label>`;
+    return `<label class="shop-order-delivery-field ${strong ? 'strong' : ''}"><small>${esc(label)}</small><input id="${id}" value="${esc(value || '')}" readonly></label>`;
   }
   async function openOrderContact(kind, phone) {
     try {
@@ -2587,7 +2587,7 @@
         ? `<del>${money(item.line_total)}</del><b>${money(item.discounted_line_total ?? item.line_total)}</b>`
         : money(item.line_total);
       const productOpen = item.product_id ? `<button type="button" class="shop-order-product-open" data-order-product-open="${esc(item.product_id)}" aria-label="Deschide fișa produsului ${esc(item.product_name)}" title="Deschide fișa produsului"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>` : '';
-      return `<div>${item.image_url ? `<img src="${esc(item.image_url)}" alt="">` : `<b>${item.quantity}×</b>`}<span><strong>${esc(item.product_name)}</strong><small>${item.quantity} × <span class="${hasDiscount ? 'discounted' : ''}">${unitPrice}</span> · ${esc(item.product_sku || 'Fără SKU')}</small></span><em class="${hasDiscount ? 'discounted' : ''}">${lineTotal}</em>${productOpen}</div>`;
+      return `<div class="shop-order-product-line">${item.image_url ? `<img src="${esc(item.image_url)}" alt="">` : `<b class="shop-order-product-placeholder">${quantity(item.quantity)}×</b>`}<span class="shop-order-product-copy"><strong>${esc(item.product_name)}</strong><span class="shop-order-product-meta"><span><small>CANTITATE</small><b>${quantity(item.quantity)} ${esc(item.unit_of_measure || 'buc')}</b></span><span><small>COD PRODUS</small><b>${esc(item.product_sku || 'Fără cod')}</b></span><span><small>PREȚ UNITAR</small><b class="${hasDiscount ? 'discounted' : ''}">${unitPrice}</b></span></span></span><em class="shop-order-line-total ${hasDiscount ? 'discounted' : ''}">${lineTotal}</em>${productOpen}</div>`;
     }).join('');
     const productsTotal = Number(order.subtotal || 0) - (isProductPromotion ? orderDiscount : 0);
     const globalDiscount = !isProductPromotion && orderDiscount > 0
@@ -2645,7 +2645,7 @@
       ${invoiceCard}${shippingNoteCard}${returnInvoiceCard}${returnSummary}${returnPolicyLine}${orderTimeline(order)}${orderStatusPicker(order)}${returnRequestCard}
       <label id="shop-order-cancellation-field" class="shop-order-cancellation-field" ${order.status === 'cancelled' ? '' : 'hidden'}><span><b>ANULARE COMANDĂ · MOTIV OBLIGATORIU</b><strong>${order.status === 'cancelled' ? 'Motivul înregistrat' : 'De ce anulăm comanda?'}</strong><small>Clientul va fi notificat automat, iar factura și stocul vor fi corectate după regulile fiscale.</small></span><textarea id="shop-order-cancellation-reason" rows="4" maxlength="1000" placeholder="Scrie motivul transmis clientului...">${esc(order.customer_cancellation_reason || '')}</textarea></label>
       <label class="shop-order-notify" data-notify-state="waiting"><input id="shop-order-notify" type="checkbox"><span class="shop-order-notify-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/></svg><i></i></span><span class="shop-order-notify-copy"><span class="shop-order-notify-eyebrow">NOTIFICARE CLIENT <b id="shop-order-notify-state">ALEGE STATUS</b></span><strong>Trimite actualizarea pe e-mail</strong><small id="shop-order-notify-helper"></small></span><span class="shop-order-notify-switch" aria-hidden="true"><i></i></span></label>
-      <div class="shop-commerce-columns"><label>Status plată<select id="shop-order-payment-status">${['pending', 'paid', 'failed', 'refunded'].map(value => `<option value="${value}" ${order.payment_status === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label><label>Metodă de plată<input value="${order.payment_method === 'card' ? 'Card online' : 'Ramburs la curier'}" disabled></label></div>
+      <div class="shop-commerce-columns"><label>Status plată<select id="shop-order-payment-status">${['pending', 'paid', 'failed', 'refunded'].map(value => `<option value="${value}" ${order.payment_status === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label><label>Metodă de plată<input value="${order.payment_method === 'card' ? 'Card online' : 'Ramburs la curier'}" readonly></label></div>
       <label>Notițe interne<textarea id="shop-order-admin-notes" rows="4">${esc(order.admin_notes || '')}</textarea></label>${order.customer_notes ? `<div class="shop-order-note"><small>OBSERVAȚII CLIENT</small>${esc(order.customer_notes)}</div>` : ''}`;
     $('shop-order-details').querySelector('[data-order-call]')?.addEventListener('click', () => void openOrderContact('call', order.customer_phone));
     $('shop-order-details').querySelector('[data-order-whatsapp]')?.addEventListener('click', () => void openOrderContact('whatsapp', order.customer_phone));
@@ -2667,7 +2667,7 @@
     let deliveryEditing = false;
     deliveryEditButton?.addEventListener('click', () => {
       deliveryEditing = !deliveryEditing;
-      deliveryInputs.forEach((input, index) => { input.disabled = !deliveryEditing; if (!deliveryEditing) input.value = deliveryOriginal[index]; });
+      deliveryInputs.forEach((input, index) => { input.readOnly = !deliveryEditing; if (!deliveryEditing) input.value = deliveryOriginal[index]; });
       deliveryEditButton.classList.toggle('active', deliveryEditing);
       deliveryEditButton.querySelector('span').textContent = deliveryEditing ? 'Anulează' : 'Editează';
       const helper = $('shop-order-details').querySelector('.shop-order-delivery-helper');

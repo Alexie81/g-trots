@@ -6360,10 +6360,14 @@ try {
             if ($db->inTransaction()) $db->rollBack();
             throw $error;
         }
+        $seoSync = shopProductSeoSync($db, $config, (string)$current['id'], (string)($current['slug'] ?? ''), false);
+        $seoSitemap = shopProductSeoRebuildSitemap($db, $config);
         $stripeSync = stripeSyncProductSafe($db, $config, (string)$current['id']);
         $merchantSync = merchantSyncProductSafe($db, $config, (string)$current['id']);
         $shopifySync = shopifySyncProductSafe($db, $config, (string)$current['id']);
         $product = findProduct($db, (string)$current['id'], $config, false);
+        $product['seo_sync'] = $seoSync;
+        $product['seo_sitemap'] = $seoSitemap;
         $product['stripe_sync'] = $stripeSync;
         $product['merchant_sync'] = $merchantSync;
         $product['shopify_sync'] = $shopifySync;

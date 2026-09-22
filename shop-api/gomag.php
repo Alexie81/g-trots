@@ -1234,6 +1234,9 @@ function boomagImportProductsBatch(PDO $db, array $config, int $offset, int $lim
                 $brandInsert = $db->prepare('INSERT IGNORE INTO shop_product_brands (product_id, brand_id) VALUES (?, ?)');
                 foreach (array_values(array_unique($brandIds)) as $brandId) $brandInsert->execute([$productId, $brandId]);
             }
+            if ($categoryId !== null && function_exists('syncProductCategories')) {
+                syncProductCategories($db, $productId, [$categoryId], $categoryId);
+            }
             shopNirEnsureBoomagKidotoysReferences($db, $productId);
             $db->commit();
 

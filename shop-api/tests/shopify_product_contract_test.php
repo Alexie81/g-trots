@@ -1,6 +1,12 @@
 <?php
 declare(strict_types=1);
 
+if (!function_exists('mb_substr')) {
+    function mb_substr(string $value, int $offset, ?int $length = null): string {
+        return $length === null ? substr($value, $offset) : substr($value, $offset, $length);
+    }
+}
+
 define('SHOP_CATEGORY_SECOND_HAND_ID', '8f1ac397-76ab-4bd9-9f60-1cd239cf2573');
 require_once dirname(__DIR__) . '/product-pricing.php';
 require_once dirname(__DIR__) . '/stripe.php';
@@ -55,6 +61,11 @@ $assert($variant['metafields'][0]['value'] === 'https://g-trots.ro/magazin/produ
 $assert($payload['files'][0]['originalSource'] === $product['images'][0]['url'], 'imaginea principală nu este transmisă');
 $assert($payload['files'][0]['duplicateResolutionMode'] === 'REPLACE', 'imaginile nu sunt actualizate idempotent');
 $assert($payload['metafields'][0]['value'] === 'product-stable-id', 'ID-ul intern stabil lipsește');
+$assert(shopifyProductSetIdentifier(['slug' => 'produs-nou']) === ['handle' => 'produs-nou'], 'produsul nou nu este identificat după handle');
+$assert(
+    shopifyProductSetIdentifier(['slug' => 'slug-nou', 'shopify_product_id' => 'gid://shopify/Product/123']) === ['id' => 'gid://shopify/Product/123'],
+    'produsul existent nu își păstrează identitatea Shopify la schimbarea slugului'
+);
 
 $unlimited = $product;
 $unlimited['stock_mode'] = 'unlimited';
@@ -78,6 +89,7 @@ $assert(str_contains($api, "\$action === 'syncShopifyCatalog'"), 'ruta de migrar
 $assert(str_contains($gomag, 'shopifySyncProductSafe'), 'Boomag nu propagă prețul și stocul în Shopify');
 $assert(str_contains($shopify, "'shopify',\n            'key' => 'external_url'"), 'external_url standard nu este prezent');
 $assert(str_contains($shopify, 'productSet(synchronous: true'), 'catalogul nu folosește productSet sincron');
+$assert(str_contains($shopify, "'identifier' => shopifyProductSetIdentifier(\$product)"), 'sincronizarea nu folosește ID-ul Shopify stabil');
 $assert(str_contains($shopify, 'publishablePublish(id: $id, input: $input)'), 'produsele active nu sunt publicate automat în Shopify Catalog');
 $assert(str_contains($shopify, 'publishableUnpublish(id: $id, input: $input)'), 'produsele inactive nu sunt retrase automat din Shopify Catalog');
 $assert(str_contains($shopify, 'shopifySetCatalogPublished($config, $shopifyProductId, shopifyProductIsVisible($product))'), 'sincronizarea nu actualizează starea publicării în catalogul AI');

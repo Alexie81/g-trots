@@ -328,6 +328,12 @@ function shopifyRecordProductSync(PDO $db, string $productId, ?string $shopifyPr
     ]);
 }
 
+function shopifyProductSetIdentifier(array $product): array {
+    $remoteId = trim((string)($product['shopify_product_id'] ?? ''));
+    if ($remoteId !== '') return ['id' => $remoteId];
+    return ['handle' => (string)$product['slug']];
+}
+
 function shopifySyncProduct(PDO $db, array $config, string $productId): array {
     if (!shopifySyncIsEnabled($config)) return ['status' => 'disabled'];
     if (!shopifyIsConfigured($config)) {
@@ -353,7 +359,7 @@ mutation GtrotsProductSet($input: ProductSetInput!, $identifier: ProductSetIdent
 }
 GRAPHQL;
     $data = shopifyGraphql($config, $query, [
-        'identifier' => ['handle' => (string)$product['slug']],
+        'identifier' => shopifyProductSetIdentifier($product),
         'input' => shopifyProductPayload($product, $config),
     ]);
     $payload = is_array($data['productSet'] ?? null) ? $data['productSet'] : [];

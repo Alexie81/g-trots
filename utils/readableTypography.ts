@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
 const MINIMUM_FONT_SIZE = 12;
 const MINIMUM_LINE_HEIGHT = 16;
@@ -30,9 +30,18 @@ export function installReadableTypography() {
     ) => void;
   };
 
+  // Toate componentele Text, inclusiv cele din modale și liste deja
+  // existente, pot fi selectate prin apăsare lungă și copiate.
+  const globalText = Text as typeof Text & {
+    defaultProps?: { selectable?: boolean; [key: string]: unknown };
+  };
+  globalText.defaultProps = {
+    ...(globalText.defaultProps || {}),
+    selectable: true,
+  };
+
   if (typeof globalStyleSheet.setStyleAttributePreprocessor !== 'function') return;
 
   globalStyleSheet.setStyleAttributePreprocessor('fontSize', readableFontSize);
   globalStyleSheet.setStyleAttributePreprocessor('lineHeight', readableLineHeight);
 }
-

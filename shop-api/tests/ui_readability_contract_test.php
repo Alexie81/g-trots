@@ -5,6 +5,7 @@ $root = dirname(__DIR__, 2);
 $mobileRoot = file_get_contents($root . '/app/_layout.tsx');
 $mobileTypography = file_get_contents($root . '/utils/readableTypography.ts');
 $desktopMain = file_get_contents($root . '/electron-app/main.js');
+$desktopStyles = file_get_contents($root . '/electron-app/renderer/style.css');
 
 $failures = [];
 $expect = static function (bool $condition, string $message) use (&$failures): void {
@@ -27,6 +28,12 @@ $expect(
         && str_contains($desktopMain, 'setZoomFactor(DESKTOP_READABILITY_ZOOM)'),
     'Aplicația desktop nu impune lizibilitatea globală a textelor.'
 );
+$expect(
+    str_contains($mobileTypography, 'selectable: true')
+        && str_contains($desktopStyles, 'body *')
+        && str_contains($desktopStyles, 'user-select: text !important;'),
+    'Textele nu sunt configurate global pentru selectare și copiere.'
+);
 
 if ($failures !== []) {
     fwrite(STDERR, implode(PHP_EOL, $failures) . PHP_EOL);
@@ -34,4 +41,3 @@ if ($failures !== []) {
 }
 
 echo "OK: regulile globale de lizibilitate sunt active pe mobil și desktop." . PHP_EOL;
-

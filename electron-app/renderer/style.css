@@ -16369,3 +16369,18 @@ body::after {
   #shop-order-details .shop-order-line-total { grid-column:2; justify-self:start; min-width:0; text-align:left; }
   #shop-order-details .shop-order-product-open { grid-column:3; grid-row:1/3; }
 }
+/* Copiere globală: orice text vizibil rămâne selectabil inclusiv în modale. */
+body,
+body * {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+
+body img,
+body svg,
+body svg *,
+body canvas,
+body video {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}

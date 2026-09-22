@@ -566,7 +566,7 @@
     }
 
     const specificationSection = document.querySelector("#specificatii");
-    const specificationTab = document.querySelector('.product-content-tabs a[href="#specificatii"]');
+    const specificationTab = document.querySelector('.product-content-tabs [data-product-target="#specificatii"]');
     const savedSpecifications = Array.isArray(product.specifications) ? product.specifications.filter(item => item?.label && item?.value) : [];
     const hasSpecifications = savedSpecifications.length > 0;
     if (specificationSection) {
@@ -601,7 +601,7 @@
     const savedQuestions = Array.isArray(product.questions) ? product.questions.filter(item => item?.question && item?.answer).map(item => [item.question, item.answer]) : [];
     const questions = savedQuestions;
     const questionSection = document.querySelector("#intrebari");
-    const questionTab = document.querySelector('.product-content-tabs a[href="#intrebari"]');
+    const questionTab = document.querySelector('.product-content-tabs [data-product-target="#intrebari"]');
     const hasQuestions = questions.length > 0;
     if (questionSection) {
       questionSection.hidden = !hasQuestions;

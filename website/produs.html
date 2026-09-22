@@ -33,11 +33,11 @@
     <link rel="preload" href="assets/magazin-produse-v1.png" as="image" type="image/png">
     <link rel="stylesheet" href="styles.css?v=20260827-shop-call">
     <link rel="stylesheet" href="magazin.css?v=20260827-2">
-    <link rel="stylesheet" href="produs.css?v=20260920-related-drag-v1">
+    <link rel="stylesheet" href="produs.css?v=20260922-product-tabs-v2">
     <link rel="stylesheet" href="favorites.css?v=20260909-nav-v2">
     <link rel="stylesheet" href="shop-live.css?v=20260827-1">
                       <script src="/theme.js?v=20260920-public-theme-v11"></script>
-  <link rel="stylesheet" href="/theme.css?v=20260920-public-theme-v11">
+  <link rel="stylesheet" href="/theme.css?v=20260922-product-tabs-v3">
 </head>
   <body class="shop-page product-page is-live-product-loading" data-product-id="">
     <a class="skip-link" href="#product-detail">Sari la produs</a>
@@ -151,10 +151,10 @@
       </section>
 
       <nav class="product-content-tabs shell" aria-label="Detalii produs" data-gt-live-product hidden>
-        <a class="active" href="#descriere" data-product-tab>Descriere</a>
-        <a href="#specificatii" data-product-tab hidden>Specificații</a>
-        <a href="#recenzii" data-product-tab>Recenzii <span data-review-count>(0)</span></a>
-        <a href="#intrebari" data-product-tab hidden>Întrebări și răspunsuri</a>
+        <button class="active" type="button" data-product-tab data-product-target="#descriere">Descriere</button>
+        <button type="button" data-product-tab data-product-target="#specificatii" hidden>Specificații</button>
+        <button type="button" data-product-tab data-product-target="#recenzii">Recenzii <span data-review-count>(0)</span></button>
+        <button type="button" data-product-tab data-product-target="#intrebari" hidden>Întrebări și răspunsuri</button>
       </nav>
 
       <div class="product-content shell" data-gt-live-product hidden>
@@ -290,7 +290,7 @@
     </a>
 
 <script src="favorites.js?v=20260910-navbar-v1" defer></script>
-    <script src="produs.js?v=20260920-related-drag-v1" defer></script>
-    <script src="shop-live.js?v=20260910-product-seo-v1" defer></script>
+    <script src="produs.js?v=20260922-product-tabs-v2" defer></script>
+    <script src="shop-live.js?v=20260922-product-tabs-v3" defer></script>
 <script src="/legal-footer.js?v=20260920-public-theme-v11" defer></script></body>
 </html>

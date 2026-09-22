@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ftplib import FTP_TLS
+from getpass import getpass
 from io import BytesIO
 import json
 import os
@@ -16,11 +17,15 @@ PUBLIC_ROOT = "https://g-trots.ro/shop-api"
 
 def connect() -> FTP_TLS:
     context = ssl.create_default_context()
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
     ftp = FTP_TLS(context=context, timeout=90)
-    ftp.connect(os.environ.get("GT_FTP_HOST", "ftp.cab-it.ro"), int(os.environ.get("GT_FTP_PORT", "21")))
-    ftp.login(os.environ["GT_FTP_USER"], os.environ["GT_FTP_PASS"])
+    host = os.environ.get("GT_FTP_HOST", "ftp.cab-it.ro")
+    username = os.environ.get("GT_FTP_USER", "")
+    password = os.environ.get("GT_FTP_PASS", "") or getpass("Parola FTPS: ")
+    if not username:
+        raise RuntimeError("Lipsește utilizatorul FTPS (GT_FTP_USER).")
+    ftp.connect(host, int(os.environ.get("GT_FTP_PORT", "21")))
+    ftp.host = os.environ.get("GT_FTP_TLS_SERVER_NAME", host)
+    ftp.login(username, password)
     ftp.prot_p()
     ftp.set_pasv(True)
     ftp.cwd(REMOTE_ROOT)

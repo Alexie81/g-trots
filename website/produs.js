@@ -459,13 +459,17 @@ productAddCart?.addEventListener("click", () => {
 });
 
 const productTabs = [...document.querySelectorAll("[data-product-tab]")];
+const getProductTabSelector = tab => {
+  const selector = tab?.dataset?.productTarget || tab?.getAttribute("href") || "";
+  return selector.startsWith("#") && selector.length > 1 ? selector : "";
+};
 const productSections = productTabs
-  .map(tab => document.querySelector(tab.getAttribute("href")))
+  .map(tab => document.querySelector(getProductTabSelector(tab)))
   .filter(Boolean);
 
 function setActiveProductTab(sectionId) {
   productTabs.forEach(tab => {
-    const isActive = !tab.hidden && tab.getAttribute("href") === `#${sectionId}`;
+    const isActive = !tab.hidden && getProductTabSelector(tab) === `#${sectionId}`;
     tab.classList.toggle("active", isActive);
     tab.toggleAttribute("aria-current", isActive);
   });
@@ -506,12 +510,13 @@ document.querySelectorAll('a[href^="#"]:not([data-product-tab])').forEach(link =
 
 productTabs.forEach(tab => {
   tab.addEventListener("click", event => {
-    const target = document.querySelector(tab.getAttribute("href"));
+    const selector = getProductTabSelector(tab);
+    const target = selector ? document.querySelector(selector) : null;
     if (!target) return;
     event.preventDefault();
     setActiveProductTab(target.id);
     target.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
-    history.replaceState(null, "", `${window.location.pathname}${window.location.search}${tab.getAttribute("href")}`);
+    history.replaceState(null, "", `${window.location.pathname}${window.location.search}${selector}`);
   });
 });
 

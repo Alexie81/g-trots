@@ -1466,34 +1466,39 @@ body.image-viewer-open {
   display: none;
 }
 
-.product-content-tabs a {
+.product-content-tabs :is(a, button) {
   min-height: 3.45rem;
   padding: 0 1.2rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 1 0 auto;
+  appearance: none;
+  border: 0;
   border-radius: 1.05rem;
+  background: transparent;
   color: #8d8882;
+  cursor: pointer;
+  font-family: inherit;
   font-size: 0.68rem;
   font-weight: 800;
   white-space: nowrap;
   transition: background 160ms ease, color 160ms ease;
 }
 
-.product-content-tabs a:hover,
-.product-content-tabs a:focus-visible {
+.product-content-tabs :is(a, button):hover,
+.product-content-tabs :is(a, button):focus-visible {
   outline: 0;
   background: rgba(255, 255, 255, 0.055);
   color: #fff;
 }
 
-.product-content-tabs a.active {
+.product-content-tabs :is(a, button).active {
   background: #f2d5b3;
   color: #351d09;
 }
 
-.product-content-tabs a span {
+.product-content-tabs :is(a, button) span {
   margin-left: 0.35rem;
 }
 
@@ -2731,7 +2736,7 @@ body.image-viewer-open {
     border-radius: 1.2rem;
   }
 
-  .product-content-tabs a {
+  .product-content-tabs :is(a, button) {
     min-height: 3.1rem;
     padding: 0 0.95rem;
     border-radius: 0.9rem;

@@ -1077,8 +1077,13 @@ html[data-theme="dark"] .product-content-tabs {
   background: rgba(12,39,77,.94) !important;
   box-shadow: var(--gt-soft-shadow) !important;
 }
-html[data-theme="dark"] .product-content-tabs a { color: var(--gt-muted) !important; }
-html[data-theme="dark"] .product-content-tabs a.active {
+html[data-theme="dark"] .product-content-tabs :is(a, button) { color: var(--gt-muted) !important; }
+html[data-theme="dark"] .product-content-tabs :is(a, button):hover,
+html[data-theme="dark"] .product-content-tabs :is(a, button):focus-visible {
+  background: #174779 !important;
+  color: #fff !important;
+}
+html[data-theme="dark"] .product-content-tabs :is(a, button).active {
   background: #153e6b !important;
   color: #fff !important;
 }
@@ -1152,13 +1157,13 @@ html[data-theme="light"] .product-content-tabs {
   background: rgba(255,255,255,.94) !important;
   box-shadow: var(--gt-soft-shadow) !important;
 }
-html[data-theme="light"] .product-content-tabs a { color: var(--gt-muted) !important; }
-html[data-theme="light"] .product-content-tabs a:hover,
-html[data-theme="light"] .product-content-tabs a:focus-visible {
+html[data-theme="light"] .product-content-tabs :is(a, button) { color: var(--gt-muted) !important; }
+html[data-theme="light"] .product-content-tabs :is(a, button):hover,
+html[data-theme="light"] .product-content-tabs :is(a, button):focus-visible {
   background: #f3f5f8 !important;
   color: var(--gt-heading) !important;
 }
-html[data-theme="light"] .product-content-tabs a.active {
+html[data-theme="light"] .product-content-tabs :is(a, button).active {
   background: #fff0df !important;
   color: #743500 !important;
 }

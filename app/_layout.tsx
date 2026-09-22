@@ -20,6 +20,9 @@ import OtaUpdateManager from '@/components/OtaUpdateManager';
 import AppStartupLoader from '@/components/AppStartupLoader';
 import { AppModuleProvider, useAppModule } from '@/contexts/AppModuleContext';
 import ModuleSelectionScreen from '@/components/ModuleSelectionScreen';
+import { installReadableTypography } from '@/utils/readableTypography';
+
+installReadableTypography();
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 

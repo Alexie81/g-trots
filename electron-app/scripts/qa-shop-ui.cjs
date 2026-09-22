@@ -11,8 +11,17 @@ app.whenReady().then(async () => {
     height: 900,
     minWidth: 720,
     minHeight: 560,
-    webPreferences: { nodeIntegration: true, contextIsolation: false, offscreen: true, backgroundThrottling: false },
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      offscreen: true,
+      backgroundThrottling: false,
+      defaultFontSize: 17,
+      defaultMonospaceFontSize: 15,
+      minimumFontSize: 12,
+    },
   });
+  win.webContents.setZoomFactor(1.08);
   const errors = [];
   win.webContents.on('console-message', (_event, level, message) => {
     if (level >= 2 && !message.includes('app-update') && !message.includes('Failed to fetch')) errors.push(message);

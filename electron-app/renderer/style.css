@@ -13856,13 +13856,15 @@ body::after {
 }
 
 @media (max-width: 760px) {
+  .module-switcher { grid-template-columns: 1fr; }
+  .module-switch-btn { min-height: 40px; height: auto; padding-block: 8px; }
   .shop-order-filter-grid { grid-template-columns: 1fr; }
   .shop-catalog-page { padding: 18px 16px 88px; }
   .shop-catalog-hero { grid-template-columns: 48px minmax(0, 1fr); padding: 17px; }
   .shop-catalog-hero-icon { width: 48px; height: 48px; border-radius: 14px; }
   .shop-catalog-count { grid-column: 1 / -1; width: 100%; flex-direction: row; justify-content: space-between; }
-  .shop-catalog-actions-row { gap: 10px; }
-  .shop-catalog-tabs { min-width: 0; flex: 1; }
+  .shop-catalog-actions-row { gap: 10px; flex-wrap: wrap; }
+  .shop-catalog-tabs { width: 100%; min-width: 0; flex: 1 0 100%; }
   .shop-catalog-tabs button { min-width: 0; flex: 1; }
   .shop-fab { width: 52px; height: 52px; flex-basis: 52px; }
 }

@@ -11,6 +11,7 @@ let updateDownloadInFlight = false;
 let updateCheckTimer = null;
 const updateStartupTimers = [];
 let pendingOrderDeepLink = null;
+const DESKTOP_READABILITY_ZOOM = 1.08;
 const updateState = {
   status: 'idle',
   currentVersion: app.getVersion(),
@@ -259,9 +260,13 @@ function createWindow() {
       nodeIntegration: true,
       contextIsolation: false,
       preload: path.join(__dirname, 'preload.js'),
+      defaultFontSize: 17,
+      defaultMonospaceFontSize: 15,
+      minimumFontSize: 12,
     },
   });
   mainWindow = win;
+  win.webContents.setZoomFactor(DESKTOP_READABILITY_ZOOM);
 
   win.once('ready-to-show', () => {
     if (!win.isDestroyed()) {
@@ -274,6 +279,7 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.webContents.on('did-finish-load', () => {
     if (!win.isDestroyed()) {
+      win.webContents.setZoomFactor(DESKTOP_READABILITY_ZOOM);
       win.webContents.send('rendering-mode', {
         software: useSoftwareRendering,
       });

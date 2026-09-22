@@ -7170,17 +7170,45 @@ try {
         $invoiceSummaryStatement->execute([$rangeStartSql, $rangeEndSql]);
         $invoiceSummary = $invoiceSummaryStatement->fetch() ?: [];
 
-        // Costul vânzărilor folosește FIFO-ul documentat pe mișcări. Intrarea
-        // returului inversează costul ieșirii; NIR-urile furnizorului rămân
-        // achiziții/stoc și nu devin cheltuială până la vânzarea mărfii.
+        // Evidența contabilă/FIFO rămâne fără TVA deductibil, însă dashboardul
+        // comercial compară încasările brute cu suma efectiv plătită
+        // furnizorului. Reconstituim costul cu TVA al fiecărui lot din linia
+        // NIR care l-a creat, fără să alterăm valoarea contabilă a stocului.
+        $fifoConsumptionQuantity = 'ABS(COALESCE(NULLIF(c.original_quantity, 0), c.quantity))';
+        $fifoGrossUnitCost = 'COALESCE((ABS(nl.line_total_ron) + ABS(COALESCE(nl.allocated_cost_ron, 0))) / NULLIF(ABS(nl.stock_quantity), 0), ABS(c.unit_cost_ron))';
+        $grossSaleCostExpression = 'COALESCE((
+            SELECT SUM(' . $fifoConsumptionQuantity . ' * ' . $fifoGrossUnitCost . ')
+            FROM shop_inventory_layer_consumptions c
+            INNER JOIN shop_inventory_cost_layers cl ON cl.id = c.inventory_cost_layer_id
+            LEFT JOIN shop_nir_lines nl ON nl.id = cl.nir_line_id
+            WHERE c.source_document_type = "SALES_INVOICE"
+              AND c.source_document_id = m.sales_invoice_id
+              AND c.source_line_id = m.sales_invoice_line_id
+        ), ABS(COALESCE(m.inventory_cost_total_ron, 0)))';
+        $grossReturnCostExpression = 'COALESCE((
+            SELECT ABS(COALESCE(m.accounting_quantity_delta, m.quantity_delta, 0))
+                   * SUM(' . $fifoConsumptionQuantity . ' * ' . $fifoGrossUnitCost . ')
+                   / NULLIF(SUM(' . $fifoConsumptionQuantity . '), 0)
+            FROM shop_inventory_movements original_m
+            INNER JOIN shop_inventory_layer_consumptions c
+                    ON c.source_document_type = "SALES_INVOICE"
+                   AND c.source_document_id = original_m.sales_invoice_id
+                   AND c.source_line_id = original_m.sales_invoice_line_id
+            INNER JOIN shop_inventory_cost_layers cl ON cl.id = c.inventory_cost_layer_id
+            LEFT JOIN shop_nir_lines nl ON nl.id = cl.nir_line_id
+            WHERE original_m.id = m.reversal_of_movement_id
+        ), ABS(COALESCE(m.inventory_cost_total_ron, 0)))';
+
+        // Intrarea returului inversează costul comercial al ieșirii;
+        // NIR-urile furnizorului rămân achiziții/stoc până la vânzare.
         $costSummaryStatement = $db->prepare(
             'SELECT COALESCE(SUM(CASE
-                        WHEN movement_type = "sale" THEN ABS(COALESCE(inventory_cost_total_ron, 0))
-                        WHEN movement_type IN ("return", "RETURN_IN") THEN -ABS(COALESCE(inventory_cost_total_ron, 0))
+                        WHEN m.movement_type = "sale" THEN ' . $grossSaleCostExpression . '
+                        WHEN m.movement_type IN ("return", "RETURN_IN") THEN -(' . $grossReturnCostExpression . ')
                         ELSE 0
                     END), 0) AS cost_of_goods_sold
-             FROM shop_inventory_movements
-             WHERE created_at >= ? AND created_at < ?'
+             FROM shop_inventory_movements m
+             WHERE m.created_at >= ? AND m.created_at < ?'
         );
         $costSummaryStatement->execute([$rangeStartSql, $rangeEndSql]);
         $costSummary = $costSummaryStatement->fetch() ?: [];
@@ -7258,8 +7286,8 @@ try {
         $costsDailyStatement = $db->prepare(
             'SELECT ' . $movementBucketExpression . ' AS day,
                     COALESCE(SUM(CASE
-                        WHEN m.movement_type = "sale" THEN ABS(COALESCE(m.inventory_cost_total_ron, 0))
-                        WHEN m.movement_type IN ("return", "RETURN_IN") THEN -ABS(COALESCE(m.inventory_cost_total_ron, 0))
+                        WHEN m.movement_type = "sale" THEN ' . $grossSaleCostExpression . '
+                        WHEN m.movement_type IN ("return", "RETURN_IN") THEN -(' . $grossReturnCostExpression . ')
                         ELSE 0
                     END), 0) AS cost_of_goods_sold
              FROM shop_inventory_movements m

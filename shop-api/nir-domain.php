@@ -101,7 +101,7 @@ function shopNirCalculateLine(array $line, bool $includeVatInInventoryCost = fal
     $conversionFactor = shopNirDecimalToScaled($line['conversion_factor'] ?? 1, 6, 'Factorul de conversie');
     $unitPrice = shopNirDecimalToScaled($line['unit_price'] ?? 0, 6, 'Prețul unitar');
     $priceEntryMode = strtolower(trim((string)($line['price_entry_mode'] ?? 'unit_net')));
-    if (!in_array($priceEntryMode, ['unit_net', 'line_net', 'line_gross'], true)) $priceEntryMode = 'unit_net';
+    if (!in_array($priceEntryMode, ['unit_net', 'line_net', 'line_vat', 'line_gross'], true)) $priceEntryMode = 'unit_net';
     $discountPercent = shopNirDecimalToScaled($line['discount_percent'] ?? 0, 4, 'Discountul');
     $vatRate = shopNirDecimalToScaled($line['vat_rate'] ?? 0, 4, 'Cota TVA');
     $exchangeRate = shopNirDecimalToScaled($line['exchange_rate'] ?? 1, 8, 'Cursul valutar');
@@ -126,6 +126,21 @@ function shopNirCalculateLine(array $line, bool $includeVatInInventoryCost = fal
         $unitPrice = $acceptedQuantity > 0 ? shopNirDivideRounded($gross * 10000, $acceptedQuantity) : 0;
         $vat = shopNirDivideRounded(shopNirMultiplyScaled($net, 6, $vatRate, 4, 6), 100);
         $total = $net + $vat;
+    } elseif ($priceEntryMode === 'line_vat') {
+        // Unele facturi furnizor rotunjesc TVA-ul pe poziție diferit față de
+        // rezultatul matematic al cotei (de ex. 66,12 × 21% este tipărit
+        // 13,88, nu 13,89). În acest mod păstrăm exact baza și TVA-ul
+        // documentului-sursă, iar totalul este suma lor.
+        $net = shopNirDecimalToScaled($line['line_net'] ?? 0, 6, 'Valoarea fără TVA');
+        $vat = shopNirDecimalToScaled($line['line_vat'] ?? 0, 6, 'Valoarea TVA');
+        if ($net < 0 || $vat < 0) throw new InvalidArgumentException('Valorile fără TVA și TVA nu pot fi negative.');
+        $total = $net + $vat;
+        if ($discountPercent >= 1000000 && $net > 0) throw new InvalidArgumentException('Discountul de 100% nu poate avea o valoare fără TVA pozitivă.');
+        $gross = $discountPercent < 1000000
+            ? shopNirDivideRounded($net * 1000000, 1000000 - $discountPercent)
+            : 0;
+        $discount = $gross - $net;
+        $unitPrice = $acceptedQuantity > 0 ? shopNirDivideRounded($gross * 10000, $acceptedQuantity) : 0;
     } elseif ($priceEntryMode === 'line_gross') {
         $total = shopNirDecimalToScaled($line['line_total'] ?? 0, 6, 'Valoarea cu TVA');
         if ($total < 0) throw new InvalidArgumentException('Valoarea cu TVA nu poate fi negativă.');

@@ -165,7 +165,7 @@ export type ShopNirLine = {
   stornable_quantity?: string;
   is_fully_storned?: boolean;
   unit_price: string;
-  price_entry_mode?: 'unit_net' | 'line_net' | 'line_gross';
+  price_entry_mode?: 'unit_net' | 'line_net' | 'line_vat' | 'line_gross';
   discount_percent: string;
   vat_rate: string;
   allocated_cost_ron?: string;

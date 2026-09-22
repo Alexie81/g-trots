@@ -1303,7 +1303,7 @@
       const margin = Number(dashboard.revenue || 0) > 0 ? Math.max(0, Math.min(100, Number(dashboard.profit || 0) / Number(dashboard.revenue || 0) * 100)) : 0;
       const newOrdersCount = Number(dashboard.new_orders_count || 0);
       const newOrdersLabel = newOrdersCount === 1 ? 'comandă nouă' : 'comenzi noi';
-      host.innerHTML = `<section class="shop-dashboard-header"><div><span>DASHBOARD COMERCIAL</span><h1>Magazinul tău, pe scurt</h1><p>Performanța magazinului, actualizată direct din baza de date.</p></div><div class="shop-dashboard-header-actions"><b><i></i>Sincronizat acum</b><button type="button" class="shop-dashboard-new-orders" data-shop-open="shop-orders" data-shop-order-filter="new" aria-label="Deschide ${newOrdersCount} ${newOrdersLabel}"><i class="shop-dashboard-new-orders-icon"><svg viewBox="0 0 24 24"><path d="M3 5h2l1.7 9.1a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 1.9-1.4L20 8H6"/><circle cx="9" cy="19" r="1.3"/><circle cx="17" cy="19" r="1.3"/></svg><b></b></i><span><strong>${newOrdersCount}</strong><small>${newOrdersLabel}</small></span><em><svg viewBox="0 0 20 20"><path d="M4 10h11m-4-4 4 4-4 4"/></svg></em></button></div></section>${dashboardPeriodControls()}<section class="shop-dashboard-metrics">${dashboardMetric('Încasări', money(dashboard.revenue), '#4285f4', series.map(row => row.revenue), 'revenue')}${dashboardMetric(`Retururi · ${Number(dashboard.returns_count || 0)}`, money(dashboard.returns_total), '#f472b6', series.map(row => row.returns), 'returns')}${dashboardMetric('De încasat', money(dashboard.pending_cash), '#fbbf24', series.map(row => row.pending), 'pending')}${dashboardMetric('Comenzi', dashboard.orders_count, '#a78bfa', series.map(row => row.orders), 'orders')}${dashboardMetric('Achiziții', money(dashboard.acquisitions), '#f9ab00', series.map(row => row.acquisitions), 'acquisitions')}${dashboardMetric('Profit', money(dashboard.profit), '#34a853', series.map(row => row.profit), 'profit')}</section><section class="shop-dashboard-insights">${dashboardTrendChart(series, dashboard.range || {})}<article class="shop-dashboard-margin"><header><span>REZULTAT · PERIOADA ALEASĂ</span><h2>Marjă de profit</h2></header><button type="button" class="shop-margin-ring" style="--margin:${margin.toFixed(1)}" data-dashboard-margin aria-label="Afișează profitul perioadei"><div><strong data-margin-main>${margin.toFixed(0)}%</strong><small data-margin-caption>din încasări</small></div></button><div class="shop-margin-values"><span><i></i><small>Profit</small><strong>${money(dashboard.profit)}</strong></span><span><i></i><small>Cost marfă vândută</small><strong>${money(dashboard.cost_of_goods_sold)}</strong></span></div></article></section><section class="shop-dashboard-columns"><div><div class="shop-section-head"><div><span>ACȚIUNI RAPIDE</span><h2>Administrează magazinul</h2></div></div><div class="shop-dashboard-actions">${quickActions}</div></div><div><div class="shop-section-head"><div><span>ACTIVITATE RECENTĂ</span><h2>Ultimele comenzi</h2></div><button type="button" class="shop-dashboard-see-all" data-shop-open="shop-orders" data-shop-order-filter="new">Vezi toate <b>→</b></button></div><div class="shop-dashboard-orders">${recent}</div></div></section>`;
+      host.innerHTML = `<section class="shop-dashboard-header"><div><span>DASHBOARD COMERCIAL</span><h1>Magazinul tău, pe scurt</h1><p>Performanța magazinului, actualizată direct din baza de date.</p></div><div class="shop-dashboard-header-actions"><b><i></i>Sincronizat acum</b><button type="button" class="shop-dashboard-new-orders" data-shop-open="shop-orders" data-shop-order-filter="new" aria-label="Deschide ${newOrdersCount} ${newOrdersLabel}"><i class="shop-dashboard-new-orders-icon"><svg viewBox="0 0 24 24"><path d="M3 5h2l1.7 9.1a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 1.9-1.4L20 8H6"/><circle cx="9" cy="19" r="1.3"/><circle cx="17" cy="19" r="1.3"/></svg><b></b></i><span><strong>${newOrdersCount}</strong><small>${newOrdersLabel}</small></span><em><svg viewBox="0 0 20 20"><path d="M4 10h11m-4-4 4 4-4 4"/></svg></em></button></div></section>${dashboardPeriodControls()}<section class="shop-dashboard-metrics">${dashboardMetric('Încasări', money(dashboard.revenue), '#4285f4', series.map(row => row.revenue), 'revenue')}${dashboardMetric(`Retururi · ${Number(dashboard.returns_count || 0)}`, money(dashboard.returns_total), '#f472b6', series.map(row => row.returns), 'returns')}${dashboardMetric('De încasat', money(dashboard.pending_cash), '#fbbf24', series.map(row => row.pending), 'pending')}${dashboardMetric('Comenzi', dashboard.orders_count, '#a78bfa', series.map(row => row.orders), 'orders')}${dashboardMetric('Achiziții', money(dashboard.acquisitions), '#f9ab00', series.map(row => row.acquisitions), 'acquisitions')}${dashboardMetric('Profit', money(dashboard.profit), '#34a853', series.map(row => row.profit), 'profit')}</section><section class="shop-dashboard-insights">${dashboardTrendChart(series, dashboard.range || {})}<article class="shop-dashboard-margin"><header><span>REZULTAT · PERIOADA ALEASĂ</span><h2>Marjă de profit</h2></header><button type="button" class="shop-margin-ring" style="--margin:${margin.toFixed(1)}" data-dashboard-margin aria-label="Afișează profitul perioadei"><div><strong data-margin-main>${margin.toFixed(0)}%</strong><small data-margin-caption>din încasări</small></div></button><div class="shop-margin-values"><span><i></i><small>Profit</small><strong>${money(dashboard.profit)}</strong></span><span><i></i><small>Cost marfă vândută · TVA inclus</small><strong>${money(dashboard.cost_of_goods_sold)}</strong></span></div></article></section><section class="shop-dashboard-columns"><div><div class="shop-section-head"><div><span>ACȚIUNI RAPIDE</span><h2>Administrează magazinul</h2></div></div><div class="shop-dashboard-actions">${quickActions}</div></div><div><div class="shop-section-head"><div><span>ACTIVITATE RECENTĂ</span><h2>Ultimele comenzi</h2></div><button type="button" class="shop-dashboard-see-all" data-shop-open="shop-orders" data-shop-order-filter="new">Vezi toate <b>→</b></button></div><div class="shop-dashboard-orders">${recent}</div></div></section>`;
       host.classList.remove('is-dashboard-refreshing');
       host.querySelectorAll('[data-dashboard-period]').forEach(button => button.addEventListener('click', () => {
         state.dashboardPeriod = button.dataset.dashboardPeriod;
@@ -4271,7 +4271,7 @@
 
   const nirToday = () => new Date().toISOString().slice(0, 10);
   const nirNowTime = () => new Date().toTimeString().slice(0, 5);
-  const blankNirLine = () => ({ product_id: null, product_name: '', supplier_product_reference_id: null, supplier_product_code: '', supplier_product_name: '', supplier_ean: '', purchase_unit: 'buc', stock_unit: 'buc', invoiced_quantity: '1', received_quantity: '1', accepted_quantity: '1', rejected_quantity: '0', conversion_factor: '1', unit_price: '0', price_entry_mode: 'unit_net', discount_percent: '0', vat_rate: '19', line_net: '0', line_total: '0', difference_reason: null, difference_notes: '', mismatch_reason: '', is_stock_item: true });
+  const blankNirLine = () => ({ product_id: null, product_name: '', supplier_product_reference_id: null, supplier_product_code: '', supplier_product_name: '', supplier_ean: '', purchase_unit: 'buc', stock_unit: 'buc', invoiced_quantity: '1', received_quantity: '1', accepted_quantity: '1', rejected_quantity: '0', conversion_factor: '1', unit_price: '0', price_entry_mode: 'unit_net', discount_percent: '0', vat_rate: '21', line_net: '0', line_vat: '0', line_total: '0', difference_reason: null, difference_notes: '', mismatch_reason: '', is_stock_item: true });
   const nirLocalLineTotals = (line, exchangeRate = 1) => {
     const numeric = value => Number(String(value ?? 0).replace(',', '.')) || 0;
     const quantity = Math.max(0, numeric(line.accepted_quantity));
@@ -4283,19 +4283,27 @@
     const allocatedCost = Math.max(0, numeric(line.allocated_cost_ron));
     const mode = line.price_entry_mode || 'unit_net';
     let net = quantity * price * (1 - discount / 100);
-    let total = net * (1 + vatRate / 100);
+    let vat = net * vatRate / 100;
+    let total = net + vat;
     if (mode === 'line_net') {
       net = Math.max(0, numeric(line.line_net));
-      total = net * (1 + vatRate / 100);
+      vat = net * vatRate / 100;
+      total = net + vat;
+      const beforeDiscount = discount < 100 ? net / (1 - discount / 100) : 0;
+      price = quantity > 0 ? beforeDiscount / quantity : 0;
+    } else if (mode === 'line_vat') {
+      net = Math.max(0, numeric(line.line_net));
+      vat = Math.max(0, numeric(line.line_vat));
+      total = net + vat;
       const beforeDiscount = discount < 100 ? net / (1 - discount / 100) : 0;
       price = quantity > 0 ? beforeDiscount / quantity : 0;
     } else if (mode === 'line_gross') {
       total = Math.max(0, numeric(line.line_total));
       net = total / (1 + vatRate / 100);
+      vat = total - net;
       const beforeDiscount = discount < 100 ? net / (1 - discount / 100) : 0;
       price = quantity > 0 ? beforeDiscount / quantity : 0;
     }
-    const vat = total - net;
     const netRon = net * rate;
     const vatRon = vat * rate;
     const stockQuantity = quantity * conversion;
@@ -4543,13 +4551,15 @@
       const unitCost = row?.querySelector('.shop-nir-line-total span:last-child b');
       const unitPriceInput = row?.querySelector('[data-nir-line-field="unit_price"]');
       const netInput = row?.querySelector('[data-nir-line-field="line_net"]');
+      const vatInput = row?.querySelector('[data-nir-line-field="line_vat"]');
       const grossInput = row?.querySelector('[data-nir-line-field="line_total"]');
       if (summaryQuantity) summaryQuantity.textContent = `${line.accepted_quantity || 0} ${line.stock_unit || 'buc'}`;
       if (summaryTotal) summaryTotal.textContent = money(totals.totalRon);
       if (lineTotal) lineTotal.textContent = money(totals.totalRon);
       if (unitCost) unitCost.textContent = `${money(totals.inventoryUnitCostRon)}/u`;
       if (unitPriceInput && window.document.activeElement !== unitPriceInput && line.price_entry_mode !== 'unit_net') unitPriceInput.value = nirEditableDecimal(totals.unitPrice, 6);
-      if (netInput && window.document.activeElement !== netInput && line.price_entry_mode !== 'line_net') netInput.value = nirEditableDecimal(totals.net);
+      if (netInput && window.document.activeElement !== netInput && !['line_net', 'line_vat'].includes(line.price_entry_mode)) netInput.value = nirEditableDecimal(totals.net);
+      if (vatInput && window.document.activeElement !== vatInput && line.price_entry_mode !== 'line_vat') vatInput.value = nirEditableDecimal(totals.vat);
       if (grossInput && window.document.activeElement !== grossInput && line.price_entry_mode !== 'line_gross') grossInput.value = nirEditableDecimal(totals.total);
     }
     const quantities = (document.lines || []).reduce((summary, line, index) => ({
@@ -4706,7 +4716,7 @@
       <div class="shop-nir-line-details"><div class="shop-nir-line-details-inner"><div class="shop-nir-line-panels">
         <section class="shop-nir-line-panel identity"><header><span class="shop-nir-panel-icon">${nirUiIcon('product')}<i>01</i></span><div><strong>Ce produs este?</strong><small>Îl caut automat după cod, EAN sau denumirea memorată pentru furnizor.</small></div></header><div class="shop-nir-supplier-context"><small>DENUMIRE FURNIZOR</small><strong>${esc(supplierName)}</strong></div><div class="shop-nir-field-grid">${field('COD FURNIZOR', 'supplier_product_code', line.supplier_product_code, 'placeholder="Optional · ex: COD-1025" autocomplete="off"')}${field('DENUMIRE PE FACTURA', 'supplier_product_name', line.supplier_product_name, 'placeholder="Denumirea exacta de pe factura"')}</div><div class="shop-nir-code-feedback ${matched ? 'ok' : ''}" data-nir-code-state="${index}">${nirUiIcon(matched ? 'check' : 'search')}<span><b>${matched ? 'Produs recunoscut' : 'Cautare automata dupa cod sau nume'}</b><small>${matched ? esc(line.product_name || '') : 'La prima achizitie alegi produsul intern; apoi aceasta denumire se recunoaste automat la acel furnizor.'}</small></span></div><div class="shop-nir-product-link"><div><small>PRODUS INTERN</small><strong>${esc(line.product_name || 'Niciun produs asociat')}</strong><span class="${matched ? 'ok' : 'warn'}">${matched ? (line.resolution_status === 'matched_name' ? 'Denumirea furnizorului este asociata produsului intern.' : 'Codul furnizorului este asociat produsului intern.') : 'Daca nu este gasit automat, alege produsul din catalog.'}</span></div>${editable && isStockItem ? `<span class="shop-nir-line-actions"><button type="button" class="primary" data-nir-product="${index}">${matched ? 'Schimba produsul' : 'Alege produsul'}</button></span>` : ''}</div><p class="shop-nir-panel-help">SKU-ul intern este independent. Același produs poate avea coduri și denumiri diferite la fiecare furnizor.</p></section>
         <section class="shop-nir-line-panel reception"><header><span class="shop-nir-panel-icon">${nirUiIcon('calendar')}<i>02</i></span><div><strong>Verifica marfa</strong><small>Compara factura cu ce ai primit si acceptat</small></div></header><div class="shop-nir-quantities">${field('FACTURAT', 'invoiced_quantity', line.invoiced_quantity, 'type="number" min="0" step="0.0001"')}${field('RECEPTIONAT', 'received_quantity', received, 'type="number" min="0" step="0.0001"')}${field('ACCEPTAT', 'accepted_quantity', line.accepted_quantity, 'type="number" min="0" step="0.0001"')}</div><div class="shop-nir-units">${field('UM ACHIZITIE', 'purchase_unit', line.purchase_unit || 'buc', 'placeholder="buc"')}<i>→</i>${field('UM STOC', 'stock_unit', line.stock_unit || 'buc', 'placeholder="buc"')}</div>${differenceFields}</section>
-        <section class="shop-nir-line-panel pricing"><header><span class="shop-nir-panel-icon">${nirUiIcon('currency')}<i>03</i></span><div><strong>Completeaza costul</strong><small>Pretul, valorile fara/cu TVA si costul pozitiei</small></div></header><div class="shop-nir-price-fields">${field(`PRET UNITAR · ${esc(state.nirEditor?.currency || 'RON')}`, 'unit_price', editable && line.price_entry_mode !== 'unit_net' ? nirEditableDecimal(localTotals.unitPrice, 6) : line.unit_price, 'type="number" min="0" step="0.000001"')}${field('DISCOUNT %', 'discount_percent', line.discount_percent, 'type="number" min="0" max="100" step="0.01"')}${field('TVA %', 'vat_rate', line.vat_rate, 'type="number" min="0" max="100" step="0.01"')}${field('COST SUPLIMENTAR RON', 'allocated_cost_ron', line.allocated_cost_ron || '0', 'type="number" min="0" step="0.01"')}${field(`VALOARE FARA TVA · ${esc(state.nirEditor?.currency || 'RON')}`, 'line_net', editable && line.price_entry_mode === 'line_net' ? line.line_net || '0' : nirEditableDecimal(localTotals.net), 'type="number" min="0" step="0.01"')}${field(`VALOARE CU TVA · ${esc(state.nirEditor?.currency || 'RON')}`, 'line_total', editable && line.price_entry_mode === 'line_gross' ? line.line_total || '0' : nirEditableDecimal(localTotals.total), 'type="number" min="0" step="0.01"')}</div><div class="shop-nir-line-total"><span><small>TOTAL POZITIE</small><strong>${money(editable ? localTotals.totalRon : line.line_total_ron || 0)}</strong></span><span><small>COST UNITAR CONTABIL</small><b>${money(editable ? localTotals.inventoryUnitCostRon : line.inventory_unit_cost_ron || 0)}/u</b></span></div>${priceComparison}</section>
+        <section class="shop-nir-line-panel pricing"><header><span class="shop-nir-panel-icon">${nirUiIcon('currency')}<i>03</i></span><div><strong>Completeaza costul</strong><small>Pretul, valorile fara/cu TVA si costul pozitiei</small></div></header><div class="shop-nir-price-fields">${field(`PRET UNITAR · ${esc(state.nirEditor?.currency || 'RON')}`, 'unit_price', editable && line.price_entry_mode !== 'unit_net' ? nirEditableDecimal(localTotals.unitPrice, 6) : line.unit_price, 'type="number" min="0" step="0.000001"')}${field('DISCOUNT %', 'discount_percent', line.discount_percent, 'type="number" min="0" max="100" step="0.01"')}${field('TVA %', 'vat_rate', line.vat_rate, 'type="number" min="0" max="100" step="0.01"')}${field('COST SUPLIMENTAR RON', 'allocated_cost_ron', line.allocated_cost_ron || '0', 'type="number" min="0" step="0.01"')}${field(`VALOARE FARA TVA · ${esc(state.nirEditor?.currency || 'RON')}`, 'line_net', editable && ['line_net', 'line_vat'].includes(line.price_entry_mode) ? line.line_net || '0' : nirEditableDecimal(localTotals.net), 'type="number" min="0" step="0.01"')}${field(`VALOARE TVA · ${esc(state.nirEditor?.currency || 'RON')}`, 'line_vat', editable && line.price_entry_mode === 'line_vat' ? line.line_vat || '0' : nirEditableDecimal(localTotals.vat), 'type="number" min="0" step="0.01"')}${field(`VALOARE CU TVA · ${esc(state.nirEditor?.currency || 'RON')}`, 'line_total', editable && line.price_entry_mode === 'line_gross' ? line.line_total || '0' : nirEditableDecimal(localTotals.total), 'type="number" min="0" step="0.01"')}</div><div class="shop-nir-line-total"><span><small>TOTAL POZITIE</small><strong>${money(editable ? localTotals.totalRon : line.line_total_ron || 0)}</strong></span><span><small>COST UNITAR CONTABIL</small><b>${money(editable ? localTotals.inventoryUnitCostRon : line.inventory_unit_cost_ron || 0)}/u</b></span></div>${priceComparison}</section>
       </div>${editable ? `<footer class="shop-nir-line-footer"><span>Asocierea si costul se memoreaza numai cand salvezi NIR-ul.</span><button type="button" class="danger" data-nir-remove="${index}" aria-label="Sterge produsul" title="Sterge produsul">${nirUiIcon('trash')}</button></footer>` : ''}</div></div>
     </details>`;
   }
@@ -4930,9 +4940,14 @@
       const lineIndex = Number(input.dataset.nirLine);
       const line = state.nirEditor.lines[lineIndex]; if (!line) return;
       const lineField = input.dataset.nirLineField;
+      const totalsBeforeInput = lineField === 'line_vat' ? nirLocalLineTotals(line, state.nirEditor.exchange_rate) : null;
       line[lineField] = lineField === 'is_stock_item' ? input.checked : input.value;
       if (lineField === 'unit_price') line.price_entry_mode = 'unit_net';
       if (lineField === 'line_net') line.price_entry_mode = 'line_net';
+      if (lineField === 'line_vat') {
+        if (line.price_entry_mode !== 'line_vat') line.line_net = nirEditableDecimal(totalsBeforeInput?.net || 0, 6);
+        line.price_entry_mode = 'line_vat';
+      }
       if (lineField === 'line_total') line.price_entry_mode = 'line_gross';
       if (lineField === 'invoiced_quantity') {
         line.received_quantity = input.value;
@@ -4943,7 +4958,7 @@
         if (receivedInput) receivedInput.value = input.value;
         if (acceptedInput) acceptedInput.value = input.value;
       }
-      const calculatedFields = ['invoiced_quantity', 'received_quantity', 'accepted_quantity', 'conversion_factor', 'unit_price', 'line_net', 'line_total', 'discount_percent', 'vat_rate', 'allocated_cost_ron'];
+      const calculatedFields = ['invoiced_quantity', 'received_quantity', 'accepted_quantity', 'conversion_factor', 'unit_price', 'line_net', 'line_vat', 'line_total', 'discount_percent', 'vat_rate', 'allocated_cost_ron'];
       if (calculatedFields.includes(lineField)) {
         line._expanded = true;
         scheduleNirAutosave();

@@ -161,6 +161,7 @@ GtrotsSpvService::updateSettings($db, [
 $statusCallsBeforeUpload = count(array_filter($calls, static fn(array $call): bool => str_contains((string)$call['url'], '/stareMesaj')));
 $submitted = GtrotsSpvService::sendManual($db, $config, 'invoice-accepted');
 spvE2eAssert(($submitted['invoice']['spv_status'] ?? '') === 'processing', 'După upload factura trebuie să aștepte interogarea ANAF, fără polling imediat.');
+spvE2eAssert((int)$db->query("SELECT COUNT(*) FROM shop_notifications WHERE entity_id='invoice-accepted' AND notification_type='spv_processing'")->fetchColumn() === 1, 'Încărcarea trebuie să creeze notificarea că ANAF procesează factura.');
 $firstPollAt = strtotime((string)($submitted['job']['next_attempt_at'] ?? ''));
 spvE2eAssert($firstPollAt >= time() + 7100 && $firstPollAt <= time() + 7300, 'Prima interogare ANAF trebuie programată la aproximativ două ore după upload.');
 $statusCallsAfterUpload = count(array_filter($calls, static fn(array $call): bool => str_contains((string)$call['url'], '/stareMesaj')));
@@ -168,6 +169,8 @@ spvE2eAssert($statusCallsAfterUpload === $statusCallsBeforeUpload, 'Uploadul nu 
 $accepted = spvE2eForceStatusPoll($db, $config, 'invoice-accepted');
 spvE2eAssert(($accepted['invoice']['spv_status'] ?? '') === 'sent', 'Acceptarea ANAF trebuie să marcheze factura drept trimisă.');
 spvE2eAssert(($accepted['job']['upload_index'] ?? '') === 'UPLOAD-123' && ($accepted['job']['download_id'] ?? '') === 'DOWNLOAD-456', 'Indicii ANAF trebuie păstrați pentru audit.');
+spvE2eAssert((int)$db->query("SELECT COUNT(*) FROM shop_notifications WHERE entity_id='invoice-accepted' AND notification_type='spv_sent'")->fetchColumn() === 1, 'Acceptarea trebuie să creeze notificarea de trimitere reușită.');
+spvE2eAssert((int)$db->query("SELECT COUNT(*) FROM shop_notifications WHERE entity_id='invoice-accepted' AND notification_type='spv_processing'")->fetchColumn() === 0, 'Notificarea intermediară trebuie eliminată după acceptare.');
 
 $scenario = 'processing';
 $insert->execute(['invoice-processing', 'invoice', '2026-09-04', '2026-09-04 12:02:00', 'not_sent', 'GT', '101A']);
@@ -178,6 +181,7 @@ $stillProcessing = spvE2eForceStatusPoll($db, $config, 'invoice-processing');
 $followingPollAt = strtotime((string)($stillProcessing['job']['next_attempt_at'] ?? ''));
 spvE2eAssert(($stillProcessing['invoice']['spv_status'] ?? '') === 'processing' && ($stillProcessing['job']['status'] ?? '') === 'processing', 'Răspunsul intermediar ANAF trebuie să păstreze starea în procesare.');
 spvE2eAssert($followingPollAt >= $pollStartedAt + 7100 && $followingPollAt <= $pollStartedAt + 7300, 'Fiecare răspuns în procesare trebuie să programeze următoarea interogare la două ore de la interogarea curentă.');
+spvE2eAssert((int)$db->query("SELECT COUNT(*) FROM shop_notifications WHERE entity_id='invoice-processing' AND notification_type='spv_processing'")->fetchColumn() === 1, 'Pollingul repetat nu trebuie să dubleze notificarea de procesare.');
 $processingCalls = count(array_filter($calls, static fn(array $call): bool => str_contains((string)$call['url'], '/stareMesaj')));
 GtrotsSpvService::runWorker($db, $config, 5);
 spvE2eAssert(count(array_filter($calls, static fn(array $call): bool => str_contains((string)$call['url'], '/stareMesaj'))) === $processingCalls, 'Workerul nu trebuie să interogheze din nou factura înainte de expirarea celor două ore.');
@@ -195,6 +199,8 @@ GtrotsSpvService::enqueue($db, 'invoice-rejected', 'credit_note');
 GtrotsSpvService::sendManual($db, $config, 'invoice-rejected');
 $rejected = spvE2eForceStatusPoll($db, $config, 'invoice-rejected');
 spvE2eAssert(($rejected['invoice']['spv_status'] ?? '') === 'rejected', 'Un NOK ANAF trebuie afișat drept respins, nu trimis.');
+spvE2eAssert((int)$db->query("SELECT COUNT(*) FROM shop_notifications WHERE entity_id='invoice-rejected' AND notification_type='spv_rejected'")->fetchColumn() === 1, 'Respingerea trebuie să creeze notificarea de eroare ANAF.');
+spvE2eAssert((int)$db->query("SELECT COUNT(*) FROM shop_notifications WHERE entity_id='invoice-rejected' AND notification_type='spv_processing'")->fetchColumn() === 0, 'Notificarea de procesare trebuie eliminată după respingere.');
 
 $scenario = 'rejected_phrase';
 $insert->execute(['invoice-rejected-phrase', 'return', '2026-09-04', '2026-09-04 12:15:00', 'not_sent', 'GT', '102B']);
@@ -239,6 +245,7 @@ catch (RuntimeException $expected) { }
 $retryInvoice = GtrotsInvoiceService::get($db, 'invoice-retry');
 $retryJob = $db->query("SELECT * FROM shop_spv_outbox WHERE invoice_id='invoice-retry'")->fetch();
 spvE2eAssert(($retryInvoice['spv_status'] ?? '') === 'error' && ($retryJob['status'] ?? '') === 'retry', 'O indisponibilitate ANAF trebuie să programeze reîncercarea și să păstreze factura netrimisă.');
+spvE2eAssert((int)$db->query("SELECT COUNT(*) FROM shop_notifications WHERE entity_id='invoice-retry' AND notification_type='spv_error'")->fetchColumn() === 1, 'Eroarea de upload trebuie să creeze notificarea SPV corespunzătoare.');
 
 $disconnected = GtrotsSpvService::disconnect($db, $config);
 spvE2eAssert($disconnected['connected'] === false, 'Deconectarea trebuie să elimine tokenurile utilizabile.');

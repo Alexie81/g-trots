@@ -913,10 +913,24 @@ final class GtrotsSpvService
             $db->prepare("UPDATE shop_spv_outbox SET status='processing', upload_index=?, next_attempt_at=?, last_error=NULL WHERE invoice_id=?")
                 ->execute([$uploadIndex, date('Y-m-d H:i:s', time() + self::PROCESSING_POLL_INTERVAL_SECONDS), $invoiceId]);
             $db->prepare("UPDATE shop_invoices SET spv_status='processing', spv_submission_id=? WHERE id=?")->execute([$uploadIndex, $invoiceId]);
+            $db->prepare("DELETE FROM shop_notifications WHERE entity_type='invoice' AND entity_id=? AND notification_type IN ('spv_error','spv_rejected','spv_poll_error')")
+                ->execute([$invoiceId]);
+            self::notify(
+                $db,
+                'spv_processing',
+                'ANAF procesează factura',
+                self::invoiceLabel($invoice) . ' a fost încărcată. Statusul va fi verificat automat peste aproximativ 2 ore.',
+                'invoice',
+                $invoiceId,
+                'info',
+                'spv-processing:' . $invoiceId . ':' . $uploadIndex
+            );
         } catch (Throwable $error) {
             $db->prepare("UPDATE shop_spv_outbox SET status='retry', next_attempt_at=?, last_error=? WHERE invoice_id=?")
                 ->execute([date('Y-m-d H:i:s', time() + 900), mb_substr($error->getMessage(), 0, 500), $invoiceId]);
             $db->prepare("UPDATE shop_invoices SET spv_status='error' WHERE id=? AND spv_status <> 'sent'")->execute([$invoiceId]);
+            $db->prepare("DELETE FROM shop_notifications WHERE entity_type='invoice' AND entity_id=? AND notification_type IN ('spv_processing','spv_poll_error')")
+                ->execute([$invoiceId]);
             self::notify($db, 'spv_error', 'Transmitere SPV nereușită', self::invoiceLabel($invoice) . ': ' . $error->getMessage(), 'invoice', $invoiceId, 'error', 'spv-error:' . $invoiceId . ':' . date('Y-m-d'));
             throw $error;
         }
@@ -925,12 +939,24 @@ final class GtrotsSpvService
     private static function pollUpload(PDO $db, array $config, string $invoiceId, string $uploadIndex): void
     {
         $job = self::job($db, $invoiceId) ?: [];
+        $invoice = self::invoice($db, $invoiceId);
+        $invoiceLabel = self::invoiceLabel($invoice);
         $environment = self::environment((string)($job['environment'] ?? self::settings($db)['environment']));
         $url = self::apiBase($config, $environment) . '/stareMesaj?id_incarcare=' . rawurlencode($uploadIndex);
         $response = self::http('GET', $url, ['Authorization: Bearer ' . self::accessToken($db, $config), 'Accept: application/xml, application/json'], null, 30);
         if ($response['status'] < 200 || $response['status'] >= 300) {
             $db->prepare("UPDATE shop_spv_outbox SET status='processing', next_attempt_at=?, last_error=? WHERE invoice_id=?")
                 ->execute([date('Y-m-d H:i:s', time() + self::PROCESSING_POLL_INTERVAL_SECONDS), 'Verificarea ANAF a răspuns HTTP ' . $response['status'], $invoiceId]);
+            self::notify(
+                $db,
+                'spv_poll_error',
+                'Verificarea ANAF va fi reluată',
+                $invoiceLabel . ' este încă în procesare, dar ANAF a răspuns HTTP ' . $response['status'] . '. Reîncercăm automat peste aproximativ 2 ore.',
+                'invoice',
+                $invoiceId,
+                'warning',
+                'spv-poll-error:' . $invoiceId . ':' . $uploadIndex . ':' . $response['status']
+            );
             return;
         }
         $state = mb_strtolower(self::responseValue($response['body'], ['stare', 'status']), 'UTF-8');
@@ -942,6 +968,18 @@ final class GtrotsSpvService
             GtrotsInvoiceService::markSpvSent($db, $invoiceId, $uploadIndex);
             $db->prepare("UPDATE shop_spv_outbox SET status='accepted', download_id=?, sent_at=CURRENT_TIMESTAMP, accepted_at=CURRENT_TIMESTAMP, next_attempt_at=NULL, last_error=NULL WHERE invoice_id=?")
                 ->execute([$downloadId ?: null, $invoiceId]);
+            $db->prepare("DELETE FROM shop_notifications WHERE entity_type='invoice' AND entity_id=? AND notification_type IN ('spv_processing','spv_error','spv_rejected','spv_poll_error')")
+                ->execute([$invoiceId]);
+            self::notify(
+                $db,
+                'spv_sent',
+                'Factura a fost trimisă cu succes',
+                $invoiceLabel . ' a fost acceptată și confirmată de ANAF.',
+                'invoice',
+                $invoiceId,
+                'success',
+                'spv-sent:' . $invoiceId . ':' . $uploadIndex
+            );
             return;
         }
         if (in_array($state, ['nok', 'error', 'rejected', 'invalid'], true)
@@ -950,11 +988,23 @@ final class GtrotsSpvService
             $message = self::responseMessage($response['body']);
             $db->prepare("UPDATE shop_spv_outbox SET status='rejected', next_attempt_at=NULL, last_error=? WHERE invoice_id=?")->execute([mb_substr($message, 0, 500), $invoiceId]);
             $db->prepare("UPDATE shop_invoices SET spv_status='rejected' WHERE id=? AND spv_status <> 'sent'")->execute([$invoiceId]);
+            $db->prepare("DELETE FROM shop_notifications WHERE entity_type='invoice' AND entity_id=? AND notification_type IN ('spv_processing','spv_poll_error')")
+                ->execute([$invoiceId]);
             self::notify($db, 'spv_rejected', 'Factură respinsă de ANAF', $message, 'invoice', $invoiceId, 'error', 'spv-rejected:' . $invoiceId . ':' . $uploadIndex);
             return;
         }
         $db->prepare("UPDATE shop_spv_outbox SET status='processing', next_attempt_at=?, last_error=NULL WHERE invoice_id=?")
             ->execute([date('Y-m-d H:i:s', time() + self::PROCESSING_POLL_INTERVAL_SECONDS), $invoiceId]);
+        self::notify(
+            $db,
+            'spv_processing',
+            'ANAF procesează factura',
+            $invoiceLabel . ' este încă în procesare. Statusul va fi verificat din nou automat peste aproximativ 2 ore.',
+            'invoice',
+            $invoiceId,
+            'info',
+            'spv-processing:' . $invoiceId . ':' . $uploadIndex
+        );
     }
 
     /**

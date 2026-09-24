@@ -46,6 +46,13 @@ spvAssert(($invoiceJob['status'] ?? '') === 'scheduled', 'Factura pozitivă treb
 spvAssert(($invoiceJob['scheduled_at'] ?? '') === '2026-09-08 00:00:00', 'Două zile lucrătoare după vineri trebuie să însemne întreaga zi de marți, fără condiție de oră.');
 spvAssert(($returnJob['status'] ?? '') === 'manual', 'Factura de retur veche nu trebuie trimisă din coada veche când regula curentă este manuală.');
 spvAssert(($returnJob['mode_snapshot'] ?? '') === 'manual', 'Coada veche trebuie rescrisă după automatizarea actuală.');
+$db->exec("UPDATE shop_spv_outbox SET status='processing', scheduled_at='2026-09-24 12:00:00', next_attempt_at='2026-09-24 12:01:30', last_error='în așteptarea răspunsului ANAF' WHERE invoice_id='invoice-1'");
+GtrotsSpvService::reconcileOutbox($db);
+$processingJob = $db->query("SELECT * FROM shop_spv_outbox WHERE invoice_id='invoice-1'")->fetch();
+spvAssert(($processingJob['status'] ?? '') === 'processing', 'Reconcilierea nu trebuie să scoată factura din starea de procesare ANAF.');
+spvAssert(($processingJob['scheduled_at'] ?? '') === '2026-09-24 12:00:00', 'Reconcilierea nu trebuie să reprogrameze încărcarea deja pornită.');
+spvAssert(($processingJob['next_attempt_at'] ?? '') === '2026-09-24 12:01:30', 'Următoarea verificare ANAF trebuie păstrată, nu mutată la programarea inițială.');
+spvAssert(($processingJob['last_error'] ?? '') === 'în așteptarea răspunsului ANAF', 'Diagnosticul jobului în procesare trebuie păstrat.');
 $db->exec("UPDATE shop_spv_outbox SET status='rejected', attempts=2, upload_index='987654', last_error='BR-RO-TEST: total TVA incorect' WHERE invoice_id='invoice-1'");
 $visibleJob = GtrotsSpvService::invoiceState($db, 'invoice-1');
 spvAssert(($visibleJob['status'] ?? '') === 'rejected', 'Starea ANAF respinsă trebuie expusă aplicației.');
@@ -121,7 +128,8 @@ spvAssert((int)$db->query("SELECT COUNT(*) FROM shop_notifications WHERE notific
 
 $db->exec("INSERT INTO shop_notifications (id,notification_type,title,body,entity_type,entity_id,severity,dedupe_key) VALUES ('notice-1','new_order','Comandă nouă','Test','order','order-1','success','test:1')");
 $marked = GtrotsSpvService::markNotification($db, 'notice-1');
-spvAssert(($marked['unread_count'] ?? -1) === 0, 'Notificarea citită trebuie eliminată din contor.');
+$remainingUnread = (int)$db->query('SELECT COUNT(*) FROM shop_notifications')->fetchColumn();
+spvAssert(($marked['unread_count'] ?? -1) === $remainingUnread, 'Notificarea citită trebuie eliminată din contor fără a ascunde alte alerte active.');
 spvAssert((int)$db->query("SELECT COUNT(*) FROM shop_notifications WHERE id='notice-1'")->fetchColumn() === 0, 'Notificarea eliminată trebuie ștearsă definitiv din baza de date.');
 spvAssert((int)$db->query("SELECT COUNT(*) FROM shop_notification_dismissals WHERE dedupe_key='test:1'")->fetchColumn() === 1, 'Trebuie păstrată doar amprenta minimală care împiedică recrearea alertei.');
 

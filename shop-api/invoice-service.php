@@ -489,12 +489,12 @@ final class GtrotsInvoiceService
         if (!self::storageEnabled($config)) return;
         $invoice = self::findByOrder($db, trim($orderId), false);
         if (!$invoice) return;
-        try {
-            self::storedDocument($db, $invoice, 'pdf', $config, true);
-            self::storedDocument($db, $invoice, 'xlsx', $config, true);
-            self::storedDocument($db, $invoice, 'xml', $config, true);
-        } catch (Throwable $error) {
-            error_log('[G-Trots invoice storage refresh] ' . $error->getMessage());
+        foreach (['pdf', 'xlsx', 'xml'] as $format) {
+            try {
+                self::storedDocument($db, $invoice, $format, $config, true);
+            } catch (Throwable $error) {
+                error_log('[G-Trots invoice storage refresh ' . $format . '] ' . $error->getMessage());
+            }
         }
     }
 
@@ -509,7 +509,8 @@ final class GtrotsInvoiceService
         if ($orderId === '') return false;
 
         $invoice = self::findByOrder($db, $orderId, true);
-        if (!$invoice || (string)($invoice['spv_status'] ?? 'not_sent') !== 'not_sent') return false;
+        $editableSpvStatuses = ['not_sent', 'error', 'rejected'];
+        if (!$invoice || !in_array((string)($invoice['spv_status'] ?? 'not_sent'), $editableSpvStatuses, true)) return false;
 
         $orderStmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ? LIMIT 1');
         $orderStmt->execute([$orderId]);
@@ -540,7 +541,7 @@ final class GtrotsInvoiceService
         $update = $db->prepare(
             "UPDATE shop_invoices
              SET document_status = ?, currency = ?, total = ?, buyer_name = ?, buyer_cui = ?, payload_json = ?, updated_at = CURRENT_TIMESTAMP
-             WHERE id = ? AND spv_status = 'not_sent'"
+             WHERE id = ? AND spv_status IN ('not_sent', 'error', 'rejected')"
         );
         $update->execute([
             $status,

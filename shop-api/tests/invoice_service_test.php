@@ -77,6 +77,10 @@ $db->exec("UPDATE shop_orders SET city='Câmpina' WHERE id='order-1'");
 invoiceAssert(!GtrotsInvoiceService::refreshUnsentPayloadForOrder($db, 'order-1'), 'Factura aflată în procesare SPV nu trebuie rescrisă.');
 $protectedPayload = json_decode((string)$db->query("SELECT payload_json FROM shop_invoices WHERE id='" . $first['id'] . "'")->fetchColumn(), true);
 invoiceAssert(($protectedPayload['buyer']['city'] ?? '') === 'Mizil', 'Snapshotul fiscal aflat în procesare trebuie să rămână nemodificat.');
+$db->exec("UPDATE shop_invoices SET spv_status='rejected' WHERE id='" . $first['id'] . "'");
+invoiceAssert(GtrotsInvoiceService::refreshUnsentPayloadForOrder($db, 'order-1'), 'Factura respinsă de ANAF trebuie să poată fi corectată înainte de retrimitere.');
+$rejectedPayload = json_decode((string)$db->query("SELECT payload_json FROM shop_invoices WHERE id='" . $first['id'] . "'")->fetchColumn(), true);
+invoiceAssert(($rejectedPayload['buyer']['city'] ?? '') === 'Câmpina', 'Retrimiterea trebuie să folosească UBL-ul regenerat cu datele corectate.');
 $db->exec("UPDATE shop_invoices SET spv_status='not_sent' WHERE id='" . $first['id'] . "'");
 
 GtrotsInvoiceThemeStore::update($db, 'orange', 'Test');

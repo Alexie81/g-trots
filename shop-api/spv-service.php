@@ -14,6 +14,7 @@ final class GtrotsSpvService
     private const ACCESS_REFRESH_BEFORE_SECONDS = 86400 * 3;
     private const OAUTH_STATE_TTL_SECONDS = 600;
     private const LEGAL_WORKING_DAYS = 5;
+    private const PROCESSING_POLL_INTERVAL_SECONDS = 7200;
     private static array $schemaReady = [];
     /** @var null|callable Test-only transport, unavailable to HTTP requests. */
     private static $testHttpTransport = null;
@@ -436,15 +437,20 @@ final class GtrotsSpvService
             $stmt = $db->prepare('INSERT INTO shop_spv_outbox (id, invoice_id, document_kind, environment, mode_snapshot, status, scheduled_at, next_attempt_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(invoice_id) DO UPDATE SET document_kind=excluded.document_kind, environment=excluded.environment,
-                mode_snapshot=excluded.mode_snapshot, status=CASE WHEN shop_spv_outbox.status IN ("processing","accepted") THEN shop_spv_outbox.status ELSE excluded.status END,
-                scheduled_at=excluded.scheduled_at, next_attempt_at=excluded.next_attempt_at, last_error=NULL');
+                mode_snapshot=excluded.mode_snapshot, status=CASE WHEN shop_spv_outbox.status IN ("processing","accepted","rejected") THEN shop_spv_outbox.status ELSE excluded.status END,
+                scheduled_at=CASE WHEN shop_spv_outbox.status IN ("processing","accepted","rejected") THEN shop_spv_outbox.scheduled_at ELSE excluded.scheduled_at END,
+                next_attempt_at=CASE WHEN shop_spv_outbox.status IN ("processing","accepted","rejected") THEN shop_spv_outbox.next_attempt_at ELSE excluded.next_attempt_at END,
+                last_error=CASE WHEN shop_spv_outbox.status IN ("processing","accepted","rejected") THEN shop_spv_outbox.last_error ELSE NULL END');
             $stmt->execute([$id, $invoiceId, $kind, (string)$settings['environment'], $mode, $status, $scheduled, $scheduled]);
             return;
         }
         $stmt = $db->prepare('INSERT INTO shop_spv_outbox (id, invoice_id, document_kind, environment, mode_snapshot, status, scheduled_at, next_attempt_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE document_kind=VALUES(document_kind), environment=VALUES(environment), mode_snapshot=VALUES(mode_snapshot),
-            status=IF(status IN ("processing","accepted"), status, VALUES(status)), scheduled_at=VALUES(scheduled_at), next_attempt_at=VALUES(next_attempt_at), last_error=NULL');
+            status=IF(status IN ("processing","accepted","rejected"), status, VALUES(status)),
+            scheduled_at=IF(status IN ("processing","accepted","rejected"), scheduled_at, VALUES(scheduled_at)),
+            next_attempt_at=IF(status IN ("processing","accepted","rejected"), next_attempt_at, VALUES(next_attempt_at)),
+            last_error=IF(status IN ("processing","accepted","rejected"), last_error, NULL)');
         $stmt->execute([$id, $invoiceId, $kind, (string)$settings['environment'], $mode, $status, $scheduled, $scheduled]);
     }
 
@@ -457,6 +463,16 @@ final class GtrotsSpvService
         foreach ($rows as $invoice) {
             self::enqueue($db, (string)$invoice['id'], in_array((string)($invoice['invoice_type'] ?? 'invoice'), ['return', 'correction_return'], true) ? 'credit_note' : 'invoice');
         }
+        // Repair legacy processing jobs whose next status check was pushed to
+        // the original delayed-send date. New jobs already fall inside this
+        // two-hour window and are left untouched.
+        $nextProcessingPoll = date('Y-m-d H:i:s', time() + self::PROCESSING_POLL_INTERVAL_SECONDS);
+        $latestValidPoll = date('Y-m-d H:i:s', time() + self::PROCESSING_POLL_INTERVAL_SECONDS + 300);
+        $repair = $db->prepare("UPDATE shop_spv_outbox
+            SET next_attempt_at = ?
+            WHERE status = 'processing' AND upload_index IS NOT NULL AND upload_index <> ''
+              AND (next_attempt_at IS NULL OR next_attempt_at > ?)");
+        $repair->execute([$nextProcessingPoll, $latestValidPoll]);
         if (!self::isSqlite($db)) {
             $db->exec("UPDATE shop_spv_outbox o INNER JOIN shop_invoices i ON i.id=o.invoice_id SET o.status='accepted', o.accepted_at=COALESCE(o.accepted_at,i.spv_sent_at), o.sent_at=COALESCE(o.sent_at,i.spv_sent_at) WHERE i.spv_status='sent'");
         }
@@ -867,6 +883,8 @@ final class GtrotsSpvService
         if (!$job) throw new RuntimeException('Factura nu are o sarcină SPV.');
         if ((string)$job['status'] === 'accepted') return;
         if ((string)$job['status'] === 'processing' && trim((string)($job['upload_index'] ?? '')) !== '') {
+            $nextAttemptAt = trim((string)($job['next_attempt_at'] ?? ''));
+            if ($nextAttemptAt !== '' && strtotime($nextAttemptAt) > time()) return;
             self::pollUpload($db, $config, $invoiceId, (string)$job['upload_index']);
             return;
         }
@@ -893,9 +911,8 @@ final class GtrotsSpvService
             $uploadIndex = self::responseValue($response['body'], ['index_incarcare', 'uploadindex', 'id_incarcare']);
             if ($uploadIndex === '') throw new RuntimeException('ANAF nu a returnat indexul de încărcare: ' . self::responseMessage($response['body']));
             $db->prepare("UPDATE shop_spv_outbox SET status='processing', upload_index=?, next_attempt_at=?, last_error=NULL WHERE invoice_id=?")
-                ->execute([$uploadIndex, date('Y-m-d H:i:s', time() + 45), $invoiceId]);
+                ->execute([$uploadIndex, date('Y-m-d H:i:s', time() + self::PROCESSING_POLL_INTERVAL_SECONDS), $invoiceId]);
             $db->prepare("UPDATE shop_invoices SET spv_status='processing', spv_submission_id=? WHERE id=?")->execute([$uploadIndex, $invoiceId]);
-            self::pollUpload($db, $config, $invoiceId, $uploadIndex);
         } catch (Throwable $error) {
             $db->prepare("UPDATE shop_spv_outbox SET status='retry', next_attempt_at=?, last_error=? WHERE invoice_id=?")
                 ->execute([date('Y-m-d H:i:s', time() + 900), mb_substr($error->getMessage(), 0, 500), $invoiceId]);
@@ -913,7 +930,7 @@ final class GtrotsSpvService
         $response = self::http('GET', $url, ['Authorization: Bearer ' . self::accessToken($db, $config), 'Accept: application/xml, application/json'], null, 30);
         if ($response['status'] < 200 || $response['status'] >= 300) {
             $db->prepare("UPDATE shop_spv_outbox SET status='processing', next_attempt_at=?, last_error=? WHERE invoice_id=?")
-                ->execute([date('Y-m-d H:i:s', time() + 300), 'Verificarea ANAF a răspuns HTTP ' . $response['status'], $invoiceId]);
+                ->execute([date('Y-m-d H:i:s', time() + self::PROCESSING_POLL_INTERVAL_SECONDS), 'Verificarea ANAF a răspuns HTTP ' . $response['status'], $invoiceId]);
             return;
         }
         $state = mb_strtolower(self::responseValue($response['body'], ['stare', 'status']), 'UTF-8');
@@ -937,7 +954,7 @@ final class GtrotsSpvService
             return;
         }
         $db->prepare("UPDATE shop_spv_outbox SET status='processing', next_attempt_at=?, last_error=NULL WHERE invoice_id=?")
-            ->execute([date('Y-m-d H:i:s', time() + 90), $invoiceId]);
+            ->execute([date('Y-m-d H:i:s', time() + self::PROCESSING_POLL_INTERVAL_SECONDS), $invoiceId]);
     }
 
     /**

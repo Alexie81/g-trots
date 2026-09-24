@@ -36,6 +36,19 @@ function spvE2eJwt(int $expiresAt, array $extra = []): string
     return $encode('{"alg":"none","typ":"JWT"}') . '.' . $encode(json_encode(['exp' => $expiresAt] + $extra, JSON_THROW_ON_ERROR)) . '.signature';
 }
 
+function spvE2eForceStatusPoll(PDO $db, array $config, string $invoiceId): array
+{
+    $db->prepare("UPDATE shop_spv_outbox SET next_attempt_at=? WHERE invoice_id=?")
+        ->execute([date('Y-m-d H:i:s', time() - 5), $invoiceId]);
+    GtrotsSpvService::runWorker($db, $config, 5);
+    $job = $db->prepare('SELECT * FROM shop_spv_outbox WHERE invoice_id=?');
+    $job->execute([$invoiceId]);
+    return [
+        'invoice' => GtrotsInvoiceService::get($db, $invoiceId),
+        'job' => $job->fetch() ?: [],
+    ];
+}
+
 $db = new PDO('sqlite::memory:');
 $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $db->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
@@ -100,6 +113,7 @@ GtrotsSpvService::setHttpTransportForTests(static function (string $method, stri
     if (str_contains($url, '/stareMesaj')) {
         if ($scenario === 'rejected') return ['status' => 200, 'body' => '<header stare="NOK"><Errors errorMessage="CIUS-RO invalid"/></header>'];
         if ($scenario === 'rejected_phrase') return ['status' => 200, 'body' => '<header stare="XML cu erori nepreluat de sistem"><Errors errorMessage="Document nepreluat"/></header>'];
+        if ($scenario === 'processing') return ['status' => 200, 'body' => '<header stare="IN_PRELUCRARE"/>'];
         if ($scenario === 'accepted_without_download') return ['status' => 200, 'body' => '<header stare="OK"/>'];
         return ['status' => 200, 'body' => '<header stare="OK" id_descarcare="DOWNLOAD-456"/>'];
     }
@@ -144,26 +158,49 @@ GtrotsSpvService::updateSettings($db, [
     'environment' => 'production', 'invoice_mode' => 'on_issue', 'invoice_delay_days' => 1,
     'return_mode' => 'manual', 'return_delay_days' => 1, 'reminders_enabled' => true,
 ], 'Administrator', $config);
-$accepted = GtrotsSpvService::sendManual($db, $config, 'invoice-accepted');
+$statusCallsBeforeUpload = count(array_filter($calls, static fn(array $call): bool => str_contains((string)$call['url'], '/stareMesaj')));
+$submitted = GtrotsSpvService::sendManual($db, $config, 'invoice-accepted');
+spvE2eAssert(($submitted['invoice']['spv_status'] ?? '') === 'processing', 'După upload factura trebuie să aștepte interogarea ANAF, fără polling imediat.');
+$firstPollAt = strtotime((string)($submitted['job']['next_attempt_at'] ?? ''));
+spvE2eAssert($firstPollAt >= time() + 7100 && $firstPollAt <= time() + 7300, 'Prima interogare ANAF trebuie programată la aproximativ două ore după upload.');
+$statusCallsAfterUpload = count(array_filter($calls, static fn(array $call): bool => str_contains((string)$call['url'], '/stareMesaj')));
+spvE2eAssert($statusCallsAfterUpload === $statusCallsBeforeUpload, 'Uploadul nu trebuie urmat imediat de o interogare stareMesaj.');
+$accepted = spvE2eForceStatusPoll($db, $config, 'invoice-accepted');
 spvE2eAssert(($accepted['invoice']['spv_status'] ?? '') === 'sent', 'Acceptarea ANAF trebuie să marcheze factura drept trimisă.');
 spvE2eAssert(($accepted['job']['upload_index'] ?? '') === 'UPLOAD-123' && ($accepted['job']['download_id'] ?? '') === 'DOWNLOAD-456', 'Indicii ANAF trebuie păstrați pentru audit.');
+
+$scenario = 'processing';
+$insert->execute(['invoice-processing', 'invoice', '2026-09-04', '2026-09-04 12:02:00', 'not_sent', 'GT', '101A']);
+GtrotsSpvService::enqueue($db, 'invoice-processing', 'invoice');
+GtrotsSpvService::sendManual($db, $config, 'invoice-processing');
+$pollStartedAt = time();
+$stillProcessing = spvE2eForceStatusPoll($db, $config, 'invoice-processing');
+$followingPollAt = strtotime((string)($stillProcessing['job']['next_attempt_at'] ?? ''));
+spvE2eAssert(($stillProcessing['invoice']['spv_status'] ?? '') === 'processing' && ($stillProcessing['job']['status'] ?? '') === 'processing', 'Răspunsul intermediar ANAF trebuie să păstreze starea în procesare.');
+spvE2eAssert($followingPollAt >= $pollStartedAt + 7100 && $followingPollAt <= $pollStartedAt + 7300, 'Fiecare răspuns în procesare trebuie să programeze următoarea interogare la două ore de la interogarea curentă.');
+$processingCalls = count(array_filter($calls, static fn(array $call): bool => str_contains((string)$call['url'], '/stareMesaj')));
+GtrotsSpvService::runWorker($db, $config, 5);
+spvE2eAssert(count(array_filter($calls, static fn(array $call): bool => str_contains((string)$call['url'], '/stareMesaj'))) === $processingCalls, 'Workerul nu trebuie să interogheze din nou factura înainte de expirarea celor două ore.');
 
 $scenario = 'accepted_without_download';
 $insert->execute(['invoice-list-fallback', 'invoice', '2026-09-04', '2026-09-04 12:05:00', 'not_sent', 'GT', '101B']);
 GtrotsSpvService::enqueue($db, 'invoice-list-fallback', 'invoice');
-$acceptedFromList = GtrotsSpvService::sendManual($db, $config, 'invoice-list-fallback');
+GtrotsSpvService::sendManual($db, $config, 'invoice-list-fallback');
+$acceptedFromList = spvE2eForceStatusPoll($db, $config, 'invoice-list-fallback');
 spvE2eAssert(($acceptedFromList['invoice']['spv_status'] ?? '') === 'sent' && ($acceptedFromList['job']['download_id'] ?? '') === 'DOWNLOAD-FROM-LIST', 'Dacă stareMesaj nu oferă id_descarcare, acesta trebuie recuperat din lista oficială după id_solicitare.');
 
 $scenario = 'rejected';
 $insert->execute(['invoice-rejected', 'return', '2026-09-04', '2026-09-04 12:10:00', 'not_sent', 'GT', '102']);
 GtrotsSpvService::enqueue($db, 'invoice-rejected', 'credit_note');
-$rejected = GtrotsSpvService::sendManual($db, $config, 'invoice-rejected');
+GtrotsSpvService::sendManual($db, $config, 'invoice-rejected');
+$rejected = spvE2eForceStatusPoll($db, $config, 'invoice-rejected');
 spvE2eAssert(($rejected['invoice']['spv_status'] ?? '') === 'rejected', 'Un NOK ANAF trebuie afișat drept respins, nu trimis.');
 
 $scenario = 'rejected_phrase';
 $insert->execute(['invoice-rejected-phrase', 'return', '2026-09-04', '2026-09-04 12:15:00', 'not_sent', 'GT', '102B']);
 GtrotsSpvService::enqueue($db, 'invoice-rejected-phrase', 'credit_note');
-$rejectedPhrase = GtrotsSpvService::sendManual($db, $config, 'invoice-rejected-phrase');
+GtrotsSpvService::sendManual($db, $config, 'invoice-rejected-phrase');
+$rejectedPhrase = spvE2eForceStatusPoll($db, $config, 'invoice-rejected-phrase');
 spvE2eAssert(($rejectedPhrase['invoice']['spv_status'] ?? '') === 'rejected', 'Mesajul ANAF „nepreluat/cu erori” trebuie tratat drept respins, nu lăsat în procesare.');
 
 $scenario = 'accepted';
@@ -185,6 +222,10 @@ $db->prepare("UPDATE shop_spv_outbox SET scheduled_at=?,next_attempt_at=? WHERE 
     ->execute([$futureToday, $futureToday]);
 $worker = GtrotsSpvService::runWorker($db, $config, 5);
 spvE2eAssert(($worker['processed'] ?? 0) >= 2, 'Workerul trebuie să preia facturile în prima rulare din ziua scadentă, chiar dacă ora programată este mai târzie.');
+$db->prepare("UPDATE shop_spv_outbox SET next_attempt_at=? WHERE invoice_id IN ('invoice-worker-late','invoice-worker-early')")
+    ->execute([date('Y-m-d H:i:s', time() - 5)]);
+$workerPoll = GtrotsSpvService::runWorker($db, $config, 5);
+spvE2eAssert(($workerPoll['processed'] ?? 0) >= 2, 'Workerul trebuie să verifice statusul facturilor după expirarea intervalului de polling.');
 spvE2eAssert((GtrotsInvoiceService::get($db, 'invoice-worker-early')['spv_status'] ?? '') === 'sent' && (GtrotsInvoiceService::get($db, 'invoice-worker-late')['spv_status'] ?? '') === 'sent', 'Ambele facturi scadente trebuie transmise.');
 $workerUploads = array_values(array_filter($calls, static fn(array $call): bool => str_contains((string)$call['url'], '/upload')));
 $lastWorkerUploads = array_slice($workerUploads, -2);

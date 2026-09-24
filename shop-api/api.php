@@ -8380,6 +8380,11 @@ try {
         $statusChanged = false;
         $paymentChanged = false;
         $itemsChanged = false;
+        $invoicePayloadChanged = false;
+        $invoiceRefreshRequested = array_key_exists('address', $body)
+            || array_key_exists('city', $body)
+            || array_key_exists('county', $body)
+            || array_key_exists('postal_code', $body);
         $db->beginTransaction();
         try {
             $stmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ? FOR UPDATE');
@@ -8440,6 +8445,9 @@ try {
             }
             $update = $db->prepare('UPDATE shop_orders SET status = ?, payment_status = ?, admin_notes = ?, address = ?, city = ?, county = ?, postal_code = ? WHERE id = ?');
             $update->execute([$status, $paymentStatus, mb_substr(trim((string)($body['admin_notes'] ?? '')), 0, 5000), $address, $city, $county, $postalCode, $id]);
+            if ($invoiceRefreshRequested || $paymentChanged || $itemsChanged) {
+                $invoicePayloadChanged = GtrotsInvoiceService::refreshUnsentPayloadForOrder($db, $id);
+            }
             if ($statusChanged) {
                 $historyId = recordOrderStatusHistory(
                     $db,
@@ -8455,7 +8463,7 @@ try {
             if ($db->inTransaction()) $db->rollBack();
             throw $error;
         }
-        if ($paymentChanged || $itemsChanged) GtrotsInvoiceService::refreshStoredForOrder($db, $id, $config);
+        if ($invoicePayloadChanged || $paymentChanged || $itemsChanged) GtrotsInvoiceService::refreshStoredForOrder($db, $id, $config);
         if ($itemsChanged) GtrotsShippingNoteService::refreshStoredForOrder($db, $id, $config);
         $stmt = $db->prepare('SELECT o.*' . GtrotsInvoiceService::orderJoinColumns() . GtrotsShippingNoteService::orderJoinColumns() . ' FROM shop_orders o' . GtrotsInvoiceService::orderJoinSql('o') . GtrotsShippingNoteService::orderJoinSql('o') . ' WHERE o.id = ?');
         $stmt->execute([$id]);

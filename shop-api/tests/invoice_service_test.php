@@ -64,6 +64,21 @@ invoiceAssert($first['display_number'] === 'GT 001', 'Prima factura trebuie sa f
 invoiceAssert($first['theme'] === 'purple', 'Factura trebuie sa fixeze tema activa mov.');
 invoiceAssert($first['status'] === 'unpaid', 'Comanda neplatita trebuie sa emita factura neplatita.');
 
+$db->exec("UPDATE shop_orders SET address='Str. Client Corectată 9', city='Mizil', county='Prahova', postal_code='105800' WHERE id='order-1'");
+$db->beginTransaction();
+$buyerRefreshed = GtrotsInvoiceService::refreshUnsentPayloadForOrder($db, 'order-1');
+$db->commit();
+$refreshedPayload = json_decode((string)$db->query("SELECT payload_json FROM shop_invoices WHERE id='" . $first['id'] . "'")->fetchColumn(), true);
+invoiceAssert($buyerRefreshed, 'Factura netrimisă trebuie resincronizată după modificarea datelor clientului din comandă.');
+invoiceAssert(($refreshedPayload['buyer']['address'] ?? '') === 'Str. Client Corectată 9', 'Factura netrimisă trebuie să preia adresa actualizată.');
+invoiceAssert(($refreshedPayload['buyer']['city'] ?? '') === 'Mizil' && ($refreshedPayload['buyer']['county'] ?? '') === 'Prahova', 'Factura netrimisă trebuie să preia localitatea și județul actualizate.');
+$db->exec("UPDATE shop_invoices SET spv_status='processing' WHERE id='" . $first['id'] . "'");
+$db->exec("UPDATE shop_orders SET city='Câmpina' WHERE id='order-1'");
+invoiceAssert(!GtrotsInvoiceService::refreshUnsentPayloadForOrder($db, 'order-1'), 'Factura aflată în procesare SPV nu trebuie rescrisă.');
+$protectedPayload = json_decode((string)$db->query("SELECT payload_json FROM shop_invoices WHERE id='" . $first['id'] . "'")->fetchColumn(), true);
+invoiceAssert(($protectedPayload['buyer']['city'] ?? '') === 'Mizil', 'Snapshotul fiscal aflat în procesare trebuie să rămână nemodificat.');
+$db->exec("UPDATE shop_invoices SET spv_status='not_sent' WHERE id='" . $first['id'] . "'");
+
 GtrotsInvoiceThemeStore::update($db, 'orange', 'Test');
 $insertOrder->execute(['order-2', 'CMD-002', 'completed', 'paid', 'card', 'RON', 238.00, 0, '', 238.00, 0, 1, 19, 'company', 'Client Firma', 'firma@example.com', '0700333444', 'Bd. Firma 2', 'Cluj-Napoca', 'Cluj', '400001', '']);
 $db->exec("UPDATE shop_orders SET company_name='CLIENT SRL', company_cui='RO49972605', company_registration_number='J12/1/2020', company_address='Bd. Firma 2', stripe_paid_at='2026-09-03 10:30:00' WHERE id='order-2'");

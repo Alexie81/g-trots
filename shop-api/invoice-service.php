@@ -499,6 +499,62 @@ final class GtrotsInvoiceService
     }
 
     /**
+     * Keeps the fiscal snapshot in sync with the current order while the
+     * invoice is still editable. The conditional UPDATE closes the race with
+     * an SPV upload that may start after the invoice was read.
+     */
+    public static function refreshUnsentPayloadForOrder(PDO $db, string $orderId): bool
+    {
+        $orderId = trim($orderId);
+        if ($orderId === '') return false;
+
+        $invoice = self::findByOrder($db, $orderId, true);
+        if (!$invoice || (string)($invoice['spv_status'] ?? 'not_sent') !== 'not_sent') return false;
+
+        $orderStmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ? LIMIT 1');
+        $orderStmt->execute([$orderId]);
+        $order = $orderStmt->fetch();
+        if (!$order) throw new InvalidArgumentException('Comanda nu există.');
+
+        $company = $db->query('SELECT * FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
+        $oldPayload = json_decode((string)($invoice['payload_json'] ?? ''), true);
+        $notes = is_array($oldPayload) ? (string)($oldPayload['notes'] ?? '') : '';
+        $status = self::statusForOrder($order);
+        $payload = self::payload(
+            $db,
+            $order,
+            $company,
+            (string)$invoice['id'],
+            (string)$invoice['series'],
+            (string)$invoice['invoice_number'],
+            (string)$invoice['issue_date'],
+            (string)($invoice['due_date'] ?? $invoice['issue_date']),
+            $status
+        );
+        // Notes may already include the customer's note and promotion text;
+        // preserve the exact issued text instead of appending those fragments
+        // again every time the buyer data is refreshed.
+        if ($notes !== '') $payload['notes'] = $notes;
+        $payload['theme'] = (string)$invoice['theme'];
+        $encoded = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $update = $db->prepare(
+            "UPDATE shop_invoices
+             SET document_status = ?, currency = ?, total = ?, buyer_name = ?, buyer_cui = ?, payload_json = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ? AND spv_status = 'not_sent'"
+        );
+        $update->execute([
+            $status,
+            strtoupper(trim((string)($order['currency'] ?? 'RON'))) ?: 'RON',
+            round((float)($order['total'] ?? 0), 2),
+            (string)($payload['buyer']['name'] ?? ''),
+            (string)($payload['buyer']['cui'] ?? ''),
+            $encoded,
+            (string)$invoice['id'],
+        ]);
+        return $update->rowCount() === 1;
+    }
+
+    /**
      * Rebuilds an invoice which has not reached SPV yet, keeping its fiscal
      * number. The old stock/FIFO posting is reversed before the corrected
      * order lines are posted again.

@@ -1,6 +1,6 @@
 {
   "name": "gtrots-desktop",
-  "version": "1.2.61",
+  "version": "1.2.62",
   "description": "G-Trots CRM Desktop",
   "main": "main.js",
   "scripts": {
@@ -45,6 +45,7 @@
     },
     "files": [
       "main.js",
+      "window-bounds.js",
       "preload.js",
       "package.json",
       "renderer/**/*",

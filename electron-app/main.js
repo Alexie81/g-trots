@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const log = require('electron-log');
 const { autoUpdater } = require('electron-updater');
+const { clampWindowBounds } = require('./window-bounds');
 
 let mainWindow = null;
 let whatsappWindow = null;
@@ -81,15 +82,42 @@ function readWindowState() {
     const state = JSON.parse(fs.readFileSync(windowStatePath(), 'utf8'));
     const bounds = state?.bounds;
     if (!bounds || !Number.isFinite(bounds.width) || !Number.isFinite(bounds.height)) return {};
-    const visible = screen.getAllDisplays().some(({ workArea }) => (
-      bounds.x < workArea.x + workArea.width
-      && bounds.x + bounds.width > workArea.x
-      && bounds.y < workArea.y + workArea.height
-      && bounds.y + bounds.height > workArea.y
-    ));
-    return visible ? state : {};
+    const primaryWorkArea = screen.getPrimaryDisplay()?.workArea;
+    const workAreas = screen.getAllDisplays().map(({ workArea }) => workArea);
+    if (primaryWorkArea) {
+      const primaryIndex = workAreas.findIndex((area) => (
+        area.x === primaryWorkArea.x
+        && area.y === primaryWorkArea.y
+        && area.width === primaryWorkArea.width
+        && area.height === primaryWorkArea.height
+      ));
+      if (primaryIndex > 0) workAreas.unshift(workAreas.splice(primaryIndex, 1)[0]);
+    }
+    const safeBounds = clampWindowBounds(bounds, workAreas, { minWidth: 720, minHeight: 560 });
+    return safeBounds ? { ...state, bounds: safeBounds } : {};
   } catch (_error) {
     return {};
+  }
+}
+
+function constrainWindowToWorkArea(win) {
+  if (!win || win.isDestroyed() || win.isMaximized() || win.isFullScreen()) return;
+  const primaryWorkArea = screen.getPrimaryDisplay()?.workArea;
+  const workAreas = screen.getAllDisplays().map(({ workArea }) => workArea);
+  if (primaryWorkArea) {
+    const primaryIndex = workAreas.findIndex((area) => (
+      area.x === primaryWorkArea.x
+      && area.y === primaryWorkArea.y
+      && area.width === primaryWorkArea.width
+      && area.height === primaryWorkArea.height
+    ));
+    if (primaryIndex > 0) workAreas.unshift(workAreas.splice(primaryIndex, 1)[0]);
+  }
+  const current = win.getBounds();
+  const safe = clampWindowBounds(current, workAreas, { minWidth: 720, minHeight: 560 });
+  if (!safe) return;
+  if (safe.x !== current.x || safe.y !== current.y || safe.width !== current.width || safe.height !== current.height) {
+    win.setBounds(safe);
   }
 }
 
@@ -272,6 +300,7 @@ function createWindow() {
     if (!win.isDestroyed()) {
       if (savedState.maximized) win.maximize();
       if (savedState.fullScreen) win.setFullScreen(true);
+      constrainWindowToWorkArea(win);
       win.show();
     }
   });
@@ -308,9 +337,14 @@ function createWindow() {
   win.on('unmaximize', scheduleStateSave);
   win.on('enter-full-screen', scheduleStateSave);
   win.on('leave-full-screen', scheduleStateSave);
+  const keepInsideWorkArea = () => constrainWindowToWorkArea(win);
+  screen.on('display-metrics-changed', keepInsideWorkArea);
+  screen.on('display-removed', keepInsideWorkArea);
   win.on('close', () => saveWindowState(win));
   win.on('closed', () => {
     clearTimeout(saveStateTimer);
+    screen.removeListener('display-metrics-changed', keepInsideWorkArea);
+    screen.removeListener('display-removed', keepInsideWorkArea);
     if (mainWindow === win) mainWindow = null;
   });
 }

@@ -6174,3 +6174,63 @@ body.smart-search-closing .smart-search-overlay {
     animation: none;
   }
 }
+
+/* Catalog assistance v3: high-contrast orange card with a familiar WhatsApp mark. */
+html[data-theme] body.shop-page .filters-panel .filter-help-card {
+  border-color: rgba(255, 255, 255, 0.34) !important;
+  background:
+    radial-gradient(circle at 100% 0, rgba(255, 255, 255, 0.2), transparent 9rem),
+    linear-gradient(145deg, #ff941f, #ef7100) !important;
+  color: #fff !important;
+  box-shadow: 0 1rem 2.4rem rgba(194, 82, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.32) !important;
+}
+
+html[data-theme] body.shop-page .filters-panel .filter-help-card:hover,
+html[data-theme] body.shop-page .filters-panel .filter-help-card:focus-visible {
+  border-color: rgba(255, 255, 255, 0.72) !important;
+  box-shadow: 0 1.25rem 2.8rem rgba(194, 82, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+}
+
+html[data-theme] body.shop-page .filters-panel .filter-help-heading,
+html[data-theme] body.shop-page .filters-panel .filter-help-heading b,
+html[data-theme] body.shop-page .filters-panel .filter-help-title,
+html[data-theme] body.shop-page .filters-panel .filter-help-description {
+  color: #fff !important;
+}
+
+html[data-theme] body.shop-page .filters-panel .filter-help-heading {
+  font-size: 0.82rem;
+}
+
+html[data-theme] body.shop-page .filters-panel .filter-help-icon {
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.17);
+  color: #fff;
+}
+
+html[data-theme] body.shop-page .filters-panel .filter-help-title {
+  font-size: 1.25rem;
+}
+
+html[data-theme] body.shop-page .filters-panel .filter-help-description {
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+html[data-theme] body.shop-page .filters-panel .filter-help-cta,
+html[data-theme] body.shop-page .filters-panel .filter-help-card:hover .filter-help-cta,
+html[data-theme] body.shop-page .filters-panel .filter-help-card:focus-visible .filter-help-cta {
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  background: rgba(126, 50, 0, 0.2);
+  color: #fff;
+}
+
+html[data-theme] body.shop-page .filters-panel .filter-help-cta svg {
+  width: 2rem;
+  height: 2rem;
+  padding: 0.36rem;
+  border-radius: 50%;
+  background: #25d366;
+  fill: #fff;
+  box-shadow: 0 0.35rem 0.85rem rgba(3, 112, 51, 0.24);
+}

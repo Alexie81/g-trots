@@ -3913,3 +3913,61 @@ body.product-page #intrebari .product-faq-list summary > span { width: 3rem; hei
 body.product-page #intrebari .product-faq-list details[open] summary > span { transform: rotate(135deg); }
 body.product-page #intrebari .product-faq-list details .product-faq-answer p { margin: .6rem 0 0; padding: 0; }
 @media(max-width:700px){body.product-page #intrebari .product-faq-list{gap:.55rem}body.product-page #intrebari .product-faq-list summary{min-height:4.65rem;padding:.55rem;grid-template-columns:2.7rem minmax(0,1fr) 2.55rem;gap:.62rem}body.product-page #intrebari .product-faq-list summary>b{width:2.7rem;height:2.7rem;border-radius:.85rem}body.product-page #intrebari .product-faq-list summary>strong{font-size:.69rem;line-height:1.45}body.product-page #intrebari .product-faq-list summary>span{width:2.55rem;height:2.55rem}}
+
+/* Product content v5: readable copy on desktop and mobile. */
+body.product-page #descriere .product-feature-grid article > b {
+  font-size: 0.74rem;
+}
+
+body.product-page #descriere .product-feature-grid h3 {
+  font-size: clamp(1rem, 1.15vw, 1.1rem);
+  line-height: 1.35;
+}
+
+body.product-page #descriere .product-feature-grid p {
+  font-size: clamp(0.86rem, 0.96vw, 0.94rem);
+  line-height: 1.68;
+}
+
+body.product-page #descriere .product-fit-notice strong {
+  font-size: clamp(0.94rem, 1.05vw, 1.02rem);
+  line-height: 1.35;
+}
+
+body.product-page #descriere .product-fit-notice p {
+  font-size: clamp(0.82rem, 0.92vw, 0.9rem);
+  line-height: 1.62;
+}
+
+body.product-page #descriere .product-fit-notice a {
+  font-size: 0.84rem;
+}
+
+body.product-page #intrebari .product-faq-list summary > b {
+  font-size: 0.72rem;
+}
+
+body.product-page #intrebari .product-faq-list summary > strong {
+  font-size: clamp(1rem, 1.18vw, 1.12rem);
+  line-height: 1.42;
+}
+
+body.product-page #intrebari .product-faq-answer > small {
+  font-size: 0.64rem;
+}
+
+body.product-page #intrebari .product-faq-list details .product-faq-answer p {
+  font-size: clamp(0.92rem, 1.04vw, 1.02rem);
+  line-height: 1.72;
+}
+
+@media (max-width: 700px) {
+  body.product-page #descriere .product-feature-grid h3 { font-size: 1rem; }
+  body.product-page #descriere .product-feature-grid p { font-size: 0.9rem; }
+  body.product-page #descriere .product-fit-notice strong { font-size: 0.96rem; }
+  body.product-page #descriere .product-fit-notice p { font-size: 0.86rem; }
+  body.product-page #descriere .product-fit-notice a { font-size: 0.86rem; }
+  body.product-page #intrebari .product-faq-list summary > strong { font-size: 0.95rem; line-height: 1.4; }
+  body.product-page #intrebari .product-faq-answer > small { font-size: 0.6rem; }
+  body.product-page #intrebari .product-faq-list details .product-faq-answer p { font-size: 0.9rem; line-height: 1.68; }
+}

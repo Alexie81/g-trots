@@ -1,6 +1,6 @@
 {
   "schema_version": 4,
-  "generated_at": "2026-09-13T08:13:19.097Z",
+  "generated_at": "2026-10-01T17:45:48.677Z",
   "publisher": {
     "name": "G-Trots România",
     "legal_name": "CAB IT EXPERT S.R.L.",
@@ -309,7 +309,7 @@
       "warranty": null,
       "price": 49,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/ab9b4ca6886210335546745aa86b92ad.webp"
     },
     {
@@ -369,38 +369,8 @@
       "warranty": null,
       "price": 59,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/57b4c414b0fafaa5a0853cf3876b6ebe.webp"
-    },
-    {
-      "id": "5b8c2c21-f262-5d4d-9b1e-cafba439ab37",
-      "name": "Acceleratie trotineta electrica Xiaomi Mi4 Lite (2nd Gen)",
-      "meta_title": "Acceleratie trotinetă electrică Xiaomi Mi4 Lite (2nd Gen) | G-Trots",
-      "meta_description": "Acceleratie trotinetă electrică Xiaomi Mi4 Lite (2nd Gen) | G-Trots. manetă de accelerație pentru Xiaomi. Verifică piesa veche, prinderile și dimensiunile înainte de montaj",
-      "short_description": "Acceleratie trotinetă electrică Xiaomi Mi4 Lite (2nd Gen): manetă de accelerație pentru Xiaomi. Verifică piesa veche, prinderile și dimensiunile înainte de montaj",
-      "description_excerpt": "Acceleratie trotinetă electrică Xiaomi Mi4 Lite (2nd Gen): manetă de accelerație pentru Xiaomi. Verifică piesa veche, prinderile și dimensiunile înainte de montaj",
-      "description": "Acceleratie trotinetă electrică Xiaomi Mi4 Lite (2nd Gen) | G-Trots. manetă de accelerație pentru Xiaomi. Verifică piesa veche, prinderile și dimensiunile înainte de montaj",
-      "url": "https://g-trots.ro/magazin/produs/acceleratie-trotineta-electrica-xiaomi-mi4-lite-2nd-gen/",
-      "sku": "SE-EWM358",
-      "gtin": "8435764431401",
-      "manufacturer": "OEM",
-      "category": "Manete acceleratie",
-      "compatibility": [
-        "Xiaomi"
-      ],
-      "specifications": [],
-      "conversation_intents": [
-        "Poate fi potrivit când accelerația nu răspunde, răspunde intermitent sau maneta este deteriorată.",
-        "Compară conectorul, tensiunea și poziția pinilor, apoi confirmă compatibilitatea electronică înainte de comandă."
-      ],
-      "compatibility_guidance": "Confirmă modelul, anul sau versiunea și specificațiile relevante înainte de comandă; piesele asemănătoare vizual nu sunt întotdeauna interschimbabile.",
-      "delivery": "Livrare disponibilă în toată România.",
-      "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
-      "warranty": null,
-      "price": 109,
-      "currency": "RON",
-      "availability": "https://schema.org/InStock",
-      "image": "https://g-trots.ro/shop-api/uploads/products/19fd56973318a46c1446466c3c682e04.webp"
     },
     {
       "id": "fedf9fc7-b1d1-5c42-9a4c-3a05acdd4b6e",
@@ -461,6 +431,36 @@
       "currency": "RON",
       "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/24fa276d941e1a83e24695485087197a.webp"
+    },
+    {
+      "id": "5b8c2c21-f262-5d4d-9b1e-cafba439ab37",
+      "name": "Accelerație trotinetă electrică Xiaomi 4 Lite 2nd Gen – Manetă accelerație",
+      "meta_title": "Accelerație Xiaomi 4 Lite 2nd Gen | G-Trots",
+      "meta_description": "Accelerație pentru Xiaomi Electric Scooter 4 Lite 2nd Gen. Manetă de accelerație pentru înlocuirea piesei uzate sau defecte. Verifică compatibilitatea la G-Trots.",
+      "short_description": "Accelerație pentru trotinetă electrică Xiaomi Electric Scooter 4 Lite (2nd Gen), concepută pentru înlocuirea manetei de accelerație originale atunci când aceasta este deteriorată,",
+      "description_excerpt": "Accelerație pentru trotinetă electrică Xiaomi Electric Scooter 4 Lite (2nd Gen), concepută pentru înlocuirea manetei de accelerație originale atunci când aceasta este deteriorată,",
+      "description": "Accelerație pentru Xiaomi Electric Scooter 4 Lite 2nd Gen. Manetă de accelerație pentru înlocuirea piesei uzate sau defecte. Verifică compatibilitatea la G-Trots.",
+      "url": "https://g-trots.ro/magazin/produs/acceleratie-xiaomi-4-lite-2nd-gen/",
+      "sku": "SE-EWM358",
+      "gtin": "8435764431401",
+      "manufacturer": "OEM",
+      "category": "Manete acceleratie",
+      "compatibility": [
+        "Xiaomi"
+      ],
+      "specifications": [],
+      "conversation_intents": [
+        "Poate fi potrivit când accelerația nu răspunde, răspunde intermitent sau maneta este deteriorată.",
+        "Compară conectorul, tensiunea și poziția pinilor, apoi confirmă compatibilitatea electronică înainte de comandă."
+      ],
+      "compatibility_guidance": "Confirmă modelul, anul sau versiunea și specificațiile relevante înainte de comandă; piesele asemănătoare vizual nu sunt întotdeauna interschimbabile.",
+      "delivery": "Livrare disponibilă în toată România.",
+      "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
+      "warranty": null,
+      "price": 149.99,
+      "currency": "RON",
+      "availability": "https://schema.org/InStock",
+      "image": "https://g-trots.ro/shop-api/uploads/products/19fd56973318a46c1446466c3c682e04.webp"
     },
     {
       "id": "c5a57bb2-5239-5f72-aca9-edcb16d6f769",
@@ -1012,7 +1012,7 @@
       "warranty": null,
       "price": 30,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/7aff5165c59cefd5d7e74ec8e2dfbd27.webp"
     },
     {
@@ -1096,7 +1096,7 @@
       "warranty": null,
       "price": 19,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/7bd5cf27f4889abe609d961179c9e2b6.webp"
     },
     {
@@ -1703,7 +1703,7 @@
       "warranty": null,
       "price": 50,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/3e31b502a3678b00826e80ac9d04fe88.webp"
     },
     {
@@ -2124,7 +2124,7 @@
       "delivery": "Livrare disponibilă în toată România.",
       "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
       "warranty": null,
-      "price": 101,
+      "price": 90,
       "currency": "RON",
       "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/bc7600bfb3e503b230a9a84e92f555ea.webp"
@@ -2386,7 +2386,7 @@
       "warranty": null,
       "price": 60,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/236bcb60333fa33c3366754ed4756a80.webp"
     },
     {
@@ -3076,7 +3076,7 @@
       "warranty": null,
       "price": 11,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/b108066affb080121f240b03a28240c4.webp"
     },
     {
@@ -3499,7 +3499,7 @@
       "warranty": null,
       "price": 15,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/b30498eb2ce18bf27b2c5e8d55b65057.webp"
     },
     {
@@ -3699,7 +3699,7 @@
       "warranty": null,
       "price": 69,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/61056b9e80a254d8dde4ba0cfcf90b8a.webp"
     },
     {
@@ -3986,7 +3986,7 @@
       "warranty": null,
       "price": 650,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/039b17c6046882f92cfd567ce34caf5d.webp"
     },
     {
@@ -4131,7 +4131,7 @@
       "warranty": null,
       "price": 355,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/0ce78fe3eb2afd69a41e8068a9f66086.webp"
     },
     {
@@ -4635,7 +4635,7 @@
       "warranty": null,
       "price": 73,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/bbcebd91a92e3d9a8a170375dcd1036e.webp"
     },
     {
@@ -4803,7 +4803,7 @@
       "warranty": null,
       "price": 199,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/779b2f0e3bfe9b8466ac5e81e8d593a5.webp"
     },
     {
@@ -6025,7 +6025,7 @@
       "warranty": null,
       "price": 69,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/5e20e8d1730093ebb00e728b20b864f1.webp"
     },
     {
@@ -6433,7 +6433,7 @@
       "warranty": null,
       "price": 111,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/07be5dcfd986373d8e4ed97e06f59e6e.webp"
     },
     {
@@ -7188,9 +7188,9 @@
       "delivery": "Livrare disponibilă în toată România.",
       "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
       "warranty": null,
-      "price": 149,
+      "price": 249,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/3467565886424b8b889bc5cf8cdbca5b.webp"
     },
     {
@@ -8706,7 +8706,7 @@
       "warranty": null,
       "price": 30,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/2e637cc714fe75c7cf7f755c16efb30a.webp"
     },
     {
@@ -8756,7 +8756,7 @@
       "warranty": null,
       "price": 40,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/87937999fc37379606eb057d11c71a53.webp"
     },
     {
@@ -9698,7 +9698,7 @@
       "warranty": null,
       "price": 15,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/70087a2b25148c8aed39b100e58f2c22.webp"
     },
     {
@@ -10236,7 +10236,7 @@
       "warranty": null,
       "price": 40,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/d401443ff3470cc5e83b2cc0fb762283.webp"
     },
     {
@@ -11016,6 +11016,31 @@
       "image": "https://g-trots.ro/shop-api/uploads/products/493df5f6449c1ca99566493dff0c4a21.webp"
     },
     {
+      "id": "8f97b985-1b9f-578d-ac27-f52c517f73a5",
+      "name": "Cască INTEGRA Sport full face negru-verde",
+      "meta_title": "Cască INTEGRA Sport full face negru-verde",
+      "meta_description": "Cască INTEGRA Sport full face negru-verde. , cu potrivire stabilită prin comparație cu piesa originală. Culoare: negru, verde. Potrivirea se confirmă prin măsurători și",
+      "short_description": "Cască INTEGRA Sport full face negru-verde. Cu potrivire stabilită prin comparație cu piesa originală. Culoare: negru, verde. Potrivirea se confirmă prin măsurători și comparație di",
+      "description_excerpt": "Cască INTEGRA Sport full face negru-verde. Cu potrivire stabilită prin comparație cu piesa originală. Culoare: negru, verde. Potrivirea se confirmă prin măsurători și comparație di",
+      "description": "Cască INTEGRA Sport full face negru-verde. , cu potrivire stabilită prin comparație cu piesa originală. Culoare: negru, verde. Potrivirea se confirmă prin măsurători și",
+      "url": "https://g-trots.ro/magazin/produs/casca-integrala-integra-sport-negru-verde-negru-verde/",
+      "sku": "SE-EWF584",
+      "gtin": "8435764443602",
+      "manufacturer": "eRIDER360",
+      "category": "Casti protectie",
+      "compatibility": [],
+      "specifications": [],
+      "conversation_intents": [],
+      "compatibility_guidance": null,
+      "delivery": "Livrare disponibilă în toată România.",
+      "service_support": null,
+      "warranty": null,
+      "price": 749,
+      "currency": "RON",
+      "availability": "https://schema.org/InStock",
+      "image": "https://g-trots.ro/shop-api/uploads/products/67fc6efbabc6ce245a622467aeecbe0a.webp"
+    },
+    {
       "id": "eb9420f7-43ea-59e1-b2c6-20a687e9036a",
       "name": "Casca protectie cu semnalizare",
       "meta_title": "Casca protecție cu semnalizare | G-Trots",
@@ -11195,7 +11220,7 @@
       "warranty": null,
       "price": 94,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/ce2836addcc723fcacdb2610e126ca58.webp"
     },
     {
@@ -11367,9 +11392,9 @@
       "delivery": "Livrare disponibilă în toată România.",
       "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
       "warranty": null,
-      "price": 192.18,
+      "price": 192,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/1494c0bbd65cf50abe45de15fa658c23.webp"
     },
     {
@@ -11427,7 +11452,7 @@
       "warranty": null,
       "price": 149,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/5632be969d1114aa1989ae9718fca1df.webp"
     },
     {
@@ -11630,7 +11655,7 @@
       "warranty": null,
       "price": 179,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/35faa149a7dd3363d1223b0b7aebf1bd.webp"
     },
     {
@@ -11657,10 +11682,7 @@
       "compatibility_guidance": "Confirmă modelul, anul sau versiunea și specificațiile relevante înainte de comandă; piesele asemănătoare vizual nu sunt întotdeauna interschimbabile.",
       "delivery": "Livrare disponibilă în toată România.",
       "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
-      "warranty": {
-        "legal_months": 24,
-        "commercial_months": 0
-      },
+      "warranty": null,
       "price": 129,
       "currency": "RON",
       "availability": "https://schema.org/InStock",
@@ -11756,7 +11778,7 @@
       "warranty": null,
       "price": 149,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/3eeee442f86314ba97c46074c13858f6.webp"
     },
     {
@@ -11813,9 +11835,9 @@
       "delivery": "Livrare disponibilă în toată România.",
       "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
       "warranty": null,
-      "price": 100.66,
+      "price": 120,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/96b2072d3100b765e782867f1695fdda.webp"
     },
     {
@@ -12018,9 +12040,9 @@
       "delivery": "Livrare disponibilă în toată România.",
       "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
       "warranty": null,
-      "price": 80.33,
+      "price": 80,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/d506ab7da8eb977f89cfa3bd7249aa93.webp"
     },
     {
@@ -12395,7 +12417,7 @@
       "delivery": "Livrare disponibilă în toată România.",
       "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
       "warranty": null,
-      "price": 100,
+      "price": 115,
       "currency": "RON",
       "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/00b5777a4e84b6d2ef6df43854d7ac97.webp"
@@ -12997,7 +13019,7 @@
       "warranty": null,
       "price": 132,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/9428f11156048120542aa66911cc4a9e.webp"
     },
     {
@@ -13169,7 +13191,7 @@
       "warranty": null,
       "price": 100.66,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/cddd9939a7a33f4a1c14c3c8e5a9f92f.webp"
     },
     {
@@ -13597,7 +13619,7 @@
       "warranty": null,
       "price": 162,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/7076851aa36889369dd0df2da7b82ea5.webp"
     },
     {
@@ -13802,7 +13824,7 @@
       "warranty": null,
       "price": 121,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/76a71ca6134a02b39d1cc1e68d07d073.webp"
     },
     {
@@ -14722,7 +14744,7 @@
       "warranty": null,
       "price": 125,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/adb1c920e08a55c685cb6c1ff057e3d6.webp"
     },
     {
@@ -14930,7 +14952,7 @@
       "warranty": null,
       "price": 149,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/6be4e997866b2db22533094048c8e2c4.webp"
     },
     {
@@ -15108,7 +15130,7 @@
       "warranty": null,
       "price": 162,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/8810e438e7a2aad3383b07f4c22c7ddc.webp"
     },
     {
@@ -15136,7 +15158,7 @@
       "warranty": null,
       "price": 159,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/5e05fe5e6c986b6fc532ac2672ce3c59.webp"
     },
     {
@@ -15310,7 +15332,7 @@
       "warranty": null,
       "price": 139,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/414ff42fc050ff2f6a3db21aed8a69f0.webp"
     },
     {
@@ -15514,7 +15536,7 @@
       "warranty": null,
       "price": 199,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/afc2835b219aa7a63567abb0526d9d29.webp"
     },
     {
@@ -15866,7 +15888,7 @@
       "warranty": null,
       "price": 249,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/cc002b4e00a8fd89cd66fc671dbac0fe.webp"
     },
     {
@@ -16338,7 +16360,7 @@
       "warranty": null,
       "price": 60,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/ba371b01b2a752c949c337d528804ca4.webp"
     },
     {
@@ -16593,9 +16615,9 @@
       "delivery": "Livrare disponibilă în toată România.",
       "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
       "warranty": null,
-      "price": 8,
+      "price": 11,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/be8920a3cc07f1c10097d5e075652103.webp"
     },
     {
@@ -16831,7 +16853,7 @@
       "warranty": null,
       "price": 119,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/18626c0f97f04443c5320e149b9c0ecc.webp"
     },
     {
@@ -17397,6 +17419,34 @@
       "image": "https://g-trots.ro/shop-api/uploads/products/ee8cf06c6e29d5d76a28810969489a5f.webp"
     },
     {
+      "id": "31ae0bd7-e720-5879-8c22-af6b8ec89cbf",
+      "name": "Controller Original KuKirin G3 model C",
+      "meta_title": "Controller Original KuKirin G3 model C | G-Trots",
+      "meta_description": "Controller Original KuKirin G3 model C | G-Trots. controller pentru KuKirin G3, KuKirin G3 Pro. Verifică piesa veche, prinderile și dimensiunile înainte de montaj",
+      "short_description": "Controller pentru KuKirin G3, KuKirin G3 Pro. Verifică piesa veche, prinderile și dimensiunile înainte de montaj Pentru varianta „Controller Original KuKirin G3 model C”, compară d",
+      "description_excerpt": "Controller pentru KuKirin G3, KuKirin G3 Pro. Verifică piesa veche, prinderile și dimensiunile înainte de montaj Pentru varianta „Controller Original KuKirin G3 model C”, compară d",
+      "description": "Controller Original KuKirin G3 model C | G-Trots. controller pentru KuKirin G3, KuKirin G3 Pro. Verifică piesa veche, prinderile și dimensiunile înainte de montaj",
+      "url": "https://g-trots.ro/magazin/produs/controller-original-kukirin-g3-model-c/",
+      "sku": "SE-CMM063",
+      "gtin": "8435764420276",
+      "manufacturer": "KUGOO",
+      "category": "Controller",
+      "compatibility": [
+        "KuKirin G3",
+        "KuKirin G3 Pro"
+      ],
+      "specifications": [],
+      "conversation_intents": [],
+      "compatibility_guidance": null,
+      "delivery": "Livrare disponibilă în toată România.",
+      "service_support": null,
+      "warranty": null,
+      "price": 799,
+      "currency": "RON",
+      "availability": "https://schema.org/InStock",
+      "image": "https://g-trots.ro/shop-api/uploads/products/900f0f3c42da30fe1317cd11e1415193.webp"
+    },
+    {
       "id": "1104ebbf-3e4b-5d25-91f5-ed8d7801b2bb",
       "name": "Controller Original KuKirin G3 model D",
       "meta_title": "Controller Original KuKirin G3 model D | G-Trots",
@@ -17605,7 +17655,7 @@
       "warranty": null,
       "price": 899,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/6bdf31e398d907429035cef9c9ae41c8.webp"
     },
     {
@@ -17844,7 +17894,7 @@
       "warranty": null,
       "price": 300,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/2f9aeeff4219ff599d8dc5f632160085.webp"
     },
     {
@@ -18198,6 +18248,34 @@
       "image": "https://g-trots.ro/shop-api/uploads/products/d3e3f1335122013d6b399e157c41e78a.webp"
     },
     {
+      "id": "6177b563-f9e9-514f-a1de-18e4c3290323",
+      "name": "Controller trotineta electrica KuKirin G2 MAX (model A)",
+      "meta_title": "Controller trotinetă electrică KuKirin G2 MAX (model A) | G-Trots",
+      "meta_description": "Controller trotinetă electrică KuKirin G2 MAX (model A) | G-Trots. controller pentru KuKirin G2 Max, KuKirin G2. Verifică piesa veche, prinderile și dimensiunile înainte de montaj",
+      "short_description": "Controller trotinetă electrică KuKirin G2 MAX (model A): controller pentru KuKirin G2 Max, KuKirin G2. Verifică piesa veche, prinderile și dimensiunile înainte de montaj",
+      "description_excerpt": "Controller trotinetă electrică KuKirin G2 MAX (model A): controller pentru KuKirin G2 Max, KuKirin G2. Verifică piesa veche, prinderile și dimensiunile înainte de montaj",
+      "description": "Controller trotinetă electrică KuKirin G2 MAX (model A) | G-Trots. controller pentru KuKirin G2 Max, KuKirin G2. Verifică piesa veche, prinderile și dimensiunile înainte de montaj",
+      "url": "https://g-trots.ro/magazin/produs/controller-trotineta-electrica-kukirin-g2-max-model-a/",
+      "sku": "SE-CMM037",
+      "gtin": "8435764420016",
+      "manufacturer": "KuKirin",
+      "category": "Controller",
+      "compatibility": [
+        "KuKirin G2",
+        "KuKirin G2 Max"
+      ],
+      "specifications": [],
+      "conversation_intents": [],
+      "compatibility_guidance": null,
+      "delivery": "Livrare disponibilă în toată România.",
+      "service_support": null,
+      "warranty": null,
+      "price": 467,
+      "currency": "RON",
+      "availability": "https://schema.org/OutOfStock",
+      "image": "https://g-trots.ro/shop-api/uploads/products/e8cd30859552d46eddf0815ea1d8d111.webp"
+    },
+    {
       "id": "610b20f1-e469-5ab1-a074-ef101ebf0cda",
       "name": "Controller trotineta electrica KuKirin G2 MAX (model B )",
       "meta_title": "Controller trotinetă electrică KuKirin G2 MAX (model B ) | G-Trots",
@@ -18225,7 +18303,7 @@
       "warranty": null,
       "price": 467,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/2e16be3561015c74e1f298197e9becd2.webp"
     },
     {
@@ -19435,7 +19513,7 @@
       "warranty": null,
       "price": 39,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/350a8317fb29713a2cbd0195dd6bb5ff.webp"
     },
     {
@@ -19755,7 +19833,7 @@
       "warranty": null,
       "price": 71,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/b4192dc05a9edaaf1bfc4f59ecdd92e9.webp"
     },
     {
@@ -20039,7 +20117,7 @@
       "warranty": null,
       "price": 25,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/97fac2ddc542645029baa286677cae46.webp"
     },
     {
@@ -20268,7 +20346,7 @@
       "warranty": null,
       "price": 39,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/9cb4a7d678cc227df9fbcb496f218ab4.webp"
     },
     {
@@ -20322,7 +20400,7 @@
       "warranty": null,
       "price": 39,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/1f41a2a7b52a53b21bd59ec48d8f1e15.webp"
     },
     {
@@ -20351,7 +20429,7 @@
       "warranty": null,
       "price": 39,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/c9ac3d6922870b1495e32d475b83a2a7.webp"
     },
     {
@@ -20401,7 +20479,7 @@
       "delivery": "Livrare disponibilă în toată România.",
       "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
       "warranty": null,
-      "price": 40,
+      "price": 65,
       "currency": "RON",
       "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/896f8646dafc360874e873d752f0f799.webp"
@@ -20558,7 +20636,7 @@
       "warranty": null,
       "price": 29,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/48a0fa6c1c9553f9606153e6465b76af.webp"
     },
     {
@@ -21145,7 +21223,7 @@
       "warranty": null,
       "price": 390,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/d8c76a37ff0794d1a1bb111839df7dbf.webp"
     },
     {
@@ -22506,7 +22584,7 @@
       "warranty": null,
       "price": 259,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/4945f01fb3553c47cd8da899ba91726d.webp"
     },
     {
@@ -22779,6 +22857,34 @@
       "image": "https://g-trots.ro/shop-api/uploads/products/580515ecf3072cc131d264a8880137b8.webp"
     },
     {
+      "id": "c6d78b43-909e-5628-8328-ed2c84a6208c",
+      "name": "Dopuri protectie cauciuc albastru Xiaomi",
+      "meta_title": "Dopuri protecție cauciuc albastru Xiaomi | G-Trots",
+      "meta_description": "Dopuri protecție cauciuc albastru Xiaomi | G-Trots. , pentru Xiaomi, Xiaomi M365. Culoare: albastru, roșu. Compară dimensiunea înscrisă pe anvelopa veche, diametrul jantei.",
+      "short_description": "Dopuri protecție cauciuc albastru Xiaomi, pentru Xiaomi, Xiaomi M365. Culoare: albastru, roșu. Compară dimensiunea înscrisă pe anvelopa veche, diametrul jantei, lățimea, tipul came",
+      "description_excerpt": "Dopuri protecție cauciuc albastru Xiaomi, pentru Xiaomi, Xiaomi M365. Culoare: albastru, roșu. Compară dimensiunea înscrisă pe anvelopa veche, diametrul jantei, lățimea, tipul came",
+      "description": "Dopuri protecție cauciuc albastru Xiaomi | G-Trots. , pentru Xiaomi, Xiaomi M365. Culoare: albastru, roșu. Compară dimensiunea înscrisă pe anvelopa veche, diametrul jantei.",
+      "url": "https://g-trots.ro/magazin/produs/dopuri-protectie-cauciuc-albastru-xiaomi/",
+      "sku": "SE-67467-1",
+      "gtin": "7427135771781",
+      "manufacturer": "OEM",
+      "category": "Aparatori si protectii",
+      "compatibility": [
+        "Xiaomi",
+        "Xiaomi M365"
+      ],
+      "specifications": [],
+      "conversation_intents": [],
+      "compatibility_guidance": "Confirmă modelul, anul sau versiunea și specificațiile relevante înainte de comandă; piesele asemănătoare vizual nu sunt întotdeauna interschimbabile.",
+      "delivery": "Livrare disponibilă în toată România.",
+      "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
+      "warranty": null,
+      "price": 20,
+      "currency": "RON",
+      "availability": "https://schema.org/InStock",
+      "image": "https://g-trots.ro/shop-api/uploads/products/c7c3200dfb1db72f74073055633a26b4.webp"
+    },
+    {
       "id": "3c125102-28ff-57fb-bacf-2ecf09709630",
       "name": "Dopuri protectie cauciuc negru Xiaomi – Xiaomi, Xiaomi M365",
       "meta_title": "Dopuri protectie cauciuc negru Xiaomi – Xiaomi, Xiaomi M365",
@@ -23011,7 +23117,7 @@
       "warranty": null,
       "price": 269,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/b4fc28aa90ba8631cc999c8786b22a0b.webp"
     },
     {
@@ -23071,7 +23177,7 @@
       "warranty": null,
       "price": 100,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/dc34d62a0d70a1f11d463fd6aab8f1bb.webp"
     },
     {
@@ -23251,7 +23357,7 @@
       "warranty": null,
       "price": 210,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/85bab47336f213c2b4f0308b2740cd9e.webp"
     },
     {
@@ -23426,7 +23532,7 @@
       "warranty": null,
       "price": 49,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/1bc88cfcd1ddb9a0181219a573f6a94d.webp"
     },
     {
@@ -23659,7 +23765,7 @@
       "warranty": null,
       "price": 100,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/db1eebb3e86a898c08eee31989b3b054.webp"
     },
     {
@@ -24005,7 +24111,7 @@
       "warranty": null,
       "price": 151,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/0c149c08b6f5fe0a378ac05ac1af66d7.webp"
     },
     {
@@ -24126,7 +24232,7 @@
       "warranty": null,
       "price": 100,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/549f81a3af397637ca0713df072ceaf1.webp"
     },
     {
@@ -24443,7 +24549,7 @@
       "warranty": null,
       "price": 119,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/0c838348d4aecb31707803be1eece99f.webp"
     },
     {
@@ -24564,7 +24670,7 @@
       "warranty": null,
       "price": 89,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/d5fde8d7347cea6d94d05b14969422a0.webp"
     },
     {
@@ -24741,7 +24847,7 @@
       "warranty": null,
       "price": 405,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/83c98c46af01f641699155b3e4890c9b.webp"
     },
     {
@@ -25341,7 +25447,7 @@
       "warranty": null,
       "price": 150,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/15f1d0a159a6791299164f977c3e9932.webp"
     },
     {
@@ -26268,7 +26374,7 @@
       "warranty": null,
       "price": 49,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/9b07e2f875d1071b748361f3f7a5e04c.webp"
     },
     {
@@ -26967,7 +27073,7 @@
       "warranty": null,
       "price": 265,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/751c6231e2527e75ac7b752ed4d1aef4.webp"
     },
     {
@@ -27240,9 +27346,9 @@
       "delivery": "Livrare disponibilă în toată România.",
       "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
       "warranty": null,
-      "price": 131.17,
+      "price": 132,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/f5b180a21d3086553288b70a00a774ca.webp"
     },
     {
@@ -27347,7 +27453,7 @@
       "warranty": null,
       "price": 162,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/92e7f386be34b3714e54fdd78ffd75cd.webp"
     },
     {
@@ -27681,6 +27787,31 @@
       "currency": "RON",
       "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/2c7bb7d381c1d895152d3bded7ef320e.webp"
+    },
+    {
+      "id": "fc3dfb66-2933-558d-afb3-31bf0b41acde",
+      "name": "Încărcător 54,6 V 2 A cu mufă GX16, 3 pini",
+      "meta_title": "Încărcător 54,6 V 2 A cu mufă GX16, 3 pini",
+      "meta_description": "Încărcător 54,6 V 2 A cu mufă GX16, 3 pini. , o soluție de înlocuire cu potrivire stabilită prin comparație cu piesa originală. Tensiune: 48 V, 54,6",
+      "short_description": "Încărcător 54,6 V 2 A cu mufă GX16, 3 pini. O soluție de înlocuire cu potrivire stabilită prin comparație cu piesa originală. Tensiune: 48 V, 54,6 V. Controlează tensiunea nominală",
+      "description_excerpt": "Încărcător 54,6 V 2 A cu mufă GX16, 3 pini. O soluție de înlocuire cu potrivire stabilită prin comparație cu piesa originală. Tensiune: 48 V, 54,6 V. Controlează tensiunea nominală",
+      "description": "Încărcător 54,6 V 2 A cu mufă GX16, 3 pini. , o soluție de înlocuire cu potrivire stabilită prin comparație cu piesa originală. Tensiune: 48 V, 54,6",
+      "url": "https://g-trots.ro/magazin/produs/incarcator-trotineta-electrica-48v-output-54-6v-2a-cu-mufa-gx16-3pini/",
+      "sku": "SE-23675",
+      "gtin": "7427251491945",
+      "manufacturer": "EWheel",
+      "category": "Incarcatoare",
+      "compatibility": [],
+      "specifications": [],
+      "conversation_intents": [],
+      "compatibility_guidance": null,
+      "delivery": "Livrare disponibilă în toată România.",
+      "service_support": null,
+      "warranty": null,
+      "price": 254,
+      "currency": "RON",
+      "availability": "https://schema.org/OutOfStock",
+      "image": "https://g-trots.ro/shop-api/uploads/products/34af59cec47749badc9d3cfe28beff60.webp"
     },
     {
       "id": "6e6598af-4f94-567c-a092-5e8624959f8c",
@@ -28047,7 +28178,7 @@
       "warranty": null,
       "price": 109,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/534b2ab51f5d2356295db144a2a149ac.webp"
     },
     {
@@ -28101,7 +28232,7 @@
       "warranty": null,
       "price": 189,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/53494930049113b570f7d7f665f0eabb.webp"
     },
     {
@@ -28216,7 +28347,7 @@
       "warranty": null,
       "price": 119,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/f581450d62f37f37e5d31c514b5b776d.webp"
     },
     {
@@ -28304,7 +28435,7 @@
       "warranty": null,
       "price": 91,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/8daefdb7cf3ab3ac1673b803a7f1063f.webp"
     },
     {
@@ -28424,7 +28555,7 @@
       "warranty": null,
       "price": 119,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/59d0a0df470bb976b3a55ca26fa146da.webp"
     },
     {
@@ -29007,7 +29138,7 @@
       "warranty": null,
       "price": 99,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/8ff88b1208fcc245a2c1cd98e8e2d1cd.webp"
     },
     {
@@ -29264,6 +29395,33 @@
       "image": "https://g-trots.ro/shop-api/uploads/products/931850e8b8032f9aae8766cafa2b0a4f.webp"
     },
     {
+      "id": "efd4f184-f404-5e58-a067-3e8dd5334455",
+      "name": "Kit frână hidraulică NUTT cu 4 pistoane față-spate pentru KuKirin G4",
+      "meta_title": "Kit frână NUTT 4 pistoane KuKirin G4 | G-Trots",
+      "meta_description": "Kit NUTT față-spate cu etriere hidraulice cu 4 pistoane, manete cu senzori și furtunuri dedicate KuKirin G4. Stoc disponibil și suport G-Trots.",
+      "short_description": "Kit complet NUTT pentru KuKirin G4, cu două etriere hidraulice cu 4 pistoane, două manete prevăzute cu senzori electrici și furtunuri de aproximativ 139 cm și 223,5 cm. Soluție faț",
+      "description_excerpt": "Kit complet NUTT pentru KuKirin G4, cu două etriere hidraulice cu 4 pistoane, două manete prevăzute cu senzori electrici și furtunuri de aproximativ 139 cm și 223,5 cm. Soluție faț",
+      "description": "Kit NUTT față-spate cu etriere hidraulice cu 4 pistoane, manete cu senzori și furtunuri dedicate KuKirin G4. Stoc disponibil și suport G-Trots.",
+      "url": "https://g-trots.ro/magazin/produs/kit-frana-hidraulica-nutt-4-pistoane-kukirin-g4/",
+      "sku": "HP251004640-1",
+      "gtin": "",
+      "manufacturer": "NUTT",
+      "category": "Frane hidraulice",
+      "compatibility": [
+        "KuKirin"
+      ],
+      "specifications": [],
+      "conversation_intents": [],
+      "compatibility_guidance": null,
+      "delivery": "Livrare disponibilă în toată România.",
+      "service_support": null,
+      "warranty": null,
+      "price": 815,
+      "currency": "RON",
+      "availability": "https://schema.org/InStock",
+      "image": "https://g-trots.ro/shop-api/uploads/products/1ee9de889f92f3fa63925854156c9c41.webp"
+    },
+    {
       "id": "c3493270-5430-5dd3-b6e5-b086c62b1af2",
       "name": "Kit JP display si controller 48V pentru trotineta electrica",
       "meta_title": "Kit JP display si controller 48V pentru trotinetă electrică | G-Trots",
@@ -29288,7 +29446,7 @@
       "warranty": null,
       "price": 399,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/938292e68f6944ea39b21abeac98fc6f.webp"
     },
     {
@@ -30419,7 +30577,7 @@
       "warranty": null,
       "price": 59,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/8e6388680336add648fde3545a54246f.webp"
     },
     {
@@ -30543,6 +30701,31 @@
       "image": "https://g-trots.ro/shop-api/uploads/products/46f62e22dac0c57f72a734641fde8365.webp"
     },
     {
+      "id": "8eaa4c9d-32e8-5f8c-b377-3a235e5aac97",
+      "name": "Lumini LED fata dreapta pentru Z10X",
+      "meta_title": "Lumini LED față dreapta pentru Z10X | G-Trots",
+      "meta_description": "Lumini LED față dreapta pentru Z10X | G-Trots. , cu potrivire stabilită prin comparație cu piesa originală. Poziție: față, dreapta. Potrivirea se confirmă prin măsurători și.",
+      "short_description": "Lumini LED față dreapta pentru Z10X, cu potrivire stabilită prin comparație cu piesa originală. Poziție: față, dreapta. Potrivirea se confirmă prin măsurători și comparație directă",
+      "description_excerpt": "Lumini LED față dreapta pentru Z10X, cu potrivire stabilită prin comparație cu piesa originală. Poziție: față, dreapta. Potrivirea se confirmă prin măsurători și comparație directă",
+      "description": "Lumini LED față dreapta pentru Z10X | G-Trots. , cu potrivire stabilită prin comparație cu piesa originală. Poziție: față, dreapta. Potrivirea se confirmă prin măsurători și.",
+      "url": "https://g-trots.ro/magazin/produs/lumini-led-fata-dreapta-pentru-z10x/",
+      "sku": "WT-SP-579-RIGHT",
+      "gtin": "3760351016545",
+      "manufacturer": "OEM",
+      "category": "Faruri si lumini",
+      "compatibility": [],
+      "specifications": [],
+      "conversation_intents": [],
+      "compatibility_guidance": null,
+      "delivery": "Livrare disponibilă în toată România.",
+      "service_support": null,
+      "warranty": null,
+      "price": 71,
+      "currency": "RON",
+      "availability": "https://schema.org/InStock",
+      "image": "https://g-trots.ro/shop-api/uploads/products/4984fa9a46f1f41341ac915f3731b90e.webp"
+    },
+    {
       "id": "b3cc17df-e533-5c53-a256-b9fc34361d07",
       "name": "Lumini LED fata stanga pentru Z10X",
       "meta_title": "Lumini LED față stânga pentru Z10X | G-Trots",
@@ -30595,7 +30778,7 @@
       "warranty": null,
       "price": 99,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/3cee7e3264bebb109ba4d1ef3237883c.webp"
     },
     {
@@ -30707,7 +30890,7 @@
       "warranty": null,
       "price": 162,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/a4a265118a606643a5fbc30a00e8fc1d.webp"
     },
     {
@@ -30791,7 +30974,7 @@
       "warranty": null,
       "price": 110.83,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/d5211c6ef27d111f68ada41835083685.webp"
     },
     {
@@ -31053,7 +31236,7 @@
       "warranty": null,
       "price": 60,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/f51451f981985181666e161ca9c5a6e9.webp"
     },
     {
@@ -31234,7 +31417,7 @@
       "warranty": null,
       "price": 50,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/80637edcb2fe75c600dc129c3b969b3d.webp"
     },
     {
@@ -31264,7 +31447,7 @@
       "warranty": null,
       "price": 50,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/b17d886b44529bd567f04dc040793c55.webp"
     },
     {
@@ -32156,7 +32339,7 @@
       "warranty": null,
       "price": 121,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/0aca39c97405a1b1c90b9ad28fd23d63.webp"
     },
     {
@@ -32181,7 +32364,7 @@
       "warranty": null,
       "price": 50,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/f746e04305bf393ec7885e2ae2c3f40f.webp"
     },
     {
@@ -32481,7 +32664,7 @@
       "warranty": null,
       "price": 49,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/dedb7807a9e37fe6a469ab9b43a3ac05.webp"
     },
     {
@@ -32913,7 +33096,7 @@
       "warranty": null,
       "price": 1500,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/2d0660fe46cc571450fad60babbfb633.webp"
     },
     {
@@ -33129,7 +33312,7 @@
       "warranty": null,
       "price": 679,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/1235629fd8a794a31090c637ad119c17.webp"
     },
     {
@@ -33418,6 +33601,33 @@
       "image": "https://g-trots.ro/shop-api/uploads/products/5da6a546dfb9fd52112a6d75a115a7f1.webp"
     },
     {
+      "id": "00d8a0de-2e30-50b0-a566-85dbd8298582",
+      "name": "Mufa de incarcare pentru trotineta electrica Xiaomi 4 Pro",
+      "meta_title": "Mufă de încărcare pentru trotinetă electrică Xiaomi 4 Pro | G-Trots",
+      "meta_description": "Mufă de încărcare pentru trotinetă electrică Xiaomi 4 Pro | G-Trots. , pentru Xiaomi Mi Electric Scooter 4 Pro. Compară forma conectorului, numărul pinilor, ordinea firelor.",
+      "short_description": "Mufă de încărcare pentru trotinetă electrică Xiaomi 4 Pro, pentru Xiaomi Mi Electric Scooter 4 Pro. Compară forma conectorului, numărul pinilor, ordinea firelor, secțiunea conducto",
+      "description_excerpt": "Mufă de încărcare pentru trotinetă electrică Xiaomi 4 Pro, pentru Xiaomi Mi Electric Scooter 4 Pro. Compară forma conectorului, numărul pinilor, ordinea firelor, secțiunea conducto",
+      "description": "Mufă de încărcare pentru trotinetă electrică Xiaomi 4 Pro | G-Trots. , pentru Xiaomi Mi Electric Scooter 4 Pro. Compară forma conectorului, numărul pinilor, ordinea firelor.",
+      "url": "https://g-trots.ro/magazin/produs/mufa-de-incarcare-pentru-trotineta-electrica-xiaomi-4-pro/",
+      "sku": "3844.00",
+      "gtin": "",
+      "manufacturer": "OEM",
+      "category": "Cabluri si mufe",
+      "compatibility": [
+        "Xiaomi Mi Electric Scooter 4 Pro"
+      ],
+      "specifications": [],
+      "conversation_intents": [],
+      "compatibility_guidance": null,
+      "delivery": "Livrare disponibilă în toată România.",
+      "service_support": null,
+      "warranty": null,
+      "price": 29,
+      "currency": "RON",
+      "availability": "https://schema.org/InStock",
+      "image": "https://g-trots.ro/shop-api/uploads/products/1ad6b037cf2147c0cc40c1963bafab1a.webp"
+    },
+    {
       "id": "242cba11-d5d6-5001-ae07-28c0ab8a495a",
       "name": "Mufa incarcare DC 5.5 2.1mm",
       "meta_title": "Mufă încărcare DC 5.5 2.1mm | G-Trots",
@@ -33442,7 +33652,7 @@
       "warranty": null,
       "price": 21,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/16128f3a0376127eb3d38790bf3d3ddf.webp"
     },
     {
@@ -33472,6 +33682,34 @@
       "currency": "RON",
       "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/45f152c42ed3bba93c6dfeae16dd1a77.webp"
+    },
+    {
+      "id": "a9f7b92c-849c-564b-91a1-cffd26c0c1f0",
+      "name": "Mufă încărcare trotinetă electrică KuKirin G2 2025",
+      "meta_title": "Mufă Încărcare KuKirin G2 2025 | G-Trots",
+      "meta_description": "Mufă de încărcare pentru trotinetă electrică KuKirin G2 2025. Cod C45307. Verifică compatibilitatea și comandă piesa potrivită de la G-Trots România.",
+      "short_description": "Mufă de încărcare pentru trotinetă electrică KuKirin G2, versiunea 2025, cod C45307. 🔌⚡ Recomandată pentru înlocuirea mufei originale deteriorate sau cu contact imperfect. Verifică",
+      "description_excerpt": "Mufă de încărcare pentru trotinetă electrică KuKirin G2, versiunea 2025, cod C45307. 🔌⚡ Recomandată pentru înlocuirea mufei originale deteriorate sau cu contact imperfect. Verifică",
+      "description": "Mufă de încărcare pentru trotinetă electrică KuKirin G2 2025. Cod C45307. Verifică compatibilitatea și comandă piesa potrivită de la G-Trots România.",
+      "url": "https://g-trots.ro/magazin/produs/mufa-incarcare-kukirin-g2-2025/",
+      "sku": "C45307",
+      "gtin": "",
+      "manufacturer": "KuKirin",
+      "category": "Cabluri si mufe",
+      "compatibility": [],
+      "specifications": [],
+      "conversation_intents": [
+        "Este o opțiune utilă pentru refacerea unei conexiuni deteriorate sau a unui contact care funcționează intermitent.",
+        "Înainte de alegere, compară numărul și poziția pinilor, tensiunea, lungimea și traseul cablului; forma asemănătoare a mufei nu garantează compatibilitatea."
+      ],
+      "compatibility_guidance": "Confirmă modelul, anul sau versiunea și specificațiile relevante înainte de comandă; piesele asemănătoare vizual nu sunt întotdeauna interschimbabile.",
+      "delivery": "Livrare disponibilă în toată România.",
+      "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
+      "warranty": null,
+      "price": 68,
+      "currency": "RON",
+      "availability": "https://schema.org/InStock",
+      "image": "https://g-trots.ro/shop-api/uploads/products/fb44dac48c00f47241f90cebb43f2d63.webp"
     },
     {
       "id": "e936f9e5-89c0-505c-a0b1-b79acc9babf3",
@@ -33589,34 +33827,6 @@
       "currency": "RON",
       "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/218a9e0791d9c1a856948f4a0bc502b2.webp"
-    },
-    {
-      "id": "a9f7b92c-849c-564b-91a1-cffd26c0c1f0",
-      "name": "Mufa incarcare trotineta electrica G2 -2025",
-      "meta_title": "Mufă încărcare trotinetă electrică G2 -2025 | G-Trots",
-      "meta_description": "Mufă încărcare trotinetă electrică G2 -2025 | G-Trots. , cu potrivire stabilită prin comparație cu piesa originală. Potrivirea se confirmă prin măsurători și comparație directă",
-      "short_description": "Mufă încărcare trotinetă electrică G2 -2025, cu potrivire stabilită prin comparație cu piesa originală. Potrivirea se confirmă prin măsurători și comparație directă",
-      "description_excerpt": "Mufă încărcare trotinetă electrică G2 -2025, cu potrivire stabilită prin comparație cu piesa originală. Potrivirea se confirmă prin măsurători și comparație directă",
-      "description": "Mufă încărcare trotinetă electrică G2 -2025 | G-Trots. , cu potrivire stabilită prin comparație cu piesa originală. Potrivirea se confirmă prin măsurători și comparație directă",
-      "url": "https://g-trots.ro/magazin/produs/mufa-incarcare-trotineta-electrica-g2-2025/",
-      "sku": "C45307",
-      "gtin": "",
-      "manufacturer": "KuKirin",
-      "category": "Cabluri si mufe",
-      "compatibility": [],
-      "specifications": [],
-      "conversation_intents": [
-        "Este o opțiune utilă pentru refacerea unei conexiuni deteriorate sau a unui contact care funcționează intermitent.",
-        "Înainte de alegere, compară numărul și poziția pinilor, tensiunea, lungimea și traseul cablului; forma asemănătoare a mufei nu garantează compatibilitatea."
-      ],
-      "compatibility_guidance": "Confirmă modelul, anul sau versiunea și specificațiile relevante înainte de comandă; piesele asemănătoare vizual nu sunt întotdeauna interschimbabile.",
-      "delivery": "Livrare disponibilă în toată România.",
-      "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
-      "warranty": null,
-      "price": 40,
-      "currency": "RON",
-      "availability": "https://schema.org/InStock",
-      "image": "https://g-trots.ro/shop-api/uploads/products/fb44dac48c00f47241f90cebb43f2d63.webp"
     },
     {
       "id": "2ee8027d-a114-5750-8881-46088fc2e73c",
@@ -34209,7 +34419,7 @@
       "warranty": null,
       "price": 11,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/2ab38871e9f9bba6ddc1ddfbd0f5ec1a.webp"
     },
     {
@@ -34648,7 +34858,7 @@
       "warranty": null,
       "price": 99,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/a2aa4052d789051a6622863722e3ae42.webp"
     },
     {
@@ -34853,7 +35063,7 @@
       "warranty": null,
       "price": 35,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/225321b523d548b65e359f56294a10ec.webp"
     },
     {
@@ -35311,7 +35521,7 @@
       "warranty": null,
       "price": 50,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/f45779473c609de4ef9fa6527ae26b94.webp"
     },
     {
@@ -36031,7 +36241,7 @@
       "warranty": null,
       "price": 26,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/632e843090912e56939db6b5149b2fdd.webp"
     },
     {
@@ -36087,7 +36297,7 @@
       "warranty": null,
       "price": 39,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/bf02a6f654b2a18abe4a2247e8af1719.webp"
     },
     {
@@ -36113,9 +36323,9 @@
       "delivery": "Livrare disponibilă în toată România.",
       "service_support": "Verificarea compatibilității și montajul pot fi solicitate separat la service-ul G-Trots din București, în funcție de piesă.",
       "warranty": null,
-      "price": 49,
+      "price": 69,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/38cda8553c0ce24a5ab1378696c3b919.webp"
     },
     {
@@ -36553,7 +36763,7 @@
       "warranty": null,
       "price": 49,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/b5d4a010e9b5154a580992d27150e2ce.webp"
     },
     {
@@ -38477,7 +38687,7 @@
       "warranty": null,
       "price": 100,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/eada12fd62c98bb92a6ddc75ee5be30f.webp"
     },
     {
@@ -38532,7 +38742,7 @@
       "warranty": null,
       "price": 49,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/b744dae7ce8d66692b93aac9eea5e23d.webp"
     },
     {
@@ -39479,7 +39689,7 @@
       "warranty": null,
       "price": 99,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/004de6e7b9eb3556ca515996e6e1f1b6.webp"
     },
     {
@@ -40543,7 +40753,7 @@
       "warranty": null,
       "price": 89,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/1f077273d1e0c050af3bd9502f741674.webp"
     },
     {
@@ -41898,7 +42108,7 @@
       "warranty": null,
       "price": 38,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/eece6c589f939577c9318029580271f5.webp"
     },
     {
@@ -42135,7 +42345,7 @@
       "warranty": null,
       "price": 89,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/e4fd32b7e1e6297ae7fac1c02af2568b.webp"
     },
     {
@@ -43375,7 +43585,7 @@
       "warranty": null,
       "price": 129,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/72f5c43d760cbece7fbc7e61e823934a.webp"
     },
     {
@@ -43843,7 +44053,7 @@
       "warranty": null,
       "price": 199,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/60ac06660d80f144106c098d0ca56cfb.webp"
     },
     {
@@ -43868,7 +44078,7 @@
       "warranty": null,
       "price": 203,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/398ecb3c19c108ce4fd837f50d896c55.webp"
     },
     {
@@ -44143,7 +44353,7 @@
       "warranty": null,
       "price": 129,
       "currency": "RON",
-      "availability": "https://schema.org/InStock",
+      "availability": "https://schema.org/OutOfStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/15f6a56f4dc23dae1671576f30c1eb89.webp"
     },
     {
@@ -45255,6 +45465,31 @@
       "image": "https://g-trots.ro/shop-api/uploads/products/40ae36021e2585dcd9c7a00e6020b936.webp"
     },
     {
+      "id": "568b27c2-124c-5140-8ca1-7d70ca3a22e4",
+      "name": "Tub termocontractabil negru pentru cabluri (5mm x 100M)",
+      "meta_title": "Tub termocontractabil negru pentru cabluri (5mm x 100M) | G-Trots",
+      "meta_description": "Tub termocontractabil negru pentru cabluri (5mm x 100M) | G-Trots. cablu sau conector electric cu potrivire stabilită prin comparație cu piesa originală. Culoare: negru. Verifică.",
+      "short_description": "Cablu sau conector electric cu potrivire stabilită prin comparație cu piesa originală. Culoare: negru. Verifică piesa veche, prinderile și dimensiunile înainte de montaj Pentru var",
+      "description_excerpt": "Cablu sau conector electric cu potrivire stabilită prin comparație cu piesa originală. Culoare: negru. Verifică piesa veche, prinderile și dimensiunile înainte de montaj Pentru var",
+      "description": "Tub termocontractabil negru pentru cabluri (5mm x 100M) | G-Trots. cablu sau conector electric cu potrivire stabilită prin comparație cu piesa originală. Culoare: negru. Verifică.",
+      "url": "https://g-trots.ro/magazin/produs/tub-termocontractabil-negru-pentru-cabluri-5mm-x-100m/",
+      "sku": "SE-47322-07",
+      "gtin": "8435764403613",
+      "manufacturer": "EWheel",
+      "category": "Cabluri si mufe",
+      "compatibility": [],
+      "specifications": [],
+      "conversation_intents": [],
+      "compatibility_guidance": null,
+      "delivery": "Livrare disponibilă în toată România.",
+      "service_support": null,
+      "warranty": null,
+      "price": 182.01,
+      "currency": "RON",
+      "availability": "https://schema.org/OutOfStock",
+      "image": "https://g-trots.ro/shop-api/uploads/products/615eb87654c261c4d758b695bcd88014.webp"
+    },
+    {
       "id": "edc6e853-c079-577f-80f7-fa60b849cc68",
       "name": "Tub termocontractabil transparent pentru cabluri și acumulatori",
       "meta_title": "Tub termocontractabil transparent pentru cabluri și acumulatori",
@@ -45335,7 +45570,7 @@
       "warranty": null,
       "price": 39,
       "currency": "RON",
-      "availability": "https://schema.org/OutOfStock",
+      "availability": "https://schema.org/InStock",
       "image": "https://g-trots.ro/shop-api/uploads/products/276db809ca23783eefd33f91f157595e.webp"
     },
     {

@@ -69,6 +69,8 @@ FILES = (
     "politica-de-confidentialitate.html",
     "garantii-si-reclamatii.html",
     "404.html",
+    "404-page.css",
+    "404-page.js",
     "accesibilitate.html",
     "baterii-trotinete-electrice.html",
     "blog-service-trotinete-electrice.html",

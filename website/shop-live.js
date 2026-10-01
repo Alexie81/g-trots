@@ -312,6 +312,14 @@
         if ((name === "href" || name === "src") && /^javascript:/i.test(value)) node.removeAttribute(attribute.name);
       });
     });
+    template.content.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach(heading => {
+      [heading, ...heading.querySelectorAll("[style]")].forEach(node => {
+        node.style.removeProperty("color");
+        node.style.removeProperty("-webkit-text-fill-color");
+        node.style.removeProperty("background-color");
+        if (!node.getAttribute("style")?.trim()) node.removeAttribute("style");
+      });
+    });
     return template.innerHTML;
   }
 
@@ -622,13 +630,24 @@
         const number = document.createElement("b");
         const strong = document.createElement("strong");
         const arrow = document.createElement("span");
+        const answerWrap = document.createElement("div");
+        const answerLabel = document.createElement("small");
         const paragraph = document.createElement("p");
         number.textContent = String(index + 1).padStart(2, "0");
         strong.textContent = title;
         arrow.textContent = "›";
+        answerWrap.className = "product-faq-answer";
+        answerLabel.textContent = "Răspuns G-Trots";
         paragraph.textContent = answer;
         summary.append(number, strong, arrow);
-        details.append(summary, paragraph);
+        answerWrap.append(answerLabel, paragraph);
+        details.append(summary, answerWrap);
+        details.addEventListener("toggle", () => {
+          if (!details.open) return;
+          questionList.querySelectorAll("details[open]").forEach(item => {
+            if (item !== details) item.removeAttribute("open");
+          });
+        });
         return details;
       }));
     } else if (questionList) {

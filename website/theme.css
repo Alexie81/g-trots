@@ -1204,6 +1204,39 @@ html[data-theme="light"] .product-question-card p {
   color: var(--gt-muted) !important;
 }
 
+/* Rich product headings must ignore legacy inline colours from supplier descriptions. */
+html[data-theme="light"] .product-rich-copy :is(h1, h2, h3, h4, h5, h6),
+html[data-theme="light"] .product-rich-copy :is(h1, h2, h3, h4, h5, h6) * {
+  color: #c45800 !important;
+  -webkit-text-fill-color: #c45800 !important;
+}
+
+html[data-theme="dark"] .product-rich-copy :is(h1, h2, h3, h4, h5, h6),
+html[data-theme="dark"] .product-rich-copy :is(h1, h2, h3, h4, h5, h6) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html[data-theme="light"] .product-faq-answer {
+  border-color: rgba(255, 133, 0, 0.18) !important;
+  background: linear-gradient(135deg, #fff8ef, #ffffff) !important;
+}
+
+html[data-theme="dark"] .product-faq-list details {
+  border-color: rgba(186, 211, 245, 0.16) !important;
+  background: linear-gradient(145deg, #102f59, #0a2347) !important;
+}
+
+html[data-theme="dark"] .product-faq-list details[open] {
+  border-color: rgba(255, 151, 45, 0.46) !important;
+  background: linear-gradient(145deg, #17375f, #152c4c) !important;
+}
+
+html[data-theme="dark"] .product-faq-answer {
+  border-color: rgba(255, 151, 45, 0.19) !important;
+  background: rgba(255, 133, 0, 0.06) !important;
+}
+
 html[data-theme="light"] .product-feature-grid article,
 html[data-theme="light"] .product-spec-groups article,
 html[data-theme="light"] .review-item,
@@ -3853,3 +3886,22 @@ html[data-theme="dark"] .product-image-viewer__arrow {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: .01ms !important; }
 }
+
+/* Product description and FAQ v4, intentionally last in the theme cascade. */
+html[data-theme="light"] body.product-page .product-rich-copy :is(h1,h2,h3,h4,h5,h6),
+html[data-theme="light"] body.product-page .product-rich-copy :is(h1,h2,h3,h4,h5,h6) * { color:#c45800!important;-webkit-text-fill-color:#c45800!important; }
+html[data-theme="dark"] body.product-page .product-rich-copy :is(h1,h2,h3,h4,h5,h6),
+html[data-theme="dark"] body.product-page .product-rich-copy :is(h1,h2,h3,h4,h5,h6) * { color:#fff!important;-webkit-text-fill-color:#fff!important; }
+html[data-theme="light"] body.product-page #intrebari .product-faq-list details { border-color:var(--gt-line)!important;background:linear-gradient(145deg,#fff,#f7f8fa)!important;box-shadow:0 .65rem 1.8rem rgba(40,48,61,.055)!important; }
+html[data-theme="light"] body.product-page #intrebari .product-faq-list details:hover { border-color:rgba(255,133,0,.34)!important;box-shadow:0 1rem 2.4rem rgba(40,48,61,.09)!important; }
+html[data-theme="light"] body.product-page #intrebari .product-faq-list details[open] { border-color:rgba(255,133,0,.48)!important;background:linear-gradient(145deg,#fff8ef,#fff)!important;box-shadow:0 1.2rem 3rem rgba(255,133,0,.1)!important; }
+html[data-theme="light"] body.product-page #intrebari .product-faq-list summary>b { border-color:var(--gt-line)!important;background:#fff!important;color:#6b7280!important; }
+html[data-theme="light"] body.product-page #intrebari .product-faq-list details[open] summary>b { background:#fff0df!important;color:#b44f00!important; }
+html[data-theme="light"] body.product-page #intrebari .product-faq-list summary>span { border-color:rgba(255,133,0,.18)!important;background:#fff0df!important;color:#b44f00!important; }
+html[data-theme="light"] body.product-page #intrebari .product-faq-list details[open] summary>span { background:linear-gradient(135deg,#ff9d32,#ff7b00)!important;color:#241104!important; }
+html[data-theme="dark"] body.product-page #intrebari .product-faq-list details { border-color:rgba(186,211,245,.16)!important;background:linear-gradient(145deg,#102f59,#0a2347)!important;box-shadow:0 .8rem 2.2rem rgba(0,8,24,.16)!important; }
+html[data-theme="dark"] body.product-page #intrebari .product-faq-list details[open] { border-color:rgba(255,151,45,.46)!important;background:linear-gradient(145deg,#17375f,#152c4c)!important;box-shadow:0 1.2rem 3rem rgba(255,133,0,.09)!important; }
+html[data-theme="dark"] body.product-page #intrebari .product-faq-list summary>b { background:rgba(255,255,255,.055)!important;color:#a9b9d1!important; }
+html[data-theme="dark"] body.product-page #intrebari .product-faq-list details[open] summary>b { background:rgba(255,133,0,.16)!important;color:#ffae52!important; }
+html[data-theme="dark"] body.product-page #intrebari .product-faq-list summary>span { background:rgba(255,133,0,.1)!important;color:#ffae52!important; }
+html[data-theme="dark"] body.product-page #intrebari .product-faq-list details[open] summary>span { background:linear-gradient(135deg,#ff9d32,#ff7b00)!important;color:#241104!important; }

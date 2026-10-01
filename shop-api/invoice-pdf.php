@@ -410,6 +410,9 @@ final class GtrotsInvoicePdf
 
     private static function partyHtml(array $party, string $label, bool $seller): string
     {
+        $displayName = $seller
+            ? $party['name']
+            : mb_strtoupper($party['name'], 'UTF-8');
         $identity = array_filter([
             $party['cui'] !== '' ? 'CUI ' . $party['cui'] : '',
             $party['registration_number'] !== '' ? 'RC ' . $party['registration_number'] : '',
@@ -419,7 +422,7 @@ final class GtrotsInvoicePdf
         $bank = $seller ? array_filter([$party['bank_name'], $party['iban']]) : [];
         $capital = $seller && $party['share_capital'] !== '' ? 'Capital social ' . $party['share_capital'] : '';
         return '<div class="party-card ' . ($seller ? 'seller' : 'buyer') . '"><div class="party-label"><span>' . self::e($label) . '</span><i>' . ($seller ? 'EMITENT' : 'DESTINATAR') . '</i></div>'
-            . '<h2>' . self::e($party['name']) . '</h2>'
+            . '<h2>' . self::e($displayName) . '</h2>'
             . ($party['trade_name'] !== '' ? '<div class="trade-name">' . self::e($party['trade_name']) . '</div>' : '')
             . self::infoLine('ID', implode('  •  ', $identity))
             . self::infoLine('Adresă', implode(', ', $location))

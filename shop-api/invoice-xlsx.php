@@ -30,6 +30,7 @@ final class GtrotsInvoiceXlsx
 
         $seller = is_array($invoice['seller'] ?? null) ? $invoice['seller'] : [];
         $buyer = is_array($invoice['buyer'] ?? null) ? $invoice['buyer'] : [];
+        $buyerDisplayName = mb_strtoupper(trim((string)($buyer['name'] ?? '')), 'UTF-8');
         $related = is_array($invoice['related_invoice'] ?? null) ? $invoice['related_invoice'] : [];
         $returnReference = $status === 'return'
             ? 'RETUR PENTRU FACTURA FISCALĂ EMISĂ ' . trim((string)($related['series'] ?? '') . ' ' . (string)($related['number'] ?? ''))
@@ -48,7 +49,7 @@ final class GtrotsInvoiceXlsx
         $rows .= shopNirPremiumXlsxRow(3, [3 => shopNirPremiumXlsxCellSpec($sellerIdentity, 'string', 4), 7 => shopNirPremiumXlsxCellSpec('Emisă: ' . self::dateLabel((string)($invoice['issue_date'] ?? '')), 'string', 4), 9 => shopNirPremiumXlsxCellSpec('Scadență: ' . self::dateLabel((string)($invoice['due_date'] ?? '')), 'string', 4)], 24);
         $rows .= shopNirPremiumXlsxRow(4, $returnReference !== '' ? [1 => shopNirPremiumXlsxCellSpec($returnReference, 'string', 18)] : [], $returnReference !== '' ? 25 : 9);
         $rows .= shopNirPremiumXlsxRow(5, [1 => shopNirPremiumXlsxCellSpec('FURNIZOR / EMITENT', 'string', 18), 6 => shopNirPremiumXlsxCellSpec('CLIENT / DESTINATAR', 'string', 18)], 24);
-        $rows .= shopNirPremiumXlsxRow(6, [1 => shopNirPremiumXlsxCellSpec(trim((string)($seller['name'] ?? '')), 'string', 7), 6 => shopNirPremiumXlsxCellSpec(trim((string)($buyer['name'] ?? '')), 'string', 7)], 26);
+        $rows .= shopNirPremiumXlsxRow(6, [1 => shopNirPremiumXlsxCellSpec(trim((string)($seller['name'] ?? '')), 'string', 7), 6 => shopNirPremiumXlsxCellSpec($buyerDisplayName, 'string', 7)], 26);
         $rows .= shopNirPremiumXlsxRow(7, [1 => shopNirPremiumXlsxCellSpec(self::partyDetails($seller, true), 'string', 5), 6 => shopNirPremiumXlsxCellSpec(self::partyDetails($buyer, false), 'string', 5)], 55);
         $rows .= shopNirPremiumXlsxRow(10, [], 9);
         $rows .= shopNirPremiumXlsxRow(11, [1 => shopNirPremiumXlsxCellSpec('POZIȚII FACTURATE · ' . count($items), 'string', 18)], 25);

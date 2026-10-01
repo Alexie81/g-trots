@@ -45,6 +45,14 @@ registryZip(base64_decode($archive['content_base64']), static function (ZipArchi
     foreach (['001','002'] as $number) {
         registryAssert(str_starts_with($zip->getFromName("GT-$number/GT-$number.pdf"), '%PDF'), 'PDF must be genuine.');
         registryAssert(str_starts_with($zip->getFromName("GT-$number/GT-$number.xlsx"), 'PK'), 'XLSX must be genuine.');
+        $xlsxPath = tempnam(sys_get_temp_dir(), 'gt-invoice-xlsx-');
+        file_put_contents($xlsxPath, $zip->getFromName("GT-$number/GT-$number.xlsx"));
+        $xlsx = new ZipArchive(); registryAssert($xlsx->open($xlsxPath) === true, 'Invoice XLSX must open.');
+        try {
+            registryAssert(str_contains($xlsx->getFromName('xl/worksheets/sheet1.xml'), 'FIRMĂ TEST SRL'), 'Buyer name must be uppercase in the invoice XLSX.');
+        } finally {
+            $xlsx->close(); unlink($xlsxPath);
+        }
         $xml = $zip->getFromName("GT-$number/GT-$number - RO_e-Factura.xml");
         $doc = new DOMDocument(); registryAssert($doc->loadXML($xml), 'e-Factura XML must parse.');
         registryAssert($doc->documentElement->localName === ($number==='001' ? 'Invoice' : 'CreditNote'), 'Return must use CreditNote XML.');

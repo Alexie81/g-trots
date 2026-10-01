@@ -81,6 +81,8 @@ foreach ($labels as $status => [$label, $due]) {
 }
 
 $deliveryHtml = GtrotsInvoicePdf::html(array_replace($deliveryBase, ['status' => 'unpaid', 'theme' => 'purple']));
+$expect(str_contains($deliveryHtml, '<h2>CLIENT TEST</h2>'), 'Numele clientului trebuie afișat cu litere mari de tipar pe factură.');
+$expect(!str_contains($deliveryHtml, '<h2>G-TROTS</h2>'), 'Regula pentru client nu trebuie să modifice numele furnizorului.');
 $expect(str_contains($deliveryHtml, 'class="product-thumb-placeholder delivery-thumb"'), 'Serviciul de livrare trebuie să aibă pictogramă de curier.');
 $expect(str_contains($deliveryHtml, 'alt="Serviciu de livrare"'), 'Pictograma de curier trebuie să fie identificabilă în factură.');
 $expect(str_contains($deliveryHtml, '>Adresă</b>') && !str_contains($deliveryHtml, '>Sediu</b>'), 'Datele părților trebuie etichetate cu Adresă, nu Sediu.');

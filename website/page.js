@@ -350,6 +350,7 @@ function createPopupHost(searchWrap) {
   const placeholder = document.createComment("gtrots-search-placeholder");
   const host = document.createElement("div");
   host.className = "seo-search-popup-host";
+  host.dataset.searchPortal = searchWrap.dataset.searchPortal || "auto";
   searchWrap.parentNode.insertBefore(placeholder, searchWrap);
   placeholder.parentNode.insertBefore(host, placeholder.nextSibling);
   searchPortalAnchors.set(host, placeholder);
@@ -371,12 +372,13 @@ function createPopupHost(searchWrap) {
   return { host, popup, backButton };
 }
 
-function shouldPortalSearchHost() {
+function shouldPortalSearchHost(host) {
+  if (host?.dataset.searchPortal === "false") return false;
   return Boolean(window.matchMedia?.("(max-width: 700px)").matches);
 }
 
 function portalSearchHost(host) {
-  if (!host || !shouldPortalSearchHost()) return;
+  if (!host || !shouldPortalSearchHost(host)) return;
   if (host.parentElement !== document.body) document.body.appendChild(host);
 }
 
@@ -416,6 +418,7 @@ function syncMobileSearchPopupSize(popup) {
   if (!window.matchMedia || !window.matchMedia("(max-width: 700px)").matches) return;
   const host = popup.parentElement;
   if (!host) return;
+  if (host.dataset.searchPortal === "false") return;
   host.style.setProperty("position", "fixed", "important");
   host.style.setProperty("top", "0", "important");
   host.style.setProperty("right", "0", "important");
@@ -457,6 +460,12 @@ document.addEventListener("g-trots:consent-changed", event => {
 });
 
 function syncDesktopSearchPopupDirection(popup) {
+  if (popup.parentElement?.dataset.searchPortal === "false") {
+    popup.classList.remove("open-upward");
+    popup.style.removeProperty("--search-popup-space");
+    popup.style.removeProperty("max-height");
+    return;
+  }
   if (!window.matchMedia || window.matchMedia("(max-width: 700px)").matches) {
     popup.classList.remove("open-upward");
     popup.style.removeProperty("--search-popup-space");
@@ -505,7 +514,7 @@ function renderPopup(popup, query, categoryResults, articleResults, fallbackItem
   bindSearchViewportTracking();
   portalSearchHost(popup.parentElement);
   popup.parentElement?.classList.add("is-search-open");
-  document.documentElement.classList.add("seo-search-modal-open");
+  if (popup.parentElement?.dataset.searchPortal !== "false") document.documentElement.classList.add("seo-search-modal-open");
   syncDesktopSearchPopupDirection(popup);
   syncMobileSearchPopupSize(popup);
   localizeLinks(popup);
@@ -563,6 +572,8 @@ document.querySelectorAll("[data-seo-search]").forEach(searchWrap => {
   const src = searchWrap.dataset.searchSrc;
   const limit = Number(searchWrap.dataset.searchLimit || 24);
   const categoryFilter = searchWrap.dataset.searchCategory || searchArea?.dataset.searchCategory || "";
+  const openOnFocus = searchWrap.dataset.searchOpenOnFocus !== "false";
+  const minimumQueryLength = Math.max(1, Number(searchWrap.dataset.searchMinLength || 1));
 
   // Commercial pages use the global search without a local article grid.
   if (!input) return;
@@ -590,9 +601,10 @@ document.querySelectorAll("[data-seo-search]").forEach(searchWrap => {
 
   const update = async ({ fromFocus = false } = {}) => {
     const rawQuery = input.value.trim();
+    const hasUsableQuery = rawQuery.length >= minimumQueryLength;
     const token = ++updateToken;
 
-    if (src && rawQuery) {
+    if (src && hasUsableQuery) {
       const categoryResults = categoryFilter ? [] : categoryMatches(rawQuery, 4);
       if (!searchWorkerReady) {
         lastPopupItems = [...categoryResults, ...fallbackItems.slice(0, limit)];
@@ -613,12 +625,13 @@ document.querySelectorAll("[data-seo-search]").forEach(searchWrap => {
       return;
     }
 
-    if (src && !rawQuery) {
+    if (src && !hasUsableQuery) {
       const categoryResults = [];
       lastPopupItems = fallbackItems.slice(0, limit);
       setSearchStatus(0, false);
       if (empty) empty.classList.remove("show");
-      if (fromFocus) renderPopup(popup, "", categoryResults, lastPopupItems, fallbackItems);
+      if (fromFocus && openOnFocus) renderPopup(popup, "", categoryResults, lastPopupItems, fallbackItems);
+      else hidePopup(popup);
       return;
     }
   };
@@ -644,7 +657,7 @@ document.querySelectorAll("[data-seo-search]").forEach(searchWrap => {
     if (event.key === "Enter") {
       const query = input.value.trim();
       saveRecentSearch(query);
-      const first = lastPopupItems[0];
+      const first = query.length >= minimumQueryLength ? lastPopupItems[0] : null;
       if (first?.slug) {
         event.preventDefault();
         window.location.href = window.location.protocol === "file:" ? `${first.slug}.html` : `/${first.slug}`;

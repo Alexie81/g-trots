@@ -1,5 +1,5 @@
 (() => {
-  const COMPONENT_VERSION = '20260920-catalog-list-theme-v2';
+  const COMPONENT_VERSION = '20261004-free-shipping-v1';
   if (window.__gtLegalFooterVersion === COMPONENT_VERSION) return;
   window.__gtLegalFooterVersion = COMPONENT_VERSION;
   window.__gtLegalFooter = true;
@@ -36,6 +36,20 @@
     return element;
   };
   const esc = value => String(value || '').replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
+
+  function ensurePromotionLayer() {
+    const hasGlobalStyle = Array.from(document.querySelectorAll('link[href*="promotions.css"]')).some(link => {
+      const url = new URL(link.href, location.href);
+      return url.pathname.endsWith('/promotions.css') && url.search === '';
+    });
+    if (!hasGlobalStyle) loadAsset('link', { rel: 'stylesheet', href: '/promotions.css' });
+
+    const hasGlobalScript = Array.from(document.querySelectorAll('script[src*="promotions.js"]')).some(script => {
+      const url = new URL(script.src, location.href);
+      return url.pathname.endsWith('/promotions.js') && url.search === '';
+    });
+    if (!hasGlobalScript) loadAsset('script', { src: '/promotions.js', defer: true });
+  }
 
   if (!document.querySelector('link[href*="fonts.googleapis.com/css2?family=Manrope"]')) {
     loadAsset('link', {
@@ -529,6 +543,7 @@ ${navigationHtml}
   }
 
   ensureOriginalHeader();
+  ensurePromotionLayer();
   ensureShopNavigation();
   ensureStaticStoreShortcut();
   loadConfig()

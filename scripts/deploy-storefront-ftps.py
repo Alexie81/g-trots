@@ -110,6 +110,7 @@ FILES = (
     "checkout.js",
     "checkout-status.js",
     "payment-recovery.css",
+    "promotions.css",
     "promotions.js",
     "plata-finalizata.html",
     "plata-esuata.html",

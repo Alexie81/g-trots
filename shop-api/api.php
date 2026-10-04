@@ -772,6 +772,7 @@ function ensureShopSchema(PDO $db): void {
             cost DECIMAL(12,2) NOT NULL DEFAULT 0,
             return_cost DECIMAL(12,2) NOT NULL DEFAULT 0,
             free_above DECIMAL(12,2) NULL,
+            show_free_shipping_banner TINYINT(1) NOT NULL DEFAULT 0,
             eta_label VARCHAR(120) NULL,
             is_active TINYINT(1) NOT NULL DEFAULT 1,
             sort_order INT NOT NULL DEFAULT 0,
@@ -782,6 +783,9 @@ function ensureShopSchema(PDO $db): void {
     );
     if (!$db->query("SHOW COLUMNS FROM shop_shipping_methods LIKE 'return_cost'")->fetch()) {
         $db->exec("ALTER TABLE shop_shipping_methods ADD COLUMN return_cost DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER cost");
+    }
+    if (!$db->query("SHOW COLUMNS FROM shop_shipping_methods LIKE 'show_free_shipping_banner'")->fetch()) {
+        $db->exec("ALTER TABLE shop_shipping_methods ADD COLUMN show_free_shipping_banner TINYINT(1) NOT NULL DEFAULT 0 AFTER free_above");
     }
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_suppliers (
@@ -4187,6 +4191,7 @@ function shippingRow(array $row): array {
     $row['cost'] = (float)$row['cost'];
     $row['return_cost'] = (float)($row['return_cost'] ?? 0);
     $row['free_above'] = $row['free_above'] === null ? null : (float)$row['free_above'];
+    $row['show_free_shipping_banner'] = (bool)($row['show_free_shipping_banner'] ?? false);
     $row['sort_order'] = (int)$row['sort_order'];
     $row['is_active'] = (bool)$row['is_active'];
     return $row;
@@ -5346,6 +5351,16 @@ try {
             return $row;
         }, activePromotionRowsForCustomer($db, $customer, false, null, promotionDeviceHash($body)));
         jsonResponse($rows);
+    }
+
+    if ($action === 'publicFreeShippingBanners' && $method === 'GET') {
+        $rows = $db->query("SELECT id, name, free_above, eta_label FROM shop_shipping_methods WHERE is_active = 1 AND show_free_shipping_banner = 1 AND free_above IS NOT NULL AND free_above > 0 ORDER BY free_above ASC, sort_order ASC, name ASC LIMIT 1")->fetchAll();
+        jsonResponse(array_map(static fn(array $row): array => [
+            'id' => (string)$row['id'],
+            'name' => (string)$row['name'],
+            'free_above' => (float)$row['free_above'],
+            'eta_label' => (string)($row['eta_label'] ?? ''),
+        ], $rows));
     }
 
     if ($action === 'publicPromotionQuote' && $method === 'POST') {
@@ -8731,9 +8746,12 @@ try {
     if ($action === 'createShippingMethod' && $method === 'POST') {
         $name = mb_substr(trim((string)($body['name'] ?? '')), 0, 120);
         if ($name === '') throw new InvalidArgumentException('Numele livrarii este obligatoriu.');
+        $freeAbove = moneyValue($body['free_above'] ?? null, 'Pragul de gratuitate', true);
+        $showFreeShippingBanner = boolValue($body['show_free_shipping_banner'] ?? false);
+        if ($showFreeShippingBanner && ($freeAbove === null || $freeAbove <= 0)) throw new InvalidArgumentException('Seteaza un prag mai mare de zero pentru a afisa bara de livrare gratuita.');
         $id = uuidV4();
-        $stmt = $db->prepare('INSERT INTO shop_shipping_methods (id, name, description, cost, return_cost, free_above, eta_label, is_active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([$id, $name, mb_substr(trim((string)($body['description'] ?? '')), 0, 500), moneyValue($body['cost'] ?? 0, 'Costul livrarii'), moneyValue($body['return_cost'] ?? 0, 'Costul returului'), moneyValue($body['free_above'] ?? null, 'Pragul de gratuitate', true), mb_substr(trim((string)($body['eta_label'] ?? '')), 0, 120), boolValue($body['is_active'] ?? true, true) ? 1 : 0, (int)($body['sort_order'] ?? 0)]);
+        $stmt = $db->prepare('INSERT INTO shop_shipping_methods (id, name, description, cost, return_cost, free_above, show_free_shipping_banner, eta_label, is_active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt->execute([$id, $name, mb_substr(trim((string)($body['description'] ?? '')), 0, 500), moneyValue($body['cost'] ?? 0, 'Costul livrarii'), moneyValue($body['return_cost'] ?? 0, 'Costul returului'), $freeAbove, $showFreeShippingBanner ? 1 : 0, mb_substr(trim((string)($body['eta_label'] ?? '')), 0, 120), boolValue($body['is_active'] ?? true, true) ? 1 : 0, (int)($body['sort_order'] ?? 0)]);
         $stmt = $db->prepare('SELECT * FROM shop_shipping_methods WHERE id = ?');
         $stmt->execute([$id]);
         jsonResponse(shippingRow($stmt->fetch()), 201);
@@ -8743,8 +8761,11 @@ try {
         $id = trim((string)($_GET['id'] ?? ($body['id'] ?? '')));
         $name = mb_substr(trim((string)($body['name'] ?? '')), 0, 120);
         if ($name === '') throw new InvalidArgumentException('Numele livrarii este obligatoriu.');
-        $stmt = $db->prepare('UPDATE shop_shipping_methods SET name = ?, description = ?, cost = ?, return_cost = ?, free_above = ?, eta_label = ?, is_active = ?, sort_order = ? WHERE id = ?');
-        $stmt->execute([$name, mb_substr(trim((string)($body['description'] ?? '')), 0, 500), moneyValue($body['cost'] ?? 0, 'Costul livrarii'), moneyValue($body['return_cost'] ?? 0, 'Costul returului'), moneyValue($body['free_above'] ?? null, 'Pragul de gratuitate', true), mb_substr(trim((string)($body['eta_label'] ?? '')), 0, 120), boolValue($body['is_active'] ?? true, true) ? 1 : 0, (int)($body['sort_order'] ?? 0), $id]);
+        $freeAbove = moneyValue($body['free_above'] ?? null, 'Pragul de gratuitate', true);
+        $showFreeShippingBanner = array_key_exists('show_free_shipping_banner', $body) ? (boolValue($body['show_free_shipping_banner']) ? 1 : 0) : null;
+        if ($showFreeShippingBanner === 1 && ($freeAbove === null || $freeAbove <= 0)) throw new InvalidArgumentException('Seteaza un prag mai mare de zero pentru a afisa bara de livrare gratuita.');
+        $stmt = $db->prepare('UPDATE shop_shipping_methods SET name = ?, description = ?, cost = ?, return_cost = ?, free_above = ?, show_free_shipping_banner = COALESCE(?, show_free_shipping_banner), eta_label = ?, is_active = ?, sort_order = ? WHERE id = ?');
+        $stmt->execute([$name, mb_substr(trim((string)($body['description'] ?? '')), 0, 500), moneyValue($body['cost'] ?? 0, 'Costul livrarii'), moneyValue($body['return_cost'] ?? 0, 'Costul returului'), $freeAbove, $showFreeShippingBanner, mb_substr(trim((string)($body['eta_label'] ?? '')), 0, 120), boolValue($body['is_active'] ?? true, true) ? 1 : 0, (int)($body['sort_order'] ?? 0), $id]);
         if ($stmt->rowCount() === 0) {
             $exists = $db->prepare('SELECT id FROM shop_shipping_methods WHERE id = ?');
             $exists->execute([$id]);

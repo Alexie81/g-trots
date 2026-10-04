@@ -1254,6 +1254,7 @@ export type ShopShippingMethod = {
   cost: number;
   return_cost: number;
   free_above: number | null;
+  show_free_shipping_banner: boolean;
   eta_label: string;
   is_active: boolean;
   sort_order: number;

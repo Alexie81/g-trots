@@ -36,6 +36,8 @@ $check(str_contains($web, 'gt-free-shipping-icon'), 'bara nu are iconul propriu 
 $check(str_contains($css, '@keyframes gt-free-shipping-orbit'), 'animația barei de livrare lipsește');
 $check(str_contains($css, 'html[data-theme="light"] body.gt-has-promotion-bar .gt-promotion-bar.gt-has-free-shipping'), 'tema light a barei lipsește');
 $check(str_contains($css, 'html[data-theme="dark"] body.gt-has-promotion-bar .gt-promotion-bar.gt-has-free-shipping'), 'tema dark a barei lipsește');
+$check(str_contains($css, 'font-size:clamp(.76rem,.72rem + .12vw,.84rem)'), 'textul principal al barei este prea mic pe desktop');
+$check(str_contains($css, '.gt-promotion-track span{font-size:.72rem;letter-spacing:.012em}'), 'textul principal al barei este prea mic pe telefon');
 $check(str_contains($globalShell, 'function ensurePromotionLayer()'), 'bara nu este încărcată din stratul global al site-ului');
 $check(str_contains($globalShell, "href: '/promotions.css'"), 'stilul global al barei nu este centralizat');
 $check(str_contains($globalShell, "src: '/promotions.js'"), 'scriptul global al barei nu este centralizat');

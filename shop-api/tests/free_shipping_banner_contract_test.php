@@ -20,6 +20,7 @@ $check = static function (bool $condition, string $message): void {
 };
 
 $check(str_contains($api, 'show_free_shipping_banner TINYINT(1) NOT NULL DEFAULT 0'), 'coloana configurabilă lipsește din schemă');
+$check(str_contains($api, '$schemaVersion = 2026100401;'), 'versiunea schemei nu pornește migrarea pe server');
 $check(str_contains($api, "publicFreeShippingBanners"), 'endpointul public pentru bară lipsește');
 $check(str_contains($api, 'show_free_shipping_banner = 1 AND free_above IS NOT NULL AND free_above > 0'), 'endpointul nu filtrează metodele active eligibile');
 $check(str_contains($api, 'ORDER BY free_above ASC'), 'API-ul nu prioritizează cel mai mic prag');

@@ -58,6 +58,14 @@ shippingNoteAssert(abs($prepared['draft']['items'][0]['unit_price'] - 45.0) < 0.
 $first = GtrotsShippingNoteService::issue($db, 'o1', ['with_stamp' => true, 'sender_name' => 'G-Trots Romania'], ['display_name' => 'Test'], []);
 shippingNoteAssert($first['display_number'] === 'AVZ 001', 'Primul aviz trebuie să fie AVZ 001.');
 shippingNoteAssert($first['with_stamp'] === true, 'Varianta cu ștampilă trebuie salvată.');
+$db->exec("UPDATE shop_orders SET customer_name='CLIENT ACTUALIZAT', customer_phone='0799999999', address='Str. Client Actualizată 7', city='Brașov', county='Brașov' WHERE id='o1'");
+$revisedFirst = GtrotsShippingNoteService::reviseForOrder($db, 'o1');
+$assertedRevisedFirst = is_array($revisedFirst) ? $revisedFirst : [];
+$revisedPayload = json_decode((string)($assertedRevisedFirst['payload_json'] ?? '{}'), true, 512, JSON_THROW_ON_ERROR);
+shippingNoteAssert($revisedFirst !== null && ($assertedRevisedFirst['shipping_note_number'] ?? '') === '001', 'Regenerarea trebuie să păstreze numărul avizului existent.');
+shippingNoteAssert(!empty($revisedPayload['with_stamp']) && ($revisedPayload['sender_name'] ?? '') === 'G-Trots Romania', 'Regenerarea trebuie să păstreze varianta cu ștampilă și expeditorul editat.');
+shippingNoteAssert(($revisedPayload['buyer']['name'] ?? '') === 'CLIENT ACTUALIZAT' && ($revisedPayload['buyer']['phone'] ?? '') === '0799999999', 'Avizul trebuie să preia numele și telefonul actualizate ale clientului.');
+shippingNoteAssert(($revisedPayload['buyer']['address'] ?? '') === 'Str. Client Actualizată 7' && ($revisedPayload['buyer']['city'] ?? '') === 'Brașov', 'Avizul trebuie să preia noua adresă de livrare.');
 
 $second = GtrotsShippingNoteService::issue($db, 'o2', ['with_stamp' => false], ['display_name' => 'Test'], []);
 shippingNoteAssert($second['display_number'] === 'AVZ 002', 'Al doilea aviz trebuie să fie AVZ 002.');

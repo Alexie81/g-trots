@@ -64,7 +64,7 @@ invoiceAssert($first['display_number'] === 'GT 001', 'Prima factura trebuie sa f
 invoiceAssert($first['theme'] === 'purple', 'Factura trebuie sa fixeze tema activa mov.');
 invoiceAssert($first['status'] === 'unpaid', 'Comanda neplatita trebuie sa emita factura neplatita.');
 
-$db->exec("UPDATE shop_orders SET address='Str. Client Corectată 9', city='Mizil', county='Prahova', postal_code='105800' WHERE id='order-1'");
+$db->exec("UPDATE shop_orders SET customer_name='CLIENT CORECTAT', customer_email='corectat@example.com', customer_phone='0799999999', address='Str. Client Corectată 9', city='Mizil', county='Prahova', postal_code='105800' WHERE id='order-1'");
 $db->beginTransaction();
 $buyerRefreshed = GtrotsInvoiceService::refreshUnsentPayloadForOrder($db, 'order-1');
 $db->commit();
@@ -72,6 +72,8 @@ $refreshedPayload = json_decode((string)$db->query("SELECT payload_json FROM sho
 invoiceAssert($buyerRefreshed, 'Factura netrimisă trebuie resincronizată după modificarea datelor clientului din comandă.');
 invoiceAssert(($refreshedPayload['buyer']['address'] ?? '') === 'Str. Client Corectată 9', 'Factura netrimisă trebuie să preia adresa actualizată.');
 invoiceAssert(($refreshedPayload['buyer']['city'] ?? '') === 'Mizil' && ($refreshedPayload['buyer']['county'] ?? '') === 'Prahova', 'Factura netrimisă trebuie să preia localitatea și județul actualizate.');
+invoiceAssert(($refreshedPayload['buyer']['name'] ?? '') === 'CLIENT CORECTAT', 'Factura netrimisă trebuie să preia numele actualizat al clientului.');
+invoiceAssert(($refreshedPayload['buyer']['email'] ?? '') === 'corectat@example.com' && ($refreshedPayload['buyer']['phone'] ?? '') === '0799999999', 'Factura netrimisă trebuie să preia e-mailul și telefonul actualizate ale clientului.');
 $db->exec("UPDATE shop_invoices SET spv_status='processing' WHERE id='" . $first['id'] . "'");
 $db->exec("UPDATE shop_orders SET city='Câmpina' WHERE id='order-1'");
 invoiceAssert(!GtrotsInvoiceService::refreshUnsentPayloadForOrder($db, 'order-1'), 'Factura aflată în procesare SPV nu trebuie rescrisă.');

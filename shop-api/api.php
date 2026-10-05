@@ -8395,17 +8395,59 @@ try {
         $statusChanged = false;
         $paymentChanged = false;
         $itemsChanged = false;
+        $customerDataChanged = false;
+        $shippingNotePayloadChanged = false;
         $invoicePayloadChanged = false;
         $invoiceRefreshRequested = array_key_exists('address', $body)
             || array_key_exists('city', $body)
             || array_key_exists('county', $body)
-            || array_key_exists('postal_code', $body);
+            || array_key_exists('postal_code', $body)
+            || array_key_exists('customer_name', $body)
+            || array_key_exists('customer_phone', $body)
+            || array_key_exists('customer_email', $body);
         $db->beginTransaction();
         try {
             $stmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ? FOR UPDATE');
             $stmt->execute([$id]);
             $current = $stmt->fetch();
             if (!$current) throw new InvalidArgumentException('Comanda nu exista.');
+            $customerName = array_key_exists('customer_name', $body)
+                ? mb_strtoupper(mb_substr(trim((string)$body['customer_name']), 0, 180), 'UTF-8')
+                : (string)($current['customer_name'] ?? '');
+            $customerPhone = array_key_exists('customer_phone', $body)
+                ? mb_substr(trim((string)$body['customer_phone']), 0, 50)
+                : (string)($current['customer_phone'] ?? '');
+            $customerEmail = array_key_exists('customer_email', $body)
+                ? mb_strtolower(mb_substr(trim((string)$body['customer_email']), 0, 180), 'UTF-8')
+                : trim((string)($current['customer_email'] ?? ''));
+            if ($customerName === '') throw new InvalidArgumentException('Numele clientului este obligatoriu.');
+            if ($customerPhone === '') throw new InvalidArgumentException('Numărul de telefon al clientului este obligatoriu.');
+            if ($customerEmail !== '' && !filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
+                throw new InvalidArgumentException('Adresa de e-mail a clientului nu este validă.');
+            }
+            $customerDataChanged = $customerName !== (string)($current['customer_name'] ?? '')
+                || $customerPhone !== (string)($current['customer_phone'] ?? '')
+                || $customerEmail !== trim((string)($current['customer_email'] ?? ''));
+            if ($customerDataChanged) {
+                $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
+                $invoiceLock = $driver === 'sqlite' ? '' : ' FOR UPDATE';
+                $invoiceStmt = $db->prepare(
+                    "SELECT series, invoice_number, spv_status
+                     FROM shop_invoices
+                     WHERE order_id = ? AND invoice_type IN ('invoice', 'corrected_invoice')
+                     ORDER BY CASE WHEN invoice_type = 'corrected_invoice' THEN 0 ELSE 1 END, issued_at DESC
+                     LIMIT 1" . $invoiceLock
+                );
+                $invoiceStmt->execute([$id]);
+                $assignedInvoice = $invoiceStmt->fetch();
+                $assignedSpvStatus = (string)($assignedInvoice['spv_status'] ?? 'not_sent');
+                if ($assignedInvoice && $assignedSpvStatus === 'sent') {
+                    throw new InvalidArgumentException('Datele clientului nu mai pot fi modificate deoarece factura ' . trim((string)$assignedInvoice['series'] . ' ' . (string)$assignedInvoice['invoice_number']) . ' a fost trimisă în SPV.');
+                }
+                if ($assignedInvoice && $assignedSpvStatus === 'processing') {
+                    throw new InvalidArgumentException('Factura este în curs de transmitere către SPV. Datele clientului pot fi modificate după răspunsul ANAF, dacă factura nu a fost acceptată.');
+                }
+            }
             if (array_key_exists('items', $body) || array_key_exists('shipping_cost', $body)) {
                 if (array_key_exists('items', $body) && !is_array($body['items'])) throw new InvalidArgumentException('Lista produselor modificate nu este validă.');
                 $shippingCostOverride = null;
@@ -8432,6 +8474,10 @@ try {
             $city = trim((string)($body['city'] ?? $current['city'] ?? ''));
             $county = trim((string)($body['county'] ?? $current['county'] ?? ''));
             $postalCode = trim((string)($body['postal_code'] ?? $current['postal_code'] ?? ''));
+            $deliveryDataChanged = $address !== trim((string)($current['address'] ?? ''))
+                || $city !== trim((string)($current['city'] ?? ''))
+                || $county !== trim((string)($current['county'] ?? ''))
+                || $postalCode !== trim((string)($current['postal_code'] ?? ''));
             if ($address === '' || $city === '' || $county === '') {
                 throw new InvalidArgumentException('Adresa, localitatea și județul sunt obligatorii pentru livrare.');
             }
@@ -8458,10 +8504,13 @@ try {
                 // factura de retur în GtrotsInvoiceService::issueReturn().
                 releasePromotionUsage($db, $id);
             }
-            $update = $db->prepare('UPDATE shop_orders SET status = ?, payment_status = ?, admin_notes = ?, address = ?, city = ?, county = ?, postal_code = ? WHERE id = ?');
-            $update->execute([$status, $paymentStatus, mb_substr(trim((string)($body['admin_notes'] ?? '')), 0, 5000), $address, $city, $county, $postalCode, $id]);
+            $update = $db->prepare('UPDATE shop_orders SET status = ?, payment_status = ?, admin_notes = ?, customer_name = ?, customer_email = ?, customer_phone = ?, address = ?, city = ?, county = ?, postal_code = ? WHERE id = ?');
+            $update->execute([$status, $paymentStatus, mb_substr(trim((string)($body['admin_notes'] ?? '')), 0, 5000), $customerName, $customerEmail !== '' ? $customerEmail : null, $customerPhone, $address, $city, $county, $postalCode, $id]);
             if ($invoiceRefreshRequested || $paymentChanged || $itemsChanged) {
                 $invoicePayloadChanged = GtrotsInvoiceService::refreshUnsentPayloadForOrder($db, $id);
+            }
+            if ($customerDataChanged || $deliveryDataChanged) {
+                $shippingNotePayloadChanged = GtrotsShippingNoteService::reviseForOrder($db, $id) !== null;
             }
             if ($statusChanged) {
                 $historyId = recordOrderStatusHistory(
@@ -8479,7 +8528,7 @@ try {
             throw $error;
         }
         if ($invoicePayloadChanged || $paymentChanged || $itemsChanged) GtrotsInvoiceService::refreshStoredForOrder($db, $id, $config);
-        if ($itemsChanged) GtrotsShippingNoteService::refreshStoredForOrder($db, $id, $config);
+        if ($itemsChanged || $shippingNotePayloadChanged) GtrotsShippingNoteService::refreshStoredForOrder($db, $id, $config);
         $stmt = $db->prepare('SELECT o.*' . GtrotsInvoiceService::orderJoinColumns() . GtrotsShippingNoteService::orderJoinColumns() . ' FROM shop_orders o' . GtrotsInvoiceService::orderJoinSql('o') . GtrotsShippingNoteService::orderJoinSql('o') . ' WHERE o.id = ?');
         $stmt->execute([$id]);
         $order = orderRow($db, $stmt->fetch(), $config, true);

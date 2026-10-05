@@ -2416,11 +2416,12 @@
   }
   function orderCustomerDisplayName(order) {
     const serverName = String(order?.customer_display_name || '').trim();
-    if (serverName) return serverName;
+    if (serverName) return serverName.toLocaleUpperCase('ro-RO');
     const companyName = String(order?.company_name || '').trim();
-    return String(order?.customer_type || '').toLowerCase() === 'company' && companyName
+    const displayName = String(order?.customer_type || '').toLowerCase() === 'company' && companyName
       ? companyName
       : String(order?.customer_name || '').trim();
+    return displayName.toLocaleUpperCase('ro-RO');
   }
   function orderPaymentChips(order, labels) {
     const isCard = order.payment_method === 'card';
@@ -2530,6 +2531,9 @@
   }
   function orderDeliveryInput(label, id, value, strong = false) {
     return `<label class="shop-order-delivery-field ${strong ? 'strong' : ''}"><small>${esc(label)}</small><input id="${id}" value="${esc(value || '')}" readonly></label>`;
+  }
+  function orderCustomerInput(label, id, value, strong = false, type = 'text') {
+    return `<label class="shop-order-delivery-field shop-order-customer-field ${strong ? 'strong' : ''}"><small>${esc(label)}</small><input id="${id}" type="${type}" value="${esc(value || '')}" readonly autocomplete="off"></label>`;
   }
   async function openOrderContact(kind, phone) {
     try {
@@ -2729,10 +2733,15 @@
     const whatsappIcon = '<svg class="whatsapp-brand" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.981.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.895 6.99c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.14 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>';
     const editIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>';
     const customerKind = orderCustomerKind(order);
+    const customerEditAllowed = !order.invoice || !['sent', 'processing'].includes(order.invoice.spv_status);
+    const customerEditStatus = order.invoice?.spv_status === 'processing' ? 'ÎN TRANSMITERE SPV' : 'BLOCATĂ ÎN SPV';
+    const customerEditAction = customerEditAllowed
+      ? `<button type="button" data-order-customer-edit>${editIcon}<span>Editează</span></button>`
+      : `<em>${customerEditStatus}</em>`;
     const companyRows = customerKind.key === 'company'
       ? `<div class="shop-order-company-block"><small>DATE FISCALE</small>${orderDetailRow('CUI / CIF', order.company_cui)}${orderDetailRow('Registrul Comerțului', order.company_registration_number)}${orderDetailRow('Sediu social', order.company_address)}</div>`
       : '';
-    const clientCard = `<section class="shop-order-summary-card"><div class="shop-order-card-head"><small>CLIENT</small><div class="shop-order-client-kind">${orderCustomerBadge(order)}<em>${customerKind.label.toUpperCase()}</em></div></div>${orderDetailRow(customerKind.key === 'company' ? 'Denumire firmă' : 'Nume', orderCustomerDisplayName(order), true)}${customerKind.key === 'company' ? orderDetailRow('Persoană de contact', order.customer_contact_name || order.customer_name) : ''}${orderDetailRow('Telefon', order.customer_phone)}${orderDetailRow('E-mail', order.customer_email || 'Fără e-mail')}${companyRows}<div class="shop-order-contact-actions"><button type="button" data-order-call>${contactIcon}<span>Apelează</span></button><button type="button" class="whatsapp" data-order-whatsapp>${whatsappIcon}<span>WhatsApp</span></button></div></section>`;
+    const clientCard = `<section class="shop-order-summary-card"><div class="shop-order-card-head"><div class="shop-order-client-kind"><small>CLIENT</small>${orderCustomerBadge(order)}<em>${customerKind.label.toUpperCase()}</em></div><div class="shop-order-card-actions">${customerEditAction}</div></div>${customerKind.key === 'company' ? orderDetailRow('Denumire firmă', orderCustomerDisplayName(order), true) : ''}${orderCustomerInput(customerKind.key === 'company' ? 'Persoană de contact' : 'Nume', 'shop-order-customer-name', String(order.customer_name || '').toLocaleUpperCase('ro-RO'), customerKind.key !== 'company')}${orderCustomerInput('Telefon', 'shop-order-customer-phone', order.customer_phone, false, 'tel')}${orderCustomerInput('E-mail', 'shop-order-customer-email', order.customer_email, false, 'email')}${companyRows}${customerEditAllowed ? '<p class="shop-order-customer-helper" hidden>Salvează comanda pentru a regenera automat factura netrimisă în SPV și avizul existent.</p>' : `<p class="shop-order-customer-locked">${order.invoice?.spv_status === 'processing' ? 'Datele clientului nu pot fi schimbate cât timp factura este procesată de ANAF.' : 'Datele clientului nu mai pot fi schimbate deoarece factura a fost trimisă în SPV.'}</p>`}<div class="shop-order-contact-actions"><button type="button" data-order-call>${contactIcon}<span>Apelează</span></button><button type="button" class="whatsapp" data-order-whatsapp>${whatsappIcon}<span>WhatsApp</span></button></div></section>`;
     const paymentMethodCard = order.payment_method === 'card'
       ? '<div class="shop-order-payment-method card"><span><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h3"/></svg></span><div><small>METODĂ DE PLATĂ</small><strong>Card online</strong></div></div>'
       : '<div class="shop-order-payment-method cash"><span><svg viewBox="0 0 24 24"><path d="M4 7h16v11H4z"/><path d="M8 11h.01M16 14h.01"/><circle cx="12" cy="12.5" r="2.2"/></svg></span><div><small>METODĂ DE PLATĂ</small><strong>Ramburs la curier</strong></div></div>';
@@ -2792,6 +2801,24 @@
       <label>Notițe interne<textarea id="shop-order-admin-notes" rows="4">${esc(order.admin_notes || '')}</textarea></label>${order.customer_notes ? `<div class="shop-order-note"><small>OBSERVAȚII CLIENT</small>${esc(order.customer_notes)}</div>` : ''}`;
     $('shop-order-details').querySelector('[data-order-call]')?.addEventListener('click', () => void openOrderContact('call', order.customer_phone));
     $('shop-order-details').querySelector('[data-order-whatsapp]')?.addEventListener('click', () => void openOrderContact('whatsapp', order.customer_phone));
+    const customerEditButton = $('shop-order-details').querySelector('[data-order-customer-edit]');
+    const customerInputs = ['shop-order-customer-name', 'shop-order-customer-phone', 'shop-order-customer-email'].map(id => $(id)).filter(Boolean);
+    const customerOriginal = customerInputs.map(input => input.value);
+    let customerEditing = false;
+    customerEditButton?.addEventListener('click', () => {
+      customerEditing = !customerEditing;
+      customerInputs.forEach((input, index) => { input.readOnly = !customerEditing; if (!customerEditing) input.value = customerOriginal[index]; });
+      customerEditButton.classList.toggle('active', customerEditing);
+      customerEditButton.querySelector('span').textContent = customerEditing ? 'Anulează' : 'Editează';
+      const helper = $('shop-order-details').querySelector('.shop-order-customer-helper');
+      if (helper) helper.hidden = !customerEditing;
+      if (customerEditing) customerInputs[0]?.focus();
+    });
+    $('shop-order-customer-name')?.addEventListener('input', event => {
+      const start = event.currentTarget.selectionStart;
+      event.currentTarget.value = event.currentTarget.value.toLocaleUpperCase('ro-RO');
+      if (start !== null) event.currentTarget.setSelectionRange(start, start);
+    });
     $('shop-order-details').querySelector('[data-order-invoice-issue]')?.addEventListener('click', () => openInvoiceIssue(order.id));
     $('shop-order-details').querySelector('[data-shipping-note-issue]')?.addEventListener('click', () => void openShippingNoteIssue(order.id));
     $('shop-order-details').querySelector('[data-shipping-note-share]')?.addEventListener('click', () => void shareShippingNote(order.shipping_note));
@@ -2897,6 +2924,10 @@
       const returnItems = Array.from(document.querySelectorAll('.shop-order-return-item')).map(row => { const decision = row.dataset.returnStatus || 'pending'; const requested = Number(row.dataset.requested || 0); const accepted = decision === 'pending' ? 0 : Number(row.querySelector('.shop-order-return-quantity b')?.textContent || 0); return { order_item_id: row.dataset.returnOrderItem, quantity: requested, decision_status: decision === 'pending' ? undefined : decision, accepted_quantity: accepted, refused_quantity: decision === 'pending' ? 0 : Math.max(0, requested - accepted), decision_reason: row.querySelector('[data-return-refusal-reason]')?.value.trim() || '' }; });
       const paymentStatus = $('shop-order-payment-status').value;
       const adminNotes = $('shop-order-admin-notes').value.trim();
+      const customerEditAllowed = !state.editingOrder.invoice || !['sent', 'processing'].includes(state.editingOrder.invoice.spv_status);
+      const customerName = ($('shop-order-customer-name')?.value || state.editingOrder.customer_name || '').trim().toLocaleUpperCase('ro-RO');
+      const customerPhone = ($('shop-order-customer-phone')?.value || state.editingOrder.customer_phone || '').trim();
+      const customerEmail = ($('shop-order-customer-email')?.value || '').trim().toLocaleLowerCase('ro-RO');
       const address = $('shop-order-address')?.value.trim() || '';
       const city = $('shop-order-city')?.value.trim() || '';
       const county = $('shop-order-county')?.value.trim() || '';
@@ -2924,6 +2955,9 @@
       const hasChanges = status !== state.editingOrder.status
         || paymentStatus !== state.editingOrder.payment_status
         || adminNotes !== String(state.editingOrder.admin_notes || '').trim()
+        || (customerEditAllowed && customerName !== String(state.editingOrder.customer_name || '').trim())
+        || (customerEditAllowed && customerPhone !== String(state.editingOrder.customer_phone || '').trim())
+        || (customerEditAllowed && customerEmail !== String(state.editingOrder.customer_email || '').trim().toLocaleLowerCase('ro-RO'))
         || address !== String(state.editingOrder.address || '').trim()
         || city !== String(state.editingOrder.city || '').trim()
         || county !== String(state.editingOrder.county || '').trim()
@@ -2937,6 +2971,8 @@
         toast('Comanda este deja salvată. Nu a fost trimis niciun e-mail.', 'info');
         return;
       }
+      if (customerEditAllowed && (!customerName || !customerPhone)) throw new Error('Numele și numărul de telefon ale clientului sunt obligatorii.');
+      if (customerEditAllowed && customerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)) throw new Error('Introdu o adresă de e-mail validă sau lasă câmpul gol.');
       if (status === 'cancelled' && state.editingOrder.status !== 'cancelled' && cancellationReason.length < 3) throw new Error('Scrie motivul anulării, de cel puțin 3 caractere.');
       if (status === 'cancelled' && state.editingOrder.status !== 'cancelled' && !confirm('Anulezi comanda? Anularea se salvează imediat, clientul este notificat automat, iar factura și stocul sunt corectate după regulile fiscale.')) return;
       const returnTarget = ['return_requested', 'return_refused', 'return_confirmed', 'refunded'].includes(status);
@@ -2945,7 +2981,7 @@
       if (['return_confirmed','refunded'].includes(status) && (returnItems.some(item => !item.decision_status) || !returnItems.some(item => item.accepted_quantity > 0))) throw new Error('Evaluează toate produsele și acceptă cel puțin o bucată înainte de confirmarea returului.');
       if (['return_confirmed','refunded'].includes(status) && returnItems.some(item => item.refused_quantity > 0 && item.decision_reason.length < 3)) throw new Error('Scrie motivul pentru fiecare cantitate refuzată integral sau parțial. Motivul va apărea în e-mailul clientului.');
       const shippingChoiceRequired = isDeliveredReplacement || needsReturnShippingChoice;
-      const updated = await window.SHOP_API.updateOrder(state.editingOrder.id, { status, payment_status: paymentStatus, admin_notes: adminNotes, notify_customer: status !== state.editingOrder.status && (status === 'cancelled' ? true : Boolean($('shop-order-notify')?.checked)), cancellation_reason: status === 'cancelled' ? cancellationReason : undefined, return_reason: returnTarget ? returnReason : undefined, return_bank_iban: returnTarget ? returnIban : undefined, return_bank_account_holder: returnTarget ? returnHolder : undefined, return_shipping_payer: shippingChoiceRequired ? returnShippingPayer : undefined, return_shipping_cost: shippingChoiceRequired ? (returnShippingPayer === 'customer' ? returnShippingCost : 0) : undefined, return_items: returnTarget ? returnItems : undefined, items: changedOrderItems.length ? changedOrderItems.map(item => ({ order_item_id: item.order_item_id, product_id: item.product_id, unit_price: Number(item.unit_price) })) : undefined, shipping_cost: isDeliveredReplacement ? shippingCost : undefined, charge_replacement_shipping: isDeliveredReplacement || undefined, address, city, county, postal_code: postalCode });
+      const updated = await window.SHOP_API.updateOrder(state.editingOrder.id, { status, payment_status: paymentStatus, admin_notes: adminNotes, notify_customer: status !== state.editingOrder.status && (status === 'cancelled' ? true : Boolean($('shop-order-notify')?.checked)), cancellation_reason: status === 'cancelled' ? cancellationReason : undefined, return_reason: returnTarget ? returnReason : undefined, return_bank_iban: returnTarget ? returnIban : undefined, return_bank_account_holder: returnTarget ? returnHolder : undefined, return_shipping_payer: shippingChoiceRequired ? returnShippingPayer : undefined, return_shipping_cost: shippingChoiceRequired ? (returnShippingPayer === 'customer' ? returnShippingCost : 0) : undefined, return_items: returnTarget ? returnItems : undefined, items: changedOrderItems.length ? changedOrderItems.map(item => ({ order_item_id: item.order_item_id, product_id: item.product_id, unit_price: Number(item.unit_price) })) : undefined, shipping_cost: isDeliveredReplacement ? shippingCost : undefined, charge_replacement_shipping: isDeliveredReplacement || undefined, customer_name: customerEditAllowed ? customerName : undefined, customer_phone: customerEditAllowed ? customerPhone : undefined, customer_email: customerEditAllowed ? customerEmail : undefined, address, city, county, postal_code: postalCode });
       closeModal('shop-order-modal');
       const email = updated.email_notification;
       const automation = updated.invoice_automation;

@@ -259,6 +259,10 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
   const [shippingNoteOrder, setShippingNoteOrder] = useState<ShopOrder | null>(null);
   const [shippingNoteBusy, setShippingNoteBusy] = useState<string | null>(null);
   const [shippingNoteDraft, setShippingNoteDraft] = useState<ShopShippingNoteDraftInput>({ delegate_name: '-', identity_document: '-', transport_vehicle: '-', delivery_time: '-', loading_place: '-', sender_name: 'G-Trots Romania', with_stamp: false });
+  const [customerEditing, setCustomerEditing] = useState(false);
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [deliveryEditing, setDeliveryEditing] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryCity, setDeliveryCity] = useState('');
@@ -387,6 +391,10 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
     setReturnAccountHolder(order.return_bank_account_holder || '');
     setReturnDecisions((order.return_items?.length ? order.return_items.map((item) => ({ order_item_id: item.order_item_id, product_name: item.product_name, product_sku: item.product_sku, requested_quantity: Number(item.requested_quantity), decision_status: item.decision_status, accepted_quantity: Number(item.accepted_quantity ?? item.requested_quantity), decision_reason: item.decision_reason || '' })) : order.items.map((item) => ({ order_item_id: item.id, product_name: item.product_name, product_sku: item.product_sku, requested_quantity: Number(item.quantity), decision_status: 'pending' as const, accepted_quantity: Number(item.quantity), decision_reason: '' }))));
     setNotifyCustomer(false);
+    setCustomerEditing(false);
+    setCustomerName(String(order.customer_name || '').toLocaleUpperCase('ro-RO'));
+    setCustomerPhone(order.customer_phone || '');
+    setCustomerEmail(order.customer_email || '');
     setDeliveryEditing(false);
     setDeliveryAddress(order.address || '');
     setDeliveryCity(order.city || '');
@@ -445,6 +453,10 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
     setReturnBankIban('');
     setReturnAccountHolder('');
     setReturnDecisions([]);
+    setCustomerEditing(false);
+    setCustomerName('');
+    setCustomerPhone('');
+    setCustomerEmail('');
     setDeliveryAddress('');
     setDeliveryCity('');
     setDeliveryCounty('');
@@ -579,11 +591,15 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
     const parsedShippingCost = Number(shippingCostDraft.replace(',', '.'));
     const parsedReturnShippingCost = Number(returnShippingCostDraft.replace(',', '.'));
     const itemsChanged = changedOrderItems.length > 0;
+    const canEditCustomer = !selected.invoice || !['sent', 'processing'].includes(selected.invoice.spv_status);
     const isDeliveredReplacement = selected.status === 'completed' && Boolean(selected.invoice) && itemsChanged;
     const needsReturnShippingChoice = (status === 'return_confirmed' || status === 'refunded') && !(['return_confirmed', 'refunded'] as ShopOrder['status'][]).includes(selected.status);
     const hasChanges = status !== selected.status
       || paymentStatus !== selected.payment_status
       || adminNotes.trim() !== String(selected.admin_notes || '').trim()
+      || (canEditCustomer && customerName.trim().toLocaleUpperCase('ro-RO') !== String(selected.customer_name || '').trim())
+      || (canEditCustomer && customerPhone.trim() !== String(selected.customer_phone || '').trim())
+      || (canEditCustomer && customerEmail.trim().toLocaleLowerCase('ro-RO') !== String(selected.customer_email || '').trim().toLocaleLowerCase('ro-RO'))
       || deliveryAddress.trim() !== String(selected.address || '').trim()
       || deliveryCity.trim() !== String(selected.city || '').trim()
       || deliveryCounty.trim() !== String(selected.county || '').trim()
@@ -600,6 +616,14 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
     }
     if (!deliveryAddress.trim() || !deliveryCity.trim() || !deliveryCounty.trim()) {
       Alert.alert('Date de livrare incomplete', 'Adresa, localitatea și județul sunt obligatorii.');
+      return;
+    }
+    if (!customerName.trim() || !customerPhone.trim()) {
+      Alert.alert('Date client incomplete', 'Numele și numărul de telefon sunt obligatorii.');
+      return;
+    }
+    if (customerEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim())) {
+      Alert.alert('E-mail invalid', 'Introdu o adresă de e-mail validă sau lasă câmpul gol.');
       return;
     }
     if (!Number.isFinite(parsedShippingCost) || parsedShippingCost < 0) {
@@ -662,8 +686,12 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
     try {
       const returnTarget = (['return_requested', 'return_refused', 'return_confirmed', 'refunded'] as ShopOrder['status'][]).includes(status);
       const shippingChoiceRequired = isDeliveredReplacement || needsReturnShippingChoice;
-      const updated = await shopApi.updateOrder(token, selected.id, { status, payment_status: paymentStatus, admin_notes: adminNotes.trim(), notify_customer: status !== selected.status && (status === 'cancelled' ? true : notifyCustomer), cancellation_reason: status === 'cancelled' ? cancellationReason.trim() : undefined, return_reason: returnTarget ? returnReason.trim() : undefined, return_bank_iban: returnTarget ? normalizedReturnIban : undefined, return_bank_account_holder: returnTarget ? returnAccountHolder.trim() : undefined, return_shipping_payer: shippingChoiceRequired ? returnShippingPayer! : undefined, return_shipping_cost: shippingChoiceRequired ? (returnShippingPayer === 'customer' ? parsedReturnShippingCost : 0) : undefined, return_items: returnTarget ? returnDecisions.map((item) => ({ order_item_id: item.order_item_id, quantity: item.requested_quantity, decision_status: item.decision_status === 'pending' ? undefined : item.decision_status, accepted_quantity: item.decision_status === 'pending' ? 0 : item.accepted_quantity, refused_quantity: item.decision_status === 'pending' ? 0 : Math.max(0, item.requested_quantity - item.accepted_quantity), decision_reason: item.decision_reason })) : undefined, items: itemsChanged ? changedOrderItems.map((item) => ({ order_item_id: item.order_item_id, product_id: item.product_id, unit_price: Number(item.unit_price.replace(',', '.')) })) : undefined, shipping_cost: isDeliveredReplacement ? parsedShippingCost : undefined, charge_replacement_shipping: isDeliveredReplacement || undefined, address: deliveryAddress.trim(), city: deliveryCity.trim(), county: deliveryCounty.trim(), postal_code: deliveryPostalCode.trim() });
+      const updated = await shopApi.updateOrder(token, selected.id, { status, payment_status: paymentStatus, admin_notes: adminNotes.trim(), notify_customer: status !== selected.status && (status === 'cancelled' ? true : notifyCustomer), cancellation_reason: status === 'cancelled' ? cancellationReason.trim() : undefined, return_reason: returnTarget ? returnReason.trim() : undefined, return_bank_iban: returnTarget ? normalizedReturnIban : undefined, return_bank_account_holder: returnTarget ? returnAccountHolder.trim() : undefined, return_shipping_payer: shippingChoiceRequired ? returnShippingPayer! : undefined, return_shipping_cost: shippingChoiceRequired ? (returnShippingPayer === 'customer' ? parsedReturnShippingCost : 0) : undefined, return_items: returnTarget ? returnDecisions.map((item) => ({ order_item_id: item.order_item_id, quantity: item.requested_quantity, decision_status: item.decision_status === 'pending' ? undefined : item.decision_status, accepted_quantity: item.decision_status === 'pending' ? 0 : item.accepted_quantity, refused_quantity: item.decision_status === 'pending' ? 0 : Math.max(0, item.requested_quantity - item.accepted_quantity), decision_reason: item.decision_reason })) : undefined, items: itemsChanged ? changedOrderItems.map((item) => ({ order_item_id: item.order_item_id, product_id: item.product_id, unit_price: Number(item.unit_price.replace(',', '.')) })) : undefined, shipping_cost: isDeliveredReplacement ? parsedShippingCost : undefined, charge_replacement_shipping: isDeliveredReplacement || undefined, customer_name: canEditCustomer ? customerName.trim().toLocaleUpperCase('ro-RO') : undefined, customer_phone: canEditCustomer ? customerPhone.trim() : undefined, customer_email: canEditCustomer ? customerEmail.trim().toLocaleLowerCase('ro-RO') : undefined, address: deliveryAddress.trim(), city: deliveryCity.trim(), county: deliveryCounty.trim(), postal_code: deliveryPostalCode.trim() });
       applyOrderToEditor(updated);
+      setCustomerEditing(false);
+      setCustomerName(String(updated.customer_name || '').toLocaleUpperCase('ro-RO'));
+      setCustomerPhone(updated.customer_phone || '');
+      setCustomerEmail(updated.customer_email || '');
       setDeliveryEditing(false);
       setDeliveryAddress(updated.address || '');
       setDeliveryCity(updated.city || '');
@@ -925,7 +953,25 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
           {selected ? <ScrollView contentContainerStyle={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 20) + 30 }]} showsVerticalScrollIndicator={false}>
             {detailLoading ? <View style={styles.detailLoading}><ActivityIndicator color={Colors.orange} /><Text style={styles.detailLoadingText}>Actualizăm istoricul comenzii...</Text></View> : null}
             {!detailLoading && detailErrorMessage ? <View style={[styles.detailLoading, styles.detailError]}><Text style={styles.detailErrorText}>Detaliile complete nu s-au încărcat.</Text><TouchableOpacity style={styles.detailRetry} onPress={() => void openOrder(selected.id, selected)}><RefreshCw size={13} color="#FFFFFF" /><Text style={styles.detailRetryText}>Reîncearcă</Text></TouchableOpacity></View> : null}
-            <ClientInfoBlock order={selected} />
+            <ClientInfoBlock
+              order={selected}
+              editing={customerEditing}
+              canEdit={!selected.invoice || !['sent', 'processing'].includes(selected.invoice.spv_status)}
+              onToggle={() => {
+                if (customerEditing) {
+                  setCustomerName(String(selected.customer_name || '').toLocaleUpperCase('ro-RO'));
+                  setCustomerPhone(selected.customer_phone || '');
+                  setCustomerEmail(selected.customer_email || '');
+                }
+                setCustomerEditing((current) => !current);
+              }}
+              name={customerName}
+              phone={customerPhone}
+              email={customerEmail}
+              onNameChange={(value) => setCustomerName(value.toLocaleUpperCase('ro-RO'))}
+              onPhoneChange={setCustomerPhone}
+              onEmailChange={setCustomerEmail}
+            />
             <DeliveryInfoBlock order={selected} editing={deliveryEditing} onToggle={() => { if (deliveryEditing) { setDeliveryAddress(selected.address || ''); setDeliveryCity(selected.city || ''); setDeliveryCounty(selected.county || ''); setDeliveryPostalCode(selected.postal_code || ''); } setDeliveryEditing((current) => !current); }} address={deliveryAddress} city={deliveryCity} county={deliveryCounty} postalCode={deliveryPostalCode} onAddressChange={setDeliveryAddress} onCityChange={setDeliveryCity} onCountyChange={setDeliveryCounty} onPostalCodeChange={setDeliveryPostalCode} />
             <Text style={styles.sectionLabel}>PRODUSE · PREȚURI DE VÂNZARE</Text>
             <View style={styles.items}>{orderItemDrafts.map((item) => {
@@ -1283,25 +1329,37 @@ function DetailInfoRow({ label, value, strong = false }: { label: string; value?
   return <View style={styles.detailInfoRow}><Text style={styles.detailInfoLabel}>{label}</Text><Text style={[styles.detailInfoValue, strong && styles.detailInfoValueStrong]}>{String(value || '').trim() || '—'}</Text></View>;
 }
 
-function ClientInfoBlock({ order }: { order: ShopOrder }) {
+function ClientInfoBlock({ order, editing, canEdit, onToggle, name, phone, email, onNameChange, onPhoneChange, onEmailChange }: { order: ShopOrder; editing: boolean; canEdit: boolean; onToggle: () => void; name: string; phone: string; email: string; onNameChange: (value: string) => void; onPhoneChange: (value: string) => void; onEmailChange: (value: string) => void }) {
   const companyOrder = isCompanyOrder(order);
   return <View style={styles.info}>
-    <View style={styles.infoHead}><View style={styles.infoTitleWithBadge}><Text style={styles.infoTitle}>CLIENT</Text><View style={[styles.customerTypeBadge, companyOrder && styles.customerTypeBadgeCompany]}><Text style={[styles.customerTypeBadgeText, companyOrder && styles.customerTypeBadgeTextCompany]}>{companyOrder ? 'PJ' : 'PF'}</Text></View></View><Text style={styles.infoHeadHint}>{companyOrder ? 'PERSOANĂ JURIDICĂ' : 'PERSOANĂ FIZICĂ'}</Text></View>
-    <DetailInfoRow label={companyOrder ? 'Denumire firmă' : 'Nume'} value={shopOrderCustomerDisplayName(order)} strong />
-    {companyOrder ? <DetailInfoRow label="Persoană de contact" value={order.customer_contact_name || order.customer_name} /> : null}
-    <DetailInfoRow label="Telefon" value={order.customer_phone} />
-    <DetailInfoRow label="E-mail" value={order.customer_email || 'Fără e-mail'} />
+    <View style={styles.infoHead}><View style={styles.infoTitleWithBadge}><Text style={styles.infoTitle}>CLIENT</Text><View style={[styles.customerTypeBadge, companyOrder && styles.customerTypeBadgeCompany]}><Text style={[styles.customerTypeBadgeText, companyOrder && styles.customerTypeBadgeTextCompany]}>{companyOrder ? 'PJ' : 'PF'}</Text></View></View>{canEdit ? <TouchableOpacity style={[styles.deliveryEditButton, editing && styles.deliveryEditButtonActive]} onPress={onToggle}>{editing ? <X size={14} color={Colors.orange} /> : <Pencil size={14} color={Colors.textPrimary} />}<Text style={[styles.deliveryEditButtonText, editing && styles.deliveryEditButtonTextActive]}>{editing ? 'Anulează' : 'Editează'}</Text></TouchableOpacity> : <Text style={styles.infoHeadHint}>{order.invoice?.spv_status === 'processing' ? 'ÎN TRANSMITERE SPV' : 'BLOCATĂ ÎN SPV'}</Text>}</View>
+    {companyOrder ? <DetailInfoRow label="Denumire firmă" value={shopOrderCustomerDisplayName(order)} strong /> : null}
+    {editing ? <>
+      <CustomerEditRow label={companyOrder ? 'Persoană de contact' : 'Nume'} value={name} onChangeText={onNameChange} strong autoCapitalize="characters" />
+      <CustomerEditRow label="Telefon" value={phone} onChangeText={onPhoneChange} keyboardType="phone-pad" />
+      <CustomerEditRow label="E-mail" value={email} onChangeText={onEmailChange} keyboardType="email-address" autoCapitalize="none" />
+      <Text style={styles.deliveryEditHelper}>Salvează comanda pentru a regenera automat factura netrimisă în SPV și avizul existent.</Text>
+    </> : <>
+      <DetailInfoRow label={companyOrder ? 'Persoană de contact' : 'Nume'} value={companyOrder ? String(order.customer_contact_name || order.customer_name).toLocaleUpperCase('ro-RO') : shopOrderCustomerDisplayName(order)} strong={!companyOrder} />
+      <DetailInfoRow label="Telefon" value={order.customer_phone} />
+      <DetailInfoRow label="E-mail" value={order.customer_email || 'Fără e-mail'} />
+    </>}
     {companyOrder ? <View style={styles.companyDetails}>
       <Text style={styles.companyDetailsTitle}>DATE FISCALE</Text>
       <DetailInfoRow label="CUI / CIF" value={order.company_cui} />
       <DetailInfoRow label="Registrul Comerțului" value={order.company_registration_number} />
       <DetailInfoRow label="Sediu social" value={order.company_address} />
     </View> : null}
+    {!canEdit ? <Text style={styles.customerEditLocked}>{order.invoice?.spv_status === 'processing' ? 'Datele clientului nu pot fi schimbate cât timp factura este procesată de ANAF.' : 'Datele clientului nu mai pot fi schimbate deoarece factura a fost trimisă în SPV.'}</Text> : null}
     <View style={styles.contactActions}>
       <TouchableOpacity style={styles.contactCall} activeOpacity={0.78} onPress={() => void callCustomer(order.customer_phone)}><Phone size={16} color="#EDE7E1" /><Text style={styles.contactCallText}>Apelează</Text></TouchableOpacity>
       <TouchableOpacity style={styles.contactWhatsApp} activeOpacity={0.78} onPress={() => void openCustomerWhatsApp(order.customer_phone)}><WhatsAppLogo size={17} /><Text style={styles.contactWhatsAppText}>WhatsApp</Text></TouchableOpacity>
     </View>
   </View>;
+}
+
+function CustomerEditRow({ label, value, onChangeText, strong = false, keyboardType = 'default', autoCapitalize = 'sentences' }: { label: string; value: string; onChangeText: (value: string) => void; strong?: boolean; keyboardType?: 'default' | 'phone-pad' | 'email-address'; autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters' }) {
+  return <View style={styles.deliveryEditRow}><Text style={styles.detailInfoLabel}>{label}</Text><TextInput value={value} onChangeText={onChangeText} keyboardType={keyboardType} autoCapitalize={autoCapitalize} autoCorrect={false} style={[styles.deliveryInput, strong && styles.deliveryInputStrong]} placeholder="Completează" placeholderTextColor={Colors.textMuted} /></View>;
 }
 
 function DeliveryEditRow({ label, value, onChangeText, strong = false }: { label: string; value: string; onChangeText: (value: string) => void; strong?: boolean }) {
@@ -1365,6 +1423,7 @@ const styles = StyleSheet.create({
   orderPaymentCopy: { flex: 1, minWidth: 0 }, orderPaymentLabel: { color: Colors.textMuted, fontFamily: 'Inter-Bold', fontSize: 7, letterSpacing: 0.8 }, orderPaymentValue: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 12, marginTop: 3 },
   deliveryInputStrong: { fontFamily: 'Inter-Bold', fontSize: 11 },
   deliveryEditHelper: { color: '#FFAD70', fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 12, borderRadius: 10, padding: 9, backgroundColor: Colors.orangeDim, marginTop: 8 },
+  customerEditLocked: { color: '#F9A8B8', fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 12, borderRadius: 10, padding: 9, backgroundColor: '#3A1E26', marginTop: 9 },
   contactActions: { flexDirection: 'row', gap: 8, paddingTop: 12 },
   contactCall: { flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 14, backgroundColor: '#343138' },
   contactCallText: { color: '#EDE7E1', fontFamily: 'Inter-Bold', fontSize: 10 },

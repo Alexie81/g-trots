@@ -16433,3 +16433,49 @@ body video {
   .shop-invoice-issue-modal > header h2 { font-size: 18px; }
   .shop-invoice-issue-modal > footer button { min-height: 42px; }
 }
+
+/* Codul produsului rămâne vizibil în orice context în care se deschide fișa. */
+.shop-product-detail-header-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  border: 1px solid rgba(56,189,248,.34);
+  border-radius: 10px;
+  padding: 5px 8px;
+  color: #dff5ff;
+  background: rgba(56,189,248,.08);
+}
+.shop-product-detail-header-code small { color: #7dd3fc!important; font-size: 7px!important; letter-spacing: .09em; }
+.shop-product-detail-header-code b { color: #f0f9ff; font-size: 10px; letter-spacing: .025em; user-select: text; }
+.shop-product-detail-identity {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid rgba(56,189,248,.32);
+  border-radius: 20px;
+  padding: 14px 17px;
+  color: #effaff;
+  background: linear-gradient(120deg,rgba(14,116,144,.18),rgba(30,41,59,.55));
+}
+.shop-product-detail-identity>span { display: grid; gap: 5px; min-width: 0; }
+.shop-product-detail-identity>span:last-child { justify-items: end; text-align: right; }
+.shop-product-detail-identity small { color: #7dd3fc; font-size: 8px; font-weight: 900; letter-spacing: .11em; }
+.shop-product-detail-identity strong { color: #f0f9ff; font-size: 18px; user-select: text; }
+.shop-product-detail-identity b { color: #c6eafa; font-size: 11px; user-select: text; }
+
+/* Programarea apare doar pentru joburile SPV delayed încă netrimise. */
+.shop-issued-invoice-copy header b.shop-invoice-scheduled,
+.shop-invoice-state-stack>b.spv-scheduled {
+  border: 1px solid rgba(59,130,246,.52);
+  color: #bfdbfe;
+  background: rgba(37,99,235,.16);
+  box-shadow: 0 0 0 1px rgba(147,197,253,.03) inset;
+}
+
+@media(max-width:680px) {
+  .shop-product-detail-identity { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .shop-product-detail-identity>span:last-child { justify-items: start; text-align: left; }
+}

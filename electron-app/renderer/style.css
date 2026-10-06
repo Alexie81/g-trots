@@ -16475,6 +16475,16 @@ body video {
   box-shadow: 0 0 0 1px rgba(147,197,253,.03) inset;
 }
 
+/* Referința ANAF rămâne distinctă de starea verde „trimisă”. */
+.shop-issued-invoice-copy header b.shop-invoice-reference,
+.shop-invoice-state-stack>b.spv-reference {
+  border: 1px solid rgba(139,92,246,.55);
+  color: #ddd6fe;
+  background: rgba(124,58,237,.16);
+  box-shadow: 0 0 0 1px rgba(196,181,253,.04) inset;
+  user-select: text;
+}
+
 @media(max-width:680px) {
   .shop-product-detail-identity { align-items: flex-start; flex-direction: column; gap: 10px; }
   .shop-product-detail-identity>span:last-child { justify-items: start; text-align: left; }

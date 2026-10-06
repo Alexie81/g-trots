@@ -543,6 +543,25 @@ final class GtrotsSpvService
         return $states;
     }
 
+    /**
+     * Referința publică ANAF pentru o factură acceptată. Ordinea păstrează
+     * compatibilitatea cu documentele istorice: coada SPV, factura, apoi ID-ul
+     * de descărcare primit la confirmare.
+     */
+    public static function invoiceReference(array $invoice, ?array $job = null): ?string
+    {
+        if ((string)($invoice['spv_status'] ?? '') !== 'sent') return null;
+        foreach ([
+            $job['upload_index'] ?? null,
+            $invoice['spv_submission_id'] ?? null,
+            $job['download_id'] ?? null,
+        ] as $candidate) {
+            $reference = trim((string)$candidate);
+            if ($reference !== '') return substr($reference, 0, 180);
+        }
+        return null;
+    }
+
     /** @return array<string, mixed> */
     private static function publicInvoiceState(array $job): array
     {

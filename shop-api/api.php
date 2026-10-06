@@ -6516,6 +6516,7 @@ try {
         $spvStates = GtrotsSpvService::invoiceStates($db, array_column($invoices, 'id'));
         foreach ($invoices as &$invoice) {
             $invoice['spv_job'] = $spvStates[(string)$invoice['id']] ?? null;
+            $invoice['spv_reference'] = GtrotsSpvService::invoiceReference($invoice, $invoice['spv_job']);
         }
         unset($invoice);
         jsonResponse($invoices);
@@ -6525,6 +6526,7 @@ try {
         $invoiceId = trim((string)($_GET['id'] ?? ''));
         $invoice = GtrotsInvoiceService::get($db, $invoiceId, $config);
         $invoice['spv_job'] = GtrotsSpvService::invoiceState($db, $invoiceId);
+        $invoice['spv_reference'] = GtrotsSpvService::invoiceReference($invoice, $invoice['spv_job']);
         jsonResponse($invoice);
     }
 

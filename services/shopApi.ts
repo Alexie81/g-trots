@@ -805,6 +805,7 @@ export type ShopIssuedInvoice = {
   spv_status: 'not_sent' | 'processing' | 'error' | 'rejected' | 'sent';
   spv_sent_at: string | null;
   spv_submission_id: string | null;
+  spv_reference?: string | null;
   spv_job?: {
     status: string;
     environment: string;

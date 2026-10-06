@@ -6512,7 +6512,13 @@ try {
     }
 
     if ($action === 'listInvoices' && $method === 'GET') {
-        jsonResponse(GtrotsInvoiceService::list($db));
+        $invoices = GtrotsInvoiceService::list($db);
+        $spvStates = GtrotsSpvService::invoiceStates($db, array_column($invoices, 'id'));
+        foreach ($invoices as &$invoice) {
+            $invoice['spv_job'] = $spvStates[(string)$invoice['id']] ?? null;
+        }
+        unset($invoice);
+        jsonResponse($invoices);
     }
 
     if ($action === 'getInvoice' && $method === 'GET') {

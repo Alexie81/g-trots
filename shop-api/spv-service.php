@@ -511,6 +511,41 @@ final class GtrotsSpvService
         if ($invoiceId === '') return null;
         $job = self::job($db, $invoiceId);
         if (!$job) return null;
+        return self::publicInvoiceState($job);
+    }
+
+    /**
+     * Citește într-o singură interogare stările SPV necesare registrului de
+     * facturi. Evită câte o interogare separată pentru fiecare document.
+     *
+     * @param array<int, string> $invoiceIds
+     * @return array<string, array<string, mixed>>
+     */
+    public static function invoiceStates(PDO $db, array $invoiceIds): array
+    {
+        self::ensureSchema($db);
+        $invoiceIds = array_values(array_unique(array_filter(array_map(
+            static fn(mixed $value): string => trim((string)$value),
+            $invoiceIds
+        ), static fn(string $value): bool => $value !== '')));
+        if (!$invoiceIds) return [];
+
+        $states = [];
+        foreach (array_chunk($invoiceIds, 500) as $chunk) {
+            $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+            $stmt = $db->prepare('SELECT * FROM shop_spv_outbox WHERE invoice_id IN (' . $placeholders . ')');
+            $stmt->execute($chunk);
+            foreach ($stmt->fetchAll() as $job) {
+                $invoiceId = trim((string)($job['invoice_id'] ?? ''));
+                if ($invoiceId !== '') $states[$invoiceId] = self::publicInvoiceState($job);
+            }
+        }
+        return $states;
+    }
+
+    /** @return array<string, mixed> */
+    private static function publicInvoiceState(array $job): array
+    {
         $value = static fn(string $key): ?string => trim((string)($job[$key] ?? '')) !== '' ? (string)$job[$key] : null;
         return [
             'status' => (string)($job['status'] ?? ''),

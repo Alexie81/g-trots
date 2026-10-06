@@ -150,6 +150,9 @@ spvE2eAssert(str_contains((string)$diagnosticUploads[0]['url'], 'standard=UBL') 
 $insert = $db->prepare('INSERT INTO shop_invoices (id,invoice_type,issue_date,issued_at,spv_status,series,invoice_number) VALUES (?,?,?,?,?,?,?)');
 $insert->execute(['invoice-accepted', 'invoice', '2026-09-04', '2026-09-04 12:00:00', 'not_sent', 'GT', '101']);
 GtrotsSpvService::enqueue($db, 'invoice-accepted', 'invoice');
+$batchStates = GtrotsSpvService::invoiceStates($db, ['invoice-accepted', 'invoice-inexistent']);
+spvE2eAssert(isset($batchStates['invoice-accepted']) && !isset($batchStates['invoice-inexistent']), 'Registrul trebuie să poată citi stările SPV în lot fără rezultate false.');
+spvE2eAssert(array_key_exists('scheduled_at', $batchStates['invoice-accepted']) && array_key_exists('mode', $batchStates['invoice-accepted']), 'Starea SPV din registru trebuie să includă modul și data programării.');
 $sandboxBlocked = false;
 try { GtrotsSpvService::sendManual($db, $config, 'invoice-accepted'); }
 catch (InvalidArgumentException $expected) { $sandboxBlocked = str_contains($expected->getMessage(), 'facturile fiscale reale sunt protejate'); }

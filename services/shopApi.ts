@@ -805,6 +805,20 @@ export type ShopIssuedInvoice = {
   spv_status: 'not_sent' | 'processing' | 'error' | 'rejected' | 'sent';
   spv_sent_at: string | null;
   spv_submission_id: string | null;
+  spv_job?: {
+    status: string;
+    environment: string;
+    mode: 'manual' | 'on_issue' | 'delayed' | string;
+    attempts: number;
+    scheduled_at: string | null;
+    next_attempt_at: string | null;
+    upload_index: string | null;
+    download_id: string | null;
+    last_error: string | null;
+    sent_at: string | null;
+    accepted_at: string | null;
+    updated_at: string | null;
+  } | null;
   can_delete: boolean;
   payload?: ShopInvoicePayload;
   pdf_url?: string;

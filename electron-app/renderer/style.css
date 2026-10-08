@@ -16271,6 +16271,10 @@ body::after {
 #shop-order-details .shop-order-product-meta > button { min-height:42px; align-self:stretch; border:1px solid #365a80; border-radius:11px; padding:0 13px; color:#b8d8fa; background:#172a3b; font-size:12px; font-weight:850; cursor:pointer; }
 #shop-order-details .shop-order-product-meta > button:disabled { opacity:.42; cursor:not-allowed; }
 #shop-order-details .shop-order-product-meta > button.remove { border-color:#713b48; color:#fda4af; background:#321d24; }
+#shop-order-details .shop-order-item-actions { min-width:0; display:flex; align-items:stretch; gap:7px; border:0; padding:0; background:transparent; }
+#shop-order-details .shop-order-item-actions > button { min-height:42px; border:1px solid #365a80; border-radius:11px; padding:0 13px; color:#b8d8fa; background:#172a3b; font-size:12px; font-weight:850; cursor:pointer; }
+#shop-order-details .shop-order-item-actions > button.remove { border-color:#713b48; color:#fda4af; background:#321d24; }
+#shop-order-details .shop-order-item-actions > button:disabled { opacity:.42; cursor:not-allowed; }
 #shop-order-details .shop-order-product-meta > label { min-width:190px; display:grid; gap:3px; border:1px solid #5b493a; border-radius:11px; padding:7px 9px; background:#211a15; }
 #shop-order-details .shop-order-product-meta > label > span { display:flex; align-items:center; gap:6px; }
 #shop-order-details .shop-order-product-meta > label input { width:110px; min-height:28px; border:0; padding:0; color:#ffb36b; background:transparent; font-size:14px; font-weight:900; text-align:right; }

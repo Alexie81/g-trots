@@ -5302,9 +5302,8 @@ function shopAdminRemoveOrderItems(PDO $db, array $order, array $removedItemIds,
  * still editable. Prices, quantities, discounts and shipping remain intact.
  * Sent/processing invoices and return flows remain historical snapshots.
  */
-function shopAdminSyncRenamedProductInEditableOrders(PDO $db, string $productId, string $oldName, string $newName): array {
+function shopAdminSyncRenamedProductInEditableOrders(PDO $db, string $productId, string $newName): array {
     $productId = trim($productId);
-    $oldName = trim($oldName);
     $newName = trim($newName);
     $result = [
         'changed' => false,
@@ -5313,7 +5312,7 @@ function shopAdminSyncRenamedProductInEditableOrders(PDO $db, string $productId,
         'shipping_note_order_ids' => [],
         'skipped_locked_order_ids' => [],
     ];
-    if ($productId === '' || $newName === '' || $oldName === $newName) return $result;
+    if ($productId === '' || $newName === '') return $result;
 
     $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
     $lock = $driver === 'sqlite' ? '' : ' FOR UPDATE';
@@ -5322,10 +5321,11 @@ function shopAdminSyncRenamedProductInEditableOrders(PDO $db, string $productId,
          FROM shop_order_items oi
          INNER JOIN shop_orders o ON o.id = oi.order_id
          WHERE oi.product_id = ?
+           AND oi.product_name <> ?
            AND o.status NOT IN ("return_requested", "return_refused", "return_confirmed", "refunded", "cancelled")
          ORDER BY oi.order_id, oi.id' . $lock
     );
-    $items->execute([$productId]);
+    $items->execute([$productId, $newName]);
     $orderIds = array_values(array_unique(array_map(
         static fn(array $row): string => (string)$row['order_id'],
         $items->fetchAll()
@@ -5338,7 +5338,7 @@ function shopAdminSyncRenamedProductInEditableOrders(PDO $db, string $productId,
          WHERE order_id = ?
          ORDER BY issued_at DESC, id DESC' . $lock
     );
-    $updateItems = $db->prepare('UPDATE shop_order_items SET product_name = ? WHERE order_id = ? AND product_id = ?');
+    $updateItems = $db->prepare('UPDATE shop_order_items SET product_name = ? WHERE order_id = ? AND product_id = ? AND product_name <> ?');
     foreach ($orderIds as $orderId) {
         $invoiceStmt->execute([$orderId]);
         $invoices = $invoiceStmt->fetchAll();
@@ -5362,7 +5362,7 @@ function shopAdminSyncRenamedProductInEditableOrders(PDO $db, string $productId,
             continue;
         }
 
-        $updateItems->execute([$newName, $orderId, $productId]);
+        $updateItems->execute([$newName, $orderId, $productId, $newName]);
         if ($updateItems->rowCount() < 1) continue;
         $result['updated_order_ids'][] = $orderId;
         if ($positiveInvoices && GtrotsInvoiceService::refreshUnsentPayloadForOrder($db, $orderId)) {
@@ -8239,7 +8239,6 @@ try {
             $productOrderNameSync = shopAdminSyncRenamedProductInEditableOrders(
                 $db,
                 $id,
-                (string)$current['name'],
                 (string)$payload['name']
             );
             $oldQuantity = $current['stock_mode'] === 'tracked' ? (int)$current['stock_quantity'] : 0;
@@ -8282,6 +8281,42 @@ try {
             'skipped_locked_orders' => count((array)$productOrderNameSync['skipped_locked_order_ids']),
         ];
         jsonResponse($productResponse);
+    }
+
+    if ($action === 'syncProductOrderName' && $method === 'POST') {
+        $id = trim((string)($_GET['id'] ?? ($body['product_id'] ?? $body['id'] ?? '')));
+        $productStmt = $db->prepare('SELECT id, name FROM shop_products WHERE id = ? LIMIT 1');
+        $productStmt->execute([$id]);
+        $product = $productStmt->fetch();
+        if (!$product) jsonResponse(['error' => 'Produsul nu există.'], 404);
+
+        $db->beginTransaction();
+        try {
+            $productOrderNameSync = shopAdminSyncRenamedProductInEditableOrders(
+                $db,
+                (string)$product['id'],
+                (string)$product['name']
+            );
+            $db->commit();
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
+        foreach ((array)$productOrderNameSync['invoice_order_ids'] as $orderId) {
+            GtrotsInvoiceService::refreshStoredForOrder($db, (string)$orderId, $config);
+        }
+        foreach ((array)$productOrderNameSync['shipping_note_order_ids'] as $orderId) {
+            GtrotsShippingNoteService::refreshStoredForOrder($db, (string)$orderId, $config);
+        }
+        jsonResponse([
+            'success' => true,
+            'product_id' => (string)$product['id'],
+            'product_name' => (string)$product['name'],
+            'updated_orders' => count((array)$productOrderNameSync['updated_order_ids']),
+            'regenerated_invoices' => count((array)$productOrderNameSync['invoice_order_ids']),
+            'regenerated_shipping_notes' => count((array)$productOrderNameSync['shipping_note_order_ids']),
+            'skipped_locked_orders' => count((array)$productOrderNameSync['skipped_locked_order_ids']),
+        ]);
     }
 
     if ($action === 'deleteProduct' && $method === 'DELETE') {

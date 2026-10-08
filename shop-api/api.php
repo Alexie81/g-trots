@@ -5297,6 +5297,85 @@ function shopAdminRemoveOrderItems(PDO $db, array $order, array $removedItemIds,
     return true;
 }
 
+/**
+ * Propagates only a catalog name change into orders whose fiscal snapshot is
+ * still editable. Prices, quantities, discounts and shipping remain intact.
+ * Sent/processing invoices and return flows remain historical snapshots.
+ */
+function shopAdminSyncRenamedProductInEditableOrders(PDO $db, string $productId, string $oldName, string $newName): array {
+    $productId = trim($productId);
+    $oldName = trim($oldName);
+    $newName = trim($newName);
+    $result = [
+        'changed' => false,
+        'updated_order_ids' => [],
+        'invoice_order_ids' => [],
+        'shipping_note_order_ids' => [],
+        'skipped_locked_order_ids' => [],
+    ];
+    if ($productId === '' || $newName === '' || $oldName === $newName) return $result;
+
+    $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
+    $lock = $driver === 'sqlite' ? '' : ' FOR UPDATE';
+    $items = $db->prepare(
+        'SELECT oi.id, oi.order_id
+         FROM shop_order_items oi
+         INNER JOIN shop_orders o ON o.id = oi.order_id
+         WHERE oi.product_id = ?
+           AND o.status NOT IN ("return_requested", "return_refused", "return_confirmed", "refunded", "cancelled")
+         ORDER BY oi.order_id, oi.id' . $lock
+    );
+    $items->execute([$productId]);
+    $orderIds = array_values(array_unique(array_map(
+        static fn(array $row): string => (string)$row['order_id'],
+        $items->fetchAll()
+    )));
+    if (!$orderIds) return $result;
+
+    $invoiceStmt = $db->prepare(
+        'SELECT id, invoice_type, spv_status
+         FROM shop_invoices
+         WHERE order_id = ?
+         ORDER BY issued_at DESC, id DESC' . $lock
+    );
+    $updateItems = $db->prepare('UPDATE shop_order_items SET product_name = ? WHERE order_id = ? AND product_id = ?');
+    foreach ($orderIds as $orderId) {
+        $invoiceStmt->execute([$orderId]);
+        $invoices = $invoiceStmt->fetchAll();
+        $hasCorrectionDocuments = false;
+        $positiveInvoices = [];
+        foreach ($invoices as $invoice) {
+            $type = (string)($invoice['invoice_type'] ?? 'invoice');
+            if (in_array($type, ['return', 'correction_return'], true)) $hasCorrectionDocuments = true;
+            if (in_array($type, ['invoice', 'corrected_invoice'], true)) $positiveInvoices[] = $invoice;
+        }
+        $fiscalLocked = $hasCorrectionDocuments;
+        foreach ($positiveInvoices as $invoice) {
+            if ((string)($invoice['invoice_type'] ?? '') === 'corrected_invoice'
+                || in_array((string)($invoice['spv_status'] ?? 'not_sent'), ['sent', 'processing'], true)) {
+                $fiscalLocked = true;
+                break;
+            }
+        }
+        if ($fiscalLocked) {
+            $result['skipped_locked_order_ids'][] = $orderId;
+            continue;
+        }
+
+        $updateItems->execute([$newName, $orderId, $productId]);
+        if ($updateItems->rowCount() < 1) continue;
+        $result['updated_order_ids'][] = $orderId;
+        if ($positiveInvoices && GtrotsInvoiceService::refreshUnsentPayloadForOrder($db, $orderId)) {
+            $result['invoice_order_ids'][] = $orderId;
+        }
+        if (GtrotsShippingNoteService::reviseForOrder($db, $orderId) !== null) {
+            $result['shipping_note_order_ids'][] = $orderId;
+        }
+    }
+    $result['changed'] = !empty($result['updated_order_ids']);
+    return $result;
+}
+
 function publicTrackingOrder(array $order): array {
     $items = array_map(fn(array $item): array => [
         'order_item_id' => (string)($item['id'] ?? ''),
@@ -8123,6 +8202,13 @@ try {
         $nextContentStatus = (string)($current['content_status'] ?? '') === 'seo' && seoProductRemainsReady($payload, $db, $id)
             ? 'seo'
             : 'manual';
+        $productOrderNameSync = [
+            'changed' => false,
+            'updated_order_ids' => [],
+            'invoice_order_ids' => [],
+            'shipping_note_order_ids' => [],
+            'skipped_locked_order_ids' => [],
+        ];
         $db->beginTransaction();
         try {
             $productSku = trim((string)($current['sku'] ?? '')) !== ''
@@ -8150,6 +8236,12 @@ try {
             syncProductCategories($db, $id, $payload['category_ids'], $payload['category_id']);
             syncProductImages($db, $id, $payload['images'], $payload['name']);
             shopNirEnsureBoomagKidotoysReferences($db, $id);
+            $productOrderNameSync = shopAdminSyncRenamedProductInEditableOrders(
+                $db,
+                $id,
+                (string)$current['name'],
+                (string)$payload['name']
+            );
             $oldQuantity = $current['stock_mode'] === 'tracked' ? (int)$current['stock_quantity'] : 0;
             $newQuantity = $payload['stock_mode'] === 'tracked' ? (int)$payload['stock_quantity'] : 0;
             if ($wasAccountingTracked && $payload['is_accounting_stock_tracked'] && ($oldQuantity !== $newQuantity || $current['stock_mode'] !== $payload['stock_mode'])) {
@@ -8160,6 +8252,12 @@ try {
         } catch (Throwable $error) {
             if ($db->inTransaction()) $db->rollBack();
             throw $error;
+        }
+        foreach ((array)$productOrderNameSync['invoice_order_ids'] as $orderId) {
+            GtrotsInvoiceService::refreshStoredForOrder($db, (string)$orderId, $config);
+        }
+        foreach ((array)$productOrderNameSync['shipping_note_order_ids'] as $orderId) {
+            GtrotsShippingNoteService::refreshStoredForOrder($db, (string)$orderId, $config);
         }
         foreach ($removedDescriptionImages as $path) removeShopImage((string)$path);
         if (mb_strtolower(trim((string)$payload['source_domain'])) === 'boomag.ro') {
@@ -8177,6 +8275,12 @@ try {
         $productResponse['merchant_sync'] = $merchantSync;
         $productResponse['shopify_sync'] = $shopifySync;
         $productResponse['seo_page'] = shopProductSeoSync($db, $config, $id, $oldSlug);
+        $productResponse['order_name_sync'] = [
+            'updated_orders' => count((array)$productOrderNameSync['updated_order_ids']),
+            'regenerated_invoices' => count((array)$productOrderNameSync['invoice_order_ids']),
+            'regenerated_shipping_notes' => count((array)$productOrderNameSync['shipping_note_order_ids']),
+            'skipped_locked_orders' => count((array)$productOrderNameSync['skipped_locked_order_ids']),
+        ];
         jsonResponse($productResponse);
     }
 

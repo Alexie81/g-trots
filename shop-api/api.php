@@ -5189,6 +5189,114 @@ function shopAdminAddOrderItems(PDO $db, array $order, array $additions, array $
     return true;
 }
 
+/**
+ * Removes existing positions before the positive invoice reaches SPV. An
+ * editable invoice keeps its number and is rebuilt together with stock/FIFO;
+ * an existing shipping note is revised in place.
+ */
+function shopAdminRemoveOrderItems(PDO $db, array $order, array $removedItemIds, array $actor): bool {
+    $removedItemIds = array_values(array_unique(array_filter(array_map(
+        static fn($value): string => trim((string)$value),
+        $removedItemIds
+    ))));
+    if (!$removedItemIds) return false;
+
+    $orderId = (string)$order['id'];
+    if (in_array((string)$order['status'], ['return_requested', 'return_refused', 'return_confirmed', 'refunded', 'cancelled'], true)) {
+        throw new InvalidArgumentException('Nu poți șterge produse după intrarea comenzii în retur, rambursare sau anulare.');
+    }
+
+    $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
+    $lock = $driver === 'sqlite' ? '' : ' FOR UPDATE';
+    $invoiceStmt = $db->prepare(
+        'SELECT * FROM shop_invoices
+         WHERE order_id = ? AND invoice_type IN ("invoice", "corrected_invoice")
+         ORDER BY issued_at DESC' . $lock
+    );
+    $invoiceStmt->execute([$orderId]);
+    $editableInvoice = null;
+    foreach ($invoiceStmt->fetchAll() as $invoice) {
+        $spvStatus = (string)($invoice['spv_status'] ?? 'not_sent');
+        $invoiceLabel = trim((string)$invoice['series'] . ' ' . (string)$invoice['invoice_number']);
+        if ($spvStatus === 'sent') {
+            throw new InvalidArgumentException('Nu poți șterge produse deoarece factura ' . $invoiceLabel . ' a fost trimisă în SPV.');
+        }
+        if ($spvStatus === 'processing') {
+            throw new InvalidArgumentException('Factura este în curs de transmitere către SPV. Așteaptă răspunsul ANAF înainte de ștergerea produselor.');
+        }
+        if ((string)($invoice['invoice_type'] ?? 'invoice') === 'corrected_invoice') {
+            throw new InvalidArgumentException('Comanda are deja o factură de corecție și produsele nu mai pot fi șterse prin acest formular.');
+        }
+        $editableInvoice ??= $invoice;
+    }
+
+    $itemStmt = $db->prepare('SELECT * FROM shop_order_items WHERE order_id = ? ORDER BY id' . $lock);
+    $itemStmt->execute([$orderId]);
+    $items = $itemStmt->fetchAll();
+    if (!$items) throw new InvalidArgumentException('Comanda nu conține produse care pot fi șterse.');
+    $itemsById = [];
+    foreach ($items as $item) $itemsById[(string)$item['id']] = $item;
+    foreach ($removedItemIds as $itemId) {
+        if (!isset($itemsById[$itemId])) throw new InvalidArgumentException('Un produs selectat pentru ștergere nu mai există în comandă.');
+    }
+    if (count($items) - count($removedItemIds) < 1) {
+        throw new InvalidArgumentException('Comanda trebuie să păstreze cel puțin un produs.');
+    }
+
+    // Fixăm prețurile finale deja convenite înainte de eliminarea promoției.
+    $removed = array_fill_keys($removedItemIds, true);
+    $globalDiscount = (string)($order['promotion_scope'] ?? '') === 'global' ? max(0.0, (float)($order['discount_total'] ?? 0)) : 0.0;
+    $grossTotal = array_reduce($items, static fn(float $sum, array $item): float => $sum + max(0.0, (float)$item['line_total']), 0.0);
+    $allocatedGlobalDiscount = 0.0;
+    $lastIndex = array_key_last($items);
+    $normalizeItem = $db->prepare(
+        'UPDATE shop_order_items
+         SET unit_price = ?, line_total = ?, discount_total = 0, discounted_unit_price = ?, discounted_line_total = ?
+         WHERE id = ? AND order_id = ?'
+    );
+    $subtotal = 0.0;
+    foreach ($items as $index => $item) {
+        $quantity = max(1, (int)($item['quantity'] ?? 1));
+        $effectiveLine = (float)($item['discount_total'] ?? 0) > 0
+            ? (float)($item['discounted_line_total'] ?? $item['line_total'])
+            : (float)$item['line_total'];
+        if ($globalDiscount > 0) {
+            $lineDiscount = $index === $lastIndex
+                ? max(0.0, $globalDiscount - $allocatedGlobalDiscount)
+                : round($grossTotal > 0 ? $globalDiscount * ((float)$item['line_total'] / $grossTotal) : 0, 2);
+            $allocatedGlobalDiscount += $lineDiscount;
+            $effectiveLine = max(0.0, (float)$item['line_total'] - $lineDiscount);
+        }
+        if (isset($removed[(string)$item['id']])) continue;
+        $unitPrice = round($effectiveLine / $quantity, 2);
+        $lineTotal = round($unitPrice * $quantity, 2);
+        if ($unitPrice <= 0) throw new InvalidArgumentException('Prețul final al fiecărui produs rămas trebuie să fie mai mare decât zero.');
+        $normalizeItem->execute([$unitPrice, $lineTotal, $unitPrice, $lineTotal, (string)$item['id'], $orderId]);
+        $subtotal += $lineTotal;
+    }
+
+    $deleteItem = $db->prepare('DELETE FROM shop_order_items WHERE id = ? AND order_id = ?');
+    foreach ($removedItemIds as $itemId) $deleteItem->execute([$itemId, $orderId]);
+    if (trim((string)($order['promotion_id'] ?? '')) !== '') releasePromotionUsage($db, $orderId);
+
+    $shippingCost = max(0.0, round((float)($order['shipping_cost'] ?? 0), 2));
+    $subtotal = round($subtotal, 2);
+    $total = round($subtotal + $shippingCost, 2);
+    $vatRate = !empty($order['vat_payer']) ? max(0.0, min(100.0, (float)($order['vat_rate'] ?? 0))) : 0.0;
+    $vatTotal = $vatRate > 0 ? round($total * $vatRate / (100 + $vatRate), 2) : 0.0;
+    $netTotal = round($total - $vatTotal, 2);
+    $db->prepare(
+        'UPDATE shop_orders
+         SET subtotal = ?, discount_total = 0, promotion_id = NULL, promotion_code = NULL, promotion_scope = NULL,
+             total = ?, vat_total = ?, net_total = ?
+         WHERE id = ?'
+    )->execute([$subtotal, $total, $vatTotal, $netTotal, $orderId]);
+
+    if ($editableInvoice) GtrotsInvoiceService::reviseUnsentForOrder($db, $orderId, $actor);
+    GtrotsShippingNoteService::reviseForOrder($db, $orderId);
+    return true;
+}
+
 function publicTrackingOrder(array $order): array {
     $items = array_map(fn(array $item): array => [
         'order_item_id' => (string)($item['id'] ?? ''),
@@ -8555,6 +8663,7 @@ try {
         $paymentChanged = false;
         $itemsChanged = false;
         $itemsAdded = false;
+        $itemsRemoved = false;
         $customerDataChanged = false;
         $shippingNotePayloadChanged = false;
         $invoicePayloadChanged = false;
@@ -8613,6 +8722,16 @@ try {
                 $itemsAdded = shopAdminAddOrderItems($db, $current, (array)$body['added_items'], (array)$currentUser);
                 $itemsChanged = $itemsAdded;
                 if ($itemsAdded) {
+                    $stmt->execute([$id]);
+                    $current = $stmt->fetch();
+                    if (!$current) throw new InvalidArgumentException('Comanda nu mai este disponibilă.');
+                }
+            }
+            if (array_key_exists('removed_item_ids', $body)) {
+                if (!is_array($body['removed_item_ids'])) throw new InvalidArgumentException('Lista produselor șterse nu este validă.');
+                $itemsRemoved = shopAdminRemoveOrderItems($db, $current, (array)$body['removed_item_ids'], (array)$currentUser);
+                $itemsChanged = $itemsRemoved || $itemsChanged;
+                if ($itemsRemoved) {
                     $stmt->execute([$id]);
                     $current = $stmt->fetch();
                     if (!$current) throw new InvalidArgumentException('Comanda nu mai este disponibilă.');
@@ -8735,7 +8854,7 @@ try {
             if ($returnConfirmation !== null) $order['return_confirmation'] = $returnConfirmation;
             $order['invoice_automation'] = $automation;
         }
-        if ($itemsAdded) {
+        if ($itemsChanged) {
             $order['order_modification_email'] = array_merge(
                 ['requested' => true],
                 gtSendOrderModifiedEmail($order, $config)

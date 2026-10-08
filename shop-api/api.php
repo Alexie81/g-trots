@@ -5038,6 +5038,157 @@ function shopAdminApplyOrderItemEdits(PDO $db, array $order, array $updates, arr
     return true;
 }
 
+/**
+ * Adds new catalog products to an existing order. This operation is deliberately
+ * limited to orders without a fiscal invoice or with an editable, unsent invoice.
+ * Existing promotions are converted to their already-agreed final prices, then
+ * the invoice, inventory postings and shipping note are rebuilt atomically.
+ */
+function shopAdminAddOrderItems(PDO $db, array $order, array $additions, array $actor): bool {
+    if (!$additions) return false;
+    $orderId = (string)$order['id'];
+    if (in_array((string)$order['status'], ['return_requested', 'return_refused', 'return_confirmed', 'refunded', 'cancelled'], true)) {
+        throw new InvalidArgumentException('Nu poți adăuga produse după intrarea comenzii în retur, rambursare sau anulare.');
+    }
+
+    $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
+    $lock = $driver === 'sqlite' ? '' : ' FOR UPDATE';
+    $invoiceStmt = $db->prepare(
+        'SELECT * FROM shop_invoices
+         WHERE order_id = ? AND invoice_type IN ("invoice", "corrected_invoice")
+         ORDER BY issued_at DESC' . $lock
+    );
+    $invoiceStmt->execute([$orderId]);
+    $positiveInvoices = $invoiceStmt->fetchAll();
+    $editableInvoice = null;
+    foreach ($positiveInvoices as $invoice) {
+        $spvStatus = (string)($invoice['spv_status'] ?? 'not_sent');
+        if ($spvStatus === 'sent') {
+            throw new InvalidArgumentException('Nu poți adăuga produse deoarece factura ' . trim((string)$invoice['series'] . ' ' . (string)$invoice['invoice_number']) . ' a fost trimisă în SPV.');
+        }
+        if ($spvStatus === 'processing') {
+            throw new InvalidArgumentException('Factura este în curs de transmitere către SPV. Așteaptă răspunsul ANAF înainte de adăugarea produselor.');
+        }
+        if ((string)($invoice['invoice_type'] ?? 'invoice') === 'corrected_invoice') {
+            throw new InvalidArgumentException('Comanda are deja o factură de corecție și nu mai poate primi produse prin acest formular.');
+        }
+        $editableInvoice ??= $invoice;
+    }
+
+    $itemStmt = $db->prepare('SELECT * FROM shop_order_items WHERE order_id = ? ORDER BY id' . $lock);
+    $itemStmt->execute([$orderId]);
+    $items = $itemStmt->fetchAll();
+    if (!$items) throw new InvalidArgumentException('Comanda nu conține produse valide.');
+
+    $usedProductIds = [];
+    foreach ($items as $item) {
+        $productId = trim((string)($item['product_id'] ?? ''));
+        if ($productId !== '') $usedProductIds[$productId] = true;
+    }
+
+    $productStmt = $db->prepare(
+        'SELECT p.* FROM shop_products p
+         LEFT JOIN shop_product_sources s ON s.id = p.source_id
+         WHERE p.id = ? AND p.is_active = 1 AND (p.source_id IS NULL OR COALESCE(s.is_active, 1) = 1)' . $lock
+    );
+    $resolvedAdditions = [];
+    foreach (array_values($additions) as $addition) {
+        if (!is_array($addition)) throw new InvalidArgumentException('Produsul adăugat are format invalid.');
+        $productId = trim((string)($addition['product_id'] ?? ''));
+        $quantity = (int)($addition['quantity'] ?? 0);
+        $unitPriceText = str_replace(',', '.', trim((string)($addition['unit_price'] ?? '')));
+        $unitPrice = is_numeric($unitPriceText) ? round((float)$unitPriceText, 2) : 0.0;
+        if ($productId === '' || $quantity < 1 || $quantity > 99 || $unitPrice <= 0 || $unitPrice > 99999999.99) {
+            throw new InvalidArgumentException('Alege produsul, o cantitate între 1 și 99 și un preț unitar mai mare decât zero.');
+        }
+        if (isset($usedProductIds[$productId])) {
+            throw new InvalidArgumentException('Produsul selectat există deja în comandă. Alege un alt produs.');
+        }
+        $productStmt->execute([$productId]);
+        $product = $productStmt->fetch();
+        if (!$product) throw new InvalidArgumentException('Produsul selectat nu mai este activ în catalog.');
+        if ((string)$product['stock_mode'] === 'tracked' && (int)$product['stock_quantity'] < $quantity) {
+            throw new InvalidArgumentException('Stoc insuficient pentru ' . (string)$product['name'] . '. Disponibil ' . (int)$product['stock_quantity'] . ', necesar ' . $quantity . '.');
+        }
+        $usedProductIds[$productId] = true;
+        $acquisitionUnitCost = productOrderAcquisitionUnitCost($product);
+        $resolvedAdditions[] = [
+            'product' => $product,
+            'quantity' => $quantity,
+            'unit_price' => $unitPrice,
+            'line_total' => round($unitPrice * $quantity, 2),
+            'acquisition_unit_cost_snapshot' => $acquisitionUnitCost,
+            'acquisition_total_cost_snapshot' => $acquisitionUnitCost === null ? null : round($acquisitionUnitCost * $quantity, 2),
+        ];
+    }
+    if (!$resolvedAdditions) return false;
+
+    // Păstrăm exact valorile finale deja acceptate de client, apoi eliminăm
+    // promoția deoarece o comandă modificată manual nu mai trebuie recalculată.
+    $globalDiscount = (string)($order['promotion_scope'] ?? '') === 'global' ? max(0.0, (float)($order['discount_total'] ?? 0)) : 0.0;
+    $grossTotal = array_reduce($items, static fn(float $sum, array $item): float => $sum + max(0.0, (float)$item['line_total']), 0.0);
+    $allocatedGlobalDiscount = 0.0;
+    $lastIndex = array_key_last($items);
+    $normalizeItem = $db->prepare(
+        'UPDATE shop_order_items
+         SET unit_price = ?, line_total = ?, discount_total = 0, discounted_unit_price = ?, discounted_line_total = ?
+         WHERE id = ? AND order_id = ?'
+    );
+    $subtotal = 0.0;
+    foreach ($items as $index => $item) {
+        $quantity = max(1, (int)($item['quantity'] ?? 1));
+        $effectiveLine = (float)($item['discount_total'] ?? 0) > 0
+            ? (float)($item['discounted_line_total'] ?? $item['line_total'])
+            : (float)$item['line_total'];
+        if ($globalDiscount > 0) {
+            $lineDiscount = $index === $lastIndex
+                ? max(0.0, $globalDiscount - $allocatedGlobalDiscount)
+                : round($grossTotal > 0 ? $globalDiscount * ((float)$item['line_total'] / $grossTotal) : 0, 2);
+            $allocatedGlobalDiscount += $lineDiscount;
+            $effectiveLine = max(0.0, (float)$item['line_total'] - $lineDiscount);
+        }
+        $unitPrice = round($effectiveLine / $quantity, 2);
+        $lineTotal = round($unitPrice * $quantity, 2);
+        if ($unitPrice <= 0) throw new InvalidArgumentException('Prețul final al fiecărui produs trebuie să fie mai mare decât zero.');
+        $normalizeItem->execute([$unitPrice, $lineTotal, $unitPrice, $lineTotal, (string)$item['id'], $orderId]);
+        $subtotal += $lineTotal;
+    }
+
+    $insertItem = $db->prepare(
+        'INSERT INTO shop_order_items
+         (id, order_id, product_id, product_name, product_sku, quantity, unit_price, line_total, discount_total,
+          discounted_unit_price, discounted_line_total, acquisition_unit_cost_snapshot, acquisition_total_cost_snapshot)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)'
+    );
+    foreach ($resolvedAdditions as $addition) {
+        $product = $addition['product'];
+        $insertItem->execute([
+            uuidV4(), $orderId, (string)$product['id'], (string)$product['name'], (string)($product['sku'] ?? ''),
+            $addition['quantity'], $addition['unit_price'], $addition['line_total'], $addition['unit_price'], $addition['line_total'],
+            $addition['acquisition_unit_cost_snapshot'], $addition['acquisition_total_cost_snapshot'],
+        ]);
+        $subtotal += (float)$addition['line_total'];
+    }
+
+    if (trim((string)($order['promotion_id'] ?? '')) !== '') releasePromotionUsage($db, $orderId);
+    $shippingCost = max(0.0, round((float)($order['shipping_cost'] ?? 0), 2));
+    $subtotal = round($subtotal, 2);
+    $total = round($subtotal + $shippingCost, 2);
+    $vatRate = !empty($order['vat_payer']) ? max(0.0, min(100.0, (float)($order['vat_rate'] ?? 0))) : 0.0;
+    $vatTotal = $vatRate > 0 ? round($total * $vatRate / (100 + $vatRate), 2) : 0.0;
+    $netTotal = round($total - $vatTotal, 2);
+    $db->prepare(
+        'UPDATE shop_orders
+         SET subtotal = ?, discount_total = 0, promotion_id = NULL, promotion_code = NULL, promotion_scope = NULL,
+             total = ?, vat_total = ?, net_total = ?
+         WHERE id = ?'
+    )->execute([$subtotal, $total, $vatTotal, $netTotal, $orderId]);
+
+    if ($editableInvoice) GtrotsInvoiceService::reviseUnsentForOrder($db, $orderId, $actor);
+    GtrotsShippingNoteService::reviseForOrder($db, $orderId);
+    return true;
+}
+
 function publicTrackingOrder(array $order): array {
     $items = array_map(fn(array $item): array => [
         'order_item_id' => (string)($item['id'] ?? ''),
@@ -8403,6 +8554,7 @@ try {
         $statusChanged = false;
         $paymentChanged = false;
         $itemsChanged = false;
+        $itemsAdded = false;
         $customerDataChanged = false;
         $shippingNotePayloadChanged = false;
         $invoicePayloadChanged = false;
@@ -8456,6 +8608,16 @@ try {
                     throw new InvalidArgumentException('Factura este în curs de transmitere către SPV. Datele clientului pot fi modificate după răspunsul ANAF, dacă factura nu a fost acceptată.');
                 }
             }
+            if (array_key_exists('added_items', $body)) {
+                if (!is_array($body['added_items'])) throw new InvalidArgumentException('Lista produselor adăugate nu este validă.');
+                $itemsAdded = shopAdminAddOrderItems($db, $current, (array)$body['added_items'], (array)$currentUser);
+                $itemsChanged = $itemsAdded;
+                if ($itemsAdded) {
+                    $stmt->execute([$id]);
+                    $current = $stmt->fetch();
+                    if (!$current) throw new InvalidArgumentException('Comanda nu mai este disponibilă.');
+                }
+            }
             if (array_key_exists('items', $body) || array_key_exists('shipping_cost', $body)) {
                 if (array_key_exists('items', $body) && !is_array($body['items'])) throw new InvalidArgumentException('Lista produselor modificate nu este validă.');
                 $shippingCostOverride = null;
@@ -8476,7 +8638,7 @@ try {
                         ? round((float)str_replace(',', '.', trim((string)$body['return_shipping_cost'])), 2)
                         : null,
                     boolValue($body['charge_replacement_shipping'] ?? false)
-                );
+                ) || $itemsChanged;
             }
             $address = trim((string)($body['address'] ?? $current['address'] ?? ''));
             $city = trim((string)($body['city'] ?? $current['city'] ?? ''));
@@ -8572,6 +8734,12 @@ try {
             if ($emailNotification !== null) $order['email_notification'] = $emailNotification;
             if ($returnConfirmation !== null) $order['return_confirmation'] = $returnConfirmation;
             $order['invoice_automation'] = $automation;
+        }
+        if ($itemsAdded) {
+            $order['order_modification_email'] = array_merge(
+                ['requested' => true],
+                gtSendOrderModifiedEmail($order, $config)
+            );
         }
         jsonResponse($order);
     }

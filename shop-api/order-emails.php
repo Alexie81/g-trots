@@ -54,6 +54,16 @@ function gtOrderStatuses(): array {
             'next_title' => 'Totul este gata',
             'next_message' => 'Îți mulțumim pentru încredere. Suntem aici dacă ai nevoie de ajutor.',
         ],
+        'modified' => [
+            'label' => 'Comandă modificată',
+            'title' => 'Comanda ta a fost modificată',
+            'message' => 'Am adăugat produsele discutate și am actualizat sumarul comenzii. Mai jos găsești produsele, cantitățile, prețurile și totalul curent.',
+            'color' => '#fb923c',
+            'eyebrow' => 'SUMAR ACTUALIZAT',
+            'symbol' => '+',
+            'next_title' => 'Continuăm procesarea comenzii',
+            'next_message' => 'Folosește sumarul de mai jos pentru a verifica toate produsele și valorile actualizate.',
+        ],
         'return_requested' => [
             'label' => 'Retur solicitat',
             'title' => 'Retur solicitat',
@@ -305,7 +315,8 @@ function gtBuildOrderEmail(array $order, array $config, string $status): array {
     $customerDataRows .= '<tr><td style="padding:5px 0;color:#8f8790">Telefon</td><td align="right" style="color:#d8d1d9">' . gtEmailEscape($order['customer_phone'] ?? '') . '</td></tr>';
     $deliveryAddress = trim((string)($order['address'] ?? '') . ', ' . (string)($order['city'] ?? '') . ', ' . (string)($order['county'] ?? ''), ', ');
     $customerDataRows .= '<tr><td style="padding:9px 0 5px;border-top:1px solid #39353d;color:#8f8790">Livrare</td><td align="right" style="padding:9px 0 5px;border-top:1px solid #39353d;color:#d8d1d9">' . gtEmailEscape($deliveryAddress) . '</td></tr>';
-    $timeline = gtEmailStatusTimeline($status, (string)($order['payment_method'] ?? 'card'));
+    $timelineStatus = $status === 'modified' ? (string)($order['status'] ?? 'new') : $status;
+    $timeline = gtEmailStatusTimeline($timelineStatus, (string)($order['payment_method'] ?? 'card'));
     $returnDecisionSummary = in_array($status, ['return_refused', 'return_confirmed', 'refunded'], true)
         ? gtEmailReturnDecisionSummary($order)
         : '';
@@ -514,6 +525,22 @@ function gtSendOrderStatusEmail(array $order, array $config, string $status): ar
         return ['sent' => true, 'recipient' => $recipient, 'tracking_url' => $email['tracking_url']];
     } catch (Throwable $error) {
         error_log('[G-Trots order email] ' . $error->getMessage());
+        return ['sent' => false, 'recipient' => $recipient, 'error' => mb_substr($error->getMessage(), 0, 500)];
+    }
+}
+
+/** Trimite automat sumarul complet după adăugarea de produse de către operator. */
+function gtSendOrderModifiedEmail(array $order, array $config): array {
+    $recipient = trim((string)($order['customer_email'] ?? ''));
+    if (!filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+        return ['sent' => false, 'recipient' => $recipient, 'error' => 'Comanda nu are o adresă de e-mail validă.'];
+    }
+    try {
+        $email = gtBuildOrderEmail($order, $config, 'modified');
+        gtSmtpSend($config, $recipient, (string)$email['subject'], (string)$email['html']);
+        return ['sent' => true, 'recipient' => $recipient, 'tracking_url' => $email['tracking_url']];
+    } catch (Throwable $error) {
+        error_log('[G-Trots order modified email] ' . $error->getMessage());
         return ['sent' => false, 'recipient' => $recipient, 'error' => mb_substr($error->getMessage(), 0, 500)];
     }
 }

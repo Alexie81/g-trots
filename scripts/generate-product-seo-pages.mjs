@@ -132,7 +132,8 @@ function offerShippingDetails(shippingMethods, activePrice, currency) {
     const maxDays = Math.max(minDays, Math.max(...days));
     const freeAbove = method.free_above == null || method.free_above === "" ? null : Number(method.free_above);
     const configuredCost = Number(method.cost || 0);
-    const shippingCost = Number.isFinite(freeAbove) && activePrice >= freeAbove
+    const freeMinimum = Number.isFinite(freeAbove) && freeAbove > 0 ? Math.floor(freeAbove) + 1 : null;
+    const shippingCost = freeMinimum != null && Number(activePrice.toFixed(2)) >= freeMinimum
       ? 0
       : Math.max(0, Number.isFinite(configuredCost) ? configuredCost : 0);
     return [{

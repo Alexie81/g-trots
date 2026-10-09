@@ -5543,7 +5543,7 @@ function createPublicOrder(PDO $db, array $body, array $config): array {
         $discountTotal = round((float)$promotion['discount_total'], 2);
         $quotedItems = promotionQuoteItems($resolvedItems, $promotion);
         $shippingCost = (float)$shipping['cost'];
-        if ($shipping['free_above'] !== null && $subtotal >= (float)$shipping['free_above']) $shippingCost = 0.0;
+        if (shopFreeShippingEligible($subtotal, $shipping['free_above'])) $shippingCost = 0.0;
         $total = round(max(0, $subtotal - $discountTotal) + $shippingCost, 2);
         $companyTax = $db->query('SELECT vat_payer, vat_rate FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
         $vatPayer = boolValue($companyTax['vat_payer'] ?? false);

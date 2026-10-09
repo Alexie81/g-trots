@@ -76,6 +76,18 @@ function shopProductSeoValidGtin(string $value): ?string {
     return $expected === (int)$gtin[$length - 1] ? $gtin : null;
 }
 
+function shopFreeShippingMinimum($freeAbove): ?float {
+    if ($freeAbove === null || $freeAbove === '' || !is_numeric($freeAbove)) return null;
+    $threshold = (float)$freeAbove;
+    if (!is_finite($threshold) || $threshold <= 0) return null;
+    return floor($threshold) + 1.0;
+}
+
+function shopFreeShippingEligible(float $subtotal, $freeAbove): bool {
+    $minimum = shopFreeShippingMinimum($freeAbove);
+    return $minimum !== null && round($subtotal, 2) >= $minimum;
+}
+
 function shopProductSeoShippingDetails(array $shippingMethods, float $activePrice, string $currency): array {
     $details = [];
     foreach ($shippingMethods as $method) {
@@ -89,7 +101,7 @@ function shopProductSeoShippingDetails(array $shippingMethods, float $activePric
         $maxDays = max($days);
         $shippingCost = max(0.0, (float)($method['cost'] ?? 0));
         $freeAbove = $method['free_above'] ?? null;
-        if ($freeAbove !== null && $freeAbove !== '' && $activePrice >= (float)$freeAbove) $shippingCost = 0.0;
+        if (shopFreeShippingEligible($activePrice, $freeAbove)) $shippingCost = 0.0;
         $detail = [
             '@type' => 'OfferShippingDetails',
             'shippingDestination' => ['@type' => 'DefinedRegion', 'addressCountry' => 'RO'],

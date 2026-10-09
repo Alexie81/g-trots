@@ -65,6 +65,11 @@ productPageAssert(str_contains($html, '"@type":"Product"') && str_contains($html
 productPageAssert(str_contains($html, '"sameAs":["https://www.instagram.com/gtrots.ro/"') && str_contains($html, 'https://www.youtube.com/@g-trots') && !str_contains($html, 'medium.com'), 'Schema Organization a produsului trebuie să declare exclusiv profilurile sociale afișate.');
 productPageAssert(str_contains($html, '"merchantReturnDays":30') && !str_contains($html, '"merchantReturnDays":14'), 'Politica structurată a produsului trebuie să coincidă cu fereastra publică B2C de 30 de zile.');
 productPageAssert(str_contains($html, '"shippingDetails":[{"@type":"OfferShippingDetails"') && str_contains($html, '"value":"29.99","currency":"RON"') && str_contains($html, '"minValue":1,"maxValue":3,"unitCode":"DAY"'), 'Schema Product trebuie să publice costul și termenul real de livrare în România.');
+productPageAssert(shopFreeShippingMinimum(300) === 301.0, 'Pragul 300 trebuie să înceapă gratuitatea la 301 lei.');
+productPageAssert(!shopFreeShippingEligible(300.00, 300), 'Comanda de 300 lei nu trebuie să aibă livrare gratuită.');
+productPageAssert(!shopFreeShippingEligible(300.01, 300), 'Comanda de 300,01 lei nu trebuie să aibă livrare gratuită.');
+productPageAssert(!shopFreeShippingEligible(300.99, 300), 'Comanda de 300,99 lei nu trebuie să aibă livrare gratuită.');
+productPageAssert(shopFreeShippingEligible(301.00, 300), 'Comanda de 301 lei trebuie să aibă livrare gratuită.');
 productPageAssert(str_contains($html, 'id="gt-product-bootstrap"') && str_contains($html, 'data-gt-static-product'), 'Pagina trebuie să poată porni imediat din conținutul generat și să aibă text semantic în HTML.');
 productPageAssert(str_contains($html, 'data-product-id="trotineta-second-hand-xiaomi-pro-2"'), 'Identificatorul produsului trebuie fixat în pagină.');
 productPageAssert(str_contains($html, '<b data-product-sku>SE-CMM087</b>'), 'Codul real al produsului trebuie randat vizibil în HTML-ul inițial.');

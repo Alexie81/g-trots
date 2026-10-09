@@ -290,10 +290,17 @@
     return cart.reduce((total, item) => total + productPrice(products[item.id]) * Number(item.quantity || 0), 0);
   }
 
+  function freeShippingMinimum(freeAbove) {
+    if (freeAbove == null || freeAbove === "") return null;
+    const threshold = Number(freeAbove);
+    return Number.isFinite(threshold) && threshold > 0 ? Math.floor(threshold) + 1 : null;
+  }
+
   function shippingCost(config, subtotal, shippingId) {
     const method = config.shipping_methods.find(row => String(row.id) === String(shippingId));
     if (!method) return 0;
-    if (method.free_above != null && subtotal >= Number(method.free_above)) return 0;
+    const freeMinimum = freeShippingMinimum(method.free_above);
+    if (freeMinimum != null && Number(subtotal.toFixed(2)) >= freeMinimum) return 0;
     return Number(method.cost || 0);
   }
 

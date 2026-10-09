@@ -65,7 +65,7 @@
       .sort((left, right) => Number(left.free_above) - Number(right.free_above))
       .slice(0, 1);
     const shippingMessages = eligibleShippingMethods
-      .map(item => `Livrare gratuită la comenzi de minimum ${Number(item.free_above).toLocaleString("ro-RO", { maximumFractionDigits: 2 })} lei${item.name ? ` prin ${item.name}` : ""}`);
+      .map(item => `Livrare gratuită la comenzi de minimum ${(Math.floor(Number(item.free_above)) + 1).toLocaleString("ro-RO", { maximumFractionDigits: 0 })} lei${item.name ? ` prin ${item.name}` : ""}`);
     const messages = [...shippingMessages, ...promotionMessages];
     if (!messages.length) return;
     const hasPromotions = promotionMessages.length > 0;

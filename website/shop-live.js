@@ -901,7 +901,8 @@
       if (!days.length) return null;
       const minDays = Math.max(0, Math.min(...days));
       const maxDays = Math.max(minDays, Math.max(...days));
-      const shippingCost = method.free_above != null && activePrice >= Number(method.free_above) ? 0 : Number(method.cost || 0);
+      const freeMinimum = freeShippingMinimum(method.free_above);
+      const shippingCost = freeMinimum != null && Number(activePrice.toFixed(2)) >= freeMinimum ? 0 : Number(method.cost || 0);
       return {
         "@type": "OfferShippingDetails",
         shippingLabel: method.name || undefined,
@@ -988,10 +989,17 @@
     }, 0);
   }
 
+  function freeShippingMinimum(freeAbove) {
+    if (freeAbove == null || freeAbove === "") return null;
+    const threshold = Number(freeAbove);
+    return Number.isFinite(threshold) && threshold > 0 ? Math.floor(threshold) + 1 : null;
+  }
+
   function currentShippingCost(config, subtotal, shippingId) {
     const shipping = config.shipping_methods.find(method => String(method.id) === String(shippingId));
     if (!shipping) return 0;
-    return shipping.free_above != null && subtotal >= Number(shipping.free_above) ? 0 : Number(shipping.cost || 0);
+    const freeMinimum = freeShippingMinimum(shipping.free_above);
+    return freeMinimum != null && Number(subtotal.toFixed(2)) >= freeMinimum ? 0 : Number(shipping.cost || 0);
   }
 
   function setupCheckout(config) {

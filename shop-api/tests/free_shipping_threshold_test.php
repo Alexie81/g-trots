@@ -25,7 +25,7 @@ $check(shopFreeShippingEligible(301.00, 300), '301,00 lei trebuie să fie gratui
 $check(str_contains($api, "shopFreeShippingEligible(\$subtotal, \$shipping['free_above'])"), 'API-ul nu folosește regula strictă');
 $check(str_contains($checkout, 'Math.floor(threshold) + 1'), 'checkout-ul nu folosește următorul leu întreg');
 $check(str_contains($shopLive, 'Math.floor(threshold) + 1'), 'coșul live nu folosește următorul leu întreg');
-$check(str_contains($promotions, 'Math.floor(Number(item.free_above)) + 1'), 'bara nu afișează minimul real');
+$check(str_contains($promotions, 'comenzi de peste ${Number(item.free_above).toLocaleString'), 'bara nu afișează pragul configurat ca valoare strictă');
 $check(str_contains($seoGenerator, 'Math.floor(freeAbove) + 1'), 'generatorul SEO nu folosește pragul real');
 
 echo "free_shipping_threshold_test: OK\n";

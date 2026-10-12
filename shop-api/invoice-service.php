@@ -1333,9 +1333,9 @@ final class GtrotsInvoiceService
                 continue;
             }
             $current = (int)$row['stock_quantity'];
-            if ($onlineTracked && $current < $quantity) {
-                throw new InvalidArgumentException('Stoc insuficient pentru emiterea facturii: ' . (string)($row['name'] ?? 'produs') . '. Disponibil ' . $current . ', necesar ' . $quantity . '.');
-            }
+            // Emiterea documentului fiscal nu este condiționată de stocul
+            // online curent. Comanda trebuie facturată, iar eventualul deficit
+            // rămâne vizibil ca stoc negativ/FIFO pending până la recepția NIR.
             $after = $onlineTracked ? $current - $quantity : $current;
             $updateStock->execute([$after, $accountingAfter, $productId]);
             $movement->execute([self::uuid(), $productId, $accountingTracked ? ($warehouseId ?: null) : null, (string)$order['id'], $invoiceId, (string)$item['id'], 'sale', $onlineTracked ? -$quantity : 0, $after, $accountingTracked ? -$quantity : 0, $accountingAfter, $fifoUnitCost, $fifoAllocated > 0 ? $fifoTotalCost : null, $saleUnitPrice, $saleTotal, $fifoStatus, $fifoAllocated, $fifoPending, $note, $actorName]);

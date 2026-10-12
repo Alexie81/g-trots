@@ -96,7 +96,7 @@
 
 /* Autentificarea ramane parte din site si pe telefon. */
 @media(max-width:620px){
-  .customer-auth-page .site-header,.customer-account-page .site-header{display:block;position:sticky;z-index:60;top:0;background:rgba(10,9,8,.94);backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,.08)}
+  .customer-auth-page .site-header,.customer-account-page .site-header{display:block;position:sticky;z-index:60;top:0}
   .customer-auth-page .main-nav,.customer-account-page .main-nav{backdrop-filter:blur(28px) saturate(1.05);-webkit-backdrop-filter:blur(28px) saturate(1.05)}
   .customer-auth-page .auth-shell{min-height:calc(100vh - 4.9rem)}
   .customer-auth-page .auth-form-panel{min-height:calc(100vh - 4.9rem);padding-top:2rem}

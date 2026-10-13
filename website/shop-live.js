@@ -116,7 +116,7 @@
     });
   }
 
-  const CATALOG_CACHE_KEY = "g-trots:catalog-compact:v2";
+  const CATALOG_CACHE_KEY = "g-trots:catalog-compact:v3";
   const CONSENT_STORAGE_KEY = "g-trots-cookie-consent-v1";
   function catalogCacheAllowed() {
     try {
@@ -246,10 +246,10 @@
   }
 
   function registerProducts(products) {
-    const uniqueProducts = deduplicateProducts(products);
-    const normalized = uniqueProducts.map(normalizeProduct);
+    const catalogProducts = Array.isArray(products) ? products : [];
+    const normalized = catalogProducts.map(normalizeProduct);
     window.GTrotsFavorites?.registerProducts?.(normalized, { authoritative: true });
-    window.GTrotsShopCatalog?.renderLiveProducts?.(uniqueProducts);
+    window.GTrotsShopCatalog?.renderLiveProducts?.(catalogProducts);
     document.dispatchEvent(new CustomEvent("g-trots:live-products", { detail: normalized }));
     return normalized;
   }

@@ -3032,14 +3032,12 @@ function catalogRepresentativeProductIds(PDO $db): array {
         . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.is_featured DESC, COALESCE(p.featured_rank, 2147483647) ASC, p.created_at DESC';
     $rows = $db->query($sql)->fetchAll();
     $ids = [];
-    // Endpointul public deduplică fiecare pagină de maximum 500 de produse.
-    // Folosim aceeași regulă pentru ca Merchant, sitemap și HTML să reprezinte
-    // exact catalogul pe care îl vede un vizitator anonim.
-    foreach (array_chunk($rows, 500) as $page) {
-        foreach (deduplicateCatalogProductRows($page) as $row) {
-            $id = trim((string)($row['id'] ?? ''));
-            if ($id !== '') $ids[$id] = true;
-        }
+    // Fiecare înregistrare activă rămâne un produs public distinct. SKU-urile
+    // și variantele furnizorului nu sunt eliminate doar fiindcă au nume sau
+    // sluguri asemănătoare.
+    foreach ($rows as $row) {
+        $id = trim((string)($row['id'] ?? ''));
+        if ($id !== '') $ids[$id] = true;
     }
     return $cache[$cacheKey] = $ids;
 }
@@ -6186,7 +6184,7 @@ try {
         $stmt->execute($params);
         $rawProducts = $stmt->fetchAll();
         $catalogQueriedAt = microtime(true);
-        $products = publicCatalogRows($db, deduplicateCatalogProductRows($rawProducts), $config);
+        $products = publicCatalogRows($db, $rawProducts, $config);
         $catalogHydratedAt = microtime(true);
         $products = applyCatalogPromotionPrices($db, $products, optionalCustomer($db), promotionDeviceHash($body));
         $catalogPromotedAt = microtime(true);

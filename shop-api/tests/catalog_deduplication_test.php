@@ -73,7 +73,11 @@ $catalogUiSource = (string)file_get_contents(dirname(__DIR__, 2) . '/website/mag
 $expect(str_contains($storefrontSource, 'function productAvailabilityRank(product)'), 'Storefront-ul nu are prioritatea de disponibilitate.');
 $expect(str_contains($storefrontSource, 'shouldReplaceCatalogProduct(uniqueProducts[duplicateIndex], product)'), 'Deduplicarea din browser nu folosește prioritatea de disponibilitate.');
 $expect(!str_contains($storefrontSource, '["ean", product.ean]'), 'Storefront-ul încă unește produse distincte doar după EAN.');
-$expect(str_contains($storefrontSource, 'g-trots:catalog-compact:v2'), 'Cache-ul vechi al catalogului nu a fost invalidat.');
+$expect(str_contains($apiSource, 'publicCatalogRows($db, $rawProducts, $config)'), 'API-ul public încă elimină produse înainte de hidratarea catalogului.');
+$expect(!str_contains($apiSource, 'publicCatalogRows($db, deduplicateCatalogProductRows($rawProducts), $config)'), 'API-ul public încă apelează deduplicarea catalogului.');
+$expect(str_contains($storefrontSource, 'const catalogProducts = Array.isArray(products) ? products : [];'), 'Storefront-ul nu păstrează toate produsele primite de la API.');
+$expect(str_contains($catalogUiSource, 'const catalogProducts = products.filter(product => product && typeof product === "object");'), 'Magazinul încă nu păstrează distinct fiecare produs public.');
+$expect(str_contains($storefrontSource, 'g-trots:catalog-compact:v3'), 'Cache-ul deduplicat al catalogului nu a fost invalidat.');
 $expect(!str_contains($catalogUiSource, '["ean", product.ean]'), 'Interfața catalogului încă unește produse distincte doar după EAN.');
 $expect(str_contains($catalogUiSource, 'shouldReplaceProduct(uniqueProducts[duplicateIndex], product)'), 'Interfața catalogului nu folosește prioritatea de disponibilitate pentru duplicate reale.');
 

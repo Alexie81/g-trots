@@ -419,72 +419,15 @@ function liveProductCard(product, index) {
 function renderLiveProducts(products) {
   if (!productGrid || !Array.isArray(products)) return false;
   isCatalogLoading = false;
-  const normalizeIdentity = value => String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-  const productFamily = product => {
-    const tokens = normalizeIdentity(product.slug).split(" ").filter(Boolean);
-    if (tokens.length > 2 && /^(?:varianta|variant)$/.test(tokens.at(-2)) && /^\d+$/.test(tokens.at(-1))) tokens.splice(-2);
-    while (tokens.length > 3 && !/^\d+$/.test(tokens.at(-1)) && tokens.slice(0, -1).includes(tokens.at(-1))) tokens.pop();
-    return tokens.join("-");
-  };
-  const availabilityRank = product => {
-    if (String(product?.stock_mode || "").trim().toLowerCase() === "unlimited") return 3;
-    const quantity = Number(product?.stock_quantity || 0);
-    const lowStockThreshold = Math.max(0, Number(product?.low_stock_threshold || 0));
-    if (quantity > lowStockThreshold) return 2;
-    if (quantity > 0) return 1;
-    return 0;
-  };
-  const shouldReplaceProduct = (current, candidate) => {
-    const currentAvailability = availabilityRank(current);
-    const candidateAvailability = availabilityRank(candidate);
-    if (candidateAvailability !== currentAvailability) return candidateAvailability > currentAvailability;
-    const currentSlugLength = String(current?.slug || "").length || Number.MAX_SAFE_INTEGER;
-    const candidateSlugLength = String(candidate?.slug || "").length || Number.MAX_SAFE_INTEGER;
-    return candidateSlugLength < currentSlugLength;
-  };
-  const keyIndexes = new Map();
-  const uniqueProducts = [];
-  products.forEach(product => {
-    const normalizedName = String(product.name || "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, " ")
-      .trim();
-    const keys = [
-      ["id", product.id],
-      ["slug", product.slug],
-      ["sku", product.sku],
-      ["name", normalizedName],
-      ["family", productFamily(product)]
-    ]
-      .filter(([, value]) => String(value ?? "").trim() !== "")
-      .map(([type, value]) => `${type}:${String(value).trim().toLowerCase()}`);
-    const duplicateIndex = keys.map(key => keyIndexes.get(key)).find(index => index !== undefined);
-    if (duplicateIndex !== undefined) {
-      if (shouldReplaceProduct(uniqueProducts[duplicateIndex], product)) {
-        uniqueProducts[duplicateIndex] = product;
-      }
-      keys.forEach(key => keyIndexes.set(key, duplicateIndex));
-      return;
-    }
-    const index = uniqueProducts.length;
-    uniqueProducts.push(product);
-    keys.forEach(key => keyIndexes.set(key, index));
-  });
-  const records = uniqueProducts.map(liveProductRecord);
+  const catalogProducts = products.filter(product => product && typeof product === "object");
+  const records = catalogProducts.map(liveProductRecord);
   productGrid.replaceChildren();
   productGrid.classList.remove("is-catalog-loading", "has-catalog-error");
   productGrid.setAttribute("aria-busy", "false");
   productCards = records;
-  if (uniqueProducts.length) {
+  if (catalogProducts.length) {
     const oldMaximum = Number(priceRange?.max || 0);
-    const maximumPrice = Math.max(...uniqueProducts.map(product => Number(product.promotion_price ?? product.sale_price ?? product.price ?? 0)), oldMaximum, 1);
+    const maximumPrice = Math.max(...catalogProducts.map(product => Number(product.promotion_price ?? product.sale_price ?? product.price ?? 0)), oldMaximum, 1);
     if (priceRange && maximumPrice > oldMaximum) {
       const wasAtMaximum = Number(priceRange.value) >= oldMaximum;
       priceRange.max = String(Math.ceil(maximumPrice / 100) * 100);

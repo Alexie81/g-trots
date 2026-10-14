@@ -307,9 +307,16 @@ function liveProductRecord(product, index) {
       stock: stockKey,
       stockRank: String(stockRank),
       featuredRank: product.is_featured && Number.isFinite(Number(product.featured_rank)) ? String(product.featured_rank) : "",
+      viewCount: String(Math.max(0, Number(product.view_count || 0))),
+      unitsSold60d: String(Math.max(0, Number(product.units_sold_60d || 0))),
+      uniqueViews30d: String(Math.max(0, Number(product.unique_views_30d || 0))),
+      cartAdditions30d: String(Math.max(0, Number(product.cart_additions_30d || 0))),
+      recommendationScore: String(Math.max(0, Number(product.recommendation_score || 0))),
+      createdAt: String(product.created_at || ""),
       manufacturer: manufacturerSlug,
       price: String(currentPrice),
       name: String(product.name || "Produs G-Trots"),
+      sku: String(product.sku || ""),
       identifiers: `${product.sku || ""} ${product.ean || ""} ${product.id || ""}`,
       search: `${product.name || ""} ${categoryName} ${manufacturerName} ${shortDescription} ${brandNames.join(" ")} ${product.sku || ""} ${product.ean || ""} ${specificationText}`,
       route: `/magazin/produs/${encodeURIComponent(slug)}/`,
@@ -385,9 +392,16 @@ function liveProductCard(product, index) {
   article.dataset.featuredRank = product.is_featured && Number.isFinite(Number(product.featured_rank))
     ? String(product.featured_rank)
     : "";
+  article.dataset.viewCount = String(Math.max(0, Number(product.view_count || 0)));
+  article.dataset.unitsSold60d = String(Math.max(0, Number(product.units_sold_60d || 0)));
+  article.dataset.uniqueViews30d = String(Math.max(0, Number(product.unique_views_30d || 0)));
+  article.dataset.cartAdditions30d = String(Math.max(0, Number(product.cart_additions_30d || 0)));
+  article.dataset.recommendationScore = String(Math.max(0, Number(product.recommendation_score || 0)));
+  article.dataset.createdAt = String(product.created_at || "");
   article.dataset.manufacturer = manufacturerSlug;
   article.dataset.price = String(currentPrice);
   article.dataset.name = String(product.name || "Produs G-Trots");
+  article.dataset.sku = String(product.sku || "");
   article.dataset.identifiers = `${product.sku || ""} ${product.ean || ""} ${product.id || ""}`;
   article.dataset.search = `${product.name || ""} ${categoryName} ${manufacturerName} ${shortDescription} ${brandNames.join(" ")} ${product.sku || ""} ${product.ean || ""} ${specificationText}`;
   article.dataset.route = route;
@@ -1279,6 +1293,14 @@ function finishMobileCategorySelection() {
 function sortCards(cards) {
   const mode = sortSelect?.value || "featured";
   const activeSearchQuery = normalizeText(searchInput?.value || "");
+  const numericMetric = (card, key) => {
+    const value = Number(card.dataset[key] || 0);
+    return Number.isFinite(value) ? value : 0;
+  };
+  const createdTimestamp = card => {
+    const value = Date.parse(card.dataset.createdAt || "");
+    return Number.isFinite(value) ? value : 0;
+  };
   return [...cards].sort((first, second) => {
     const stockRank = card => {
       const explicitRank = Number(card.dataset.stockRank);
@@ -1292,27 +1314,112 @@ function sortCards(cards) {
       const searchDifference = Number(second.dataset.searchScore || 0) - Number(first.dataset.searchScore || 0);
       if (searchDifference !== 0) return searchDifference;
     }
-    if (mode === "featured") {
-      const featuredRank = card => {
-        const rank = Number(card.dataset.featuredRank);
-        return Number.isFinite(rank) && rank > 0 ? rank : Number.POSITIVE_INFINITY;
-      };
-      const firstRank = featuredRank(first);
-      const secondRank = featuredRank(second);
-      const firstIsStorefrontPick = firstRank <= 10;
-      const secondIsStorefrontPick = secondRank <= 10;
-      if (firstIsStorefrontPick !== secondIsStorefrontPick) return firstIsStorefrontPick ? -1 : 1;
-      if (firstIsStorefrontPick && secondIsStorefrontPick && firstRank !== secondRank) {
-        return firstRank - secondRank;
-      }
-    }
     const stockDifference = stockRank(first) - stockRank(second);
     if (stockDifference !== 0) return stockDifference;
+
+    if (mode === "featured") {
+      const scoreDifference = numericMetric(second, "recommendationScore") - numericMetric(first, "recommendationScore");
+      if (scoreDifference !== 0) return scoreDifference;
+      const salesDifference = numericMetric(second, "unitsSold60d") - numericMetric(first, "unitsSold60d");
+      if (salesDifference !== 0) return salesDifference;
+      const recentViewsDifference = numericMetric(second, "uniqueViews30d") - numericMetric(first, "uniqueViews30d");
+      if (recentViewsDifference !== 0) return recentViewsDifference;
+      const viewsDifference = numericMetric(second, "viewCount") - numericMetric(first, "viewCount");
+      if (viewsDifference !== 0) return viewsDifference;
+    }
+    if (mode === "best-selling") {
+      const salesDifference = numericMetric(second, "unitsSold60d") - numericMetric(first, "unitsSold60d");
+      if (salesDifference !== 0) return salesDifference;
+      const scoreDifference = numericMetric(second, "recommendationScore") - numericMetric(first, "recommendationScore");
+      if (scoreDifference !== 0) return scoreDifference;
+    }
+    if (mode === "most-viewed") {
+      const recentViewsDifference = numericMetric(second, "uniqueViews30d") - numericMetric(first, "uniqueViews30d");
+      if (recentViewsDifference !== 0) return recentViewsDifference;
+      const viewsDifference = numericMetric(second, "viewCount") - numericMetric(first, "viewCount");
+      if (viewsDifference !== 0) return viewsDifference;
+    }
+    if (mode === "newest") {
+      const createdDifference = createdTimestamp(second) - createdTimestamp(first);
+      if (createdDifference !== 0) return createdDifference;
+    }
     if (mode === "price-asc") return Number(first.dataset.price) - Number(second.dataset.price);
     if (mode === "price-desc") return Number(second.dataset.price) - Number(first.dataset.price);
     if (mode === "name") return first.dataset.name.localeCompare(second.dataset.name, "ro");
     return Number(first.dataset.index) - Number(second.dataset.index);
   });
+}
+
+function diversifyRecommendedCards(cards, visibleLimit = 24) {
+  const remaining = [...cards];
+  const diversified = [];
+  const categoryCounts = new Map();
+  const targetCount = Math.min(visibleLimit, remaining.length);
+  const maximumPerCategory = Math.max(3, Math.ceil(targetCount / 4));
+  const priceBandPattern = ["premium", "mid", "accessible"];
+  const priceBand = card => {
+    const price = Number(card.dataset.price || 0);
+    if (price >= 180) return "premium";
+    if (price >= 80) return "mid";
+    if (price >= 20) return "accessible";
+    return "micro";
+  };
+  const categoryFits = (card, breakRepetition = true) => {
+    const category = card.dataset.category || "produse";
+    const previousCategory = diversified.at(-1)?.dataset.category || "";
+    const previousPreviousCategory = diversified.at(-2)?.dataset.category || "";
+    const repeatedTwice = previousCategory && previousCategory === previousPreviousCategory;
+    return Number(categoryCounts.get(category) || 0) < maximumPerCategory
+      && (!breakRepetition || !repeatedTwice || category !== previousCategory);
+  };
+
+  while (diversified.length < targetCount && remaining.length) {
+    const desiredPriceBand = priceBandPattern[diversified.length % priceBandPattern.length];
+    let candidateIndex = remaining.findIndex(card => priceBand(card) === desiredPriceBand && categoryFits(card));
+    if (candidateIndex < 0) {
+      candidateIndex = remaining.findIndex(card => priceBand(card) === desiredPriceBand && categoryFits(card, false));
+    }
+    if (candidateIndex < 0) {
+      candidateIndex = remaining.findIndex(card => priceBand(card) !== "micro" && categoryFits(card));
+    }
+    if (candidateIndex < 0) {
+      candidateIndex = remaining.findIndex(card => priceBand(card) !== "micro" && categoryFits(card, false));
+    }
+    if (candidateIndex < 0) candidateIndex = 0;
+    const [candidate] = remaining.splice(candidateIndex, 1);
+    const category = candidate.dataset.category || "produse";
+    categoryCounts.set(category, Number(categoryCounts.get(category) || 0) + 1);
+    diversified.push(candidate);
+  }
+
+  return [...diversified, ...remaining];
+}
+
+function prioritizeRecommendedHelmets(cards) {
+  const helmetPositions = [1, 5];
+  const helmets = cards
+    .filter(card => card.dataset.category === "casti-protectie" && card.dataset.stock !== "out-of-stock")
+    .slice(0, helmetPositions.length);
+  if (!helmets.length) return cards;
+
+  const helmetSet = new Set(helmets);
+  const prioritized = cards.filter(card => !helmetSet.has(card));
+  helmets.forEach((helmet, index) => {
+    prioritized.splice(Math.min(helmetPositions[index], prioritized.length), 0, helmet);
+  });
+  return prioritized;
+}
+
+function prioritizeCampaignProducts(cards) {
+  const campaignSlots = [{ sku: "SE-CMM088", position: 1 }];
+  const prioritized = [...cards];
+  campaignSlots.forEach(({ sku, position }) => {
+    const productIndex = prioritized.findIndex(card => card.dataset.sku === sku && card.dataset.stock !== "out-of-stock");
+    if (productIndex < 0) return;
+    const [product] = prioritized.splice(productIndex, 1);
+    prioritized.splice(Math.min(position, prioritized.length), 0, product);
+  });
+  return prioritized;
 }
 
 function paginationSequence(totalPages) {
@@ -1385,7 +1492,19 @@ function applyFilters({ resetPage = true } = {}) {
     if (isVisible) visibleCards.push(card);
   });
 
-  const sortedVisibleCards = sortCards(visibleCards);
+  let sortedVisibleCards = sortCards(visibleCards);
+  const hasNarrowingFilters = selectedBrands.length > 0
+    || selectedStocks.length > 0
+    || selectedManufacturers.length > 0
+    || Number(priceRange?.value || Infinity) < Number(priceRange?.max || Infinity);
+  if ((sortSelect?.value || "featured") === "featured"
+    && !query
+    && activeCategory === "all"
+    && !hasNarrowingFilters) {
+    sortedVisibleCards = diversifyRecommendedCards(sortedVisibleCards);
+    sortedVisibleCards = prioritizeRecommendedHelmets(sortedVisibleCards);
+    sortedVisibleCards = prioritizeCampaignProducts(sortedVisibleCards);
+  }
   const pageSize = Number(productsPerPage?.value || 10);
   const totalPages = Math.max(1, Math.ceil(sortedVisibleCards.length / pageSize));
   currentPage = Math.min(Math.max(1, currentPage), totalPages);
@@ -1708,6 +1827,19 @@ smartSearchOverlay?.addEventListener("click", event => {
   closeSmartSearch();
 });
 
+document.addEventListener("pointerdown", event => {
+  const target = event.target;
+  if (!(target instanceof Node) || !smartSearchPanel || smartSearchPanel.hidden) return;
+  if (searchDeck?.contains(target) || smartSearchOverlay?.contains(target)) return;
+
+  searchInput?.blur();
+  if (desktopInlineSearchMedia.matches) {
+    closeDesktopInlineSearch({ rememberCollapsed: false });
+    return;
+  }
+  closeSmartSearch();
+});
+
 document.addEventListener("keydown", event => {
   if (desktopInlineSearchMedia.matches && event.key === "Escape" && document.activeElement === searchInput) {
     event.preventDefault();
@@ -1876,6 +2008,8 @@ viewButtons.forEach(button => {
 function openFilters() {
   if (!filtersPanel || !filtersOverlay || !mobileFilterButton) return;
   closeMenu();
+  const headerBottom = document.querySelector('.site-header')?.getBoundingClientRect().bottom || 0;
+  filtersPanel.style.setProperty('--mobile-filters-top', `${Math.max(8, Math.ceil(headerBottom + 8))}px`);
   filtersPanel.classList.add("is-open");
   filtersOverlay.classList.add("is-open");
   mobileFilterButton.setAttribute("aria-expanded", "true");

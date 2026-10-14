@@ -106,6 +106,7 @@ export default function TabLayout() {
       initialRouteName={initialServiceTab}
       screenOptions={{
         headerShown: false,
+        tabBarHideOnKeyboard: true,
         sceneStyle: {
           backgroundColor: 'transparent',
         },

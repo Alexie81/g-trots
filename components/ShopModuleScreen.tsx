@@ -6,6 +6,7 @@ import {
   BackHandler,
   Easing,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -108,6 +109,7 @@ import {
 } from '@/services/shopApi';
 
 import ShopRegistryExportButton from '@/components/ShopRegistryExportButton';
+import KeyboardAwareScrollView from '@/components/KeyboardAwareScrollView';
 
 type CatalogView = 'categories' | 'brands' | 'manufacturers';
 type SettingsView = 'sources' | 'suppliers' | 'nirs' | 'invoices' | 'invoice-configurator' | 'automations' | 'spv' | 'payments' | 'shipping' | 'customers' | 'newsletter' | 'discounts' | 'company';
@@ -1028,7 +1030,8 @@ export default function ShopModuleScreen() {
     return (
       <View style={styles.container}>
         <Header title={details.title} right={notificationButton} />
-        <ScrollView
+        <KeyboardAwareScrollView
+          extraScrollHeight={128}
           contentContainerStyle={[styles.content, { paddingBottom: 94 + insets.bottom }]}
           contentOffset={{ x: 0, y: persistedShopScrollOffsets[view] || 0 }}
           onScroll={(event) => { persistedShopScrollOffsets[view] = event.nativeEvent.contentOffset.y; }}
@@ -1092,7 +1095,7 @@ export default function ShopModuleScreen() {
               </View>
             </View>
           )}
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         <ShopBottomNavigation activeTab={view} onSelect={(tab) => tab === 'orders' ? openOrders() : setView(tab)} bottomInset={insets.bottom} />
       </View>
@@ -1144,15 +1147,16 @@ export default function ShopModuleScreen() {
       <View style={styles.container}>
         <Header title={title} showBack onBack={() => setView('more')} right={notificationButton} />
         <KeyboardAvoidingView style={styles.settingsKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
-          <ScrollView
+          <KeyboardAwareScrollView
             ref={settingsScrollRef}
+            extraScrollHeight={140}
             contentContainerStyle={{ paddingBottom: 180 + insets.bottom }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             automaticallyAdjustKeyboardInsets>
             {view === 'sources' ? <ShopProductSourcesManager /> : view === 'suppliers' ? <ShopSuppliersManager /> : view === 'payments' ? <ShopPaymentMethodsManager /> : view === 'shipping' ? <ShopShippingManager /> : view === 'customers' ? <ShopCustomersManager onSearchFocus={() => setTimeout(() => settingsScrollRef.current?.scrollTo({ y: 390, animated: true }), 120)} onOpenOrder={(orderId) => openOrders('all', orderId)} /> : view === 'newsletter' ? <ShopNewsletterSubscribersManager onSearchFocus={() => setTimeout(() => settingsScrollRef.current?.scrollTo({ y: 370, animated: true }), 120)} /> : view === 'company' ? <ShopCompanySettingsManager onFieldFocus={revealSettingsField} /> : view === 'automations' ? <ShopAutomationsManager /> : <ShopDiscountsManager />}
-          </ScrollView>
+          </KeyboardAwareScrollView>
         </KeyboardAvoidingView>
         <ShopBottomNavigation activeTab="more" onSelect={(tab) => setView(tab)} bottomInset={insets.bottom} />
       </View>
@@ -1331,6 +1335,16 @@ function ShopBottomNavigation({
   onSelect: (tab: PrimaryTab) => void;
   bottomInset: number;
 }) {
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+
+  if (keyboardVisible) return null;
+
   return (
     <View
       style={[

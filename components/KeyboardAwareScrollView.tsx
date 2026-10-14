@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   Keyboard,
   Platform,
   ScrollView,
+  StyleSheet,
   type ScrollViewProps,
   TextInput,
   useWindowDimensions,
@@ -12,21 +13,26 @@ type Props = ScrollViewProps & {
   extraScrollHeight?: number;
 };
 
-export default function KeyboardAwareScrollView({
+const KeyboardAwareScrollView = forwardRef<ScrollView, Props>(function KeyboardAwareScrollView({
   extraScrollHeight = 110,
   keyboardShouldPersistTaps = 'handled',
   keyboardDismissMode = 'on-drag',
   contentInsetAdjustmentBehavior = 'automatic',
+  contentContainerStyle,
   onScroll,
   scrollEventThrottle = 16,
   ...props
-}: Props) {
+}: Props, forwardedRef) {
   const { height: windowHeight } = useWindowDimensions();
   const scrollRef = useRef<ScrollView | null>(null);
   const keyboardVisibleRef = useRef(false);
   const keyboardTopRef = useRef(windowHeight);
   const scrollYRef = useRef(0);
   const lastFocusedRef = useRef<unknown>(null);
+  const focusWatcherRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [keyboardInset, setKeyboardInset] = useState(0);
+
+  useImperativeHandle(forwardedRef, () => scrollRef.current as ScrollView);
 
   const revealFocusedInput = useCallback((force = false) => {
     const focusedInput = (TextInput.State as any).currentlyFocusedInput?.();
@@ -62,28 +68,40 @@ export default function KeyboardAwareScrollView({
       keyboardTopRef.current =
         event.endCoordinates?.screenY
         || windowHeight - (event.endCoordinates?.height || 0);
+      setKeyboardInset(Math.max(0, Number(event.endCoordinates?.height || 0) + extraScrollHeight));
       setTimeout(() => revealFocusedInput(true), Platform.OS === 'ios' ? 80 : 140);
+      if (!focusWatcherRef.current) {
+        focusWatcherRef.current = setInterval(() => revealFocusedInput(), 120);
+      }
     });
     const hide = Keyboard.addListener(hideEvent, () => {
       keyboardVisibleRef.current = false;
       keyboardTopRef.current = windowHeight;
       lastFocusedRef.current = null;
+      setKeyboardInset(0);
+      if (focusWatcherRef.current) clearInterval(focusWatcherRef.current);
+      focusWatcherRef.current = null;
     });
-    const focusWatcher = setInterval(() => {
-      if (keyboardVisibleRef.current) revealFocusedInput();
-    }, 120);
 
     return () => {
       show.remove();
       hide.remove();
-      clearInterval(focusWatcher);
+      if (focusWatcherRef.current) clearInterval(focusWatcherRef.current);
+      focusWatcherRef.current = null;
     };
-  }, [revealFocusedInput, windowHeight]);
+  }, [extraScrollHeight, revealFocusedInput, windowHeight]);
+
+  const adjustedContentContainerStyle = useMemo(() => {
+    if (!keyboardInset) return contentContainerStyle;
+    const flattened = StyleSheet.flatten(contentContainerStyle) || {};
+    return [contentContainerStyle, { paddingBottom: Number(flattened.paddingBottom || 0) + keyboardInset }];
+  }, [contentContainerStyle, keyboardInset]);
 
   return (
     <ScrollView
       {...props}
       ref={scrollRef}
+      contentContainerStyle={adjustedContentContainerStyle}
       onScroll={(event) => {
         scrollYRef.current = event.nativeEvent.contentOffset.y;
         onScroll?.(event);
@@ -95,4 +113,6 @@ export default function KeyboardAwareScrollView({
       automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
     />
   );
-}
+});
+
+export default KeyboardAwareScrollView;

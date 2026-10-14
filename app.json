@@ -22,7 +22,7 @@
         "monochromeImage": "./assets/images/notification-icon.png",
         "backgroundColor": "#0A0A0A"
       },
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "pan"
     },
     "web": {
       "bundler": "metro",

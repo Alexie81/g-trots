@@ -1,5 +1,5 @@
 (() => {
-  const COMPONENT_VERSION = '20261014-navbar-shop-v1';
+  const COMPONENT_VERSION = '20261014-navbar-shop-v2';
   if (window.__gtLegalFooterVersion === COMPONENT_VERSION) return;
   window.__gtLegalFooterVersion = COMPONENT_VERSION;
   window.__gtLegalFooter = true;
@@ -72,7 +72,7 @@
     currentStyles.onerror = () => currentStyles.remove();
     catalogStyles.after(currentStyles);
   }
-  const themeStyleVersion = '20261014-navbar-shop-v1';
+  const themeStyleVersion = '20261014-navbar-shop-v2';
   const themeStyles = Array.from(document.querySelectorAll('link[rel="stylesheet"][href*="theme.css"]'));
   const themeStyle = themeStyles.find(link => new URL(link.href, location.href).pathname.endsWith('/theme.css'));
   if (!themeStyle) {

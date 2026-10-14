@@ -3959,6 +3959,35 @@ html[data-theme="dark"] .site-header .main-nav .nav-shop-link .nav-shop-icon {
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.48),0 .25rem .7rem rgba(120,42,0,.14)!important;
 }
 
+html[data-theme="light"] .site-header .main-nav .nav-shop-link.active,
+html[data-theme="light"] .site-header .main-nav .nav-shop-link[aria-current="page"],
+html[data-theme="dark"] .site-header .main-nav .nav-shop-link.active,
+html[data-theme="dark"] .site-header .main-nav .nav-shop-link[aria-current="page"],
+.gt-public-header .main-nav .nav-shop-link.active,
+.gt-public-header .main-nav .nav-shop-link[aria-current="page"] {
+  border-color:#ffd09a!important;
+  background:#f36f00 linear-gradient(135deg,#ffa23b 0%,#ff7900 52%,#df5500 100%)!important;
+  color:#fff!important;
+  text-shadow:0 1px 1px rgba(90,31,0,.26)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 .68rem 1.65rem rgba(232,93,0,.34),0 0 0 3px rgba(255,133,0,.12)!important;
+}
+
+html[data-theme="light"] .site-header .main-nav .nav-shop-link.active .nav-shop-icon,
+html[data-theme="light"] .site-header .main-nav .nav-shop-link[aria-current="page"] .nav-shop-icon,
+html[data-theme="dark"] .site-header .main-nav .nav-shop-link.active .nav-shop-icon,
+html[data-theme="dark"] .site-header .main-nav .nav-shop-link[aria-current="page"] .nav-shop-icon,
+.gt-public-header .main-nav .nav-shop-link.active .nav-shop-icon,
+.gt-public-header .main-nav .nav-shop-link[aria-current="page"] .nav-shop-icon {
+  background:rgba(255,255,255,.2)!important;
+  color:#fff!important;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.56),0 .25rem .7rem rgba(120,42,0,.18)!important;
+}
+
+.site-header .main-nav .nav-shop-link:active,
+.gt-public-header .main-nav .nav-shop-link:active {
+  transform:translateY(0) scale(.975);
+}
+
 .site-header .main-nav .nav-shop-link:hover,
 .site-header .main-nav .nav-shop-link:focus-visible,
 .gt-public-header .main-nav .nav-shop-link:hover,
@@ -4011,6 +4040,15 @@ html[data-theme="dark"] .site-header .main-nav .nav-shop-link .nav-shop-icon {
   .gt-public-header .main-nav > a.nav-shop-link:not(.mobile-nav-call):focus-visible {
     color:#fff!important;
     transform:translateX(3px) scale(1.012);
+  }
+
+  html[data-theme="light"] .site-header .main-nav > a.nav-shop-link.active:not(.mobile-nav-call),
+  html[data-theme="light"] .site-header .main-nav > a.nav-shop-link[aria-current="page"]:not(.mobile-nav-call),
+  html[data-theme="dark"] .site-header .main-nav > a.nav-shop-link.active:not(.mobile-nav-call),
+  html[data-theme="dark"] .site-header .main-nav > a.nav-shop-link[aria-current="page"]:not(.mobile-nav-call) {
+    border-color:#ffd09a!important;
+    background:#f36f00 linear-gradient(135deg,#ffa23b 0%,#ff7900 52%,#df5500 100%)!important;
+    color:#fff!important;
   }
 }
 

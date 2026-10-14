@@ -1081,6 +1081,19 @@ body.menu-open .gt-store-shortcut { opacity: 0; pointer-events: none; }
   .gt-public-header .global-shop-actions .gt-mobile-context-switch::after { animation: none; }
 }
 
+/* iOS mărește automat pagina când un control editabil are sub 16px.
+   Păstrăm zoom-ul manual disponibil și corectăm doar dimensiunea controalelor. */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 900px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+    textarea,
+    select,
+    [contenteditable="true"] {
+      font-size: 16px !important;
+    }
+  }
+}
+
 @media (min-width: 641px) and (max-width: 900px) {
   .gt-site-footer__nav-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -1,5 +1,5 @@
 (() => {
-  const COMPONENT_VERSION = '20261014-mobile-menu-v2';
+  const COMPONENT_VERSION = '20261014-mobile-menu-ios-input-v3';
   if (window.__gtLegalFooterVersion === COMPONENT_VERSION) return;
   window.__gtLegalFooterVersion = COMPONENT_VERSION;
   window.__gtLegalFooter = true;
@@ -59,7 +59,7 @@
       onload() { this.media = 'all'; },
     });
   }
-  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20261014-mobile-menu-v2' });
+  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20261014-mobile-menu-ios-input-v3' });
   // Generated catalogue pages may still reference a cached, older stylesheet.
   // Keep it until the current revision loads, preserving its cascade position.
   const catalogStyles = document.querySelector('link[rel="stylesheet"][href*="magazin.css"]');

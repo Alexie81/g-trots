@@ -2760,7 +2760,9 @@
       const itemAction = item.is_new
         ? `<button type="button" class="remove" data-order-item-remove="${esc(item.order_item_id)}">Elimină</button>`
         : `<span class="shop-order-item-actions"><button type="button" data-order-item-change="${esc(item.order_item_id)}" ${orderItemsEditable ? '' : 'disabled'}>Schimbă produsul</button><button type="button" class="remove" data-order-item-remove="${esc(item.order_item_id)}" ${canAddOrderItems ? '' : 'disabled'}>Șterge</button></span>`;
-      return `<div class="shop-order-product-line editable ${item.is_new ? 'new' : ''}" data-order-item-line="${esc(item.order_item_id)}">${item.image_url ? `<img src="${esc(item.image_url)}" alt="">` : `<b class="shop-order-product-placeholder">${quantity(item.quantity)}×</b>`}<span class="shop-order-product-copy"><strong>${esc(item.product_name)}${item.is_new ? '<i class="shop-order-new-item-badge">NOU</i>' : ''}</strong><span class="shop-order-product-meta"><span><small>CANTITATE</small><b>${quantity(item.quantity)} ${esc(item.unit_of_measure || 'buc')}</b></span><span><small>COD PRODUS</small><b>${esc(item.product_sku || 'Fără cod')}</b></span><span><small>PREȚ UNITAR</small><b>${money(item.unit_price)}</b></span>${itemAction}</span></span><em class="shop-order-line-total">${money(Number(item.unit_price || 0) * Number(item.quantity || 0))}</em>${productOpen}</div>`;
+      const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>';
+      const copyActions = `<span class="shop-order-copy-actions"><button type="button" data-order-item-copy="${esc(item.order_item_id)}" data-copy-field="name" aria-label="Copiază numele produsului">${copyIcon}<span>Nume</span></button><button type="button" class="code" data-order-item-copy="${esc(item.order_item_id)}" data-copy-field="code" aria-label="Copiază codul produsului" ${item.product_sku ? '' : 'disabled'}>${copyIcon}<span>Cod</span></button></span>`;
+      return `<div class="shop-order-product-line editable ${item.is_new ? 'new' : ''}" data-order-item-line="${esc(item.order_item_id)}">${item.image_url ? `<img src="${esc(item.image_url)}" alt="">` : `<b class="shop-order-product-placeholder">${quantity(item.quantity)}×</b>`}<span class="shop-order-product-copy"><strong>${esc(item.product_name)}${item.is_new ? '<i class="shop-order-new-item-badge">NOU</i>' : ''}</strong>${copyActions}<span class="shop-order-product-meta"><span><small>CANTITATE</small><b>${quantity(item.quantity)} ${esc(item.unit_of_measure || 'buc')}</b></span><span><small>COD PRODUS</small><b>${esc(item.product_sku || 'Fără cod')}</b></span><span><small>PREȚ UNITAR</small><b>${money(item.unit_price)}</b></span>${itemAction}</span></span><em class="shop-order-line-total">${money(Number(item.unit_price || 0) * Number(item.quantity || 0))}</em>${productOpen}</div>`;
     }).join('');
     const productsTotal = state.orderItemDrafts.reduce((sum, item) => sum + Number(item.unit_price || 0) * Number(item.quantity || 0), 0);
     const globalDiscount = !isProductPromotion && orderDiscount > 0
@@ -2882,6 +2884,23 @@
       event.preventDefault();
       event.stopPropagation();
       void openProductDetail(button.dataset.orderProductOpen, { overOrder: true });
+    }));
+    $('shop-order-details').querySelectorAll('[data-order-item-copy]').forEach(button => button.addEventListener('click', () => {
+      const item = state.orderItemDrafts.find(draft => draft.order_item_id === button.dataset.orderItemCopy);
+      const field = button.dataset.copyField === 'code' ? 'code' : 'name';
+      const value = String(field === 'code' ? item?.product_sku || '' : item?.product_name || '').trim();
+      if (!value) return toast('Acest produs nu are încă un cod care poate fi copiat.', 'error');
+      clipboard.writeText(value);
+      const label = button.querySelector('span');
+      const initialLabel = field === 'code' ? 'Cod' : 'Nume';
+      button.classList.add('copied');
+      if (label) label.textContent = 'Copiat';
+      window.setTimeout(() => {
+        if (!button.isConnected) return;
+        button.classList.remove('copied');
+        if (label) label.textContent = initialLabel;
+      }, 1600);
+      toast(`${field === 'code' ? 'Codul' : 'Numele'} produsului a fost copiat.`);
     }));
     $('shop-order-details').querySelectorAll('[data-order-item-change]').forEach(button => button.addEventListener('click', () => openOrderProductPicker(button.dataset.orderItemChange)));
     $('shop-order-details').querySelector('[data-order-item-add]')?.addEventListener('click', () => openOrderProductPicker('', 'add'));

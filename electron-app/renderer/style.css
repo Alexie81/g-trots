@@ -16262,6 +16262,14 @@ body::after {
 #shop-order-details .shop-order-items > .shop-order-product-line > .shop-order-product-placeholder { display:grid; place-items:center; color:#ff9b51; background:rgba(255,129,38,.1); font-size:14px; }
 #shop-order-details .shop-order-product-copy { min-width:0; display:grid; gap:10px; }
 #shop-order-details .shop-order-product-copy > strong { color:#fffaf6; font-size:15px; line-height:1.4; }
+.shop-order-copy-actions { display:flex; align-items:center; flex-wrap:wrap; gap:7px; }
+.shop-order-copy-actions > button { min-height:36px; display:inline-flex; align-items:center; justify-content:center; gap:7px; border:1px solid #704624; border-radius:11px; padding:0 12px; color:#ffb36b; background:#2d2118; font-size:12px; font-weight:900; cursor:pointer; transition:border-color .18s ease,background .18s ease,color .18s ease,transform .18s ease; }
+.shop-order-copy-actions > button.code { border-color:#365a80; color:#b8d8fa; background:#172a3b; }
+.shop-order-copy-actions > button:hover { transform:translateY(-1px); border-color:#ff8a32; background:#38271b; }
+.shop-order-copy-actions > button.code:hover { border-color:#5c8fbe; background:#1b3246; }
+.shop-order-copy-actions > button.copied { border-color:#2f7659; color:#a7f3d0; background:#173326; }
+.shop-order-copy-actions > button:disabled { opacity:.4; cursor:not-allowed; transform:none; }
+.shop-order-copy-actions svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.9; }
 .shop-order-new-item-badge { display:inline-flex; align-items:center; min-height:22px; margin-left:8px; border-radius:999px; padding:2px 8px; color:#93c5fd; background:rgba(37,99,235,.16); font-size:9px; font-style:normal; font-weight:900; letter-spacing:.08em; vertical-align:middle; }
 #shop-order-details .shop-order-product-meta { display:flex; align-items:stretch; flex-wrap:wrap; gap:8px; }
 #shop-order-details .shop-order-product-meta > span { min-width:112px; display:grid; gap:3px; border:1px solid #3b373f; border-radius:11px; padding:7px 9px; background:#19181c; }

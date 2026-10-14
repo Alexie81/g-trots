@@ -13,6 +13,7 @@ final class GtrotsInvoiceService
     public static function download(PDO $db, string $id, string $format, array $config = []): array
     {
         if ($format !== 'xml') throw new RuntimeException('Testul acceptă numai XML.');
+        if ($id === 'invoice-generation-error') throw new InvalidArgumentException('Județul nu poate fi transformat în codul ISO ANAF.');
         return ['content_base64' => base64_encode('<?xml version="1.0" encoding="UTF-8"?><Invoice><ID>' . htmlspecialchars($id, ENT_XML1) . '</ID></Invoice>')];
     }
 
@@ -249,6 +250,18 @@ $retryInvoice = GtrotsInvoiceService::get($db, 'invoice-retry');
 $retryJob = $db->query("SELECT * FROM shop_spv_outbox WHERE invoice_id='invoice-retry'")->fetch();
 spvE2eAssert(($retryInvoice['spv_status'] ?? '') === 'error' && ($retryJob['status'] ?? '') === 'retry', 'O indisponibilitate ANAF trebuie să programeze reîncercarea și să păstreze factura netrimisă.');
 spvE2eAssert((int)$db->query("SELECT COUNT(*) FROM shop_notifications WHERE entity_id='invoice-retry' AND notification_type='spv_error'")->fetchColumn() === 1, 'Eroarea de upload trebuie să creeze notificarea SPV corespunzătoare.');
+
+$scenario = 'accepted';
+$insert->execute(['invoice-generation-error', 'invoice', '2026-09-04', '2026-09-04 12:35:00', 'not_sent', 'GT', '105']);
+GtrotsSpvService::enqueue($db, 'invoice-generation-error', 'invoice');
+try { GtrotsSpvService::sendManual($db, $config, 'invoice-generation-error'); }
+catch (InvalidArgumentException $expected) { }
+$generationInvoice = GtrotsInvoiceService::get($db, 'invoice-generation-error');
+$generationJob = $db->query("SELECT * FROM shop_spv_outbox WHERE invoice_id='invoice-generation-error'")->fetch();
+spvE2eAssert(($generationInvoice['spv_status'] ?? '') === 'error' && ($generationJob['status'] ?? '') === 'retry', 'Orice eroare apărută înainte de upload trebuie păstrată și reîncercată, nu lăsată invizibil în Programată.');
+spvE2eAssert((int)($generationJob['attempts'] ?? 0) === 1, 'Încercarea eșuată la generarea XML trebuie contabilizată.');
+spvE2eAssert(str_contains((string)($generationJob['last_error'] ?? ''), 'codul ISO ANAF'), 'Mesajul erorii de generare trebuie păstrat pentru diagnostic.');
+spvE2eAssert((int)$db->query("SELECT COUNT(*) FROM shop_notifications WHERE entity_id='invoice-generation-error' AND notification_type='spv_error'")->fetchColumn() === 1, 'Eroarea de generare trebuie să creeze imediat o notificare SPV.');
 
 $disconnected = GtrotsSpvService::disconnect($db, $config);
 spvE2eAssert($disconnected['connected'] === false, 'Deconectarea trebuie să elimine tokenurile utilizabile.');

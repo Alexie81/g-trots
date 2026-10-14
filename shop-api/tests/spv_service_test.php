@@ -53,6 +53,12 @@ spvAssert(($processingJob['status'] ?? '') === 'processing', 'Reconcilierea nu t
 spvAssert(($processingJob['scheduled_at'] ?? '') === '2026-09-24 12:00:00', 'Reconcilierea nu trebuie să reprogrameze încărcarea deja pornită.');
 spvAssert(($processingJob['next_attempt_at'] ?? '') === '2026-09-24 12:01:30', 'Următoarea verificare ANAF trebuie păstrată, nu mutată la programarea inițială.');
 spvAssert(($processingJob['last_error'] ?? '') === 'în așteptarea răspunsului ANAF', 'Diagnosticul jobului în procesare trebuie păstrat.');
+$db->exec("UPDATE shop_spv_outbox SET status='retry', attempts=1, next_attempt_at='2026-09-24 12:15:00', last_error='Județ invalid' WHERE invoice_id='invoice-1'");
+GtrotsSpvService::reconcileOutbox($db);
+$retryJob = $db->query("SELECT * FROM shop_spv_outbox WHERE invoice_id='invoice-1'")->fetch();
+spvAssert(($retryJob['status'] ?? '') === 'retry', 'Reconcilierea nu trebuie să ascundă o eroare de trimitere care așteaptă reîncercarea.');
+spvAssert(($retryJob['next_attempt_at'] ?? '') === '2026-09-24 12:15:00', 'Momentul reîncercării trebuie păstrat.');
+spvAssert(($retryJob['last_error'] ?? '') === 'Județ invalid', 'Eroarea care trebuie afișată în notificări nu trebuie ștearsă de reconciliere.');
 $db->exec("UPDATE shop_spv_outbox SET status='rejected', attempts=2, upload_index='987654', last_error='BR-RO-TEST: total TVA incorect' WHERE invoice_id='invoice-1'");
 $visibleJob = GtrotsSpvService::invoiceState($db, 'invoice-1');
 spvAssert(($visibleJob['status'] ?? '') === 'rejected', 'Starea ANAF respinsă trebuie expusă aplicației.');

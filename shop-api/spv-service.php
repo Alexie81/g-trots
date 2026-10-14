@@ -437,20 +437,20 @@ final class GtrotsSpvService
             $stmt = $db->prepare('INSERT INTO shop_spv_outbox (id, invoice_id, document_kind, environment, mode_snapshot, status, scheduled_at, next_attempt_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(invoice_id) DO UPDATE SET document_kind=excluded.document_kind, environment=excluded.environment,
-                mode_snapshot=excluded.mode_snapshot, status=CASE WHEN shop_spv_outbox.status IN ("processing","accepted","rejected") THEN shop_spv_outbox.status ELSE excluded.status END,
-                scheduled_at=CASE WHEN shop_spv_outbox.status IN ("processing","accepted","rejected") THEN shop_spv_outbox.scheduled_at ELSE excluded.scheduled_at END,
-                next_attempt_at=CASE WHEN shop_spv_outbox.status IN ("processing","accepted","rejected") THEN shop_spv_outbox.next_attempt_at ELSE excluded.next_attempt_at END,
-                last_error=CASE WHEN shop_spv_outbox.status IN ("processing","accepted","rejected") THEN shop_spv_outbox.last_error ELSE NULL END');
+                mode_snapshot=excluded.mode_snapshot, status=CASE WHEN shop_spv_outbox.status IN ("uploading","processing","retry","accepted","rejected") THEN shop_spv_outbox.status ELSE excluded.status END,
+                scheduled_at=CASE WHEN shop_spv_outbox.status IN ("uploading","processing","retry","accepted","rejected") THEN shop_spv_outbox.scheduled_at ELSE excluded.scheduled_at END,
+                next_attempt_at=CASE WHEN shop_spv_outbox.status IN ("uploading","processing","retry","accepted","rejected") THEN shop_spv_outbox.next_attempt_at ELSE excluded.next_attempt_at END,
+                last_error=CASE WHEN shop_spv_outbox.status IN ("uploading","processing","retry","accepted","rejected") THEN shop_spv_outbox.last_error ELSE NULL END');
             $stmt->execute([$id, $invoiceId, $kind, (string)$settings['environment'], $mode, $status, $scheduled, $scheduled]);
             return;
         }
         $stmt = $db->prepare('INSERT INTO shop_spv_outbox (id, invoice_id, document_kind, environment, mode_snapshot, status, scheduled_at, next_attempt_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE document_kind=VALUES(document_kind), environment=VALUES(environment), mode_snapshot=VALUES(mode_snapshot),
-            status=IF(status IN ("processing","accepted","rejected"), status, VALUES(status)),
-            scheduled_at=IF(status IN ("processing","accepted","rejected"), scheduled_at, VALUES(scheduled_at)),
-            next_attempt_at=IF(status IN ("processing","accepted","rejected"), next_attempt_at, VALUES(next_attempt_at)),
-            last_error=IF(status IN ("processing","accepted","rejected"), last_error, NULL)');
+            status=IF(status IN ("uploading","processing","retry","accepted","rejected"), status, VALUES(status)),
+            scheduled_at=IF(status IN ("uploading","processing","retry","accepted","rejected"), scheduled_at, VALUES(scheduled_at)),
+            next_attempt_at=IF(status IN ("uploading","processing","retry","accepted","rejected"), next_attempt_at, VALUES(next_attempt_at)),
+            last_error=IF(status IN ("uploading","processing","retry","accepted","rejected"), last_error, NULL)');
         $stmt->execute([$id, $invoiceId, $kind, (string)$settings['environment'], $mode, $status, $scheduled, $scheduled]);
     }
 
@@ -939,23 +939,40 @@ final class GtrotsSpvService
         if ((string)$job['status'] === 'processing' && trim((string)($job['upload_index'] ?? '')) !== '') {
             $nextAttemptAt = trim((string)($job['next_attempt_at'] ?? ''));
             if ($nextAttemptAt !== '' && strtotime($nextAttemptAt) > time()) return;
-            self::pollUpload($db, $config, $invoiceId, (string)$job['upload_index']);
+            try {
+                self::pollUpload($db, $config, $invoiceId, (string)$job['upload_index']);
+            } catch (Throwable $error) {
+                $invoice = self::invoice($db, $invoiceId);
+                $db->prepare("UPDATE shop_spv_outbox SET status='processing', next_attempt_at=?, last_error=? WHERE invoice_id=?")
+                    ->execute([date('Y-m-d H:i:s', time() + self::PROCESSING_POLL_INTERVAL_SECONDS), mb_substr($error->getMessage(), 0, 500), $invoiceId]);
+                self::notify(
+                    $db,
+                    'spv_poll_error',
+                    'Verificarea ANAF va fi reluată',
+                    self::invoiceLabel($invoice) . ': ' . $error->getMessage(),
+                    'invoice',
+                    $invoiceId,
+                    'warning',
+                    'spv-poll-error:' . $invoiceId . ':' . date('Y-m-d-H')
+                );
+                throw $error;
+            }
             return;
         }
         $invoice = self::invoice($db, $invoiceId);
-        $company = $db->query('SELECT cui FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
-        $cif = preg_replace('/\D+/', '', (string)($company['cui'] ?? '')) ?: '';
-        if ($cif === '') throw new RuntimeException('Completează CUI-ul firmei înainte de transmiterea în SPV.');
-        $document = GtrotsInvoiceService::download($db, $invoiceId, 'xml', $config);
-        $xml = base64_decode((string)($document['content_base64'] ?? ''), true);
-        if (!is_string($xml) || trim($xml) === '') throw new RuntimeException('XML-ul e-Factura nu a putut fi generat.');
-        $token = self::accessToken($db, $config);
-        $environment = self::environment((string)($job['environment'] ?? self::settings($db)['environment']));
-        $base = self::apiBase($config, $environment);
-        $standard = (string)($job['document_kind'] ?? '') === 'credit_note' || in_array((string)($invoice['invoice_type'] ?? ''), ['return', 'correction_return'], true) ? 'CN' : 'UBL';
-        $url = $base . '/upload?standard=' . $standard . '&cif=' . rawurlencode($cif);
         $db->prepare("UPDATE shop_spv_outbox SET status='uploading', attempts=attempts+1, last_error=NULL WHERE invoice_id=?")->execute([$invoiceId]);
         try {
+            $company = $db->query('SELECT cui FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
+            $cif = preg_replace('/\D+/', '', (string)($company['cui'] ?? '')) ?: '';
+            if ($cif === '') throw new RuntimeException('Completează CUI-ul firmei înainte de transmiterea în SPV.');
+            $document = GtrotsInvoiceService::download($db, $invoiceId, 'xml', $config);
+            $xml = base64_decode((string)($document['content_base64'] ?? ''), true);
+            if (!is_string($xml) || trim($xml) === '') throw new RuntimeException('XML-ul e-Factura nu a putut fi generat.');
+            $token = self::accessToken($db, $config);
+            $environment = self::environment((string)($job['environment'] ?? self::settings($db)['environment']));
+            $base = self::apiBase($config, $environment);
+            $standard = (string)($job['document_kind'] ?? '') === 'credit_note' || in_array((string)($invoice['invoice_type'] ?? ''), ['return', 'correction_return'], true) ? 'CN' : 'UBL';
+            $url = $base . '/upload?standard=' . $standard . '&cif=' . rawurlencode($cif);
             $response = self::http('POST', $url, ['Authorization: Bearer ' . $token, 'Content-Type: text/plain; charset=UTF-8', 'Accept: application/xml, application/json'], $xml, 55);
             if ($response['status'] === 401 || $response['status'] === 403) {
                 $token = self::accessToken($db, $config, true);

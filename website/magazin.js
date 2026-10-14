@@ -199,8 +199,10 @@ const smartSearchClose = document.querySelector("[data-smart-search-close]");
 const smartSearchBack = document.querySelector("[data-smart-search-back]");
 const smartSearchSubmit = document.querySelector("[data-smart-search-submit]");
 const smartSearchMobileBack = document.querySelector("[data-smart-search-mobile-back]");
+const desktopInlineSearchMedia = window.matchMedia("(min-width: 701px)");
 let smartSearchActiveIndex = -1;
 let smartSearchClosingTimer = 0;
+let desktopSearchFrame = 0;
 const categoryTree = document.querySelector(".category-tree");
 const compatibilityOptions = document.querySelector(".compatibility-filter .filter-options-scroll");
 const manufacturerOptions = document.querySelector(".manufacturer-filter .filter-options-scroll");
@@ -1015,8 +1017,30 @@ function updateSmartSearchCollapseTarget() {
   searchDeck.style.setProperty("--smart-search-collapse-y", `${targetRect.top + targetRect.height / 2 - deckRect.top}px`);
 }
 
+function resetSmartSearchPresentation() {
+  window.clearTimeout(smartSearchClosingTimer);
+  smartSearchClosingTimer = 0;
+  searchDeck?.classList.remove("is-search-open", "is-search-closing");
+  document.body.classList.remove("smart-search-open", "smart-search-closing");
+  if (smartSearchPanel) smartSearchPanel.hidden = true;
+  if (smartSearchOverlay) smartSearchOverlay.hidden = true;
+  smartSearchActiveIndex = -1;
+}
+
+function queueDesktopCatalogSearch() {
+  window.cancelAnimationFrame(desktopSearchFrame);
+  desktopSearchFrame = window.requestAnimationFrame(() => {
+    desktopSearchFrame = 0;
+    applyFilters();
+  });
+}
+
 function openSmartSearch() {
   if (!smartSearchPanel || !searchDeck) return;
+  if (desktopInlineSearchMedia.matches) {
+    resetSmartSearchPresentation();
+    return;
+  }
   // Focus, click si input se pot declansa unul dupa altul pentru aceeasi
   // interactiune. Dupa deschidere nu mai recalculam pozitia si nu mai
   // redesenam panoul inca o data, astfel pagina ramane stabila.
@@ -1461,11 +1485,28 @@ productCards.forEach((card, index) => {
 if (searchInput) {
   searchInput.addEventListener("input", () => {
     if (searchClear) searchClear.hidden = searchInput.value.length === 0;
+    if (desktopInlineSearchMedia.matches) {
+      resetSmartSearchPresentation();
+      queueDesktopCatalogSearch();
+      return;
+    }
     openSmartSearch();
     renderSmartSearch();
   });
-  searchInput.addEventListener("click", openSmartSearch);
+  searchInput.addEventListener("click", () => {
+    if (!desktopInlineSearchMedia.matches) openSmartSearch();
+  });
   searchInput.addEventListener("keydown", event => {
+    if (desktopInlineSearchMedia.matches) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        queueDesktopCatalogSearch();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        searchInput.blur();
+      }
+      return;
+    }
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setSmartSearchActive(smartSearchActiveIndex + 1);
@@ -1488,6 +1529,12 @@ if (searchInput) {
 searchClear?.addEventListener("click", event => {
   event.preventDefault();
   event.stopPropagation();
+  if (desktopInlineSearchMedia.matches) {
+    clearSmartSearchQuery();
+    resetSmartSearchPresentation();
+    searchInput?.focus();
+    return;
+  }
   searchInput?.blur();
   closeSmartSearch({ clearQuery: true });
 });
@@ -1523,6 +1570,11 @@ smartSearchBack?.addEventListener("click", event => {
 smartSearchMobileBack?.addEventListener("click", event => {
   event.preventDefault();
   event.stopPropagation();
+  if (desktopInlineSearchMedia.matches) {
+    resetSmartSearchPresentation();
+    searchInput?.focus();
+    return;
+  }
   if (searchDeck?.classList.contains("is-search-open")) {
     searchInput?.blur();
     closeSmartSearch();
@@ -1534,6 +1586,11 @@ smartSearchMobileBack?.addEventListener("click", event => {
 smartSearchSubmit?.addEventListener("click", event => {
   event.preventDefault();
   event.stopPropagation();
+  if (desktopInlineSearchMedia.matches) {
+    resetSmartSearchPresentation();
+    queueDesktopCatalogSearch();
+    return;
+  }
   showSmartSearchCatalogResults();
 });
 smartSearchOverlay?.addEventListener("click", event => {
@@ -1543,6 +1600,11 @@ smartSearchOverlay?.addEventListener("click", event => {
 });
 
 document.addEventListener("keydown", event => {
+  if (desktopInlineSearchMedia.matches && event.key === "Escape" && document.activeElement === searchInput) {
+    event.preventDefault();
+    searchInput?.blur();
+    return;
+  }
   if (event.key === "Escape" && searchDeck?.classList.contains("is-search-open")) {
     event.preventDefault();
     searchInput?.blur();
@@ -1551,9 +1613,16 @@ document.addEventListener("keydown", event => {
   }
   if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase("ro-RO") === "k") {
     event.preventDefault();
-    openSmartSearch();
+    if (desktopInlineSearchMedia.matches) resetSmartSearchPresentation();
+    else openSmartSearch();
     searchInput?.focus();
   }
+});
+
+desktopInlineSearchMedia.addEventListener?.("change", event => {
+  if (!event.matches) return;
+  resetSmartSearchPresentation();
+  queueDesktopCatalogSearch();
 });
 
 if (priceRange) {

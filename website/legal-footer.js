@@ -1,5 +1,5 @@
 (() => {
-  const COMPONENT_VERSION = '20261004-free-shipping-v1';
+  const COMPONENT_VERSION = '20261014-navbar-shop-v1';
   if (window.__gtLegalFooterVersion === COMPONENT_VERSION) return;
   window.__gtLegalFooterVersion = COMPONENT_VERSION;
   window.__gtLegalFooter = true;
@@ -72,8 +72,19 @@
     currentStyles.onerror = () => currentStyles.remove();
     catalogStyles.after(currentStyles);
   }
-  if (!document.querySelector('link[href*="theme.css"]')) {
-    loadAsset('link', { rel: 'stylesheet', href: '/theme.css?v=20260920-public-theme-v11' });
+  const themeStyleVersion = '20261014-navbar-shop-v1';
+  const themeStyles = Array.from(document.querySelectorAll('link[rel="stylesheet"][href*="theme.css"]'));
+  const themeStyle = themeStyles.find(link => new URL(link.href, location.href).pathname.endsWith('/theme.css'));
+  if (!themeStyle) {
+    loadAsset('link', { rel: 'stylesheet', href: `/theme.css?v=${themeStyleVersion}` });
+  } else if (new URL(themeStyle.href, location.href).searchParams.get('v') !== themeStyleVersion) {
+    const currentThemeStyle = themeStyle.cloneNode();
+    const currentThemeUrl = new URL(themeStyle.href, location.href);
+    currentThemeUrl.searchParams.set('v', themeStyleVersion);
+    currentThemeStyle.href = currentThemeUrl.href;
+    currentThemeStyle.onload = () => themeStyle.remove();
+    currentThemeStyle.onerror = () => currentThemeStyle.remove();
+    themeStyle.after(currentThemeStyle);
   }
   if (!document.querySelector('script[src*="theme.js"]')) {
     loadAsset('script', { src: '/theme.js?v=20260920-public-theme-v11', async: false });

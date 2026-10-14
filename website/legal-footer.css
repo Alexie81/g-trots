@@ -239,6 +239,20 @@
 
 .gt-public-header .global-shop-actions { font: 400 1rem/normal "Manrope", Arial, sans-serif; }
 
+/* Comutatorul Shop / Service este o acțiune exclusiv mobilă, injectată de
+   componenta globală a navbarului pe fiecare pagină publică. */
+.gt-mobile-context-switch { display: none; }
+
+@keyframes gt-mobile-context-shine {
+  0%, 68% { transform: translateX(-3rem) rotate(18deg); }
+  86%, 100% { transform: translateX(3rem) rotate(18deg); }
+}
+
+@keyframes gt-mobile-context-float {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  50% { transform: translateY(-1.5px) rotate(-2deg); }
+}
+
 .gt-public-header .mobile-nav-heading,
 .gt-public-header .mobile-nav-account,
 .gt-public-header .mobile-nav-call,
@@ -696,6 +710,87 @@ body.menu-open .gt-store-shortcut { opacity: 0; pointer-events: none; }
   .gt-public-header .logo { font-size: 1.32rem; }
   .gt-public-header .logo img { width: 2.35rem; height: 2.35rem; margin-right: 0.55rem; flex-basis: 2.35rem; border-radius: 0.7rem; }
   .gt-public-header .header-cta { display: none; }
+  .gt-public-header .global-shop-actions .gt-mobile-context-switch {
+    width: 2.7rem;
+    min-width: 2.7rem;
+    height: 2.7rem;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    flex: 0 0 2.7rem;
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.58) !important;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #ffad45 0%, #ff8914 48%, #e86700 100%) !important;
+    background-color: #f47b00 !important;
+    color: #fff !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48), 0 0.55rem 1.25rem rgba(221, 92, 0, 0.3), 0 0 0 1px rgba(255, 139, 25, 0.14) !important;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+    animation: gt-mobile-context-float 3.6s ease-in-out infinite;
+  }
+  .gt-public-header .global-shop-actions .gt-mobile-context-switch::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 1px;
+    border-radius: inherit;
+    background: radial-gradient(circle at 30% 20%, rgba(255,255,255,.46), transparent 38%);
+    pointer-events: none;
+  }
+  .gt-public-header .global-shop-actions .gt-mobile-context-switch::after {
+    width: .8rem;
+    height: 3.6rem;
+    content: "";
+    position: absolute;
+    z-index: 2;
+    left: 0;
+    top: -.45rem;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.52), transparent);
+    pointer-events: none;
+    transform: translateX(-3rem) rotate(18deg);
+    animation: gt-mobile-context-shine 5.4s ease-in-out infinite;
+  }
+  .gt-public-header .global-shop-actions .gt-mobile-context-switch > span {
+    width: 1.55rem;
+    height: 1.55rem;
+    display: grid;
+    place-items: center;
+    position: relative;
+    z-index: 1;
+  }
+  .gt-public-header .global-shop-actions .gt-mobile-context-switch svg {
+    width: 1.35rem;
+    height: 1.35rem;
+    display: block;
+    overflow: visible;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    filter: drop-shadow(0 1px 1px rgba(103, 37, 0, .2));
+  }
+  .gt-public-header .global-shop-actions .gt-mobile-context-switch.is-service svg {
+    width: 1.42rem;
+    height: 1.42rem;
+    transform: rotate(-7deg);
+  }
+  .gt-public-header .global-shop-actions .gt-mobile-context-switch:hover,
+  .gt-public-header .global-shop-actions .gt-mobile-context-switch:focus-visible {
+    color: #fff !important;
+    filter: saturate(1.08) brightness(1.04);
+    outline: 2px solid rgba(255, 145, 24, .34);
+    outline-offset: 2px;
+    transform: translateY(-2px) scale(1.04);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), 0 .72rem 1.5rem rgba(221, 92, 0, .38), 0 0 0 1px rgba(255, 139, 25, .2) !important;
+  }
+  .gt-public-header .global-shop-actions .gt-mobile-context-switch:active {
+    transform: scale(.94);
+  }
   .gt-public-header .menu-toggle {
     width: 3rem;
     height: 3rem;
@@ -967,6 +1062,11 @@ body.menu-open .gt-store-shortcut { opacity: 0; pointer-events: none; }
   .gt-site-footer__bottom { width: 100%; grid-template-columns: 1fr; justify-items: center; text-align: center; }
   .gt-site-footer__bottom .cab-it-credit { justify-self: center !important; }
   .gt-site-footer__copyright { grid-row: 1; }
+}
+
+@media (max-width: 900px) and (prefers-reduced-motion: reduce) {
+  .gt-public-header .global-shop-actions .gt-mobile-context-switch,
+  .gt-public-header .global-shop-actions .gt-mobile-context-switch::after { animation: none; }
 }
 
 @media (min-width: 641px) and (max-width: 900px) {

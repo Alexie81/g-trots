@@ -1,5 +1,5 @@
 (() => {
-  const COMPONENT_VERSION = '20261014-navbar-shop-v2';
+  const COMPONENT_VERSION = '20261014-mobile-context-switch-v1';
   if (window.__gtLegalFooterVersion === COMPONENT_VERSION) return;
   window.__gtLegalFooterVersion = COMPONENT_VERSION;
   window.__gtLegalFooter = true;
@@ -59,7 +59,7 @@
       onload() { this.media = 'all'; },
     });
   }
-  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20260920-public-theme-v1' });
+  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20261014-mobile-context-switch-v1' });
   // Generated catalogue pages may still reference a cached, older stylesheet.
   // Keep it until the current revision loads, preserving its cascade position.
   const catalogStyles = document.querySelector('link[rel="stylesheet"][href*="magazin.css"]');
@@ -182,11 +182,38 @@
     }
   }
 
+  function ensureMobileContextSwitch(header, headerInner, shopContext) {
+    if (!header || !headerInner) return;
+    let actions = header.querySelector('.global-shop-actions');
+    if (!actions) {
+      actions = document.createElement('div');
+      actions.className = 'global-shop-actions';
+      headerInner.insertBefore(actions, headerInner.querySelector('.menu-toggle'));
+    }
+
+    let link = actions.querySelector('.gt-mobile-context-switch');
+    if (!link) {
+      link = document.createElement('a');
+      actions.prepend(link);
+    }
+
+    const destination = shopContext ? '/' : '/magazin';
+    const label = shopContext ? 'Mergi la service-ul G-Trots' : 'Intră în magazinul G-Trots';
+    link.className = `gt-mobile-context-switch ${shopContext ? 'is-service' : 'is-shop'}`;
+    link.href = destination;
+    link.title = shopContext ? 'Service G-Trots' : 'Shop G-Trots';
+    link.setAttribute('aria-label', label);
+    link.innerHTML = shopContext
+      ? '<span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.75-3.75a6 6 0 0 1-7.92 7.92l-6.9 6.9a2.12 2.12 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.92-7.92L14.7 6.3Z"/></svg></span>'
+      : '<span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.5 8.5h11l1.15 11H5.35l1.15-11Z"/><path d="M9 9V6.75a3 3 0 0 1 6 0V9"/></svg></span>';
+  }
+
   function ensureOriginalHeader() {
     if (/^\/googledb9a3f7a7ad1d21d(?:\.html)?\/?$/i.test(location.pathname)) return;
 
     const currentPath = location.pathname.toLowerCase().replace(/\/+$/, '').replace(/\.html$/, '') || '/';
-    const shopActive = /\/(magazin|produs)(?:\/|$)|anvelopa-g10|display-smart|incarcator-fastcharge|motor-dualhub|baterie-powercore|kit-frana/.test(currentPath);
+    const productContext = Boolean(document.body.dataset.productId || document.querySelector('main.product-page, [data-product-detail]'));
+    const shopActive = /\/(magazin|produs)(?:\/|$)|anvelopa-g10|display-smart|incarcator-fastcharge|motor-dualhub|baterie-powercore|kit-frana/.test(currentPath) || productContext;
     const servicePage = currentPath === '/service-trotinete-electrice' || currentPath.startsWith('/service-trotinete-electrice-');
     const contactActive = currentPath === '/contact';
     const guidesActive = !shopActive && !servicePage && !contactActive && (
@@ -270,6 +297,7 @@ ${navigationHtml}
       headerInner.append(toggle);
     }
     if (!toggle) return;
+    ensureMobileContextSwitch(header, headerInner, shopActive);
     // Unele pagini statice au încă un handler inline pentru vechiul navbar.
     // Înlocuirea butonului păstrează aspectul și elimină handler-ele duplicate,
     // altfel aceeași atingere deschide și închide imediat meniul pe mobil.

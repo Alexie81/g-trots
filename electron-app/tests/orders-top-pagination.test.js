@@ -26,6 +26,8 @@ assert.ok(actionsIndex >= 0 && topPaginationIndex > actionsIndex && filtersIndex
 assert.match(mobile, /<View style=\{styles\.topPagination\}>\s*<ShopPagination page=\{page\} pageSize=\{pageSize\} total=\{ordersTotal\}/, 'Paginarea mobilă de sus trebuie să folosească aceeași stare ca paginarea de jos.');
 const mobilePagination = fs.readFileSync(path.join(__dirname, '..', '..', 'components', 'ShopPagination.tsx'), 'utf8');
 assert.match(mobilePagination, /<Text style=\{styles\.pageJumpLabel\}>Pg<\/Text>/, 'Paginarea mobilă trebuie să afișeze eticheta compactă Pg pe același rând cu numerele.');
+assert.doesNotMatch(mobilePagination, /\{first\}–\{last\} din \{total\}/, 'Paginarea mobilă nu trebuie să mai afișeze intervalul redundant de rezultate.');
+assert.match(mobilePagination, /controls:\s*\{[^}]*flexWrap:\s*'nowrap'/s, 'Controalele paginării mobile trebuie păstrate pe un singur rând.');
 assert.match(mobilePagination, /pageJump:\s*\{[^}]*flexWrap:\s*'nowrap'/s, 'Eticheta Pg, numărul paginii și totalul trebuie păstrate pe un singur rând.');
 assert.match(mobilePagination, /accessibilityLabel=\{`Mergi la pagina, între 1 și \$\{pageCount\}`\}/, 'Paginarea mobilă trebuie să permită introducerea accesibilă a numărului paginii.');
 assert.match(mobilePagination, /onSubmitEditing=\{submitPage\}/, 'Paginarea mobilă trebuie să navigheze la confirmarea numărului introdus.');

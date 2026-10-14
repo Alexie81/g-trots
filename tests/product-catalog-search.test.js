@@ -26,8 +26,11 @@ includes(styles, '.product-catalog-search.is-open .product-catalog-search__form'
 includes(styles, '.product-catalog-search.is-open .product-catalog-search__results', 'Panoul mobil pe tot ecranul lipsește.');
 includes(component, "document.body.classList.add('product-catalog-search-open')", 'Comportamentul specific telefonului nu este activat.');
 includes(styles, 'html[data-theme="light"] .product-catalog-search__form', 'Tema deschisă lipsește.');
-includes(template, 'product-catalog-search.css?v=20261014-v7', 'Șablonul produselor viitoare nu include stilul căutării.');
-includes(template, 'product-catalog-search.js?v=20261014-v7', 'Șablonul produselor viitoare nu include scriptul căutării.');
+includes(template, 'product-catalog-search.css?v=20261014-v12', 'Șablonul produselor viitoare nu include stilul căutării.');
+includes(template, 'product-catalog-search.js?v=20261014-v12', 'Șablonul produselor viitoare nu include scriptul căutării.');
+includes(component, "input.addEventListener('pointerdown'", 'Căutarea trebuie să se redeschidă la fiecare apăsare pe input.');
+includes(component, "component.classList.add('is-closing')", 'Restrângerea animată a căutării lipsește.');
+includes(styles, '@keyframes product-mobile-search-panel-out', 'Închiderea animată a panoului mobil lipsește.');
 includes(component, 'popularSearches', 'Căutarea mobilă trebuie să afișeze sugestiile populare.');
 includes(component, 'data-product-search-back', 'Căutarea mobilă trebuie să permită revenirea la produs.');
 includes(footer, "location.pathname.includes('/magazin/produs/')", 'Produsele existente nu primesc componenta globală.');

@@ -101,10 +101,10 @@
   }
   if (document.body.classList.contains('product-page') || location.pathname.includes('/magazin/produs/')) {
     if (!document.querySelector('link[href*="product-catalog-search.css"]')) {
-      loadAsset('link', { rel: 'stylesheet', href: '/product-catalog-search.css?v=20261014-v7' });
+      loadAsset('link', { rel: 'stylesheet', href: '/product-catalog-search.css?v=20261014-v12' });
     }
     if (!document.querySelector('script[src*="product-catalog-search.js"]')) {
-      loadAsset('script', { src: '/product-catalog-search.js?v=20261014-v7', defer: true });
+      loadAsset('script', { src: '/product-catalog-search.js?v=20261014-v12', defer: true });
     }
   }
 

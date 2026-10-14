@@ -64,6 +64,7 @@
   let products = [];
   let fallbackRequested = false;
   let activeIndex = -1;
+  let closeTimer = 0;
   const mobileSearchMedia = window.matchMedia('(max-width: 700px)');
   const popularSearches = [
     ['Cauciucuri și anvelope', 'Cauciucuri și anvelope'],
@@ -236,14 +237,7 @@
     if (!query) {
       resultTitle.textContent = 'Căutare inteligentă';
       resultSubtitle.textContent = 'Găsește piesa potrivită după denumire, model sau marcă';
-      if (mobileSearchMedia.matches) {
-        resultBody.append(popularSearchList());
-      } else {
-        const empty = document.createElement('p');
-        empty.className = 'product-catalog-search__empty';
-        empty.innerHTML = '<span aria-hidden="true">⌕</span><b>Găsești rapid produsul potrivit.</b><small>Introdu cel puțin două caractere.</small>';
-        resultBody.append(empty);
-      }
+      resultBody.append(popularSearchList());
       allButton.hidden = true;
       return;
     }
@@ -268,6 +262,8 @@
   }
 
   function openPanel() {
+    window.clearTimeout(closeTimer);
+    component.classList.remove('is-closing');
     component.classList.add('is-open');
     if (mobileSearchMedia.matches) {
       document.body.classList.add('product-catalog-search-open');
@@ -280,13 +276,15 @@
   }
 
   function closePanel() {
-    component.classList.remove('is-open');
-    document.body.classList.remove('product-catalog-search-open');
+    if (panel.hidden || component.classList.contains('is-closing')) return;
+    component.classList.add('is-closing');
     iconButton.setAttribute('aria-label', 'Activează căutarea');
     input.setAttribute('aria-expanded', 'false');
-    window.setTimeout(() => {
-      if (!component.classList.contains('is-open')) panel.hidden = true;
-    }, 190);
+    closeTimer = window.setTimeout(() => {
+      component.classList.remove('is-open', 'is-closing');
+      document.body.classList.remove('product-catalog-search-open');
+      panel.hidden = true;
+    }, 250);
     activeIndex = -1;
   }
 
@@ -313,7 +311,11 @@
   });
   form.addEventListener('click', event => {
     if (event.target.closest('button, a, input')) return;
+    openPanel();
     input.focus({ preventScroll: true });
+  });
+  input.addEventListener('pointerdown', () => {
+    if (!component.classList.contains('is-open')) openPanel();
   });
   input.addEventListener('focus', openPanel);
   input.addEventListener('input', renderResults);
@@ -336,6 +338,7 @@
       closePanel();
       return;
     }
+    openPanel();
     input.focus({ preventScroll: true });
   });
   clearButton.addEventListener('click', event => {
@@ -353,7 +356,10 @@
   });
   allButton.addEventListener('click', goToCatalog);
   document.addEventListener('pointerdown', event => {
-    if (!component.contains(event.target)) closePanel();
+    if (!component.contains(event.target)) {
+      input.blur();
+      closePanel();
+    }
   });
   document.addEventListener('keydown', event => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {

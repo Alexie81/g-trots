@@ -63,7 +63,7 @@ export default function ShopPagination({ page, pageSize, total, onPageChange, on
         </View>
         <View style={styles.navigation}>
           <View style={styles.pageJump}>
-            <Text style={styles.pageJumpLabel}>Pagina</Text>
+            <Text style={styles.pageJumpLabel}>Pg</Text>
             <TextInput
               accessibilityLabel={`Mergi la pagina, între 1 și ${pageCount}`}
               value={pageDraft}
@@ -127,13 +127,13 @@ const styles = StyleSheet.create({
   wrap: { borderWidth: 1, borderColor: '#302D34', borderRadius: 18, padding: 8, backgroundColor: '#1B1B1F', marginTop: 10 },
   controls: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', columnGap: 8, rowGap: 6 },
   summary: { flexDirection: 'row', alignItems: 'center' },
-  navigation: { flexDirection: 'row', alignItems: 'center', marginLeft: 'auto' },
+  navigation: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', marginLeft: 'auto' },
   rowsLabel: { flexShrink: 1, color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 10 },
   pageSizeButton: { minWidth: 48, height: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, borderWidth: 1, borderColor: 'transparent', borderRadius: 11, marginLeft: 5, backgroundColor: '#27252B' },
   pageSizeButtonOpen: { borderColor: 'rgba(255,107,0,0.55)', backgroundColor: 'rgba(255,107,0,0.08)' },
   pageSizeValue: { color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 11 },
   range: { minWidth: 78, marginLeft: 12, color: Colors.textSecondary, fontFamily: 'Inter-Medium', fontSize: 10, textAlign: 'center' },
-  pageJump: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  pageJump: { minHeight: 36, flexShrink: 0, flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center', gap: 4 },
   pageJumpLabel: { color: Colors.textMuted, fontFamily: 'Inter-Medium', fontSize: 9 },
   pageJumpInput: { width: 42, height: 34, borderWidth: 1, borderColor: '#49454F', borderRadius: 10, paddingHorizontal: 5, paddingVertical: 0, color: Colors.textPrimary, backgroundColor: '#27252B', fontFamily: 'Inter-Bold', fontSize: 11, textAlign: 'center' },
   pageJumpTotal: { color: Colors.textMuted, fontFamily: 'Inter-Medium', fontSize: 9 },

@@ -43,6 +43,8 @@ FILES = (
     "produs.html",
     "produs.js",
     "produs.css",
+    "product-catalog-search.css",
+    "product-catalog-search.js",
     "checkout.css",
     "favorite.html",
     "cos.html",

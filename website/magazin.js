@@ -461,7 +461,12 @@ function renderLiveProducts(products) {
   }
   currentPage = Math.max(1, Number(document.body.dataset.catalogPage || 1));
   applyFilters();
-  if (searchDeck?.classList.contains("is-search-open")) renderSmartSearch();
+  if (
+    searchDeck?.classList.contains("is-search-open")
+    || searchDeck?.classList.contains("has-inline-results")
+  ) {
+    renderSmartSearch();
+  }
   productGrid.dataset.catalogSource = "shop-api";
   return true;
 }
@@ -952,6 +957,13 @@ function semanticSearchScore(card, rawQuery) {
   // Pentru o cautare dintr-un singur cuvant cerem o potrivire clara in titlu,
   // categorie, marca, producator sau cod. O mentiune izolata in descriere nu
   // mai umple panoul cu produse fara legatura directa.
+  if (queryTokens.length === 0) {
+    if (score <= 0) return 0;
+    const stockRank = Number(card.dataset.stockRank || 0);
+    if (stockRank === 0) score += 5;
+    else if (stockRank === 2) score -= 3;
+    return Math.max(0, Math.round(score * 10) / 10);
+  }
   if (queryTokens.length === 1 && strongMatchedTokens === 0) return 0;
   if (queryTokens.length && matchedTokens === queryTokens.length) score += 55 + queryTokens.length * 5;
   else if (queryTokens.length <= 3) return 0;
@@ -2005,15 +2017,27 @@ viewButtons.forEach(button => {
   });
 });
 
+function syncMobileFiltersPosition() {
+  if (!filtersPanel) return;
+  const header = document.querySelector(".site-header");
+  const headerBottom = header?.getBoundingClientRect().bottom || 0;
+  const panelTop = Math.max(8, Math.ceil(headerBottom + 10));
+  filtersPanel.style.setProperty("--mobile-filters-top", `${panelTop}px`);
+}
+
 function openFilters() {
   if (!filtersPanel || !filtersOverlay || !mobileFilterButton) return;
   closeMenu();
-  const headerBottom = document.querySelector('.site-header')?.getBoundingClientRect().bottom || 0;
-  filtersPanel.style.setProperty('--mobile-filters-top', `${Math.max(8, Math.ceil(headerBottom + 8))}px`);
+  syncMobileFiltersPosition();
   filtersPanel.classList.add("is-open");
   filtersOverlay.classList.add("is-open");
   mobileFilterButton.setAttribute("aria-expanded", "true");
   document.body.classList.add("filters-open");
+  window.requestAnimationFrame(() => {
+    syncMobileFiltersPosition();
+    window.requestAnimationFrame(syncMobileFiltersPosition);
+  });
+  window.setTimeout(syncMobileFiltersPosition, 240);
   filtersClose?.focus();
 }
 
@@ -2029,6 +2053,13 @@ function closeFilters({ restoreFocus = false } = {}) {
 mobileFilterButton?.addEventListener("click", openFilters);
 filtersClose?.addEventListener("click", () => closeFilters({ restoreFocus: true }));
 filtersOverlay?.addEventListener("click", () => closeFilters({ restoreFocus: true }));
+
+window.addEventListener("resize", () => {
+  if (filtersPanel?.classList.contains("is-open")) syncMobileFiltersPosition();
+});
+window.visualViewport?.addEventListener("resize", () => {
+  if (filtersPanel?.classList.contains("is-open")) syncMobileFiltersPosition();
+});
 
 document.addEventListener("keydown", event => {
   if (event.key === "Escape") {

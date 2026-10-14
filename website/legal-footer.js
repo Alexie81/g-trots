@@ -62,7 +62,7 @@
   loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20261014-mobile-menu-ios-input-v3' });
   // Generated catalogue pages may still reference a cached, older stylesheet.
   // Keep it until the current revision loads, preserving its cascade position.
-  const catalogStyleVersion = '20261015-mobile-filters-v1';
+  const catalogStyleVersion = '20261015-search-filters-v6';
   const catalogStyles = document.querySelector('link[rel="stylesheet"][href*="magazin.css"]');
   if (catalogStyles && new URL(catalogStyles.href).searchParams.get('v') !== catalogStyleVersion) {
     const currentStyles = catalogStyles.cloneNode();

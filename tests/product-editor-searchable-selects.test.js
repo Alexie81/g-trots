@@ -4,6 +4,7 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const desktopCss = fs.readFileSync(path.join(root, 'electron-app/renderer/style.css'), 'utf8');
+const desktopHtml = fs.readFileSync(path.join(root, 'electron-app/renderer/index.html'), 'utf8');
 const desktopJs = fs.readFileSync(path.join(root, 'electron-app/renderer/js/shop-commerce.js'), 'utf8');
 const mobile = fs.readFileSync(path.join(root, 'components/ShopProductsManager.tsx'), 'utf8');
 
@@ -13,6 +14,10 @@ assert.match(desktopCss, /\.shop-dropdown-search input\s*\{[^}]*position:\s*stat
   'Câmpul de căutare desktop trebuie să fie vizibil și interactiv.');
 assert.doesNotMatch(desktopCss, /\.shop-brand-options input\s*\{[^}]*opacity:\s*0;/s,
   'Regula pentru checkbox nu trebuie să ascundă și câmpul de căutare.');
+assert.match(desktopCss, /\.shop-brand-options label\[hidden\]\s*\{\s*display:\s*none;/,
+  'Opțiunile eliminate de filtrare trebuie ascunse chiar dacă etichetele folosesc layout flex.');
+assert.match(desktopHtml, /shop-commerce\.js\?v=20261015-prefix-search-2/,
+  'Rendererul desktop trebuie să invalideze versiunea JavaScript veche din cache.');
 
 for (const placeholder of [
   'Scrie aici numele categoriei...',

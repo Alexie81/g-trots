@@ -1661,6 +1661,7 @@ export const shopApi = {
   listProductOptionIds: (token: string) => shopCall<string[]>('listProductOptionIds', token, { method: 'POST', body: '{}' }),
   getProduct: (token: string, id: string) => shopCall<ShopProduct>('getProduct', token, undefined, id),
   getProductStats: (token: string, id: string) => shopCall<ShopProductStats>('getProductStats', token, undefined, id),
+  checkProductSku: (token: string, sku: string, excludeId?: string | null) => shopCall<{ sku: string; available: boolean; automatic: boolean }>('checkProductSku', token, undefined, undefined, 0, { sku, exclude_id: excludeId || undefined }),
   createProduct: (token: string, payload: ShopProductPayload) => shopCall<ShopProduct>('createProduct', token, { method: 'POST', body: JSON.stringify(payload) }),
   updateProduct: (token: string, id: string, payload: ShopProductPayload) => shopCall<ShopProduct>('updateProduct', token, { method: 'PUT', body: JSON.stringify(payload) }, id),
   uploadRichDescriptionImage: (token: string, base64: string) => shopCall<{ url: string; path: string }>('uploadRichDescriptionImage', token, { method: 'POST', body: JSON.stringify({ base64 }) }),

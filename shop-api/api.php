@@ -266,7 +266,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026100401;
+    $schemaVersion = 2026101401;
     // Ruta normala face doar SELECT-ul indexat. Un CREATE TABLE IF NOT EXISTS la
     // fiecare request tot cere verificari de metadata si poate astepta lock-uri.
     try {
@@ -691,6 +691,17 @@ function ensureShopSchema(PDO $db): void {
     if (!$db->query("SHOW INDEX FROM shop_products WHERE Key_name = 'idx_shop_products_featured'")->fetch()) {
         $db->exec('ALTER TABLE shop_products ADD INDEX idx_shop_products_featured (is_featured, featured_rank)');
     }
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_product_engagement_uniques (
+            product_id CHAR(36) NOT NULL,
+            metric_date DATE NOT NULL,
+            event_type VARCHAR(20) NOT NULL,
+            visitor_hash CHAR(64) NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (product_id, metric_date, event_type, visitor_hash),
+            INDEX idx_shop_product_engagement_period (event_type, metric_date, product_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_supplier_sync_state (
             source_domain VARCHAR(120) NOT NULL PRIMARY KEY,
@@ -2512,20 +2523,40 @@ function uniqueSlug(PDO $db, string $table, string $name, ?string $excludeId = n
     return $base . '-' . substr(bin2hex(random_bytes(4)), 0, 8);
 }
 
-function uniqueProductSku(PDO $db, ?string $value, ?string $excludeId = null): ?string {
+function normalizeProductSku(?string $value, int $limit = 80): ?string {
     $base = strtoupper(trim((string)$value));
     $base = preg_replace('/[^A-Z0-9_-]+/', '-', $base) ?? '';
     $base = trim($base, '-_');
     if ($base === '') return null;
-    $base = mb_substr($base, 0, 72);
+    return mb_substr($base, 0, $limit);
+}
+
+function productSkuAvailable(PDO $db, string $sku, ?string $excludeId = null): bool {
+    $sql = 'SELECT id FROM shop_products WHERE sku = ?' . ($excludeId ? ' AND id <> ?' : '') . ' LIMIT 1';
+    $stmt = $db->prepare($sql);
+    $stmt->execute($excludeId ? [$sku, $excludeId] : [$sku]);
+    return !$stmt->fetchColumn();
+}
+
+function uniqueProductSku(PDO $db, ?string $value, ?string $excludeId = null): ?string {
+    $base = normalizeProductSku($value, 72);
+    if ($base === null) return null;
     for ($index = 1; $index < 10000; $index++) {
         $sku = $index === 1 ? $base : mb_substr($base, 0, 72) . '-' . $index;
-        $sql = 'SELECT id FROM shop_products WHERE sku = ?' . ($excludeId ? ' AND id <> ?' : '') . ' LIMIT 1';
-        $stmt = $db->prepare($sql);
-        $stmt->execute($excludeId ? [$sku, $excludeId] : [$sku]);
-        if (!$stmt->fetchColumn()) return $sku;
+        if (productSkuAvailable($db, $sku, $excludeId)) return $sku;
     }
     throw new RuntimeException('Nu s-a putut genera un SKU unic.');
+}
+
+function resolvedProductSku(PDO $db, ?string $requestedSku, string $name, string $sourceDomain, ?string $excludeId = null): string {
+    $normalized = normalizeProductSku($requestedSku);
+    if ($normalized !== null) {
+        if (!productSkuAvailable($db, $normalized, $excludeId)) {
+            throw new InvalidArgumentException('SKU-ul este indisponibil. Alege un alt cod de produs.');
+        }
+        return $normalized;
+    }
+    return (string)uniqueProductSku($db, generatedProductSku($name, $sourceDomain), $excludeId);
 }
 
 function generatedProductSku(string $name, string $sourceDomain): string {
@@ -3132,6 +3163,14 @@ function publicCatalogProductRow(array $row): array {
         'low_stock_threshold' => (int)($row['low_stock_threshold'] ?? 0),
         'is_featured' => (bool)($row['is_featured'] ?? false),
         'featured_rank' => $row['featured_rank'] === null ? null : (int)$row['featured_rank'],
+        'view_count' => max(0, (int)($row['view_count'] ?? 0)),
+        'units_sold_60d' => max(0, (int)($row['units_sold_60d'] ?? 0)),
+        'units_sold_30d' => max(0, (int)($row['units_sold_30d'] ?? 0)),
+        'units_sold_previous_30d' => max(0, (int)($row['units_sold_previous_30d'] ?? 0)),
+        'unique_views_30d' => max(0, (int)($row['unique_views_30d'] ?? 0)),
+        'cart_additions_30d' => max(0, (int)($row['cart_additions_30d'] ?? 0)),
+        'recommendation_score' => round(max(0, min(100, (float)($row['recommendation_score'] ?? 0))), 4),
+        'created_at' => (string)($row['created_at'] ?? ''),
         'promotion_price' => $row['promotion_price'] === null ? null : (float)$row['promotion_price'],
         'price_before_promotion' => $row['price_before_promotion'] === null ? null : (float)$row['price_before_promotion'],
         'promotion_discount_percent' => (float)($row['promotion_discount_percent'] ?? 0),
@@ -3201,6 +3240,14 @@ function compactPublicCatalogPayload(array $products): array {
                 (bool)($product['is_accessory_category'] ?? false),
                 (int)($product['review_count'] ?? 0),
                 $product['review_average'] === null ? null : (float)$product['review_average'],
+                (int)($product['view_count'] ?? 0),
+                (int)($product['units_sold_60d'] ?? 0),
+                (int)($product['units_sold_30d'] ?? 0),
+                (int)($product['units_sold_previous_30d'] ?? 0),
+                (int)($product['unique_views_30d'] ?? 0),
+                (int)($product['cart_additions_30d'] ?? 0),
+                (float)($product['recommendation_score'] ?? 0),
+                (string)($product['created_at'] ?? ''),
             ];
         }, $products),
     ];
@@ -3213,13 +3260,40 @@ function publicCatalogProductSelectSql(): string {
                    p.legal_warranty_months, p.commercial_warranty_months,
                    p.price, p.supplier_base_price, p.sale_price, p.discount_type, p.discount_value, p.currency, p.unit_of_measure,
                    p.stock_mode, p.stock_quantity, p.low_stock_threshold,
-                   p.is_featured, p.featured_rank,
+                   p.is_featured, p.featured_rank, p.view_count, p.created_at,
+                   COALESCE(sales.units_sold_60d, 0) AS units_sold_60d,
+                   COALESCE(sales.units_sold_30d, 0) AS units_sold_30d,
+                   COALESCE(sales.units_sold_previous_30d, 0) AS units_sold_previous_30d,
+                   COALESCE(engagement.unique_views_30d, 0) AS unique_views_30d,
+                   COALESCE(engagement.cart_additions_30d, 0) AS cart_additions_30d,
+                   ' . productRecommendationScoreSql() . ' AS recommendation_score,
                    c.name AS category_name, c.slug AS category_slug,
                    m.name AS manufacturer_name, m.slug AS manufacturer_slug
             FROM shop_products p
             LEFT JOIN shop_categories c ON c.id = p.category_id
             LEFT JOIN shop_manufacturers m ON m.id = p.manufacturer_id
-            LEFT JOIN shop_product_sources s ON s.id = p.source_id';
+            LEFT JOIN shop_product_sources s ON s.id = p.source_id
+            LEFT JOIN (
+                SELECT oi.product_id,
+                       SUM(CASE WHEN o.created_at >= DATE_SUB(NOW(), INTERVAL 60 DAY) THEN oi.quantity ELSE 0 END) AS units_sold_60d,
+                       SUM(CASE WHEN o.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN oi.quantity ELSE 0 END) AS units_sold_30d,
+                       SUM(CASE WHEN o.created_at >= DATE_SUB(NOW(), INTERVAL 60 DAY)
+                                 AND o.created_at < DATE_SUB(NOW(), INTERVAL 30 DAY) THEN oi.quantity ELSE 0 END) AS units_sold_previous_30d
+                FROM shop_order_items oi
+                INNER JOIN shop_orders o ON o.id = oi.order_id
+                WHERE oi.product_id IS NOT NULL
+                  AND o.created_at >= DATE_SUB(NOW(), INTERVAL 60 DAY)
+                  AND o.status IN ("confirmed", "processing", "shipped", "completed", "return_requested", "return_refused")
+                GROUP BY oi.product_id
+            ) sales ON sales.product_id = p.id
+            LEFT JOIN (
+                SELECT product_id,
+                       SUM(CASE WHEN event_type = "view" THEN 1 ELSE 0 END) AS unique_views_30d,
+                       SUM(CASE WHEN event_type = "cart_add" THEN 1 ELSE 0 END) AS cart_additions_30d
+                FROM shop_product_engagement_uniques
+                WHERE metric_date >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)
+                GROUP BY product_id
+            ) engagement ON engagement.product_id = p.id';
 }
 
 function publicCatalogRows(PDO $db, array $rows, array $config): array {
@@ -3344,6 +3418,32 @@ function productStockOrderSql(): string {
                 WHEN p.stock_quantity > 0 THEN 1
                 ELSE 2
             END';
+}
+
+function productRecommendationScoreSql(): string {
+    $sales60 = 'COALESCE(sales.units_sold_60d, 0)';
+    $sales30 = 'COALESCE(sales.units_sold_30d, 0)';
+    $previous30 = 'COALESCE(sales.units_sold_previous_30d, 0)';
+    $views30 = 'COALESCE(engagement.unique_views_30d, 0)';
+    $cart30 = 'COALESCE(engagement.cart_additions_30d, 0)';
+
+    return '(40 * LEAST(1, LOG(1 + ' . $sales60 . ') / LOG(21))
+            + 18 * LEAST(1, LOG(1 + ' . $cart30 . ') / LOG(13))
+            + 14 * (
+                0.75 * LEAST(1, LOG(1 + ' . $views30 . ') / LOG(101))
+                + 0.25 * LEAST(1, LOG(1 + COALESCE(p.view_count, 0)) / LOG(1001))
+              )
+            + 10 * CASE
+                WHEN ' . $sales30 . ' <= ' . $previous30 . ' THEN 0
+                WHEN ' . $previous30 . ' > 0 THEN LEAST(1, (' . $sales30 . ' - ' . $previous30 . ') / ' . $previous30 . ')
+                ELSE LEAST(1, ' . $sales30 . ' / 3)
+              END
+            + 15 * CASE
+                WHEN TIMESTAMPDIFF(DAY, p.created_at, NOW()) BETWEEN 0 AND 60
+                    THEN (60 - TIMESTAMPDIFF(DAY, p.created_at, NOW())) / 60
+                ELSE 0
+              END
+            + 3 * CASE WHEN p.is_featured = 1 THEN 1 ELSE 0 END)';
 }
 
 function productListSql(): string {
@@ -4419,6 +4519,17 @@ function promotionDeviceHash(array $body = []): string {
     $token = trim((string)($body['device_token'] ?? requestHeader('X-Shop-Device')));
     if ($token === '' || !preg_match('/^[A-Za-z0-9_-]{20,128}$/', $token)) return '';
     return hash('sha256', $token);
+}
+
+function recordProductEngagement(PDO $db, string $productId, string $eventType, string $deviceHash): bool {
+    if ($productId === '' || $deviceHash === '' || !in_array($eventType, ['view', 'cart_add'], true)) return false;
+    $stmt = $db->prepare(
+        'INSERT IGNORE INTO shop_product_engagement_uniques
+            (product_id, metric_date, event_type, visitor_hash)
+         VALUES (?, CURDATE(), ?, ?)'
+    );
+    $stmt->execute([$productId, $eventType, $deviceHash]);
+    return $stmt->rowCount() === 1;
 }
 
 function promotionUsageError(PDO $db, string $code, ?array $customer, string $deviceHash): ?string {
@@ -6083,6 +6194,26 @@ try {
         jsonResponse($rows);
     }
 
+    if ($action === 'recordPublicProductEngagement' && $method === 'POST') {
+        $idOrSlug = mb_substr(trim((string)($body['product_id'] ?? $body['product_slug'] ?? '')), 0, 200);
+        $eventType = mb_strtolower(trim((string)($body['event_type'] ?? '')), 'UTF-8');
+        if ($idOrSlug === '' || !in_array($eventType, ['cart_add'], true)) {
+            jsonResponse(['error' => 'Evenimentul de produs nu este valid.'], 400);
+        }
+        try {
+            $product = findProduct($db, $idOrSlug, $config, true);
+            $recorded = recordProductEngagement(
+                $db,
+                (string)$product['id'],
+                $eventType,
+                promotionDeviceHash($body)
+            );
+            jsonResponse(['recorded' => $recorded]);
+        } catch (InvalidArgumentException $error) {
+            jsonResponse(['error' => $error->getMessage()], 404);
+        }
+    }
+
     if ($action === 'publicCatalogFilters' && $method === 'GET') {
         $categories = $db->query(
             "SELECT c.*, p.name AS parent_name
@@ -6143,9 +6274,9 @@ try {
         }
         $search = trim((string)($_GET['q'] ?? ''));
         if ($search !== '') {
-            $where[] = '(p.name LIKE ? OR p.sku LIKE ? OR p.short_description LIKE ?)';
+            $where[] = '(p.name LIKE ? OR p.sku LIKE ? OR p.ean LIKE ? OR p.short_description LIKE ?)';
             $term = '%' . mb_substr($search, 0, 120) . '%';
-            array_push($params, $term, $term, $term);
+            array_push($params, $term, $term, $term, $term);
         }
         $categoryId = trim((string)($_GET['category_id'] ?? ''));
         if ($categoryId !== '') {
@@ -6179,7 +6310,24 @@ try {
             $countStmt->execute($params);
             $totalProducts = (int)$countStmt->fetchColumn();
         }
-        $sql = publicCatalogProductSelectSql() . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY ' . productStockOrderSql() . ' ASC, p.is_featured DESC, COALESCE(p.featured_rank, 2147483647) ASC, p.created_at DESC LIMIT ' . $offset . ', ' . $pageSize;
+        $catalogSort = mb_strtolower(trim((string)($_GET['sort'] ?? '')), 'UTF-8');
+        $stockFirst = productStockOrderSql() . ' ASC, ';
+        $catalogOrder = match ($catalogSort) {
+            'best_selling' => $stockFirst . 'units_sold_60d DESC, recommendation_score DESC, unique_views_30d DESC, p.view_count DESC, p.created_at DESC, p.id ASC',
+            'most_viewed' => $stockFirst . 'unique_views_30d DESC, p.view_count DESC, units_sold_60d DESC, recommendation_score DESC, p.created_at DESC, p.id ASC',
+            'newest' => $stockFirst . 'p.created_at DESC, recommendation_score DESC, p.id ASC',
+            default => $stockFirst . 'recommendation_score DESC, units_sold_60d DESC, unique_views_30d DESC, p.view_count DESC, COALESCE(p.featured_rank, 2147483647) ASC, p.created_at DESC, p.id ASC',
+        };
+        if ($search !== '') {
+            $catalogOrder = 'CASE
+                WHEN LOWER(TRIM(COALESCE(p.sku, ""))) = LOWER(TRIM(?)) THEN 0
+                WHEN LOWER(TRIM(COALESCE(p.ean, ""))) = LOWER(TRIM(?)) THEN 0
+                WHEN LOWER(TRIM(p.name)) = LOWER(TRIM(?)) THEN 1
+                ELSE 2
+            END ASC, ' . $catalogOrder;
+            array_push($params, $search, $search, $search);
+        }
+        $sql = publicCatalogProductSelectSql() . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY ' . $catalogOrder . ' LIMIT ' . $offset . ', ' . $pageSize;
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         $rawProducts = $stmt->fetchAll();
@@ -6243,6 +6391,7 @@ try {
                 $product = findProduct($db, $idOrSlug, $config, false, false);
             }
             $db->prepare('UPDATE shop_products SET view_count = view_count + 1 WHERE id = ?')->execute([$product['id']]);
+            recordProductEngagement($db, (string)$product['id'], 'view', promotionDeviceHash($body));
             $product['view_count'] = (int)$product['view_count'] + 1;
             jsonResponse(applyCatalogPromotionPrices($db, [$product], optionalCustomer($db), promotionDeviceHash($body))[0]);
         } catch (InvalidArgumentException $error) {
@@ -8109,13 +8258,23 @@ try {
         }
     }
 
+    if ($action === 'checkProductSku' && $method === 'GET') {
+        $sku = normalizeProductSku((string)($_GET['sku'] ?? ''));
+        $excludeId = trim((string)($_GET['exclude_id'] ?? '')) ?: null;
+        jsonResponse([
+            'sku' => $sku ?? '',
+            'available' => $sku === null || productSkuAvailable($db, $sku, $excludeId),
+            'automatic' => $sku === null,
+        ]);
+    }
+
     if ($action === 'createProduct' && $method === 'POST') {
         $payload = productPayload($db, $body);
         ensureUniqueProductName($db, $payload['name']);
         $id = uuidV4();
         $db->beginTransaction();
         try {
-            $productSku = uniqueProductSku($db, $payload['sku'] ?? generatedProductSku($payload['name'], $payload['source_domain']));
+            $productSku = resolvedProductSku($db, $payload['sku'], $payload['name'], $payload['source_domain']);
             $stmt = $db->prepare('INSERT INTO shop_products (id, category_id, manufacturer_id, source_id, sku, supplier_product_code, ean, source_domain, source_url, name, slug, short_description, description_title, description_html, specifications_json, questions_json, manufacturer_address, manufacturer_email, eu_responsible_person_name, eu_responsible_person_address, eu_responsible_person_email, product_model, product_identifier, safety_warnings_ro, safety_documents_json, ce_marking_applicable, compliance_documents_json, legal_warranty_months, commercial_warranty_months, software_updates_until, repairability_info, spare_parts_info, meta_title, meta_description, cost_price, price, sale_price, discount_type, discount_value, currency, unit_of_measure, stock_mode, stock_quantity, is_accounting_stock_tracked, low_stock_threshold, is_active, is_featured) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
             $stmt->execute([
                 $id, $payload['category_id'], $payload['manufacturer_id'], $payload['source_id'], $productSku, $payload['supplier_product_code'], $payload['ean'], $payload['source_domain'], $payload['source_url'],
@@ -8209,9 +8368,7 @@ try {
         ];
         $db->beginTransaction();
         try {
-            $productSku = trim((string)($current['sku'] ?? '')) !== ''
-                ? (string)$current['sku']
-                : uniqueProductSku($db, $payload['sku'] ?? generatedProductSku($payload['name'], $payload['source_domain']), $id);
+            $productSku = resolvedProductSku($db, $payload['sku'], $payload['name'], $payload['source_domain'], $id);
             $stmt = $db->prepare('UPDATE shop_products SET category_id = ?, manufacturer_id = ?, source_id = ?, sku = ?, supplier_product_code = ?, ean = ?, source_domain = ?, source_url = ?, name = ?, slug = ?, short_description = ?, description_title = ?, description_html = ?, specifications_json = ?, questions_json = ?, manufacturer_address = ?, manufacturer_email = ?, eu_responsible_person_name = ?, eu_responsible_person_address = ?, eu_responsible_person_email = ?, product_model = ?, product_identifier = ?, safety_warnings_ro = ?, safety_documents_json = ?, ce_marking_applicable = ?, compliance_documents_json = ?, legal_warranty_months = ?, commercial_warranty_months = ?, software_updates_until = ?, repairability_info = ?, spare_parts_info = ?, meta_title = ?, meta_description = ?, cost_price = ?, price = ?, sale_price = ?, discount_type = ?, discount_value = ?, currency = ?, unit_of_measure = ?, stock_mode = ?, stock_quantity = ?, is_accounting_stock_tracked = ?, low_stock_threshold = ?, is_active = ?, is_featured = ?, content_status = ? WHERE id = ?');
             $stmt->execute([
                 $payload['category_id'], $payload['manufacturer_id'], $payload['source_id'], $productSku, $payload['supplier_product_code'], $payload['ean'], $payload['source_domain'], $payload['source_url'],

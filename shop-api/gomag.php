@@ -596,14 +596,13 @@ function gomagSyncProductFromFeed(PDO $db, array $config, string $idOrSlug): arr
 
     $update = $db->prepare(
         'UPDATE shop_products
-         SET sku = ?, supplier_product_code = ?, supplier_base_price = ?, supplier_price_difference = ?, supplier_price_updated_at = NOW(),
+         SET supplier_product_code = ?, supplier_base_price = ?, supplier_price_difference = ?, supplier_price_updated_at = NOW(),
              cost_price = ?, price = ?, sale_price = ?, stock_quantity = ?,
              supplier_stock_quantity = ?, supplier_stock_status = ?, supplier_stock_updated_at = NOW(),
              updated_at = updated_at
          WHERE id = ?'
     );
     $update->execute([
-        $feedSku,
         $feedSku,
         $supplierBase,
         $difference,
@@ -1434,7 +1433,7 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
         $reset->execute([(string)$source]);
         $update = $db->prepare(
             'UPDATE shop_products
-             SET sku = ?, supplier_product_code = ?,
+             SET supplier_product_code = ?,
                  supplier_base_price = ?, supplier_price_difference = ?, supplier_price_updated_at = NOW(),
                  cost_price = ?, price = ?, sale_price = ?, supplier_stock_quantity = ?, supplier_stock_status = ?,
                  supplier_stock_updated_at = NOW(), stock_quantity = ?,
@@ -1498,7 +1497,6 @@ function gomagSyncSupplierStock(PDO $db, array $config): array {
             if ($stockChanged) $stocksChanged[$productId] = true;
 
             $update->execute([
-                $feedSku,
                 $feedSku,
                 $supplierBase,
                 $difference,

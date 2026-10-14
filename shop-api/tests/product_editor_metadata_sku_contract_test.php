@@ -7,6 +7,7 @@ $mobile = (string)file_get_contents($root . '/components/ShopProductsManager.tsx
 $mobileApi = (string)file_get_contents($root . '/services/shopApi.ts');
 $desktop = (string)file_get_contents($root . '/electron-app/renderer/js/shop-commerce.js');
 $desktopApi = (string)file_get_contents($root . '/electron-app/renderer/js/shop-api.js');
+$gomag = (string)file_get_contents($root . '/shop-api/gomag.php');
 
 $assert = static function (bool $condition, string $message): void {
     if (!$condition) {
@@ -18,6 +19,19 @@ $assert = static function (bool $condition, string $message): void {
 $assert(str_contains($api, "if (\$action === 'checkProductSku'"), 'API-ul trebuie sa expuna verificarea SKU.');
 $assert(substr_count($api, 'resolvedProductSku($db, $payload[\'sku\']') >= 2, 'Crearea si editarea trebuie sa accepte SKU manual sau generat.');
 $assert(str_contains($api, "throw new InvalidArgumentException('SKU-ul este indisponibil."), 'API-ul trebuie sa refuze un SKU duplicat.');
+$gomagSyncStart = strpos($gomag, 'function gomagSyncProductFromFeed');
+$gomagSyncEnd = strpos($gomag, 'function boomagNormalizeKey', $gomagSyncStart === false ? 0 : $gomagSyncStart);
+$gomagSync = $gomagSyncStart !== false && $gomagSyncEnd !== false ? substr($gomag, $gomagSyncStart, $gomagSyncEnd - $gomagSyncStart) : '';
+$assert($gomagSync !== '', 'Sincronizarea produsului Boomag trebuie sa existe.');
+$assert(!str_contains($gomagSync, 'SET sku = ?'), 'Sincronizarea Boomag nu trebuie sa suprascrie SKU-ul intern ales manual.');
+$assert(str_contains($gomagSync, 'SET supplier_product_code = ?'), 'Codul furnizorului trebuie actualizat separat din feedul Boomag.');
+$gomagBulkSyncStart = strpos($gomag, 'function gomagSyncSupplierStock');
+$gomagBulkSync = $gomagBulkSyncStart === false ? '' : substr($gomag, $gomagBulkSyncStart);
+$assert($gomagBulkSync !== '' && !str_contains($gomagBulkSync, 'SET sku = ?, supplier_product_code = ?'), 'Sincronizarea periodica Boomag nu trebuie sa suprascrie SKU-ul intern.');
+$seoSaveStart = strpos($api, "if (\$action === 'saveBoomagSeoProduct'");
+$seoSaveEnd = strpos($api, "if (\$action === 'listProducts'", $seoSaveStart === false ? 0 : $seoSaveStart);
+$seoSave = $seoSaveStart !== false ? substr($api, $seoSaveStart, $seoSaveEnd === false ? 8000 : $seoSaveEnd - $seoSaveStart) : '';
+$assert($seoSave !== '' && !str_contains($seoSave, 'SET sku = ?'), 'Salvarea continutului SEO Boomag nu trebuie sa suprascrie SKU-ul intern.');
 
 $assert(str_contains($mobile, 'const refreshEditorMetadata = useCallback'), 'Aplicatia mobila trebuie sa reincarce metadatele editorului.');
 $assert(substr_count($mobile, 'refreshEditorMetadata()') >= 2, 'Metadatele mobile trebuie actualizate la adaugare si editare.');
@@ -26,7 +40,7 @@ $assert(str_contains($mobile, "error={skuAvailability === 'unavailable' ? 'Indis
 $assert(str_contains($mobile, 'normalizeSkuInput(sku) === originalSku.current'), 'Aplicatia mobila trebuie sa accepte SKU-ul nemodificat al produsului editat.');
 $assert(str_contains($mobile, "listProductOptions(token, { q: sku, limit: 50 })"), 'Aplicatia mobila trebuie sa poata verifica SKU-ul si pe un API public mai vechi.');
 $assert(substr_count($mobile, '<TextInput autoFocus') >= 3, 'Toate selectoarele mobile de catalog trebuie sa deschida direct cautarea.');
-$assert(str_contains($mobile, 'Apasă și caută producătorul') && str_contains($mobile, 'Apasă și caută compatibilitatea'), 'Selectoarele mobile trebuie sa indice vizibil functia de cautare.');
+$assert(str_contains($mobile, 'Deschide și scrie numele producătorului') && str_contains($mobile, 'Deschide și scrie marca sau modelul'), 'Selectoarele mobile trebuie sa indice vizibil functia de cautare.');
 $assert(str_contains($mobileApi, 'checkProductSku:'), 'Clientul API mobil trebuie sa poata verifica SKU-ul.');
 
 $assert(str_contains($desktop, "metadata(),\n      ]"), 'Editorul desktop trebuie sa reincarce metadatele la fiecare deschidere.');

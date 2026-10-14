@@ -18,9 +18,10 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { ArrowLeft, BadgeCheck, Ban, BellRing, Check, ChevronRight, CircleCheckBig, Clock3, CreditCard, Download, Eye, FileCheck2, FileText, HandCoins, Mail, PackageCheck, PackageOpen, Pencil, Phone, Plus, RefreshCw, RotateCcw, Save, Search, Send, Share2, ShoppingCart, SlidersHorizontal, Star, Trash2, TrendingUp, Truck, WalletCards, Warehouse, X } from 'lucide-react-native';
+import { ArrowLeft, BadgeCheck, Ban, BellRing, Check, ChevronRight, CircleCheckBig, Clock3, Copy, CreditCard, Download, Eye, FileCheck2, FileText, HandCoins, Mail, PackageCheck, PackageOpen, Pencil, Phone, Plus, RefreshCw, RotateCcw, Save, Search, Send, Share2, ShoppingCart, SlidersHorizontal, Star, Trash2, TrendingUp, Truck, WalletCards, Warehouse, X } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -274,6 +275,7 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
   const [returnShippingPayer, setReturnShippingPayer] = useState<'customer' | 'company' | null>(null);
   const [returnShippingCostDraft, setReturnShippingCostDraft] = useState('0.00');
   const [orderItemDrafts, setOrderItemDrafts] = useState<OrderItemDraft[]>([]);
+  const [copiedOrderItemField, setCopiedOrderItemField] = useState('');
   const [itemPickerTarget, setItemPickerTarget] = useState<string | null>(null);
   const [itemProductSearch, setItemProductSearch] = useState('');
   const [itemProductOptions, setItemProductOptions] = useState<ShopProduct[]>([]);
@@ -292,6 +294,24 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
   const initialOpenedOrderId = useRef<string | null>(null);
   const initialLoadEffect = useRef(true);
   const itemProductRequestId = useRef(0);
+  const copyFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const copyOrderItemField = useCallback(async (itemId: string, field: 'name' | 'code', value: string) => {
+    const copyValue = String(value || '').trim();
+    if (!copyValue) {
+      Alert.alert('Cod indisponibil', 'Acest produs nu are încă un cod care poate fi copiat.');
+      return;
+    }
+    await Clipboard.setStringAsync(copyValue);
+    const feedbackKey = `${itemId}:${field}`;
+    setCopiedOrderItemField(feedbackKey);
+    if (copyFeedbackTimer.current) clearTimeout(copyFeedbackTimer.current);
+    copyFeedbackTimer.current = setTimeout(() => setCopiedOrderItemField(''), 1600);
+  }, []);
+
+  useEffect(() => () => {
+    if (copyFeedbackTimer.current) clearTimeout(copyFeedbackTimer.current);
+  }, []);
 
   useEffect(() => {
     const timeout = setTimeout(() => setDebouncedQuery(query.trim()), 240);
@@ -1037,6 +1057,14 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
                   <View style={styles.itemNameRow}><Text selectable style={styles.itemName}>{item.product_name}</Text>{item.is_new ? <View style={styles.newItemBadge}><Text style={styles.newItemBadgeText}>NOU</Text></View> : null}</View>
                   <Text selectable style={styles.itemSku}>{item.quantity} {item.unit_of_measure} · {item.product_sku || 'Fără cod'}</Text>
                   <Text selectable style={styles.itemUnitPrice}>Preț unitar · {money(Number(item.unit_price.replace(',', '.')) || 0)}</Text>
+                  <View style={styles.itemCopyActions}>
+                    {(['name', 'code'] as const).map((field) => {
+                      const copied = copiedOrderItemField === `${item.order_item_id}:${field}`;
+                      const value = field === 'name' ? item.product_name : item.product_sku;
+                      const label = field === 'name' ? 'Nume' : 'Cod';
+                      return <TouchableOpacity key={field} accessibilityRole="button" accessibilityLabel={`Copiază ${label.toLocaleLowerCase('ro-RO')} produs`} disabled={!String(value || '').trim()} activeOpacity={0.72} style={[styles.itemCopyButton, field === 'code' && styles.itemCopyButtonCode, copied && styles.itemCopyButtonCopied, !String(value || '').trim() && styles.disabled]} onPress={() => void copyOrderItemField(item.order_item_id, field, value)}>{copied ? <Check size={13} color="#A7F3D0" strokeWidth={2.8} /> : <Copy size={13} color={field === 'name' ? '#FFB36B' : '#93C5FD'} strokeWidth={2.3} />}<Text style={[styles.itemCopyButtonText, field === 'code' && styles.itemCopyButtonTextCode, copied && styles.itemCopyButtonTextCopied]}>{copied ? 'Copiat' : label}</Text></TouchableOpacity>;
+                    })}
+                  </View>
                   <View style={styles.itemEditRow}>
                     {item.is_new ? <TouchableOpacity style={[styles.itemChangeButton, styles.removeNewItemButton]} onPress={() => setOrderItemDrafts((current) => current.filter((draft) => draft.order_item_id !== item.order_item_id))}><Trash2 size={13} color="#FDA4AF" /><Text style={[styles.itemChangeText, styles.removeNewItemText]}>Elimină</Text></TouchableOpacity> : <><TouchableOpacity disabled={!editable} style={[styles.itemChangeButton, !editable && styles.disabled]} onPress={() => openItemProductPicker(item.order_item_id)}><Pencil size={13} color="#93C5FD" /><Text style={styles.itemChangeText}>Schimbă produsul</Text></TouchableOpacity><TouchableOpacity disabled={!canAddProducts} style={[styles.itemChangeButton, styles.removeNewItemButton, !canAddProducts && styles.disabled]} onPress={() => {
                       if (orderItemDrafts.length <= 1) { Alert.alert('Produs obligatoriu', 'Comanda trebuie să păstreze cel puțin un produs.'); return; }
@@ -1496,6 +1524,12 @@ const styles = StyleSheet.create({
   addOrderItemButton: { minHeight: 43, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 14, paddingHorizontal: 12, backgroundColor: '#2563EB' }, addOrderItemButtonText: { color: '#FFFFFF', fontFamily: 'Inter-Bold', fontSize: 9 },
   items: { overflow: 'hidden', borderRadius: 18, backgroundColor: '#1B1B1F' }, item: { minHeight: 70, flexDirection: 'row', alignItems: 'center', gap: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#343137', padding: 11 }, itemImage: { width: 48, height: 48, borderRadius: 15, backgroundColor: '#F7F2ED' }, itemQty: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: Colors.orangeDim }, itemQtyText: { color: Colors.orange, fontFamily: 'Inter-Bold', fontSize: 10 }, itemCopy: { flex: 1, minWidth: 0 }, itemNameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }, itemName: { flexShrink: 1, color: Colors.textPrimary, fontFamily: 'Inter-SemiBold', fontSize: 10 }, newItemBadge: { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: '#2563EB22' }, newItemBadgeText: { color: '#93C5FD', fontFamily: 'Inter-Bold', fontSize: 6.5, letterSpacing: 0.7 }, itemSku: { color: Colors.textMuted, fontFamily: 'Inter-Regular', fontSize: 8, marginTop: 3 }, itemTotal: { color: Colors.textPrimary, fontFamily: 'Inter-Bold', fontSize: 10 }, itemOpen: { width: 39, height: 39, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#4A4750', borderRadius: 14, backgroundColor: '#343139' },
   itemUnitPrices: { minHeight: 15, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 5, marginTop: 3 }, itemUnitPrice: { color: Colors.textSecondary, fontFamily: 'Inter-SemiBold', fontSize: 8 }, itemOldPrice: { color: Colors.textMuted, fontFamily: 'Inter-SemiBold', fontSize: 8, textDecorationLine: 'line-through', textDecorationColor: Colors.orange }, itemDiscountPrice: { color: '#6EE7B7', fontFamily: 'Inter-Bold', fontSize: 8 }, itemTotals: { alignItems: 'flex-end', gap: 2 }, itemOldTotal: { color: Colors.textMuted, fontFamily: 'Inter-SemiBold', fontSize: 8, textDecorationLine: 'line-through', textDecorationColor: Colors.orange }, itemDiscountTotal: { color: '#6EE7B7', fontFamily: 'Inter-Bold', fontSize: 10 },
+  itemCopyActions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 7, marginTop: 8 },
+  itemCopyButton: { minHeight: 34, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: '#704624', borderRadius: 11, paddingHorizontal: 11, backgroundColor: '#2D2118' },
+  itemCopyButtonCode: { borderColor: '#365A80', backgroundColor: '#172A3B' },
+  itemCopyButtonCopied: { borderColor: '#2F7659', backgroundColor: '#173326' },
+  itemCopyButtonText: { color: '#FFB36B', fontFamily: 'Inter-Bold', fontSize: 9.5 },
+  itemCopyButtonTextCode: { color: '#B8D8FA' }, itemCopyButtonTextCopied: { color: '#A7F3D0' },
   itemEditable: { alignItems: 'flex-start', flexWrap: 'wrap', paddingVertical: 13 },
   itemEditRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   itemChangeButton: { minHeight: 39, flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#365A80', borderRadius: 12, paddingHorizontal: 10, backgroundColor: '#172A3B' },

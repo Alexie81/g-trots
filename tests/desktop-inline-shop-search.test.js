@@ -6,6 +6,7 @@ const script = fs.readFileSync(path.join(root, 'website', 'magazin.js'), 'utf8')
 const styles = fs.readFileSync(path.join(root, 'website', 'magazin.css'), 'utf8');
 const page = fs.readFileSync(path.join(root, 'website', 'magazin.html'), 'utf8');
 const htaccess = fs.readFileSync(path.join(root, 'website', '.htaccess'), 'utf8');
+const legalFooter = fs.readFileSync(path.join(root, 'website', 'legal-footer.js'), 'utf8');
 
 function expectIncludes(source, fragment, message) {
   if (!source.includes(fragment)) throw new Error(message);
@@ -31,5 +32,9 @@ expectIncludes(page, 'data-smart-search-expand', 'Controlul de redeschidere al b
 expectIncludes(page, 'magazin.css?v=20261014-desktop-inline-results-v3', 'Pagina magazinului nu invalidează cache-ul stilurilor.');
 expectIncludes(page, 'magazin.js?v=20261014-desktop-inline-results-v3', 'Pagina magazinului nu invalidează cache-ul scriptului.');
 expectIncludes(htaccess, 'legal-footer\\.js|magazin\\.(?:css|js)|promotions', 'Fișierele căutării nu sunt revalidate pe paginile SEO existente.');
+expectIncludes(legalFooter, "const catalogStyleVersion = '20261014-desktop-inline-results-v3';", 'Stratul global înlocuiește stilurile magazinului cu o versiune veche.');
+if (legalFooter.includes("currentUrl.searchParams.set('v', '20260920-list-theme-v2')")) {
+  throw new Error('Stratul global reactivează versiunea veche a stilurilor magazinului.');
+}
 
 console.log('desktop_inline_shop_search_test: OK');

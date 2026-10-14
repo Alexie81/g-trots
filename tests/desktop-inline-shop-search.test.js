@@ -26,6 +26,10 @@ expectIncludes(script, 'semanticCardData(card).identifierWords.includes(query)',
 expectIncludes(script, 'semanticCardData(card).title === query', 'Denumirea exactă a produsului nu are prioritate exclusivă.');
 expectIncludes(script, 'if (queryTokens.length === 0) {', 'Căutările formate din expresii generale exacte sunt eliminate greșit.');
 expectIncludes(script, 'if (score <= 0) return 0;', 'Expresiile generale trebuie păstrate numai când există o potrivire reală.');
+expectIncludes(script, 'function isElectricScooterSearch(rawQuery)', 'Intenția de căutare pentru trotinete electrice lipsește.');
+expectIncludes(script, 'function isElectricScooterCard(card)', 'Produsele de tip trotinetă nu sunt separate de piesele compatibile.');
+expectIncludes(script, '.filter(isElectricScooterCard)', 'Rezultatele rapide nu sunt limitate la trotinetele propriu-zise.');
+expectIncludes(script, '? isElectricScooterCard(card)', 'Catalogul nu limitează căutarea de trotinete la categoria corectă.');
 expectIncludes(script, 'const exactMatchSet = exactMatches.length ? new Set(exactMatches) : null;', 'Catalogul nu limitează rezultatele la potrivirea exactă.');
 expectIncludes(script, 'const searchField = document.querySelector(".shop-search-field");', 'Zona completă a barei de căutare nu este identificată.');
 expectIncludes(script, 'searchField?.addEventListener("click", event => {', 'Zona completă a barei nu deschide căutarea.');
@@ -50,10 +54,10 @@ expectIncludes(styles, 'html[data-theme="light"] body.shop-page .shop-search-act
 expectIncludes(styles, '.desktop-search-expander::before', 'Bara restrânsă de sub căutare lipsește.');
 expectIncludes(styles, '.shop-search-deck:focus-within:not(.has-inline-results):not(.is-inline-collapsing) .desktop-search-expander', 'Bara restrânsă nu este limitată la focalizarea căutării.');
 expectIncludes(page, 'data-smart-search-expand', 'Controlul de redeschidere al barei restrânse lipsește.');
-expectIncludes(page, 'magazin.css?v=20261015-search-filters-v6', 'Pagina magazinului nu invalidează cache-ul stilurilor.');
-expectIncludes(page, 'magazin.js?v=20261015-search-filters-v6', 'Pagina magazinului nu invalidează cache-ul scriptului.');
+expectIncludes(page, 'magazin.css?v=20261015-search-filters-v7', 'Pagina magazinului nu invalidează cache-ul stilurilor.');
+expectIncludes(page, 'magazin.js?v=20261015-search-filters-v7', 'Pagina magazinului nu invalidează cache-ul scriptului.');
 expectIncludes(htaccess, 'legal-footer\\.js|magazin\\.(?:css|js)|promotions', 'Fișierele căutării nu sunt revalidate pe paginile SEO existente.');
-expectIncludes(legalFooter, "const catalogStyleVersion = '20261015-search-filters-v6';", 'Stratul global înlocuiește stilurile magazinului cu o versiune veche.');
+expectIncludes(legalFooter, "const catalogStyleVersion = '20261015-search-filters-v7';", 'Stratul global înlocuiește stilurile magazinului cu o versiune veche.');
 if (legalFooter.includes("currentUrl.searchParams.set('v', '20260920-list-theme-v2')")) {
   throw new Error('Stratul global reactivează versiunea veche a stilurilor magazinului.');
 }

@@ -834,6 +834,22 @@ const smartSearchSynonymGroups = [
 
 const semanticSearchCache = new WeakMap();
 const smartSearchStopWords = new Set(["vreau", "caut", "cauta", "pentru", "trotineta", "trotinete", "electrica", "electric", "piesa", "piese", "produs", "produse", "un", "una", "unei", "de", "la", "cu", "si", "sau", "din"]);
+const electricScooterSearchQueries = new Set([
+  "trotineta",
+  "trotinete",
+  "trotineta electrica",
+  "trotinete electrice"
+]);
+
+function isElectricScooterSearch(rawQuery) {
+  return electricScooterSearchQueries.has(normalizeText(rawQuery));
+}
+
+function isElectricScooterCard(card) {
+  const categoryName = normalizeText(card.dataset.categoryName || "");
+  const categorySlug = normalizeText(card.dataset.category || "").replace(/\s+/g, "-");
+  return categoryName === "trotinete electrice" || categorySlug === "trotinete-electrice";
+}
 
 function semanticTermsForToken(token) {
   const matchingGroup = smartSearchSynonymGroups.find(group => group.some(term => term === token));
@@ -990,6 +1006,11 @@ function smartSearchCards(query) {
   const exactMatches = exactSearchCards(query);
   if (exactMatches.length) {
     return exactMatches.map(card => ({ card, score: 1000 }));
+  }
+  if (isElectricScooterSearch(query)) {
+    return productCards
+      .filter(isElectricScooterCard)
+      .map(card => ({ card, score: 900 }));
   }
   return productCards
     .map(card => ({ card, score: semanticSearchScore(card, query) }))
@@ -1481,6 +1502,7 @@ function applyFilters({ resetPage = true } = {}) {
   const query = normalizeText(searchInput?.value || "");
   const exactMatches = query ? exactSearchCards(query) : [];
   const exactMatchSet = exactMatches.length ? new Set(exactMatches) : null;
+  const electricScooterIntent = query && isElectricScooterSearch(query);
   const selectedBrands = getSelectedBrands();
   const selectedStocks = getSelectedStocks();
   const selectedManufacturers = getSelectedManufacturers();
@@ -1492,7 +1514,13 @@ function applyFilters({ resetPage = true } = {}) {
     const cardTaxonomy = `${card.dataset.category || ""} ${card.dataset.taxonomy || ""}`.split(" ").filter(Boolean);
     const searchScore = query ? semanticSearchScore(card, query) : 0;
     card.dataset.searchScore = String(searchScore);
-    const matchesSearch = !query || (exactMatchSet ? exactMatchSet.has(card) : searchScore >= 8);
+    const matchesSearch = !query || (
+      exactMatchSet
+        ? exactMatchSet.has(card)
+        : electricScooterIntent
+          ? isElectricScooterCard(card)
+          : searchScore >= 8
+    );
     const matchesCategory = activeCategory === "all"
       || cardTaxonomy.some(category => activeCategoryScope.has(category));
     const matchesBrand = selectedBrands.length === 0 || selectedBrands.some(brand => cardBrands.includes(brand));

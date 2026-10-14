@@ -24,12 +24,14 @@ $assert(substr_count($mobile, 'refreshEditorMetadata()') >= 2, 'Metadatele mobil
 $assert(str_contains($mobile, "sku: form.sku.trim()"), 'Aplicatia mobila trebuie sa trimita SKU-ul editat.');
 $assert(str_contains($mobile, "error={skuAvailability === 'unavailable' ? 'Indisponibil'"), 'Aplicatia mobila trebuie sa afiseze starea SKU in timp real.');
 $assert(str_contains($mobile, 'normalizeSkuInput(sku) === originalSku.current'), 'Aplicatia mobila trebuie sa accepte SKU-ul nemodificat al produsului editat.');
+$assert(str_contains($mobile, "listProductOptions(token, { q: sku, limit: 50 })"), 'Aplicatia mobila trebuie sa poata verifica SKU-ul si pe un API public mai vechi.');
 $assert(str_contains($mobileApi, 'checkProductSku:'), 'Clientul API mobil trebuie sa poata verifica SKU-ul.');
 
 $assert(str_contains($desktop, "metadata(),\n      ]"), 'Editorul desktop trebuie sa reincarce metadatele la fiecare deschidere.');
 $assert(str_contains($desktop, "$('shop-product-sku').addEventListener('input'"), 'Desktopul trebuie sa verifice SKU-ul in timp ce este scris.');
 $assert(str_contains($desktop, "sku: $('shop-product-sku').value.trim()"), 'Desktopul trebuie sa trimita SKU-ul editat.');
 $assert(str_contains($desktop, 'sku === originalSku'), 'Desktopul trebuie sa accepte SKU-ul nemodificat al produsului editat.');
+$assert(str_contains($desktop, "listProductOptions({ q: sku, limit: 50 })"), 'Desktopul trebuie sa poata verifica SKU-ul si pe un API public mai vechi.');
 $assert(str_contains($desktop, 'document.body.appendChild(imageMenu)'), 'Meniul de click dreapta al imaginii nu trebuie taiat de editorul scrollabil.');
 $assert(str_contains($desktop, "editor.addEventListener('contextmenu'"), 'Imaginile din descriere trebuie sa raspunda la click dreapta.');
 $assert(str_contains($desktopApi, 'checkProductSku:'), 'Clientul API desktop trebuie sa poata verifica SKU-ul.');

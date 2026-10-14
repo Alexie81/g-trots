@@ -429,8 +429,20 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
     const timeout = setTimeout(() => {
       void shopApi.checkProductSku(token, sku, form.id).then((result) => {
         if (sequence === skuCheckSequence.current) setSkuAvailability(result.available ? 'available' : 'unavailable');
-      }).catch(() => {
-        if (sequence === skuCheckSequence.current) setSkuAvailability('unavailable');
+      }).catch(async () => {
+        try {
+          // Pastreaza verificarea functionala si cand API-ul public nu are inca
+          // ruta dedicata: catalogul existent cauta si dupa SKU, apoi comparam
+          // exact si excludem produsul aflat in editare.
+          const candidates = await shopApi.listProductOptions(token, { q: sku, limit: 50 });
+          const normalizedSku = normalizeSkuInput(sku);
+          const duplicate = candidates.some((product) => (
+            product.id !== form.id && normalizeSkuInput(product.sku || '') === normalizedSku
+          ));
+          if (sequence === skuCheckSequence.current) setSkuAvailability(duplicate ? 'unavailable' : 'available');
+        } catch {
+          if (sequence === skuCheckSequence.current) setSkuAvailability('unavailable');
+        }
       });
     }, 180);
     return () => clearTimeout(timeout);

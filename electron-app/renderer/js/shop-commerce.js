@@ -1884,8 +1884,22 @@
       setProductSkuStatus(result.available ? 'available' : 'unavailable');
       return Boolean(result.available);
     } catch (_) {
-      if (requestId === state.productSkuCheckRequestId) setProductSkuStatus('unavailable');
-      return false;
+      // Compatibilitate cu API-urile publice mai vechi care nu expun inca
+      // checkProductSku. Cautarea existenta include SKU-ul, iar comparatia exacta
+      // evita sa confundam propriul cod de furnizor cu un SKU duplicat.
+      try {
+        const candidates = await window.SHOP_API.listProductOptions({ q: sku, limit: 50 });
+        const duplicate = (Array.isArray(candidates) ? candidates : []).some(product => (
+          String(product?.id || '') !== String(state.editingProduct?.id || '')
+          && normalizeSkuInput(product?.sku || '') === sku
+        ));
+        if (requestId !== state.productSkuCheckRequestId) return state.productSkuAvailability === 'available';
+        setProductSkuStatus(duplicate ? 'unavailable' : 'available');
+        return !duplicate;
+      } catch (_) {
+        if (requestId === state.productSkuCheckRequestId) setProductSkuStatus('unavailable');
+        return false;
+      }
     }
   }
   function scheduleProductSkuCheck(delay = 180) {

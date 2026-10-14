@@ -190,6 +190,7 @@ if (scooterStage && !prefersReducedMotion) {
 const productGrid = document.querySelector("#product-grid");
 let productCards = [...document.querySelectorAll(".product-card")];
 const searchInput = document.querySelector("#product-search");
+const searchField = document.querySelector(".shop-search-field");
 const searchClear = document.querySelector(".shop-search-clear");
 const searchDeck = document.querySelector(".shop-search-deck");
 const smartSearchPanel = document.querySelector("#smart-search-panel");
@@ -944,7 +945,21 @@ function semanticSearchScore(card, rawQuery) {
   return Math.max(0, Math.round(score * 10) / 10);
 }
 
+function exactSearchCards(rawQuery) {
+  const query = normalizeText(rawQuery);
+  if (!query) return [];
+
+  const identifierMatches = productCards.filter(card => semanticCardData(card).identifierWords.includes(query));
+  if (identifierMatches.length) return identifierMatches;
+
+  return productCards.filter(card => semanticCardData(card).title === query);
+}
+
 function smartSearchCards(query) {
+  const exactMatches = exactSearchCards(query);
+  if (exactMatches.length) {
+    return exactMatches.map(card => ({ card, score: 1000 }));
+  }
   return productCards
     .map(card => ({ card, score: semanticSearchScore(card, query) }))
     .filter(result => result.score >= 8)
@@ -1047,9 +1062,9 @@ function openDesktopInlineSearch({ force = false } = {}) {
   smartSearchPanel.hidden = false;
 }
 
-function closeDesktopInlineSearch({ restoreFocus = false } = {}) {
+function closeDesktopInlineSearch({ restoreFocus = false, rememberCollapsed = true } = {}) {
   if (!smartSearchPanel || !searchDeck) return;
-  desktopSearchCollapsed = true;
+  desktopSearchCollapsed = rememberCollapsed;
   window.clearTimeout(smartSearchClosingTimer);
   searchDeck.classList.remove("is-search-open", "is-search-closing");
   searchDeck.classList.add("is-inline-collapsing");
@@ -1069,6 +1084,15 @@ function closeDesktopInlineSearch({ restoreFocus = false } = {}) {
     return;
   }
   smartSearchClosingTimer = window.setTimeout(finishClose, 220);
+}
+
+function showDesktopSearchCatalogResults() {
+  applyFilters();
+  closeDesktopInlineSearch({ rememberCollapsed: false });
+  searchInput?.blur();
+  window.setTimeout(() => {
+    document.querySelector("#catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 30);
 }
 
 function queueDesktopCatalogSearch() {
@@ -1331,6 +1355,8 @@ function applyFilters({ resetPage = true } = {}) {
   }
   if (resetPage) currentPage = 1;
   const query = normalizeText(searchInput?.value || "");
+  const exactMatches = query ? exactSearchCards(query) : [];
+  const exactMatchSet = exactMatches.length ? new Set(exactMatches) : null;
   const selectedBrands = getSelectedBrands();
   const selectedStocks = getSelectedStocks();
   const selectedManufacturers = getSelectedManufacturers();
@@ -1342,7 +1368,7 @@ function applyFilters({ resetPage = true } = {}) {
     const cardTaxonomy = `${card.dataset.category || ""} ${card.dataset.taxonomy || ""}`.split(" ").filter(Boolean);
     const searchScore = query ? semanticSearchScore(card, query) : 0;
     card.dataset.searchScore = String(searchScore);
-    const matchesSearch = !query || searchScore >= 8;
+    const matchesSearch = !query || (exactMatchSet ? exactMatchSet.has(card) : searchScore >= 8);
     const matchesCategory = activeCategory === "all"
       || cardTaxonomy.some(category => activeCategoryScope.has(category));
     const matchesBrand = selectedBrands.length === 0 || selectedBrands.some(brand => cardBrands.includes(brand));
@@ -1528,6 +1554,9 @@ productCards.forEach((card, index) => {
 });
 
 if (searchInput) {
+  searchInput.addEventListener("focus", () => {
+    if (desktopInlineSearchMedia.matches) openDesktopInlineSearch();
+  });
   searchInput.addEventListener("input", () => {
     if (searchClear) searchClear.hidden = searchInput.value.length === 0;
     if (desktopInlineSearchMedia.matches) {
@@ -1553,16 +1582,11 @@ if (searchInput) {
         openDesktopInlineSearch();
         setSmartSearchActive(smartSearchActiveIndex - 1);
       } else if (event.key === "Enter") {
-        const activeChoice = smartSearchChoices()[smartSearchActiveIndex];
         event.preventDefault();
-        if (activeChoice) activeChoice.click();
-        else {
-          openDesktopInlineSearch();
-          queueDesktopCatalogSearch();
-        }
+        showDesktopSearchCatalogResults();
       } else if (event.key === "Escape") {
         event.preventDefault();
-        closeDesktopInlineSearch();
+        closeDesktopInlineSearch({ rememberCollapsed: false });
         searchInput.blur();
       }
       return;
@@ -1585,6 +1609,17 @@ if (searchInput) {
     }
   });
 }
+
+searchField?.addEventListener("click", event => {
+  if (event.target.closest("button, input, a")) return;
+  if (desktopInlineSearchMedia.matches) {
+    searchInput?.focus({ preventScroll: true });
+    openDesktopInlineSearch();
+    return;
+  }
+  openSmartSearch();
+  searchInput?.focus({ preventScroll: true });
+});
 
 searchClear?.addEventListener("click", event => {
   event.preventDefault();
@@ -1611,7 +1646,8 @@ smartSearchContent?.addEventListener("click", event => {
 
   const showAllButton = event.target.closest("[data-smart-search-all]");
   if (showAllButton) {
-    showSmartSearchCatalogResults();
+    if (desktopInlineSearchMedia.matches) showDesktopSearchCatalogResults();
+    else showSmartSearchCatalogResults();
   }
 });
 
@@ -1635,7 +1671,7 @@ smartSearchMobileBack?.addEventListener("click", event => {
   event.preventDefault();
   event.stopPropagation();
   if (desktopInlineSearchMedia.matches) {
-    openDesktopInlineSearch();
+    openDesktopInlineSearch({ force: true });
     searchInput?.focus();
     return;
   }
@@ -1651,8 +1687,7 @@ smartSearchSubmit?.addEventListener("click", event => {
   event.preventDefault();
   event.stopPropagation();
   if (desktopInlineSearchMedia.matches) {
-    openDesktopInlineSearch({ force: true });
-    queueDesktopCatalogSearch();
+    showDesktopSearchCatalogResults();
     return;
   }
   showSmartSearchCatalogResults();
@@ -1671,7 +1706,7 @@ smartSearchOverlay?.addEventListener("click", event => {
 document.addEventListener("keydown", event => {
   if (desktopInlineSearchMedia.matches && event.key === "Escape" && document.activeElement === searchInput) {
     event.preventDefault();
-    closeDesktopInlineSearch();
+    closeDesktopInlineSearch({ rememberCollapsed: false });
     searchInput?.blur();
     return;
   }
@@ -1695,14 +1730,10 @@ document.addEventListener("keydown", event => {
 desktopInlineSearchMedia.addEventListener?.("change", event => {
   resetSmartSearchPresentation();
   if (event.matches) {
-    if (!desktopSearchCollapsed) openDesktopInlineSearch();
+    desktopSearchCollapsed = false;
     queueDesktopCatalogSearch();
   }
 });
-
-if (desktopInlineSearchMedia.matches) {
-  window.requestAnimationFrame(() => openDesktopInlineSearch({ force: true }));
-}
 
 if (priceRange) {
   priceRange.addEventListener("input", () => {

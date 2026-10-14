@@ -1130,17 +1130,29 @@
     const selectId = `shop-${key}-page-size`;
     const options = pageSizeOptions.map(value => `<option value="${value}" ${value === pageSize ? 'selected' : ''}>${value}</option>`).join('');
     const chevron = direction => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${direction === 'left' ? 'm15 18-6-6 6-6' : 'm9 18 6-6-6-6'}"/></svg>`;
-    return `<nav class="shop-commerce-pagination" aria-label="Paginare"><div class="shop-commerce-page-size"><label for="${selectId}">Randuri pe pagina:</label><span><select id="${selectId}" data-page-size-key="${key}" aria-label="Randuri pe pagina">${options}</select><i aria-hidden="true">⌄</i></span></div><span class="shop-commerce-pagination-range" aria-live="polite">${first}–${last} din ${total}</span><div class="shop-commerce-pagination-arrows"><button type="button" data-page-key="${key}" data-page="${page - 1}" aria-label="Pagina anterioara" title="Pagina anterioara" ${page === 1 ? 'disabled' : ''}>${chevron('left')}</button><button type="button" data-page-key="${key}" data-page="${page + 1}" aria-label="Pagina urmatoare" title="Pagina urmatoare" ${page === pageCount ? 'disabled' : ''}>${chevron('right')}</button></div></nav>`;
+    return `<nav class="shop-commerce-pagination" aria-label="Paginare"><div class="shop-commerce-page-size"><label for="${selectId}">Randuri pe pagina:</label><span><select id="${selectId}" data-page-size-key="${key}" aria-label="Randuri pe pagina">${options}</select><i aria-hidden="true">⌄</i></span></div><span class="shop-commerce-pagination-range" aria-live="polite">${first}–${last} din ${total}</span><label class="shop-commerce-page-jump"><span>Pagina</span><input type="number" inputmode="numeric" min="1" max="${pageCount}" value="${page}" data-page-input-key="${key}" data-page-count="${pageCount}" aria-label="Mergi la pagina, între 1 și ${pageCount}"><em>/ ${pageCount}</em></label><div class="shop-commerce-pagination-arrows"><button type="button" data-page-key="${key}" data-page="${page - 1}" aria-label="Pagina anterioara" title="Pagina anterioara" ${page === 1 ? 'disabled' : ''}>${chevron('left')}</button><button type="button" data-page-key="${key}" data-page="${page + 1}" aria-label="Pagina urmatoare" title="Pagina urmatoare" ${page === pageCount ? 'disabled' : ''}>${chevron('right')}</button></div></nav>`;
   }
   function tableHeaderPagination(key, total, page, pageCount, pageSize) {
     if (!total) return '';
     const first = (page - 1) * pageSize + 1;
     const last = Math.min(total, page * pageSize);
     const chevron = direction => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${direction === 'left' ? 'm15 18-6-6 6-6' : 'm9 18 6-6-6-6'}"/></svg>`;
-    return `<nav class="shop-order-table-top-pagination" aria-label="Paginare comenzi sus"><span aria-live="polite">${first}–${last} din ${total}</span><button type="button" data-page-key="${key}" data-page="${page - 1}" aria-label="Pagina anterioară" title="Pagina anterioară" ${page === 1 ? 'disabled' : ''}>${chevron('left')}</button><button type="button" data-page-key="${key}" data-page="${page + 1}" aria-label="Pagina următoare" title="Pagina următoare" ${page === pageCount ? 'disabled' : ''}>${chevron('right')}</button></nav>`;
+    return `<nav class="shop-order-table-top-pagination" aria-label="Paginare comenzi sus"><span aria-live="polite">${first}–${last} din ${total}</span><label><span>Pagina</span><input type="number" inputmode="numeric" min="1" max="${pageCount}" value="${page}" data-page-input-key="${key}" data-page-count="${pageCount}" aria-label="Mergi la pagina, între 1 și ${pageCount}"><em>/ ${pageCount}</em></label><button type="button" data-page-key="${key}" data-page="${page - 1}" aria-label="Pagina anterioară" title="Pagina anterioară" ${page === 1 ? 'disabled' : ''}>${chevron('left')}</button><button type="button" data-page-key="${key}" data-page="${page + 1}" aria-label="Pagina următoare" title="Pagina următoare" ${page === pageCount ? 'disabled' : ''}>${chevron('right')}</button></nav>`;
   }
   function bindPagination(containerId, key, render, pageSizeOptions = PAGE_SIZE_OPTIONS) {
     $(containerId).querySelectorAll(`[data-page-key="${key}"]`).forEach(button => button.addEventListener('click', () => { state.pages[key] = Number(button.dataset.page); render(); $(containerId).scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
+    $(containerId).querySelectorAll(`[data-page-input-key="${key}"]`).forEach(input => {
+      const submitPage = () => {
+        const pageCount = Math.max(1, Number(input.dataset.pageCount) || 1);
+        const requestedPage = Number.parseInt(input.value, 10);
+        const nextPage = Number.isFinite(requestedPage) ? Math.min(Math.max(1, requestedPage), pageCount) : (state.pages[key] || 1);
+        state.pages[key] = nextPage;
+        render();
+        $(containerId).scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+      input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); submitPage(); } });
+      input.addEventListener('change', submitPage);
+    });
     $(containerId).querySelector(`[data-page-size-key="${key}"]`)?.addEventListener('change', event => {
       const pageSize = Number(event.target.value);
       if (!pageSizeOptions.includes(pageSize)) return;

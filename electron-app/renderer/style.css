@@ -13521,9 +13521,14 @@ body::after {
 .shop-product-sales-table tbody tr[data-product-sale-order]:hover { background: rgba(255,255,255,.035); }
 .shop-commerce-table.orders tbody tr, .shop-commerce-table.inventory tbody tr[data-stock-open] { cursor: pointer; }
 .shop-commerce-table.orders td:last-child { width: 72px; text-align: center; }
-.shop-commerce-table.orders th.shop-order-table-pagination-cell { width: 244px; min-width: 244px; padding: 7px 12px 7px 8px; text-align: right; }
+.shop-commerce-table.orders th.shop-order-table-pagination-cell { width: 362px; min-width: 362px; padding: 7px 12px 7px 8px; text-align: right; }
 .shop-order-table-top-pagination { display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px; vertical-align: middle; }
 .shop-order-table-top-pagination > span { min-width: 82px; color: #aaa39c; font-size: 10px; font-weight: 750; letter-spacing: 0; text-align: center; text-transform: none; white-space: nowrap; }
+.shop-order-table-top-pagination > label { display: inline-flex; align-items: center; gap: 4px; color: #817a74; font-size: 9px; font-weight: 700; letter-spacing: 0; text-transform: none; white-space: nowrap; }
+.shop-order-table-top-pagination input { width: 42px; height: 32px; appearance: textfield; border: 1px solid #4b4650; border-radius: 9px; padding: 0 4px; color: #eee9e5; background: #29262c; font: inherit; font-size: 10px; font-weight: 850; text-align: center; outline: 0; }
+.shop-order-table-top-pagination input::-webkit-inner-spin-button { display: none; }
+.shop-order-table-top-pagination input:focus { border-color: rgba(255,129,38,.72); box-shadow: 0 0 0 2px rgba(255,107,0,.09); }
+.shop-order-table-top-pagination label em { color: #77716c; font-size: 9px; font-style: normal; }
 .shop-order-table-top-pagination button { width: 32px; height: 32px; display: inline-grid; place-items: center; border: 1px solid #46414a; border-radius: 10px; padding: 0; color: #d8d2cc; background: #302d34; cursor: pointer; transition: color .15s ease, border-color .15s ease, background .15s ease, opacity .15s ease, transform .15s ease; }
 .shop-order-table-top-pagination button:hover:not(:disabled) { border-color: rgba(255,129,38,.6); color: #ff8126; background: rgba(255,107,0,.1); transform: translateY(-1px); }
 .shop-order-table-top-pagination button:focus-visible { outline: 2px solid rgba(255,129,38,.72); outline-offset: 1px; }
@@ -13542,6 +13547,11 @@ body::after {
 .shop-commerce-page-size select:focus-visible { border-color: rgba(255,107,0,.68); box-shadow: 0 0 0 3px rgba(255,107,0,.09); }
 .shop-commerce-page-size i { position: absolute; right: 9px; top: 50%; color: #8b837c; font-size: 13px; font-style: normal; pointer-events: none; transform: translateY(-58%); }
 .shop-commerce-pagination-range { min-width: 88px; color: #aaa39c; font-size: 11px; text-align: center; white-space: nowrap; }
+.shop-commerce-page-jump { display: flex; align-items: center; gap: 5px; color: #817a74; font-size: 10px; white-space: nowrap; }
+.shop-commerce-page-jump input { width: 46px; height: 36px; appearance: textfield; border: 1px solid #48434c; border-radius: 10px; padding: 0 5px; color: #eee9e5; background: #29262c; font: inherit; font-size: 11px; font-weight: 800; text-align: center; outline: 0; }
+.shop-commerce-page-jump input::-webkit-inner-spin-button { display: none; }
+.shop-commerce-page-jump input:focus { border-color: rgba(255,107,0,.68); box-shadow: 0 0 0 3px rgba(255,107,0,.09); }
+.shop-commerce-page-jump em { color: #77716c; font-size: 10px; font-style: normal; }
 .shop-commerce-pagination-arrows { display: flex; align-items: center; gap: 3px; }
 .shop-commerce-pagination button { width: 38px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 11px; padding: 0; color: #d8d2cc; background: transparent; line-height: 1; cursor: pointer; transition: color .15s ease, background .15s ease, opacity .15s ease; }
 .shop-commerce-pagination button:hover:not(:disabled) { color: #ff8126; background: rgba(255,107,0,.09); }
@@ -13554,6 +13564,8 @@ body::after {
   .shop-commerce-page-size select { width: 51px; padding-left: 8px; }
   .shop-commerce-page-size i { right: 7px; }
   .shop-commerce-pagination-range { min-width: 74px; font-size: 10px; }
+  .shop-commerce-page-jump > span { display: none; }
+  .shop-commerce-page-jump input { width: 40px; }
   .shop-commerce-pagination button { width: 34px; }
 }
 .commerce-pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 6px 9px; color: var(--pill, #a49d96); background: color-mix(in srgb, var(--pill, #a49d96) 11%, transparent); font-size: 7px; font-weight: 900; letter-spacing: .06em; }

@@ -1872,6 +1872,11 @@
       setProductSkuStatus('available');
       return true;
     }
+    const originalSku = normalizeSkuInput(state.editingProduct?.sku || '');
+    if (state.editingProduct?.id && sku === originalSku) {
+      setProductSkuStatus('available');
+      return true;
+    }
     setProductSkuStatus('checking');
     try {
       const result = await window.SHOP_API.checkProductSku(sku, state.editingProduct?.id || '');

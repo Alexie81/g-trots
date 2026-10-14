@@ -9,12 +9,14 @@ const css = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'style.css'),
 const mobile = fs.readFileSync(path.join(__dirname, '..', '..', 'components', 'ShopOrdersManager.tsx'), 'utf8');
 
 assert.match(source, /function tableHeaderPagination\(key, total, page, pageCount, pageSize\)/, 'Desktop trebuie să aibă paginarea compactă din antet.');
-assert.match(source, /<th>Factură<\/th><th class="shop-order-table-pagination-cell">\$\{topPagination\}<\/th>/, 'Paginarea desktop trebuie afișată imediat după coloana Factură.');
+assert.match(source, /<th colspan="2" class="shop-order-table-pagination-cell"><div class="shop-order-table-head-group"><span>Factură<\/span>\$\{topPagination\}<\/div><\/th>/, 'Paginarea desktop trebuie grupată compact cu Factură, fără o coloană suplimentară.');
 assert.match(source, /shop-order-table-top-pagination[\s\S]*data-page-key="\$\{key\}"[\s\S]*data-page="\$\{page \+ 1\}"/, 'Butoanele paginării de sus trebuie legate la mecanismul comun de schimbare a paginii.');
 assert.match(source, /shop-order-table-top-pagination[\s\S]*data-page-input-key="\$\{key\}"/, 'Paginarea desktop de sus trebuie să permită introducerea numărului paginii.');
 assert.match(source, /shop-commerce-page-jump[\s\S]*data-page-input-key="\$\{key\}"/, 'Paginarea desktop de jos trebuie să permită introducerea numărului paginii.');
 assert.match(source, /querySelectorAll\(`\[data-page-input-key="\$\{key\}"\]`\)/, 'Toate câmpurile de pagină trebuie conectate la navigare.');
-assert.match(css, /\.shop-commerce-table\.orders th\.shop-order-table-pagination-cell\s*\{[^}]*text-align:\s*right/s, 'Paginarea desktop trebuie aliniată în dreapta antetului.');
+assert.match(source, /shop-order-table-top-pagination[\s\S]*<span>Pg<\/span>/, 'Paginarea desktop trebuie să folosească eticheta compactă Pg.');
+assert.match(css, /\.shop-order-table-head-group\s*\{[^}]*justify-content:\s*space-between/s, 'Factura și paginarea desktop trebuie distribuite elegant în același grup de antet.');
+assert.doesNotMatch(css, /shop-order-table-pagination-cell[^}]*min-width:\s*362px/s, 'Paginarea desktop nu trebuie să mai lățească forțat tabelul.');
 
 const actionsIndex = mobile.indexOf('<View style={styles.actions}>');
 const topPaginationIndex = mobile.indexOf('<View style={styles.topPagination}>');

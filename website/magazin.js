@@ -193,6 +193,11 @@ const searchInput = document.querySelector("#product-search");
 const searchField = document.querySelector(".shop-search-field");
 const searchClear = document.querySelector(".shop-search-clear");
 const searchDeck = document.querySelector(".shop-search-deck");
+const initialCatalogSearchQuery = String(new URLSearchParams(window.location.search).get("q") || "").trim().slice(0, 180);
+if (searchInput && initialCatalogSearchQuery) {
+  searchInput.value = initialCatalogSearchQuery;
+  if (searchClear) searchClear.hidden = false;
+}
 const smartSearchPanel = document.querySelector("#smart-search-panel");
 const smartSearchContent = document.querySelector("[data-smart-search-content]");
 const smartSearchOverlay = document.querySelector("[data-smart-search-overlay]");

@@ -1285,6 +1285,10 @@ body.filters-open {
   transform: translateX(2px);
 }
 
+.desktop-search-expander {
+  display: none;
+}
+
 .smart-search-overlay[hidden],
 .smart-search-panel[hidden] {
   display: none;
@@ -1362,6 +1366,145 @@ body.smart-search-closing .smart-search-overlay {
 @media (min-width: 701px) {
   .smart-search-panel {
     height: min(36rem, calc(100vh - 8rem));
+  }
+
+  .shop-search-deck.has-inline-results,
+  .shop-search-deck.is-inline-collapsing {
+    align-items: start;
+  }
+
+  .shop-search-deck.has-inline-results .smart-search-panel,
+  .shop-search-deck.is-inline-collapsing .smart-search-panel {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    max-height: min(36rem, calc(100vh - 9rem));
+    grid-column: 1 / -1;
+    position: relative;
+    inset: auto;
+    z-index: 1;
+    margin-top: 0.12rem;
+    border-radius: 1.35rem;
+    box-shadow: 0 1.1rem 2.8rem rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+    transform-origin: top center;
+    animation: desktop-inline-results-in 220ms cubic-bezier(0.2, 0.82, 0.2, 1) both;
+  }
+
+  .shop-search-deck.is-inline-collapsing .smart-search-panel {
+    pointer-events: none;
+    animation: desktop-inline-results-out 220ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
+  .shop-search-deck.has-inline-results .smart-search-content,
+  .shop-search-deck.is-inline-collapsing .smart-search-content {
+    min-height: 0;
+    max-height: min(29rem, calc(100vh - 14rem));
+  }
+
+  .shop-search-deck.has-inline-results .smart-search-footer,
+  .shop-search-deck.is-inline-collapsing .smart-search-footer {
+    display: none;
+  }
+
+  .shop-search-deck.has-inline-results .smart-search-head > button span,
+  .shop-search-deck.is-inline-collapsing .smart-search-head > button span {
+    font-size: 0;
+  }
+
+  .shop-search-deck.has-inline-results .smart-search-head > button span::before,
+  .shop-search-deck.is-inline-collapsing .smart-search-head > button span::before {
+    content: "⌃";
+    display: block;
+    color: #ff9b2b;
+    font-size: 1.55rem;
+    font-weight: 900;
+    line-height: 1;
+    transform: translateY(0.18rem);
+  }
+
+  .shop-search-deck:not(.has-inline-results):not(.is-inline-collapsing) .desktop-search-expander {
+    min-height: 1.15rem;
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    position: relative;
+    margin: -0.08rem 0.42rem 0.02rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    animation: desktop-inline-expander-in 180ms ease both;
+  }
+
+  .desktop-search-expander::before {
+    content: "";
+    height: 0.22rem;
+    position: absolute;
+    inset: 50% 0.35rem auto;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(240, 127, 0, 0.16), rgba(240, 127, 0, 0.74) 72%, rgba(240, 127, 0, 0.22));
+    box-shadow: 0 0.3rem 0.9rem rgba(240, 127, 0, 0.12);
+    transform: translateY(-50%);
+    transition: height 180ms ease, background 180ms ease, box-shadow 180ms ease;
+  }
+
+  .desktop-search-expander > span {
+    width: 2rem;
+    height: 1.15rem;
+    display: grid;
+    place-items: center;
+    position: relative;
+    z-index: 1;
+    border: 1px solid rgba(240, 127, 0, 0.32);
+    border-radius: 999px;
+    background: #25221f;
+    box-shadow: 0 0.3rem 0.9rem rgba(0, 0, 0, 0.2);
+    transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+  }
+
+  .desktop-search-expander > span::before {
+    content: "";
+    width: 0.5rem;
+    height: 0.5rem;
+    border-right: 2px solid #ff9b2b;
+    border-bottom: 2px solid #ff9b2b;
+    transform: translateY(-0.12rem) rotate(45deg);
+  }
+
+  .desktop-search-expander:hover::before,
+  .desktop-search-expander:focus-visible::before {
+    height: 0.28rem;
+    background: linear-gradient(90deg, rgba(240, 127, 0, 0.28), #ff8a0b 72%, rgba(240, 127, 0, 0.34));
+    box-shadow: 0 0.35rem 1rem rgba(240, 127, 0, 0.24);
+  }
+
+  .desktop-search-expander:hover > span,
+  .desktop-search-expander:focus-visible > span {
+    border-color: rgba(255, 155, 43, 0.72);
+    background: #31271d;
+    transform: translateY(0.08rem);
+  }
+
+  .desktop-search-expander:focus-visible {
+    outline: none;
+  }
+
+  html[data-theme="light"] body.shop-page .desktop-search-expander > span {
+    background: #fffaf4;
+    box-shadow: 0 0.3rem 0.9rem rgba(125, 73, 19, 0.12);
+  }
+
+  html[data-theme="light"] body.shop-page .desktop-search-expander:hover > span,
+  html[data-theme="light"] body.shop-page .desktop-search-expander:focus-visible > span {
+    background: #fff2e3;
+  }
+}
+
+@media (min-width: 1001px) {
+  .shop-search-deck.has-inline-results .smart-search-results,
+  .shop-search-deck.is-inline-collapsing .smart-search-results {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -1807,6 +1950,37 @@ body.smart-search-closing .smart-search-overlay {
 @keyframes smart-search-panel-in {
   from { opacity: 0; transform: translateY(-0.55rem) scale(0.99); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes desktop-inline-results-in {
+  from {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(-0.5rem) scaleY(0.96);
+  }
+  to {
+    opacity: 1;
+    max-height: min(36rem, calc(100vh - 9rem));
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+@keyframes desktop-inline-results-out {
+  from {
+    opacity: 1;
+    max-height: min(36rem, calc(100vh - 9rem));
+    transform: translateY(0) scaleY(1);
+  }
+  to {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(-0.5rem) scaleY(0.96);
+  }
+}
+
+@keyframes desktop-inline-expander-in {
+  from { opacity: 0; transform: translateY(-0.35rem); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes smart-search-collapse-to-icon {

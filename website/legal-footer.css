@@ -815,24 +815,25 @@ body.menu-open .gt-store-shortcut { opacity: 0; pointer-events: none; }
   .gt-public-header .menu-toggle[aria-expanded="true"] span:first-child { transform: translateY(0.22rem) rotate(45deg); }
   .gt-public-header .menu-toggle[aria-expanded="true"] span:last-child { transform: translateY(-0.22rem) rotate(-45deg); }
   .gt-public-header .main-nav {
-    position: fixed;
+    position: absolute;
     z-index: 101;
-    inset: 5.15rem 0.65rem auto;
-    max-height: calc(100svh - 5.8rem);
+    inset: auto 0.2rem auto;
+    top: calc(100% + 0.5rem) !important;
+    max-height: var(--gt-mobile-menu-max-height, calc(100svh - 5.8rem)) !important;
     margin: 0;
-    padding: 0.65rem;
+    padding: 0.52rem;
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 0.25rem;
+    gap: 0.12rem;
     overflow-y: auto;
     border: 1px solid rgba(255, 255, 255, 0.11);
-    border-radius: 1.75rem;
+    border-radius: 1.45rem;
     background:
       radial-gradient(circle at 100% 0%, rgba(240, 127, 0, 0.12), transparent 14rem),
       rgba(10, 10, 10, 0.94);
     color: #eeeae5;
-    box-shadow: 0 2rem 5rem rgba(0, 0, 0, 0.58), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+    box-shadow: 0 1.35rem 3.5rem rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.055);
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
@@ -843,29 +844,36 @@ body.menu-open .gt-store-shortcut { opacity: 0; pointer-events: none; }
     transition: opacity 240ms ease, visibility 240ms ease, transform 320ms cubic-bezier(0.16, 1, 0.3, 1);
   }
   .gt-public-header .main-nav.open { opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0) scale(1); }
-  .gt-public-header .mobile-nav-heading { min-height: 3rem; padding: 0.45rem 0.65rem 0.7rem; display: flex; align-items: end; justify-content: space-between; gap: 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+  .gt-public-header .mobile-nav-heading { min-height: 2.35rem; padding: 0.3rem 0.62rem 0.48rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
   .gt-public-header .mobile-nav-heading span { color: #fff; font-size: 0.72rem; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
   .gt-public-header .mobile-nav-heading small { color: var(--gt-orange); font-size: 0.67rem; font-weight: 800; }
   .gt-public-header .main-nav > a:not(.mobile-nav-call) {
-    min-height: 4rem;
+    min-height: 3.35rem;
     margin: 0;
-    padding: 0.75rem 0.85rem;
+    padding: 0.48rem 0.65rem;
     display: grid;
-    grid-template-columns: 2rem 1fr auto;
+    grid-template-columns: 1.75rem minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.65rem;
     border: 1px solid transparent;
-    border-radius: 1.15rem;
+    border-radius: 1rem;
     color: #eeeae5 !important;
     background: transparent;
-    font-size: clamp(1rem, 4.5vw, 1.15rem);
+    font-size: clamp(0.95rem, 4.1vw, 1.05rem);
     font-weight: 760;
     letter-spacing: -0.04em;
     transition: color 180ms ease, background 180ms ease, border-color 180ms ease, transform 180ms ease;
   }
   .gt-public-header .main-nav > a:not(.mobile-nav-call)::before {
+    width: 1.7rem;
+    height: 1.7rem;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(128, 128, 128, 0.12);
+    border-radius: 0.58rem;
+    background: rgba(127, 127, 127, 0.055);
     color: #66625f;
-    font-size: 0.62rem;
+    font-size: 0.56rem;
     font-weight: 850;
     letter-spacing: 0.08em;
   }
@@ -898,12 +906,18 @@ body.menu-open .gt-store-shortcut { opacity: 0; pointer-events: none; }
     color: var(--gt-orange);
     opacity: 1;
   }
+  html[data-theme="light"] .gt-public-header .main-nav > a:not(.mobile-nav-call):not(.nav-shop-link):not(.mobile-nav-account) {
+    color: #171b24 !important;
+  }
+  html[data-theme="dark"] .gt-public-header .main-nav > a:not(.mobile-nav-call):not(.nav-shop-link):not(.mobile-nav-account) {
+    color: #f7f9ff !important;
+  }
   .gt-public-header .main-nav > a.nav-shop-link:not(.mobile-nav-call) {
-    min-height: 4.45rem;
+    min-height: 3.65rem;
     margin: 0;
-    padding: 0.62rem 0.72rem;
-    grid-template-columns: 2.75rem 1fr auto;
-    gap: 0.8rem;
+    padding: 0.42rem 0.58rem;
+    grid-template-columns: 2.35rem 1fr auto;
+    gap: 0.68rem;
     border-color: rgba(255, 158, 44, 0.3);
     background:
       linear-gradient(135deg, rgba(255, 145, 0, 0.2), rgba(79, 45, 21, 0.5)),
@@ -913,20 +927,18 @@ body.menu-open .gt-store-shortcut { opacity: 0; pointer-events: none; }
   }
   .gt-public-header .main-nav > a.nav-shop-link:not(.mobile-nav-call)::before { content: none; }
   .gt-public-header .main-nav > a.nav-shop-link:not(.mobile-nav-call)::after { position: static; top: auto; right: auto; border-radius: 0; background: transparent; }
-  .gt-public-header .main-nav > a.nav-shop-link:not(.mobile-nav-call) .nav-shop-icon { width: 2.75rem; height: 2.75rem; flex-basis: 2.75rem; border-radius: 0.9rem; }
-  .gt-public-header .main-nav > a.nav-shop-link:not(.mobile-nav-call) .nav-shop-icon::before { top: 1.13rem; left: 0.97rem; }
-  .gt-public-header .main-nav > a.nav-shop-link:not(.mobile-nav-call) .nav-shop-icon::after { top: 0.79rem; left: 1.14rem; }
+  .gt-public-header .main-nav > a.nav-shop-link:not(.mobile-nav-call) .nav-shop-icon { width: 2.35rem; height: 2.35rem; flex-basis: 2.35rem; border-radius: 0.78rem; transform: scale(0.86); }
 
   .gt-public-header .main-nav > a.mobile-nav-account:not(.mobile-nav-call) {
-    min-height: 4.65rem;
-    margin-top: 0.35rem;
-    padding: 0.55rem 0.65rem;
+    min-height: 3.85rem;
+    margin-top: 0.2rem;
+    padding: 0.42rem 0.55rem;
     display: grid;
-    grid-template-columns: 3.15rem minmax(0, 1fr) 2rem;
-    gap: 0.8rem;
+    grid-template-columns: 2.65rem minmax(0, 1fr) 1.85rem;
+    gap: 0.68rem;
     overflow: hidden;
     border: 1px solid rgba(255, 149, 30, 0.28);
-    border-radius: 1.25rem;
+    border-radius: 1.05rem;
     background: linear-gradient(135deg, rgba(255, 139, 14, 0.15), rgba(255, 255, 255, 0.035));
     color: #fff !important;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
@@ -934,13 +946,13 @@ body.menu-open .gt-store-shortcut { opacity: 0; pointer-events: none; }
   .gt-public-header .main-nav > a.mobile-nav-account:not(.mobile-nav-call)::before,
   .gt-public-header .main-nav > a.mobile-nav-account:not(.mobile-nav-call)::after { content: none; }
   .gt-public-header .mobile-nav-account-avatar {
-    width: 3.15rem;
-    height: 3.15rem;
+    width: 2.65rem;
+    height: 2.65rem;
     padding: 0.16rem;
     display: grid;
     place-items: center;
     border: 1px solid rgba(255, 151, 45, 0.48);
-    border-radius: 1rem;
+    border-radius: 0.85rem;
     background: linear-gradient(145deg, #30251d, #1c1815);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0.55rem 1.35rem rgba(0, 0, 0, 0.24);
   }
@@ -949,7 +961,7 @@ body.menu-open .gt-store-shortcut { opacity: 0; pointer-events: none; }
     height: 100%;
     display: block;
     position: relative;
-    border-radius: 0.82rem;
+    border-radius: 0.7rem;
     background: linear-gradient(145deg, #27231f, #161412);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.065);
   }
@@ -959,7 +971,7 @@ body.menu-open .gt-store-shortcut { opacity: 0; pointer-events: none; }
     content: "";
     position: absolute;
     left: 50%;
-    top: 0.55rem;
+    top: 0.43rem;
     border-radius: 50%;
     background: #fff7ee;
     transform: translateX(-50%);
@@ -970,7 +982,7 @@ body.menu-open .gt-store-shortcut { opacity: 0; pointer-events: none; }
     content: "";
     position: absolute;
     left: 50%;
-    bottom: 0.42rem;
+    bottom: 0.34rem;
     border-radius: 1rem 1rem 0.5rem 0.5rem;
     background: #fff7ee;
     transform: translateX(-50%);
@@ -981,19 +993,19 @@ body.menu-open .gt-store-shortcut { opacity: 0; pointer-events: none; }
   .gt-public-header .mobile-nav-account > b { width: 2rem; height: 2rem; display: grid; place-items: center; border-radius: 0.72rem; background: rgba(255, 139, 14, 0.13); color: #ff9b2f; font-size: 1.25rem; }
 
   .gt-public-header .mobile-nav-call {
-    min-height: 4.4rem;
-    margin-top: 0.4rem;
-    padding: 0.55rem 0.65rem;
+    min-height: 3.85rem;
+    margin-top: 0.2rem;
+    padding: 0.42rem 0.55rem;
     display: grid;
     grid-template-columns: auto 1fr;
     align-items: center;
     gap: 0 0.75rem;
-    border-radius: 1.25rem;
+    border-radius: 1.05rem;
     background: var(--gt-orange);
     color: #fff;
     box-shadow: 0 1rem 2.2rem rgba(240, 127, 0, 0.2);
   }
-  .gt-public-header .mobile-nav-call > span { width: 3.1rem; height: 3.1rem; grid-row: span 2; display: grid; place-items: center; border: 1px solid rgba(255, 255, 255, 0.32); border-radius: 50%; background: rgba(20, 20, 20, 0.28); }
+  .gt-public-header .mobile-nav-call > span { width: 2.65rem; height: 2.65rem; grid-row: span 2; display: grid; place-items: center; border: 1px solid rgba(255, 255, 255, 0.32); border-radius: 50%; background: rgba(20, 20, 20, 0.28); }
   .gt-public-header .mobile-nav-call svg { width: 1.25rem; height: 1.25rem; fill: currentColor; }
   .gt-public-header .mobile-nav-call strong { align-self: end; font-size: 1rem; font-weight: 900; letter-spacing: -0.035em; }
   .gt-public-header .mobile-nav-call small { align-self: start; color: rgba(255, 255, 255, 0.76); font-size: 0.68rem; font-weight: 750; }

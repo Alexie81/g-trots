@@ -1,5 +1,5 @@
 (() => {
-  const COMPONENT_VERSION = '20261014-mobile-context-switch-v1';
+  const COMPONENT_VERSION = '20261014-mobile-menu-v2';
   if (window.__gtLegalFooterVersion === COMPONENT_VERSION) return;
   window.__gtLegalFooterVersion = COMPONENT_VERSION;
   window.__gtLegalFooter = true;
@@ -59,7 +59,7 @@
       onload() { this.media = 'all'; },
     });
   }
-  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20261014-mobile-context-switch-v1' });
+  loadAsset('link', { rel: 'stylesheet', href: '/legal-footer.css?v=20261014-mobile-menu-v2' });
   // Generated catalogue pages may still reference a cached, older stylesheet.
   // Keep it until the current revision loads, preserving its cascade position.
   const catalogStyles = document.querySelector('link[rel="stylesheet"][href*="magazin.css"]');
@@ -326,7 +326,17 @@ ${navigationHtml}
       account.querySelector('strong').textContent = name;
       account.classList.toggle('is-authenticated', Boolean(loggedIn && customer));
     };
+    const syncMobileMenuPosition = () => {
+      if (!headerInner || innerWidth > 900) {
+        nav.style.removeProperty('--gt-mobile-menu-max-height');
+        return;
+      }
+      const headerBox = headerInner.getBoundingClientRect();
+      const availableHeight = Math.max(240, Math.floor(innerHeight - headerBox.bottom - 16));
+      nav.style.setProperty('--gt-mobile-menu-max-height', `${availableHeight}px`);
+    };
     const setOpen = open => {
+      if (open) syncMobileMenuPosition();
       document.body.classList.toggle('menu-open', open);
       nav.classList.toggle('open', open);
       toggle.setAttribute('aria-expanded', String(open));
@@ -342,7 +352,13 @@ ${navigationHtml}
       if (nav.classList.contains('open') && !header.contains(event.target)) setOpen(false);
     }, true);
     addEventListener('keydown', event => { if (event.key === 'Escape') setOpen(false); });
-    addEventListener('resize', () => { if (innerWidth > 900) setOpen(false); }, { passive: true });
+    addEventListener('resize', () => {
+      if (innerWidth > 900) setOpen(false);
+      else if (nav.classList.contains('open')) syncMobileMenuPosition();
+    }, { passive: true });
+    document.addEventListener('g-trots:promotions-viewed', () => {
+      if (nav.classList.contains('open')) requestAnimationFrame(syncMobileMenuPosition);
+    });
     addEventListener('storage', event => {
       if (event.key === 'g-trots-customer-session-v1' || event.key === 'g-trots-customer-profile-v1') syncMobileAccount();
     });

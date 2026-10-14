@@ -23,6 +23,7 @@ import { getClientByQrCode, getOrCreateServiceSheetForClient, getPricePresets, m
 import type { Client, PricePreset, ServiceFormData } from '@/types';
 import { Focus, Keyboard, Lightbulb, ScanLine, Smartphone, SunMedium, ZoomIn } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import KeyboardAwareScrollView from '@/components/KeyboardAwareScrollView';
 
 type ScanState = 'idle' | 'loading';
 
@@ -299,7 +300,8 @@ export default function ScannerScreen() {
     <View style={styles.container}>
       <Header title="" right={<MobileChatHeaderButton />} />
 
-      <ScrollView
+      <KeyboardAwareScrollView
+        extraScrollHeight={125}
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
@@ -373,7 +375,7 @@ export default function ScannerScreen() {
             <View style={styles.instructionStep}><Text style={styles.stepNumber}>3</Text><Text style={styles.instrText}>Dupa detectare, datele clientului apar automat.</Text></View>
           </View>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* Modals */}
       <QrServiceModal

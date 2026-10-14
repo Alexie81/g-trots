@@ -20,6 +20,7 @@ import MobileChatHeaderButton from '@/components/MobileChatHeaderButton';
 import ClientCollaboratorSelector from '@/components/ClientCollaboratorSelector';
 import ClientExpenseSelector from '@/components/ClientExpenseSelector';
 import FinancialPriceControls from '@/components/FinancialPriceControls';
+import KeyboardAwareScrollView from '@/components/KeyboardAwareScrollView';
 import { useAuth } from '@/contexts/AuthContext';
 import QrCodeViewer from '@/components/QrCodeViewer';
 import WhatsAppPresetPicker from '@/components/WhatsAppPresetPicker';
@@ -484,7 +485,8 @@ export default function EditClientScreen() {
           }
         />
 
-        <ScrollView
+        <KeyboardAwareScrollView
+          extraScrollHeight={135}
           contentContainerStyle={styles.form}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
@@ -1132,7 +1134,7 @@ export default function EditClientScreen() {
               ) : null}
             </View>
           ) : null}
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </View>
 
       {client && (

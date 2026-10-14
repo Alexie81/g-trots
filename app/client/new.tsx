@@ -17,6 +17,7 @@ import MobileChatHeaderButton from '@/components/MobileChatHeaderButton';
 import ClientCollaboratorSelector from '@/components/ClientCollaboratorSelector';
 import ClientExpenseSelector from '@/components/ClientExpenseSelector';
 import FinancialPriceControls from '@/components/FinancialPriceControls';
+import KeyboardAwareScrollView from '@/components/KeyboardAwareScrollView';
 import { createClient, createExpenseCategory, getCollaborators, getExpenseCategories, getProfiles, getPricePresets } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Profile, Collaborator, ExpenseCategory, ClientFormData, PricePreset } from '@/types';
@@ -198,7 +199,8 @@ export default function NewClientScreen() {
           }
         />
 
-        <ScrollView
+        <KeyboardAwareScrollView
+          extraScrollHeight={135}
           contentContainerStyle={styles.form}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
@@ -404,7 +406,7 @@ export default function NewClientScreen() {
               </TouchableOpacity>
             ))}
           </View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </View>
     </KeyboardAvoidingView>
   );

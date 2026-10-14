@@ -37,6 +37,7 @@ import {
   X,
 } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
+import KeyboardAwareScrollView from '@/components/KeyboardAwareScrollView';
 import { useAuth } from '@/contexts/AuthContext';
 import RichTextEditor from '@/components/RichTextEditor';
 import ShopPagination from '@/components/ShopPagination';
@@ -756,7 +757,8 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
 
   return (
     <>
-      <ScrollView
+      <KeyboardAwareScrollView
+        extraScrollHeight={125}
         style={styles.wrap}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 94 + bottomInset }]}
         stickyHeaderIndices={[1]}
@@ -796,7 +798,7 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
       )) : <View style={styles.empty}><Package size={32} color="#A78BFA" /><Text style={styles.emptyTitle}>Niciun produs</Text><Text style={styles.emptyText}>Adauga primul produs pentru a-l publica pe site.</Text></View>}
       <ShopPagination page={safePage} pageSize={pageSize} total={productTotal} onPageChange={setPage} onPageSizeChange={(nextSize) => { setPage(1); setPageSize(nextSize); }} />
       </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {detailVisible ? <Modal visible animationType="none" onRequestClose={closeDetail}>
         <SafeAreaView style={styles.editorSafe} edges={['top', 'bottom']}>
@@ -840,7 +842,7 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
             <View style={styles.editorHeaderCopy}><Text style={styles.editorKicker}>CRM PRODUSE</Text><Text style={styles.editorTitle}>{form.id ? 'Editeaza produsul' : 'Produs nou'}</Text></View>
             <TouchableOpacity style={[styles.saveTop, (saving || editorLoading) && styles.disabled]} onPress={() => void save()} disabled={saving || editorLoading}>{saving ? <ActivityIndicator color={Colors.white} /> : <><Save size={17} color={Colors.white} /><Text style={styles.saveTopText}>Salveaza</Text></>}</TouchableOpacity>
           </View>
-          {editorLoading ? <View style={styles.editorLoadingState}><View style={styles.editorLoadingIcon}><RefreshCw size={27} color={Colors.orange} /></View><ActivityIndicator size="large" color={Colors.orange} /><Text style={styles.editorLoadingTitle}>Se încarcă produsul</Text><Text style={styles.editorLoadingText}>Pregătim descrierea, imaginile, specificațiile și datele comerciale.</Text></View> : <ScrollView contentContainerStyle={[styles.form, { paddingBottom: Math.max(insets.bottom, 24) + 36 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          {editorLoading ? <View style={styles.editorLoadingState}><View style={styles.editorLoadingIcon}><RefreshCw size={27} color={Colors.orange} /></View><ActivityIndicator size="large" color={Colors.orange} /><Text style={styles.editorLoadingTitle}>Se încarcă produsul</Text><Text style={styles.editorLoadingText}>Pregătim descrierea, imaginile, specificațiile și datele comerciale.</Text></View> : <KeyboardAwareScrollView extraScrollHeight={135} contentContainerStyle={[styles.form, { paddingBottom: Math.max(insets.bottom, 24) + 36 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <SectionTitle number="01" title="Sursa si identitate" text="Alege provenienta produsului si adresa lui publica." />
             <Text style={styles.label}>SURSA PRODUSULUI</Text>
             <View style={styles.sourceRow}>
@@ -931,7 +933,7 @@ export default function ShopProductsManager({ onOpenOrder, header, bottomInset =
             <View style={styles.toggleCard}><View><Text style={styles.toggleTitle}>Produs activ</Text><Text style={styles.toggleText}>Este vizibil si poate fi comandat pe site.</Text></View><Switch value={form.is_active} onValueChange={(value) => patchForm('is_active', value)} trackColor={{ false: '#39363D', true: Colors.orangeMid }} thumbColor={form.is_active ? Colors.orange : '#8A8A8A'} /></View>
             <View style={styles.toggleCard}><View><Text style={styles.toggleTitle}>Produs recomandat</Text><Text style={styles.toggleText}>Apare prioritar in magazin.</Text></View><Switch value={form.is_featured} onValueChange={(value) => patchForm('is_featured', value)} trackColor={{ false: '#39363D', true: '#F59E0B55' }} thumbColor={form.is_featured ? '#F59E0B' : '#8A8A8A'} /></View>
             <TouchableOpacity style={[styles.saveBottom, saving && styles.disabled]} onPress={() => void save()} disabled={saving}>{saving ? <ActivityIndicator color={Colors.white} /> : <><Save size={19} color={Colors.white} /><Text style={styles.saveBottomText}>Salveaza produsul</Text></>}</TouchableOpacity>
-          </ScrollView>}
+          </KeyboardAwareScrollView>}
         </SafeAreaView>
       </Modal> : null}
       {saving ? <ProductSaveProgress mode={savingMode} /> : null}

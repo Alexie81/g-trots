@@ -27,6 +27,7 @@ import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { shopApi, shopOrderCustomerDisplayName, ShopOrder, ShopOrderPage, ShopProduct, ShopProductStats, ShopShippingNoteDraftInput } from '@/services/shopApi';
 import ShopPagination from '@/components/ShopPagination';
+import KeyboardAwareScrollView from '@/components/KeyboardAwareScrollView';
 import { runWhenIdle } from '@/utils/runWhenIdle';
 
 const orderStatuses = [
@@ -1024,7 +1025,7 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
       <Modal visible={Boolean(selected)} animationType="slide" onRequestClose={() => productPanelId ? closeProductPanel() : (!saving && closeOrder())}>
         <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
           <View style={styles.modalHeader}><TouchableOpacity style={styles.close} onPress={closeOrder}><X size={21} color={Colors.textSecondary} /></TouchableOpacity><View style={styles.modalHeaderCopy}><Text style={styles.modalKicker}>COMANDA SHOP</Text><Text style={styles.modalTitle}>{selected?.order_number}</Text></View><TouchableOpacity style={[styles.save, (saving || detailLoading || Boolean(detailErrorMessage)) && styles.disabled]} onPress={() => void save()} disabled={saving || detailLoading || Boolean(detailErrorMessage)}>{saving ? <ActivityIndicator color={Colors.white} /> : <><Save size={17} color={Colors.white} /><Text style={styles.saveText}>Salveaza</Text></>}</TouchableOpacity></View>
-          {selected ? <ScrollView contentContainerStyle={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 20) + 30 }]} showsVerticalScrollIndicator={false}>
+          {selected ? <KeyboardAwareScrollView extraScrollHeight={130} contentContainerStyle={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 20) + 30 }]} showsVerticalScrollIndicator={false}>
             {detailLoading ? <View style={styles.detailLoading}><ActivityIndicator color={Colors.orange} /><Text style={styles.detailLoadingText}>Actualizăm istoricul comenzii...</Text></View> : null}
             {!detailLoading && detailErrorMessage ? <View style={[styles.detailLoading, styles.detailError]}><Text style={styles.detailErrorText}>Detaliile complete nu s-au încărcat.</Text><TouchableOpacity style={styles.detailRetry} onPress={() => void openOrder(selected.id, selected)}><RefreshCw size={13} color="#FFFFFF" /><Text style={styles.detailRetryText}>Reîncearcă</Text></TouchableOpacity></View> : null}
             <ClientInfoBlock
@@ -1178,7 +1179,7 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
             <View style={styles.chips}>{paymentStatuses.map((item) => <TouchableOpacity key={item.value} style={[styles.chip, paymentStatus === item.value && styles.chipActive]} onPress={() => setPaymentStatus(item.value)}>{paymentStatus === item.value ? <Check size={13} color={Colors.orange} /> : null}<Text style={[styles.chipText, paymentStatus === item.value && styles.chipTextActive]}>{item.label}</Text></TouchableOpacity>)}</View>
             {selected.customer_notes ? <InfoBlock title="Observatii client" lines={[selected.customer_notes]} /> : null}
             <Text style={styles.sectionLabel}>NOTITE INTERNE</Text><TextInput value={adminNotes} onChangeText={setAdminNotes} multiline placeholder="Adauga informatii vizibile doar in CRM" placeholderTextColor={Colors.textMuted} style={styles.notes} />
-          </ScrollView> : null}
+          </KeyboardAwareScrollView> : null}
           {productPanelId ? <Animated.View
             style={[
               styles.productPanelLayer,
@@ -1242,7 +1243,7 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
       <Modal visible={replacementTransportPrompt} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setReplacementTransportPrompt(false)}>
         <Pressable style={styles.invoicePromptBackdrop} onPress={() => setReplacementTransportPrompt(false)}>
           <Pressable style={[styles.invoicePrompt, styles.replacementTransportPrompt]} onPress={(event) => event.stopPropagation()}>
-            <ScrollView bounces={false} showsVerticalScrollIndicator={false} contentContainerStyle={styles.invoicePromptScroll}>
+            <KeyboardAwareScrollView extraScrollHeight={120} bounces={false} showsVerticalScrollIndicator={false} contentContainerStyle={styles.invoicePromptScroll}>
               <View style={styles.invoicePromptHead}><View style={[styles.invoicePromptLogo, styles.replacementTransportLogo]}><Truck size={25} color="#C4B5FD" /></View><TouchableOpacity style={styles.invoicePromptClose} onPress={() => setReplacementTransportPrompt(false)}><X size={18} color={Colors.textSecondary} /></TouchableOpacity></View>
               <Text style={[styles.invoicePromptEyebrow, { color: '#C4B5FD' }]}>COMANDĂ LIVRATĂ ȘI FACTURATĂ</Text>
               <Text style={styles.invoicePromptTitle}>Transportul înlocuirii</Text>
@@ -1254,14 +1255,14 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
                 {returnShippingPayer === 'customer' ? <View style={styles.returnShippingAmountRow}><Text style={styles.returnShippingAmountLabel}>VALOARE TRANSPORT RETUR</Text><View style={styles.shippingCostField}><TextInput selectTextOnFocus keyboardType="decimal-pad" value={returnShippingCostDraft} onChangeText={setReturnShippingCostDraft} style={styles.shippingCostInput} /><Text style={styles.shippingCostCurrency}>lei</Text></View></View> : <Text style={styles.returnShippingChoiceHelp}>{returnShippingPayer === 'company' ? 'Clientului nu i se reține transportul de retur.' : 'Alege Clientul sau Firma pentru a continua.'}</Text>}
               </View>
               <View style={styles.invoicePromptActions}><TouchableOpacity style={styles.invoicePromptCancel} onPress={() => setReplacementTransportPrompt(false)}><Text style={styles.invoicePromptCancelText}>Înapoi</Text></TouchableOpacity><TouchableOpacity style={[styles.invoicePromptConfirm, { backgroundColor: '#7C3AED' }]} onPress={confirmReplacementTransport}><Check size={18} color="#FFFFFF" /><Text style={styles.invoicePromptConfirmText}>Confirmă transportul</Text></TouchableOpacity></View>
-            </ScrollView>
+            </KeyboardAwareScrollView>
           </Pressable>
         </Pressable>
       </Modal>
       <Modal visible={Boolean(shippingNoteOrder)} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !shippingNoteBusy && setShippingNoteOrder(null)}>
         <Pressable style={styles.invoicePromptBackdrop} onPress={() => !shippingNoteBusy && setShippingNoteOrder(null)}>
           <Pressable style={[styles.invoicePrompt, styles.shippingNotePrompt]} onPress={(event) => event.stopPropagation()}>
-            <ScrollView bounces={false} showsVerticalScrollIndicator={false} contentContainerStyle={styles.invoicePromptScroll}>
+            <KeyboardAwareScrollView extraScrollHeight={120} bounces={false} showsVerticalScrollIndicator={false} contentContainerStyle={styles.invoicePromptScroll}>
               <View style={styles.invoicePromptHead}><View style={[styles.invoicePromptLogo, { borderColor: '#315E89', backgroundColor: '#172637' }]}><FileText size={26} color="#93C5FD" /></View><TouchableOpacity disabled={Boolean(shippingNoteBusy)} style={styles.invoicePromptClose} onPress={() => setShippingNoteOrder(null)}><X size={18} color={Colors.textSecondary} /></TouchableOpacity></View>
               <Text style={[styles.invoicePromptEyebrow, { color: '#93C5FD' }]}>AVIZ DE ÎNSOȚIRE A MĂRFII</Text>
               <Text style={styles.invoicePromptTitle}>Date privind expediția</Text>
@@ -1276,7 +1277,7 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
               ] as Array<[keyof Omit<ShopShippingNoteDraftInput, 'with_stamp'>, string]>).map(([key, label]) => <View key={key} style={styles.shippingNoteField}><Text style={styles.shippingNoteFieldLabel}>{label}</Text><TextInput value={shippingNoteDraft[key]} onChangeText={(value) => patchShippingNote(key, value)} maxLength={500} placeholder="-" placeholderTextColor="#716970" style={styles.shippingNoteInput} /></View>)}
               <TouchableOpacity activeOpacity={0.78} onPress={() => patchShippingNote('with_stamp', !shippingNoteDraft.with_stamp)} style={[styles.invoiceEmailSwitch, shippingNoteDraft.with_stamp && styles.shippingNoteStampActive]}><View style={styles.invoiceEmailCopy}><Text style={styles.invoiceEmailTitle}>Variantă cu ștampilă</Text><Text style={styles.invoiceEmailText}>În PDF apare ștampila salvată în Datele firmei, fără chenar.</Text></View><Switch value={shippingNoteDraft.with_stamp} onValueChange={(value) => patchShippingNote('with_stamp', value)} trackColor={{ false: '#5A545D', true: '#2563EB' }} thumbColor="#FFFFFF" ios_backgroundColor="#5A545D" /></TouchableOpacity>
               <View style={styles.invoicePromptActions}><TouchableOpacity disabled={Boolean(shippingNoteBusy)} style={styles.invoicePromptCancel} onPress={() => setShippingNoteOrder(null)}><Text style={styles.invoicePromptCancelText}>Renunță</Text></TouchableOpacity><TouchableOpacity disabled={Boolean(shippingNoteBusy)} style={[styles.invoicePromptConfirm, { backgroundColor: '#2563EB' }]} onPress={() => void issueShippingNote()}>{shippingNoteBusy ? <ActivityIndicator color="#FFFFFF" /> : <><FileText size={18} color="#FFFFFF" /><Text style={styles.invoicePromptConfirmText}>Generează avizul</Text></>}</TouchableOpacity></View>
-            </ScrollView>
+            </KeyboardAwareScrollView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1284,7 +1285,7 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
         <Pressable style={styles.invoicePromptBackdrop} onPress={() => !invoiceBusy && setInvoicePromptOrder(null)}>
           <Pressable style={styles.invoicePrompt} onPress={(event) => event.stopPropagation()}>
             <View style={styles.invoicePromptGlow} />
-            <ScrollView bounces={false} showsVerticalScrollIndicator={false} contentContainerStyle={styles.invoicePromptScroll}>
+            <KeyboardAwareScrollView extraScrollHeight={120} bounces={false} showsVerticalScrollIndicator={false} contentContainerStyle={styles.invoicePromptScroll}>
             <View style={styles.invoicePromptHead}><View style={styles.invoicePromptLogo}><FileCheck2 size={26} color="#FFB36B" /></View><TouchableOpacity disabled={Boolean(invoiceBusy)} style={styles.invoicePromptClose} onPress={() => setInvoicePromptOrder(null)}><X size={18} color={Colors.textSecondary} /></TouchableOpacity></View>
             <Text style={styles.invoicePromptEyebrow}>DOCUMENT FISCAL · TEMĂ FIXATĂ</Text>
             <Text style={styles.invoicePromptTitle}>{invoicePromptOrder?.status === 'return_confirmed' ? 'Emite factura și returul' : 'Emite factura'}</Text>
@@ -1294,7 +1295,7 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
             {invoicePromptOrder?.status === 'return_confirmed' ? <TouchableOpacity activeOpacity={0.78} disabled={!invoicePromptOrder.customer_email || Boolean(invoiceBusy)} onPress={() => setInvoiceSendReturnEmail((value) => !value)} style={[styles.invoiceEmailSwitch, invoiceSendReturnEmail && styles.invoiceEmailSwitchActive, !invoicePromptOrder.customer_email && styles.invoiceEmailSwitchDisabled]}><View style={[styles.invoiceEmailIcon, invoiceSendReturnEmail && styles.invoiceEmailIconActive]}><RotateCcw size={21} color={invoiceSendReturnEmail ? '#FFFFFF' : '#2DD4BF'} /></View><View style={styles.invoiceEmailCopy}><View style={styles.invoiceEmailTitleRow}><Text style={styles.invoiceEmailTitle}>Trimite factura de retur</Text><View style={[styles.invoiceEmailBadge, invoiceSendReturnEmail && styles.invoiceEmailBadgeActive]}><Text style={[styles.invoiceEmailBadgeText, invoiceSendReturnEmail && styles.invoiceEmailBadgeTextActive]}>{invoiceSendReturnEmail ? 'ACTIV' : 'OPȚIONAL'}</Text></View></View><Text numberOfLines={2} style={styles.invoiceEmailText}>PDF separat, trimis la aceeași adresă a clientului.</Text></View><View pointerEvents="none" style={styles.invoiceEmailControl}><Text style={[styles.invoiceEmailState, invoiceSendReturnEmail && styles.invoiceEmailStateActive]}>{invoiceSendReturnEmail ? 'DA' : 'NU'}</Text><Switch value={invoiceSendReturnEmail} trackColor={{ false: '#5A545D', true: '#0F766E' }} thumbColor="#FFFFFF" ios_backgroundColor="#5A545D" /></View></TouchableOpacity> : null}
             <View style={styles.invoicePromptNotice}><BadgeCheck size={17} color="#34D399" /><Text style={styles.invoicePromptNoticeText}>{invoicePromptOrder?.status === 'return_confirmed' ? 'Ambele documente folosesc seria activă și numere consecutive. Cele două comutatoare de e-mail sunt complet independente.' : 'Numărul și tema rămân aceleași la orice regenerare ulterioară.'}</Text></View>
             <View style={styles.invoicePromptActions}><TouchableOpacity disabled={Boolean(invoiceBusy)} style={styles.invoicePromptCancel} onPress={() => setInvoicePromptOrder(null)}><Text style={styles.invoicePromptCancelText}>Renunță</Text></TouchableOpacity><TouchableOpacity disabled={Boolean(invoiceBusy)} style={styles.invoicePromptConfirm} onPress={() => invoicePromptOrder && void issueInvoice(invoicePromptOrder, invoiceSendEmail, invoiceSendReturnEmail)}>{invoiceBusy ? <ActivityIndicator color="#FFFFFF" /> : <><FileCheck2 size={18} color="#FFFFFF" /><Text style={styles.invoicePromptConfirmText}>{invoicePromptOrder?.status === 'return_confirmed' ? 'Emite ambele' : invoiceSendEmail ? 'Emite și trimite' : 'Emite factura'}</Text></>}</TouchableOpacity></View>
-            </ScrollView>
+            </KeyboardAwareScrollView>
           </Pressable>
         </Pressable>
       </Modal>

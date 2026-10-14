@@ -11,6 +11,7 @@ import ShopInventoryExportButton from '@/components/ShopInventoryExportButton';
 import AutoScrollProductName from '@/components/AutoScrollProductName';
 import useAndroidSearchBack from '@/hooks/useAndroidSearchBack';
 import { runWhenIdle } from '@/utils/runWhenIdle';
+import KeyboardAwareScrollView from '@/components/KeyboardAwareScrollView';
 
 type InventorySnapshot = { products: ShopProduct[]; cachedAt: number };
 const INVENTORY_SNAPSHOT_TTL_MS = 30_000;
@@ -255,7 +256,7 @@ export default function ShopInventoryManager({ onOpenNir, header, bottomInset = 
   const selectedSupplierManaged = selected?.source_domain?.toLowerCase() === 'boomag.ro';
   const selectedCanAdjust = selected?.stock_mode === 'tracked' && !selectedSupplierManaged;
 
-  return <><ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 94 + bottomInset }} stickyHeaderIndices={[1]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+  return <><KeyboardAwareScrollView extraScrollHeight={125} style={styles.scroll} contentContainerStyle={{ paddingBottom: 94 + bottomInset }} stickyHeaderIndices={[1]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
     <View style={styles.pageHeader}>{header}</View>
     <View style={styles.actions}><View style={styles.actionsRow}><View style={styles.totalPill}><Text style={styles.totalPillText}>{filtered.length}</Text></View><View style={styles.search}><Search size={17} color={Colors.textMuted} /><TextInput value={query} onChangeText={(value) => { setQuery(value); setPage(1); }} placeholder="Nume, cod, furnizor sau marcă" placeholderTextColor={Colors.textMuted} style={styles.searchInput} />{query ? <TouchableOpacity accessibilityLabel="Șterge căutarea" style={styles.clearSearch} onPress={clearSearch}><X size={16} color={Colors.textSecondary} /></TouchableOpacity> : null}</View><ShopInventoryExportButton /><TouchableOpacity style={styles.refresh} onPress={() => void load()}><RefreshCw size={18} color={Colors.textSecondary} /></TouchableOpacity></View></View>
     <View style={styles.wrap}>
@@ -270,11 +271,11 @@ export default function ShopInventoryManager({ onOpenNir, header, bottomInset = 
       </TouchableOpacity>;
     }) : <View style={styles.empty}><Boxes size={34} color="#22C55E" /><Text style={styles.emptyTitle}>Niciun produs în stoc</Text></View>}
     <ShopPagination page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} onPageSizeChange={setPageSize} /></View>
-    </ScrollView>
+    </KeyboardAwareScrollView>
 
     <Modal visible={Boolean(selected)} animationType="slide" transparent onRequestClose={() => !saving && setSelected(null)}>
       <View style={styles.backdrop}><SafeAreaView style={styles.sheet} edges={['top', 'bottom']}><View style={styles.sheetHeader}><View style={styles.sheetHeaderCopy}><Text style={styles.sheetKicker}>STOCURI / FIȘA PRODUSULUI</Text><Text style={styles.productCodeTop}>{selected?.sku || 'FĂRĂ COD'}</Text><AutoScrollProductName value={selected?.name || ''} style={styles.sheetTitle} /><Text style={styles.sheetSubtitle}>Toate intrările și mișcările acestui produs, explicate cronologic.</Text></View><TouchableOpacity style={styles.close} onPress={() => setSelected(null)}><X size={20} color={Colors.textSecondary} /></TouchableOpacity></View>
-        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetContent}>
+        <KeyboardAwareScrollView extraScrollHeight={130} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetContent}>
           <View style={styles.productHero}>
             {selected?.images?.[0]?.url ? <ShopProductPicture image={selected.images[0]} width={62} height={62} borderRadius={17} /> : <View style={styles.heroFallback}><Package size={24} color="#5EEAD4" /></View>}
             <View style={styles.heroCopy}><Text numberOfLines={2} style={styles.heroName}>{selected?.name}</Text><Text style={styles.heroSku}>{selected?.sku || 'Fără SKU'}</Text></View>
@@ -300,7 +301,7 @@ export default function ShopInventoryManager({ onOpenNir, header, bottomInset = 
             }) : <View style={styles.ledgerEmpty}><History size={25} color={Colors.textMuted} /><Text style={styles.ledgerEmptyTitle}>Nicio mișcare înregistrată</Text></View>}
             <Pager page={safeMovementPage} total={movements.length} onChange={setMovementPage} />
           </View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </SafeAreaView></View>
     </Modal>
   </>;

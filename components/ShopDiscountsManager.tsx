@@ -6,6 +6,7 @@ import { CalendarDays, Check, ChevronRight, Clock3, Gift, ImageOff, Mail, Megaph
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { shopApi, ShopCustomerSummary, ShopProduct, ShopPromotion, ShopPromotionPayload, ShopPromotionStats } from '@/services/shopApi';
+import KeyboardAwareScrollView from '@/components/KeyboardAwareScrollView';
 
 type PromotionForm = ShopPromotionPayload & { id: string | null; valueText: string; minText: string };
 
@@ -223,7 +224,7 @@ export default function ShopDiscountsManager() {
       <TouchableOpacity style={styles.statsEdit} onPress={() => { const item = details.promotion; setDetails(null); setTimeout(() => edit(item), 180); }}><Pencil size={17} color="#1A0B01" /><Text>Editează reducerea</Text></TouchableOpacity>
     </ScrollView></> : null}</View></View></Modal>
 
-    <Modal visible={Boolean(form)} transparent animationType="slide" onRequestClose={() => !saving && setForm(null)}><View style={styles.backdrop}><View style={[styles.sheet, compact && styles.sheetCompact, { paddingBottom: Math.max(14, insets.bottom) }]}>{form ? <><View style={styles.sheetHead}><View><Text style={styles.sheetKicker}>CONFIGURARE CAMPANIE</Text><Text style={styles.sheetTitle}>{form.id ? 'Editează reducerea' : 'Reducere nouă'}</Text></View><TouchableOpacity style={styles.close} onPress={() => setForm(null)}><X size={20} color="#ECE7EC" /></TouchableOpacity></View><ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.form}>
+    <Modal visible={Boolean(form)} transparent animationType="slide" onRequestClose={() => !saving && setForm(null)}><View style={styles.backdrop}><View style={[styles.sheet, compact && styles.sheetCompact, { paddingBottom: Math.max(14, insets.bottom) }]}>{form ? <><View style={styles.sheetHead}><View><Text style={styles.sheetKicker}>CONFIGURARE CAMPANIE</Text><Text style={styles.sheetTitle}>{form.id ? 'Editează reducerea' : 'Reducere nouă'}</Text></View><TouchableOpacity style={styles.close} onPress={() => setForm(null)}><X size={20} color="#ECE7EC" /></TouchableOpacity></View><KeyboardAwareScrollView extraScrollHeight={135} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.form}>
       <View style={styles.fieldRow}><Field label="COD REDUCERE *" value={form.code} onChangeText={(value) => setForm({ ...form, code: value.toUpperCase().replace(/[^A-Z0-9_-]/g, '') })} placeholder="GTROTS10" /><Field label="TITLU *" value={form.title} onChangeText={(value) => setForm({ ...form, title: value })} placeholder="10% pentru comenzi mari" /></View>
       <Field label="DESCRIERE" value={form.description} onChangeText={(value) => setForm({ ...form, description: value })} placeholder="Detalii interne sau pentru client" multiline />
       <Choice title="TIP REDUCERE" options={[['percent', 'Procent (%)'], ['fixed', 'Sumă fixă']]} selected={form.discount_type} onSelect={(value) => setForm({ ...form, discount_type: value as 'percent' | 'fixed' })} />
@@ -251,7 +252,7 @@ export default function ShopDiscountsManager() {
       <Toggle title="Aplicare automată" text="Clientul primește automat cea mai bună reducere eligibilă." value={form.auto_apply} onChange={(value) => setForm({ ...form, auto_apply: value })} />
       <Toggle title="Afișează în bara site-ului" text="Anunțul apare animat deasupra meniului magazinului." value={form.show_banner} onChange={(value) => setForm({ ...form, show_banner: value })} />
       <TouchableOpacity disabled={saving} style={[styles.save, saving && styles.saveDisabled]} onPress={() => void save()}>{saving ? <ActivityIndicator color="#1A0B01" /> : <><Text style={styles.saveText}>Salvează campania</Text><View style={styles.saveIcon}><Text style={styles.savePercent}>%</Text></View></>}</TouchableOpacity>
-    </ScrollView></> : null}</View></View></Modal>
+    </KeyboardAwareScrollView></> : null}</View></View></Modal>
   </View>;
 }
 

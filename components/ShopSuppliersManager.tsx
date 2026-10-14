@@ -19,6 +19,7 @@ import { Building2, ChevronDown, ChevronLeft, ChevronRight, Globe2, Handshake, M
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { shopApi, shopSupplierDisplayName, ShopSupplier, ShopSupplierPayload, ShopSupplierProductReference } from '@/services/shopApi';
+import KeyboardAwareScrollView from '@/components/KeyboardAwareScrollView';
 
 type SupplierForm = ShopSupplierPayload & { id: string | null };
 
@@ -210,7 +211,7 @@ export default function ShopSuppliersManager() {
         <View style={styles.backdrop}>
           <View style={[styles.sheet, { paddingBottom: Math.max(20, insets.bottom) }]}>
             <View style={styles.sheetHeader}><View><Text style={styles.sheetKicker}>FIȘĂ FURNIZOR</Text><Text style={styles.sheetTitle}>{form?.id ? 'Editează furnizorul' : 'Furnizor nou'}</Text></View><TouchableOpacity style={styles.closeButton} onPress={() => !saving && setForm(null)}><X size={20} color={Colors.textSecondary} /></TouchableOpacity></View>
-            {form ? <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.formScroll}>
+            {form ? <KeyboardAwareScrollView extraScrollHeight={135} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.formScroll}>
               <Field label="ALIAS AFIȘAT *" value={form.alias || ''} onChangeText={(value) => setForm({ ...form, alias: value })} placeholder="Ex: Distribuitorul meu" />
               <Field label="DENUMIRE JURIDICĂ *" value={form.name} onChangeText={(value) => setForm({ ...form, name: value })} placeholder="Ex: Distribuitor piese SRL" />
               <Field label="PERSOANĂ DE CONTACT" value={form.contact_person || ''} onChangeText={(value) => setForm({ ...form, contact_person: value })} placeholder="Nume și prenume" />
@@ -221,7 +222,7 @@ export default function ShopSuppliersManager() {
               <Field label="NOTIȚE" value={form.notes || ''} onChangeText={(value) => setForm({ ...form, notes: value })} placeholder="Condiții comerciale, program, observații…" multiline />
               <View style={styles.switchRow}><View><Text style={styles.switchTitle}>Furnizor activ</Text><Text style={styles.switchText}>Poate fi folosit pentru achiziții noi.</Text></View><Switch value={form.is_active} onValueChange={(value) => setForm({ ...form, is_active: value })} trackColor={{ false: '#3B3740', true: '#0F766E' }} thumbColor={form.is_active ? '#5EEAD4' : '#8B858E'} /></View>
               <TouchableOpacity style={[styles.saveButton, saving && styles.disabled]} disabled={saving} onPress={() => void save()}>{saving ? <ActivityIndicator color="#062521" /> : <Save size={18} color="#062521" />}<Text style={styles.saveText}>{saving ? 'Se salvează…' : 'Salvează furnizorul'}</Text></TouchableOpacity>
-            </ScrollView> : null}
+            </KeyboardAwareScrollView> : null}
           </View>
         </View>
       </KeyboardAvoidingView>

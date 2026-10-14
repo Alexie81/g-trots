@@ -6,6 +6,7 @@ import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { shopApi } from '@/services/shopApi';
+import KeyboardAwareScrollView from '@/components/KeyboardAwareScrollView';
 
 const periods = [
   { id: 'all', label: 'Toată perioada' },
@@ -108,14 +109,14 @@ export default function ShopInventoryExportButton() {
           <View style={s.track}><View style={[s.fill, { width: `${progress}%` }]} /></View><Text style={s.note}>Timpul este o estimare bazată pe numărul real de produse, mișcări și documente.</Text>
         </View> : <>
           <View style={s.header}><View style={s.icon}><FileSpreadsheet size={24} color="#6EE7C7" /></View><View style={{ flex: 1 }}><Text style={s.eyebrow}>EXPORT CONTABIL DE STOC</Text><Text style={s.title}>Alege perioada</Text></View><TouchableOpacity accessibilityLabel="Închide exportul" onPress={() => setVisible(false)} style={s.close}><X size={20} color="#CCC5CF" /></TouchableOpacity></View>
-          <ScrollView contentContainerStyle={s.body} showsVerticalScrollIndicator={false}>
+          <KeyboardAwareScrollView extraScrollHeight={120} contentContainerStyle={s.body} showsVerticalScrollIndicator={false}>
             <Text style={s.hint}>Primești un singur Excel cu rezumat, stoc pe produse, fișe de magazie, toate mișcările, documentele-sursă și metodologia exportului.</Text>
             <Text style={s.section}>Perioada registrului</Text>
             <View style={s.periods}>{periods.map((option) => <TouchableOpacity key={option.id} accessibilityRole="radio" accessibilityState={{ checked: period === option.id }} style={[s.period, period === option.id && s.periodActive]} onPress={() => setPeriod(option.id)}><CalendarDays size={18} color={period === option.id ? '#FFB36B' : '#7DD3FC'} /><Text style={s.periodText}>{option.label}</Text>{period === option.id ? <Check size={15} color="#5EEAD4" /> : null}</TouchableOpacity>)}</View>
             {period === 'custom' ? <View style={s.dates}><View style={{ flex: 1 }}><Text style={s.note}>DE LA</Text><TextInput accessibilityLabel="Data de început" value={from} onChangeText={setFrom} placeholder="AAAA-LL-ZZ" placeholderTextColor="#99919D" style={s.input} /></View><View style={{ flex: 1 }}><Text style={s.note}>PÂNĂ LA</Text><TextInput accessibilityLabel="Data de sfârșit" value={to} onChangeText={setTo} placeholder="AAAA-LL-ZZ" placeholderTextColor="#99919D" style={s.input} /></View></View> : null}
             <View style={s.summary}><Check size={20} color="#5EEAD4" /><View style={{ flex: 1 }}><Text style={s.optionTitle}>Registru Excel complet</Text><Text style={s.hint}>{dates[0] && dates[1] ? `${dates[0]} — ${dates[1]}` : period === 'custom' ? 'Completează ambele date.' : 'Toată perioada disponibilă.'}</Text></View></View>
             <Text style={s.note}>Exportul este doar în citire: nu schimbă stocuri, facturi, comenzi sau documente NIR.</Text>
-          </ScrollView>
+          </KeyboardAwareScrollView>
           <TouchableOpacity style={s.submit} onPress={() => void download()}><FileSpreadsheet size={20} color="#FFFFFF" /><Text style={s.submitText}>Generează Excel</Text></TouchableOpacity>
         </>}
       </View></View>

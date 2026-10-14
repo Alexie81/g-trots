@@ -20,6 +20,7 @@ import { LockKeyhole, User } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import AppAuroraBackground from '@/components/AppAuroraBackground';
+import KeyboardAwareScrollView from '@/components/KeyboardAwareScrollView';
 
 const appLogo = require('../assets/images/logo.png');
 
@@ -78,7 +79,8 @@ export default function MobileLoginGate({ children }: { children: React.ReactNod
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 18 : 0}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <ScrollView
+          <KeyboardAwareScrollView
+            extraScrollHeight={120}
             style={styles.scroll}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
@@ -168,7 +170,7 @@ export default function MobileLoginGate({ children }: { children: React.ReactNod
                 </TouchableOpacity>
               </Animated.View>
             </Animated.View>
-          </ScrollView>
+          </KeyboardAwareScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </AppAuroraBackground>

@@ -6,6 +6,7 @@ import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { shopApi } from '@/services/shopApi';
+import KeyboardAwareScrollView from '@/components/KeyboardAwareScrollView';
 
 type Kind = 'categories' | 'brands' | 'manufacturers' | 'invoices';
 const titles: Record<Kind, string> = { categories: 'Categorii', brands: 'Compatibilități', manufacturers: 'Producători', invoices: 'Facturi emise' };
@@ -70,7 +71,7 @@ export default function ShopRegistryExportButton({ kind, total = 0 }: { kind: Ki
           <View style={s.track}><View style={[s.fill, { width: `${progress}%` }]} /></View><Text style={s.note}>Progres estimat până la primirea fișierului.</Text>
         </View> : <>
           <View style={s.header}><View style={s.icon}><FileSpreadsheet size={25} color="#6EE7C7" /></View><View style={{ flex: 1 }}><Text style={s.eyebrow}>{invoices ? 'EXPORT CONTABIL' : 'CATALOG G-TROTS'}</Text><Text style={s.title}>{invoices ? 'Exportă facturile' : titles[kind]}</Text></View><TouchableOpacity accessibilityLabel="Închide exportul" onPress={() => setVisible(false)} style={s.close}><X size={20} color="#CCC5CF" /></TouchableOpacity></View>
-          <ScrollView contentContainerStyle={s.body}>
+          <KeyboardAwareScrollView extraScrollHeight={120} contentContainerStyle={s.body}>
             {invoices ? <>
               <Text style={s.section}>01   Ce vrei să descarci?</Text>
               {[false, true].map(value => <TouchableOpacity key={String(value)} accessibilityRole="radio" accessibilityState={{ checked: complete === value }} onPress={() => setComplete(value)} style={[s.option, complete === value && s.selected]}>{value ? <FolderArchive size={23} color="#7DD3FC" /> : <FileSpreadsheet size={23} color="#7DD3FC" />}<View style={{ flex: 1 }}><Text style={s.optionTitle}>{value ? 'Centralizator + toate facturile' : 'Doar centralizatorul'}</Text><Text style={s.hint}>{value ? 'ZIP · folder Serie-Număr cu PDF, XLSX și XML' : 'Un singur fișier Excel detaliat'}</Text></View>{complete === value && <Check size={18} color="#5EEAD4" />}</TouchableOpacity>)}
@@ -79,7 +80,7 @@ export default function ShopRegistryExportButton({ kind, total = 0 }: { kind: Ki
               <View style={s.summary}><Check size={20} color="#5EEAD4" /><View style={{ flex: 1 }}><Text style={s.optionTitle}>{complete ? 'Arhivă completă' : 'Centralizator Excel'}</Text><Text style={s.hint}>{dates[0] && dates[1] ? `${dates[0]} — ${dates[1]}` : period === 'custom' ? 'Completează ambele date.' : 'Toate facturile emise, inclusiv retururile.'}</Text></View></View>
               <Text style={s.note}>Exportul nu emite facturi și nu trimite documente către ANAF.</Text>
             </> : <Text style={s.hint}>Se exportă toate înregistrările, inclusiv cele inactive, cu starea și numărul produselor asociate. Fișierul include logo-ul G-Trots și antetul portocaliu.</Text>}
-          </ScrollView>
+          </KeyboardAwareScrollView>
           <TouchableOpacity style={s.submit} onPress={() => void download()}><FileSpreadsheet size={20} color="#FFFFFF" /><Text style={s.submitText}>Descarcă acum</Text></TouchableOpacity>
         </>}
       </View></View>

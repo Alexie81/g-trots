@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { CalendarClock, Check, FileText, Hash, Palette, Save, Settings2, ShieldCheck, Sparkles, StickyNote } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
+import KeyboardAwareScrollView from '@/components/KeyboardAwareScrollView';
 import { useAuth } from '@/contexts/AuthContext';
 import { ShopInvoiceTheme, ShopInvoiceThemePalette, ShopInvoiceThemeSettings, shopApi } from '@/services/shopApi';
 
@@ -95,7 +96,7 @@ export default function ShopInvoiceConfigurator({ bottomInset = 0 }: Props) {
 
   if (loading) return <View style={styles.loading}><ActivityIndicator size="large" color="#FB923C" /><Text style={styles.loadingTitle}>Se încarcă temele facturii</Text><Text style={styles.loadingText}>Sincronizăm aceeași alegere pentru telefon și desktop.</Text></View>;
 
-  return <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: 112 + bottomInset }]} showsVerticalScrollIndicator={false}>
+  return <KeyboardAwareScrollView extraScrollHeight={135} style={styles.scroll} contentContainerStyle={[styles.content, { paddingBottom: 112 + bottomInset }]} showsVerticalScrollIndicator={false}>
     <View style={styles.shell}>
       <View style={[styles.hero, wide && styles.heroWide]}>
         <View style={styles.iconStage}><View style={styles.invoiceIcon}><FileText size={34} color="#FDBA74" strokeWidth={1.8} /></View><View style={styles.settingsIcon}><Settings2 size={20} color={Colors.white} strokeWidth={2.2} /></View></View>
@@ -130,7 +131,7 @@ export default function ShopInvoiceConfigurator({ bottomInset = 0 }: Props) {
       <View style={styles.protectionCard}><View style={styles.protectionIcon}><ShieldCheck size={24} color="#86EFAC" /></View><View style={styles.protectionCopy}><Text style={styles.protectionTitle}>Temele vechi sunt protejate</Text><Text style={styles.protectionText}>Dacă GT001-GT099 au fost emise cu mov și activezi portocaliu după GT099, schimbarea începe cu GT100. Orice regenerare a documentelor GT001-GT099 folosește în continuare mov.</Text></View></View>
       <TouchableOpacity disabled={!dirty || saving} onPress={() => void save()} style={[styles.saveButton, { backgroundColor: activePalette.accent }, (!dirty || saving) && styles.saveDisabled]}>{saving ? <ActivityIndicator color="#FFF" /> : <><View><Text style={styles.saveKicker}>{dirty ? 'APLICĂ SCHIMBĂRILE' : 'CONFIGURAȚIE SALVATĂ'}</Text><Text style={styles.saveText}>{dirty ? 'Salvează configurarea facturii' : `${series || 'GT'} ${String(Number(nextNumber) || 1).padStart(3, '0')} este următoarea`}</Text></View><View style={styles.saveIcon}>{dirty ? <Save size={20} color="#FFF" /> : <Sparkles size={20} color="#FFF" />}</View></>}</TouchableOpacity>
     </View>
-  </ScrollView>;
+  </KeyboardAwareScrollView>;
 }
 
 const styles = StyleSheet.create({

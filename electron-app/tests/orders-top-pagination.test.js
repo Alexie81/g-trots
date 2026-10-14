@@ -15,6 +15,7 @@ assert.match(source, /shop-order-table-top-pagination[\s\S]*data-page-input-key=
 assert.match(source, /shop-commerce-page-jump[\s\S]*data-page-input-key="\$\{key\}"/, 'Paginarea desktop de jos trebuie să permită introducerea numărului paginii.');
 assert.match(source, /querySelectorAll\(`\[data-page-input-key="\$\{key\}"\]`\)/, 'Toate câmpurile de pagină trebuie conectate la navigare.');
 assert.match(source, /shop-order-table-top-pagination[\s\S]*<span>Pg<\/span>/, 'Paginarea desktop trebuie să folosească eticheta compactă Pg.');
+assert.doesNotMatch(source, /shop-order-table-top-pagination[^`]*aria-live="polite"/, 'Paginarea desktop din antet nu trebuie să repete intervalul de rezultate.');
 assert.match(css, /\.shop-order-table-head-group\s*\{[^}]*justify-content:\s*space-between/s, 'Factura și paginarea desktop trebuie distribuite elegant în același grup de antet.');
 assert.doesNotMatch(css, /shop-order-table-pagination-cell[^}]*min-width:\s*362px/s, 'Paginarea desktop nu trebuie să mai lățească forțat tabelul.');
 

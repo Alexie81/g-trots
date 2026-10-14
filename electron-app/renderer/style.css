@@ -13525,7 +13525,6 @@ body::after {
 .shop-order-table-head-group { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .shop-order-table-head-group > span { flex: 0 0 auto; }
 .shop-order-table-top-pagination { min-width: 0; display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; vertical-align: middle; }
-.shop-order-table-top-pagination > span { min-width: 66px; color: #aaa39c; font-size: 9px; font-weight: 750; letter-spacing: 0; text-align: center; text-transform: none; white-space: nowrap; }
 .shop-order-table-top-pagination > label { display: inline-flex; align-items: center; gap: 4px; color: #817a74; font-size: 9px; font-weight: 700; letter-spacing: 0; text-transform: none; white-space: nowrap; }
 .shop-order-table-top-pagination input { width: 34px; height: 28px; appearance: textfield; border: 1px solid #4b4650; border-radius: 8px; padding: 0 3px; color: #eee9e5; background: #29262c; font: inherit; font-size: 10px; font-weight: 850; text-align: center; outline: 0; }
 .shop-order-table-top-pagination input::-webkit-inner-spin-button { display: none; }

@@ -13357,6 +13357,9 @@ body::after {
 .shop-editor-modal textarea, .shop-editor-modal select { width: 100%; border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; color: var(--text); background: var(--surface-2); font: inherit; font-size: 10px; outline: none; resize: vertical; }
 .shop-editor-modal textarea:focus, .shop-editor-modal select:focus { border-color: rgba(255,107,0,.45); box-shadow: 0 0 0 3px rgba(255,107,0,.07); }
 .shop-field-help { display: block; margin-top: 6px; color: #68625d; font-size: 8px; }
+.shop-field-help.available { color: #22c55e; font-weight: 800; }
+.shop-field-help.unavailable { color: #ef4444; font-weight: 800; }
+.shop-field-help.checking { color: #f59e0b; font-weight: 700; }
 .shop-image-editor { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: 15px; margin: 2px 0 18px; }
 .shop-image-preview { width: 92px; height: 92px; overflow: hidden; display: grid; place-items: center; border: 1px dashed rgba(255,255,255,.14); border-radius: 17px; color: #69635e; background-color: rgba(255,255,255,.025); background-position: center; background-size: cover; cursor: pointer; }
 .shop-image-preview span { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 8px; }

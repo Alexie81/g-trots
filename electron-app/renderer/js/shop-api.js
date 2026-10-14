@@ -192,6 +192,7 @@
     listProductOptionIds: () => call('listProductOptionIds', json('POST', {})),
     getProduct: (id) => call('getProduct', {}, id),
     getProductStats: (id) => call('getProductStats', {}, id),
+    checkProductSku: (sku, excludeId = '') => call('checkProductSku', {}, '', 0, { sku, exclude_id: excludeId }),
     createProduct: (payload) => call('createProduct', json('POST', payload)),
     updateProduct: (id, payload) => call('updateProduct', json('PUT', payload), id),
     uploadRichDescriptionImage: (base64) => call('uploadRichDescriptionImage', json('POST', { base64 })),

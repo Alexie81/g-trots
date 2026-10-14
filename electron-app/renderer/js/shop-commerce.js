@@ -8,7 +8,7 @@
   const state = {
     products: [], orders: [], invoices: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], newsletterSubscribers: [], promotions: [], companies: [], receiptLocations: [], nirs: [], nirPermissions: [], nirWarehouses: [], nirReceiptLocations: [], invoiceThemeSettings: null, invoiceAutomationSettings: null, invoiceAutomationSaving: false, selectedInvoiceTheme: 'orange', invoiceSettingsDraft: { invoice_series: 'GT', next_number: 1, due_days: 7, default_notes: '' }, invoiceThemeSaving: false, invoiceQuery: '', invoiceStatusFilter: 'all', invoiceBusy: '', spvConnection: null, spvDraft: null, spvBusy: '', spvWaitingForOAuth: false, spvDiagnostics: null,
     editingProduct: null, editingOrder: null, orderItemDrafts: [], orderProductPickerTimer: null, orderReplacementTransportConfirmed: false, orderReplacementShippingCost: 0, orderReplacementReturnPayer: '', orderReplacementReturnCost: 0, invoiceIssueOrder: null, invoiceDetail: null, shippingNoteOrder: null, shippingNoteBusy: '', editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, editingReceiptLocation: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
-    productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, productTotal: 0, productSearchTimer: null, productLoadRequestId: 0, slugTouched: false, productQuery: '', orderQuery: '', orderSearchTimer: null, orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
+    productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, productTotal: 0, productSearchTimer: null, productLoadRequestId: 0, productSkuCheckTimer: null, productSkuCheckRequestId: 0, productSkuAvailability: 'available', slugTouched: false, productQuery: '', orderQuery: '', orderSearchTimer: null, orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
     customerQuery: '', newsletterQuery: '', newsletterStatus: 'all', productSaveProgressTimer: null, inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirStornoDocument: null, nirSupplierReturnContext: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false, nirBundleDownloading: '', nirRegistryDownloadPeriod: 'current_month', nirRegistryDownloadContent: 'complete', nirRegistryDownloading: false, nirExportProgressTimer: null,
     pages: { products: 1, orders: 1, invoices: 1, inventory: 1, stockFlow: 1, stockMovements: 1, productSales: 1, productReviews: 1, productPurchases: 1, customers: 1, newsletter: 1, customerOrders: 1, nirs: 1 },
     pageSizes: { products: 10, orders: 10, invoices: 10, inventory: 10, stockFlow: 5, stockMovements: 5, productSales: 5, productReviews: 5, productPurchases: 5, customers: 10, newsletter: 12, customerOrders: 5, nirs: 15 },
@@ -98,6 +98,7 @@
     } catch {}
   }
   const slugify = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 200);
+  const normalizeSkuInput = value => String(value || '').toUpperCase().replace(/[^A-Z0-9_-]+/g, '-').replace(/^[-_]+/, '').slice(0, 80);
   const normalizeSemanticSearch = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
   function searchEditDistance(left, right) {
     if (left === right) return 0;
@@ -244,7 +245,7 @@
   function productModal() {
     return `<div class="shop-commerce-overlay" id="shop-product-modal" hidden><form class="shop-commerce-modal product-editor" id="shop-product-form"><header><div><small>CRM PRODUSE</small><h2 id="shop-product-modal-title">Produs nou</h2></div><button type="button" data-commerce-close="shop-product-modal">×</button></header><div class="shop-commerce-modal-scroll">
       ${section('01', 'Sursa si identitate', 'Sursa implicita este selectata automat pentru un produs nou.')}
-      <div class="shop-commerce-columns"><label>Sursa produsului<select id="shop-product-source"></select></label><label>SKU / cod<input id="shop-product-sku" maxlength="80" placeholder="Se generează automat la salvare" disabled aria-disabled="true" /><small class="shop-field-help">Se generează automat la salvare</small></label></div>
+      <div class="shop-commerce-columns"><label>Sursa produsului<select id="shop-product-source"></select></label><label>SKU / cod<input id="shop-product-sku" maxlength="80" autocomplete="off" placeholder="Lasă gol pentru generare automată" /><small class="shop-field-help available" id="shop-product-sku-status">Disponibil</small></label></div>
       <div class="shop-commerce-columns"><label>Cod produs furnizor<input id="shop-product-supplier-code" maxlength="120" placeholder="Optional · litere si cifre" /></label><label>EAN<input id="shop-product-ean" maxlength="120" placeholder="Optional · litere si cifre" /></label></div>
       <div class="shop-commerce-columns"><label>Nume produs *<input id="shop-product-name" maxlength="180" required /><small id="shop-product-name-error" class="shop-field-error" hidden>Acest nume de produs exista deja.</small></label><label>Slug *<span class="shop-input-prefix">g-trots.ro/magazin/produs/</span><input id="shop-product-slug" maxlength="200" required /></label></div>
       ${section('02', 'Galerie foto', 'Incarca pana la 12 poze. Tine click pe o fotografie si trage-o in pozitia dorita.')}
@@ -686,6 +687,10 @@
     $('shop-product-detail-edit').addEventListener('click', () => { const product = state.productDetail?.product; if (!product) return; closeModal('shop-product-detail-modal'); setTimeout(() => openProduct(product.id), 190); });
     $('shop-product-name').addEventListener('input', () => { if (!state.slugTouched) $('shop-product-slug').value = slugify($('shop-product-name').value); validateProductName(); updateProductPreview(); });
     $('shop-product-slug').addEventListener('input', () => { state.slugTouched = true; $('shop-product-slug').value = slugify($('shop-product-slug').value); updateProductPreview(); });
+    $('shop-product-sku').addEventListener('input', event => {
+      event.target.value = normalizeSkuInput(event.target.value);
+      scheduleProductSkuCheck();
+    });
     $('shop-product-brands-toggle').addEventListener('click', () => { const options = $('shop-product-brands'); const opening = options.hidden; options.hidden = !opening; $('shop-product-brands-toggle').setAttribute('aria-expanded', opening ? 'true' : 'false'); });
     $('shop-product-categories-toggle').addEventListener('click', () => toggleProductDropdown('categories'));
     $('shop-product-manufacturer-toggle').addEventListener('click', () => toggleProductDropdown('manufacturers'));
@@ -710,6 +715,10 @@
 
   function wireRichDescriptionEditor() {
     const editor = $('shop-product-description');
+    const imageMenu = $('shop-rich-image-menu');
+    // Meniul este mutat in body ca sa nu fie taiat de zona scrollabila a
+    // editorului si ca pozitionarea fixed sa ramana raportata la fereastra.
+    if (imageMenu?.parentElement !== document.body) document.body.appendChild(imageMenu);
     document.addEventListener('selectionchange', () => {
       const selection = window.getSelection();
       if (!selection?.rangeCount) return;
@@ -723,7 +732,7 @@
       if (!figure) return closeRichImageMenu();
       event.preventDefault(); event.stopPropagation();
       selectRichImage(figure); openRichImageMenu(event.clientX, event.clientY);
-    });
+    }, true);
     editor.addEventListener('pointerdown', startRichImageResize);
     editor.addEventListener('dragstart', startRichImageDrag);
     editor.addEventListener('dragover', updateRichImageDrop, true);
@@ -1742,8 +1751,10 @@
 
   async function openProduct(id = '') {
     try {
-      if (!state.sources.length) await metadata();
-      const product = id ? await window.SHOP_API.getProduct(id) : null;
+      const [product] = await Promise.all([
+        id ? window.SHOP_API.getProduct(id) : Promise.resolve(null),
+        metadata(),
+      ]);
       state.editingProduct = product;
       state.slugTouched = false;
       state.productImages = (product?.images || []).map((image, index) => ({ ...image, key: image.id || `existing-${index}`, preview: image.url }));
@@ -1756,6 +1767,7 @@
       renderBrandDropdown(product?.brand_ids || []);
       const values = { 'shop-product-sku': product?.sku, 'shop-product-supplier-code': product?.supplier_product_code, 'shop-product-ean': product?.ean, 'shop-product-name': product?.name, 'shop-product-slug': product?.slug, 'shop-product-short': product?.short_description, 'shop-product-description-title': product?.description_title, 'shop-product-price': product?.price, 'shop-product-supplier-base-price': product?.supplier_base_price ?? '', 'shop-product-price-difference': product?.supplier_price_difference ?? '', 'shop-product-discount-value': product?.discount_value || '', 'shop-product-unit': product?.unit_of_measure || 'buc', 'shop-product-stock': product?.stock_quantity ?? 0, 'shop-product-low-stock': product?.low_stock_threshold ?? 3, 'shop-product-meta-title': product?.meta_title, 'shop-product-meta-description': product?.meta_description, 'shop-product-manufacturer-address': product?.manufacturer_address, 'shop-product-manufacturer-email': product?.manufacturer_email, 'shop-product-eu-name': product?.eu_responsible_person_name, 'shop-product-eu-address': product?.eu_responsible_person_address, 'shop-product-eu-email': product?.eu_responsible_person_email, 'shop-product-model': product?.product_model, 'shop-product-identifier': product?.product_identifier, 'shop-product-safety-warnings': product?.safety_warnings_ro, 'shop-product-safety-documents': (product?.safety_documents || []).join('\n'), 'shop-product-compliance-documents': (product?.compliance_documents || []).join('\n'), 'shop-product-legal-warranty': product?.legal_warranty_months ?? '', 'shop-product-commercial-warranty': product?.commercial_warranty_months ?? '', 'shop-product-software-updates': product?.software_updates_until ?? '', 'shop-product-repairability': product?.repairability_info, 'shop-product-spare-parts': product?.spare_parts_info };
       Object.entries(values).forEach(([key, value]) => $(key).value = value ?? '');
+      scheduleProductSkuCheck(0);
       if (!product) $('shop-product-legal-warranty').value = '';
       $('shop-product-discount-type').value = product?.discount_type || 'percent';
       $('shop-product-ce').value = product?.ce_marking_applicable == null ? '' : product.ce_marking_applicable ? 'yes' : 'no';
@@ -1843,6 +1855,39 @@
     message.hidden = !duplicate;
     return !duplicate;
   }
+  function setProductSkuStatus(status) {
+    state.productSkuAvailability = status;
+    const message = $('shop-product-sku-status');
+    if (!message) return;
+    message.className = `shop-field-help ${status}`;
+    message.textContent = status === 'available' ? 'Disponibil' : status === 'unavailable' ? 'Indisponibil' : 'Se verifică…';
+    $('shop-product-sku')?.classList.toggle('is-invalid', status === 'unavailable');
+  }
+  async function checkProductSku() {
+    const input = $('shop-product-sku');
+    const sku = normalizeSkuInput(input?.value || '');
+    if (input && input.value !== sku) input.value = sku;
+    const requestId = ++state.productSkuCheckRequestId;
+    if (!sku) {
+      setProductSkuStatus('available');
+      return true;
+    }
+    setProductSkuStatus('checking');
+    try {
+      const result = await window.SHOP_API.checkProductSku(sku, state.editingProduct?.id || '');
+      if (requestId !== state.productSkuCheckRequestId) return state.productSkuAvailability === 'available';
+      setProductSkuStatus(result.available ? 'available' : 'unavailable');
+      return Boolean(result.available);
+    } catch (_) {
+      if (requestId === state.productSkuCheckRequestId) setProductSkuStatus('unavailable');
+      return false;
+    }
+  }
+  function scheduleProductSkuCheck(delay = 180) {
+    clearTimeout(state.productSkuCheckTimer);
+    setProductSkuStatus($('shop-product-sku')?.value.trim() ? 'checking' : 'available');
+    state.productSkuCheckTimer = setTimeout(() => void checkProductSku(), delay);
+  }
   function updateProductPreview() { const price = Number($('shop-product-price').value || 0); const source = state.sources.find(item => item.id === $('shop-product-source').value); const isBoomag = String(source?.domain || '').trim().toLowerCase() === 'boomag.ro'; const supplierBaseInput = $('shop-product-supplier-base-price'); const differenceInput = $('shop-product-price-difference'); const supplierBase = supplierBaseInput.value === '' ? null : Number(supplierBaseInput.value); $('shop-product-boomag-pricing').hidden = !isBoomag; $('shop-product-price-hint').hidden = !isBoomag; differenceInput.value = isBoomag && supplierBase !== null && Number.isFinite(supplierBase) ? (price - supplierBase).toFixed(2) : ''; const discount = Math.max(0, Number($('shop-product-discount-value').value || 0)); const discountType = $('shop-product-discount-type').value; const finalPrice = discount ? Math.max(0, discountType === 'fixed' ? price - discount : price * (1 - discount / 100)) : price; $('shop-product-discount-label').firstChild.textContent = discountType === 'fixed' ? 'Reducere lei' : 'Reducere %'; $('shop-product-final-price').textContent = money(finalPrice); $('shop-google-title').textContent = $('shop-product-meta-title').value.trim() || $('shop-product-name').value.trim() || 'Titlul produsului'; $('shop-google-description').textContent = $('shop-product-meta-description').value.trim() || $('shop-product-short').value.trim() || 'Descrierea produsului va aparea aici.'; $('shop-google-url').textContent = `https://g-trots.ro/magazin/produs/${$('shop-product-slug').value || 'slug-produs'}`; const image = $('shop-google-image'); if (state.productImages[0]) { image.setAttribute('style', imageBackground(state.productImages[0])); image.hidden = false; } else { image.removeAttribute('style'); image.hidden = true; } }
   function updateProductSaveProgress(mode, elapsedMs) {
     const estimatedSeconds = mode === 'create' ? 24 : 17;
@@ -1887,12 +1932,13 @@
     event.preventDefault(); const button = $('shop-product-save'); button.disabled = true;
     try {
       if (!validateProductName()) { $('shop-product-name').focus(); throw new Error('Acest nume de produs exista deja.'); }
+      if (!await checkProductSku()) { $('shop-product-sku').focus(); throw new Error('SKU-ul este indisponibil. Alege un alt cod de produs.'); }
       const price = Number($('shop-product-price').value); const costPrice = Number(state.editingProduct?.cost_price || 0); const discount = Number($('shop-product-discount-value').value || 0); const discountType = $('shop-product-discount-type').value; const source = state.sources.find(item => item.id === $('shop-product-source').value);
       if (discount < 0 || (discount > 0 && (discountType === 'percent' ? discount >= 100 : discount >= price))) throw new Error(discountType === 'percent' ? 'Reducerea procentuala trebuie sa fie sub 100%.' : 'Reducerea fixa trebuie sa fie mai mica decat pretul.');
       const salePrice = discount ? Math.round((discountType === 'fixed' ? price - discount : price * (1 - discount / 100)) * 100) / 100 : null;
       const categoryIds = selectedCategoryIds();
       const primaryCategoryId = [...categoryIds].sort((a, b) => categoryDepth(b) - categoryDepth(a))[0] || null;
-      const payload = { source_id: source?.id || null, source_domain: source?.domain || 'g-trots.ro', source_url: '', supplier_product_code: $('shop-product-supplier-code').value.trim(), ean: $('shop-product-ean').value.trim(), name: $('shop-product-name').value.trim(), slug: $('shop-product-slug').value.trim(), short_description: $('shop-product-short').value.trim(), description_title: $('shop-product-description-title').value.trim(), description_html: richDescriptionHtml(), specifications: state.productSpecifications.map(item => ({ group: item.group.trim(), label: item.label.trim(), value: item.value.trim() })), questions: state.productQuestions.map(item => ({ question: item.question.trim(), answer: item.answer.trim() })), manufacturer_address: $('shop-product-manufacturer-address').value.trim(), manufacturer_email: $('shop-product-manufacturer-email').value.trim(), eu_responsible_person_name: $('shop-product-eu-name').value.trim(), eu_responsible_person_address: $('shop-product-eu-address').value.trim(), eu_responsible_person_email: $('shop-product-eu-email').value.trim(), product_model: $('shop-product-model').value.trim(), product_identifier: $('shop-product-identifier').value.trim(), safety_warnings_ro: $('shop-product-safety-warnings').value.trim(), safety_documents: $('shop-product-safety-documents').value.split(/\r?\n/).map(value => value.trim()).filter(Boolean), ce_marking_applicable: $('shop-product-ce').value === '' ? null : $('shop-product-ce').value === 'yes', compliance_documents: $('shop-product-compliance-documents').value.split(/\r?\n/).map(value => value.trim()).filter(Boolean), legal_warranty_months: $('shop-product-legal-warranty').value === '' ? null : Math.max(0, Number($('shop-product-legal-warranty').value)), commercial_warranty_months: $('shop-product-commercial-warranty').value === '' ? null : Math.max(0, Number($('shop-product-commercial-warranty').value)), software_updates_until: $('shop-product-software-updates').value || null, repairability_info: $('shop-product-repairability').value.trim(), spare_parts_info: $('shop-product-spare-parts').value.trim(), meta_title: $('shop-product-meta-title').value.trim(), meta_description: $('shop-product-meta-description').value.trim(), cost_price: costPrice, price, discount_type: discountType, discount_value: discount || null, discount_percent: discountType === 'percent' ? discount || null : null, sale_price: salePrice, category_id: primaryCategoryId, category_ids: categoryIds, manufacturer_id: $('shop-product-manufacturers').querySelector('input[type="radio"]:checked')?.value || null, brand_ids: Array.from($('shop-product-brands').querySelectorAll('input:checked')).map(input => input.value), unit_of_measure: $('shop-product-unit').value.trim() || 'buc', stock_mode: $('shop-product-stock-mode').value, stock_quantity: Math.max(0, Number($('shop-product-stock').value || 0)), is_accounting_stock_tracked: $('shop-product-accounting-tracked').checked, low_stock_threshold: Math.max(0, Number($('shop-product-low-stock').value || 0)), currency: 'RON', is_active: $('shop-product-active').checked, is_featured: $('shop-product-featured').checked, images: state.productImages.map((image, index) => ({ id: image.id, base64: image.base64, alt_text: image.alt_text || $('shop-product-name').value.trim(), sort_order: index })) };
+      const payload = { source_id: source?.id || null, source_domain: source?.domain || 'g-trots.ro', source_url: '', sku: $('shop-product-sku').value.trim(), supplier_product_code: $('shop-product-supplier-code').value.trim(), ean: $('shop-product-ean').value.trim(), name: $('shop-product-name').value.trim(), slug: $('shop-product-slug').value.trim(), short_description: $('shop-product-short').value.trim(), description_title: $('shop-product-description-title').value.trim(), description_html: richDescriptionHtml(), specifications: state.productSpecifications.map(item => ({ group: item.group.trim(), label: item.label.trim(), value: item.value.trim() })), questions: state.productQuestions.map(item => ({ question: item.question.trim(), answer: item.answer.trim() })), manufacturer_address: $('shop-product-manufacturer-address').value.trim(), manufacturer_email: $('shop-product-manufacturer-email').value.trim(), eu_responsible_person_name: $('shop-product-eu-name').value.trim(), eu_responsible_person_address: $('shop-product-eu-address').value.trim(), eu_responsible_person_email: $('shop-product-eu-email').value.trim(), product_model: $('shop-product-model').value.trim(), product_identifier: $('shop-product-identifier').value.trim(), safety_warnings_ro: $('shop-product-safety-warnings').value.trim(), safety_documents: $('shop-product-safety-documents').value.split(/\r?\n/).map(value => value.trim()).filter(Boolean), ce_marking_applicable: $('shop-product-ce').value === '' ? null : $('shop-product-ce').value === 'yes', compliance_documents: $('shop-product-compliance-documents').value.split(/\r?\n/).map(value => value.trim()).filter(Boolean), legal_warranty_months: $('shop-product-legal-warranty').value === '' ? null : Math.max(0, Number($('shop-product-legal-warranty').value)), commercial_warranty_months: $('shop-product-commercial-warranty').value === '' ? null : Math.max(0, Number($('shop-product-commercial-warranty').value)), software_updates_until: $('shop-product-software-updates').value || null, repairability_info: $('shop-product-repairability').value.trim(), spare_parts_info: $('shop-product-spare-parts').value.trim(), meta_title: $('shop-product-meta-title').value.trim(), meta_description: $('shop-product-meta-description').value.trim(), cost_price: costPrice, price, discount_type: discountType, discount_value: discount || null, discount_percent: discountType === 'percent' ? discount || null : null, sale_price: salePrice, category_id: primaryCategoryId, category_ids: categoryIds, manufacturer_id: $('shop-product-manufacturers').querySelector('input[type="radio"]:checked')?.value || null, brand_ids: Array.from($('shop-product-brands').querySelectorAll('input:checked')).map(input => input.value), unit_of_measure: $('shop-product-unit').value.trim() || 'buc', stock_mode: $('shop-product-stock-mode').value, stock_quantity: Math.max(0, Number($('shop-product-stock').value || 0)), is_accounting_stock_tracked: $('shop-product-accounting-tracked').checked, low_stock_threshold: Math.max(0, Number($('shop-product-low-stock').value || 0)), currency: 'RON', is_active: $('shop-product-active').checked, is_featured: $('shop-product-featured').checked, images: state.productImages.map((image, index) => ({ id: image.id, base64: image.base64, alt_text: image.alt_text || $('shop-product-name').value.trim(), sort_order: index })) };
       payload.legal_warranty_months = $('shop-product-legal-warranty').value === '' ? null : Math.max(0, Number($('shop-product-legal-warranty').value));
       if (!payload.name || !payload.slug || !Number.isFinite(price) || !Number.isFinite(costPrice) || costPrice < 0) throw new Error('Completeaza numele, slug-ul si preturile valide.');
       const saveMode = state.editingProduct ? 'edit' : 'create';

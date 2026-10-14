@@ -69,6 +69,35 @@ vatUblAssert((string)$xpath->evaluate('string(//cac:LegalMonetaryTotal/cbc:TaxIn
 vatUblAssert((string)$xpath->evaluate('string(//cac:AccountingSupplierParty//cac:PartyTaxScheme/cbc:CompanyID)') === 'RO49972605', 'Identificatorul fiscal al plătitorului de TVA trebuie să includă prefixul RO o singură dată.');
 vatUblAssert($xpath->query('//cac:InvoiceLine/cac:AllowanceCharge[cbc:ChargeIndicator="false"]')->length === 1, 'Reducerea comercială trebuie declarată explicit pe linie.');
 
+$countyVariants = [
+    'Dambovița' => 'RO-DB',
+    'Hargita' => 'RO-HR',
+    'Dimbovita' => 'RO-DB',
+    'Harghit' => 'RO-HR',
+    'Bistrta Nasaud' => 'RO-BN',
+    'Județul Bistrița Năsăud' => 'RO-BN',
+];
+foreach ($countyVariants as $county => $expectedCode) {
+    $variant = $invoice;
+    $variant['buyer']['county'] = $county;
+    $variantXml = GtrotsInvoiceUbl::render($variant);
+    $variantXpath = vatUblXpath($variantXml);
+    vatUblAssert(
+        (string)$variantXpath->evaluate('string(//cac:AccountingCustomerParty//cac:PostalAddress/cbc:CountrySubentity)') === $expectedCode,
+        'Forma de județ „' . $county . '” trebuie normalizată la ' . $expectedCode . '.'
+    );
+}
+
+$ambiguousCounty = $invoice;
+$ambiguousCounty['buyer']['county'] = 'Golj';
+$ambiguousRejected = false;
+try {
+    GtrotsInvoiceUbl::render($ambiguousCounty);
+} catch (InvalidArgumentException $error) {
+    $ambiguousRejected = str_contains($error->getMessage(), 'codul ISO 3166-2');
+}
+vatUblAssert($ambiguousRejected, 'Un județ ambiguu precum „Golj” nu trebuie ghicit automat între Dolj și Gorj.');
+
 $creditNote = $invoice;
 $creditNote['series'] = 'GTR';
 $creditNote['number'] = '910002';

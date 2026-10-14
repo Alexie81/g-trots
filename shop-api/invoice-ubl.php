@@ -22,7 +22,7 @@ final class GtrotsInvoiceUbl
         'brasov' => 'BV', 'brașov' => 'BV', 'braila' => 'BR', 'brăila' => 'BR', 'buzau' => 'BZ', 'buzău' => 'BZ',
         'caras-severin' => 'CS', 'caraș-severin' => 'CS', 'calarasi' => 'CL', 'călărași' => 'CL', 'cluj' => 'CJ',
         'constanta' => 'CT', 'constanța' => 'CT', 'covasna' => 'CV', 'dambovita' => 'DB', 'dâmbovița' => 'DB',
-        'dolj' => 'DJ', 'galati' => 'GL', 'galați' => 'GL', 'giurgiu' => 'GR', 'gorj' => 'GJ', 'harghita' => 'HR',
+        'dolj' => 'DJ', 'galati' => 'GL', 'galați' => 'GL', 'giurgiu' => 'GR', 'gorj' => 'GJ', 'harghita' => 'HR', 'hargita' => 'HR',
         'hunedoara' => 'HD', 'ialomita' => 'IL', 'ialomița' => 'IL', 'iasi' => 'IS', 'iași' => 'IS', 'ilfov' => 'IF',
         'maramures' => 'MM', 'maramureș' => 'MM', 'mehedinti' => 'MH', 'mehedinți' => 'MH', 'mures' => 'MS',
         'mureș' => 'MS', 'neamt' => 'NT', 'neamț' => 'NT', 'olt' => 'OT', 'prahova' => 'PH', 'satu mare' => 'SM',
@@ -351,14 +351,63 @@ final class GtrotsInvoiceUbl
     private static function countyCode(string $county, string $city, string $postalCode): string
     {
         $normalized = mb_strtolower(trim($county), 'UTF-8');
-        $normalized = preg_replace('/\s+/', ' ', str_replace(['județul ', 'judetul ', 'jud. '], '', $normalized)) ?: $normalized;
+        $normalized = preg_replace('/^(?:jude[țţt]ul|jud\.)\s+/u', '', $normalized) ?: $normalized;
+        $normalized = preg_replace('/\s+/', ' ', $normalized) ?: $normalized;
         $code = self::COUNTIES[$normalized] ?? '';
+        if ($code === '') {
+            // Adresele istorice și importurile curierilor pot amesteca formele
+            // cu/fără diacritice (ex. „Dambovița”) sau pot folosi denumirea
+            // uzuală „Hargita”. ANAF are nevoie de codul județului, nu de o
+            // anumită ortografie a textului introdus de client.
+            $ascii = strtr($normalized, [
+                'ă' => 'a', 'â' => 'a', 'î' => 'i',
+                'ș' => 's', 'ş' => 's', 'ț' => 't', 'ţ' => 't',
+            ]);
+            $code = self::COUNTIES[$ascii]
+                ?? self::COUNTIES[str_replace(' ', '-', $ascii)]
+                ?? '';
+            if ($code === '') $code = self::closestCountyCode($ascii);
+        }
         if ($code === '' && preg_match('/^(?:RO-)?([A-Z]{1,2})$/i', trim($county), $match)) $code = strtoupper($match[1]);
         if ($code === '') throw new InvalidArgumentException('Județul „' . trim($county) . '” nu poate fi transformat în codul ISO 3166-2 cerut de ANAF.');
         if ($code === 'B' && !preg_match('/^SECTOR[1-6]$/', self::normalizedCity($city, $county, $postalCode))) {
             throw new InvalidArgumentException('Pentru București, localitatea trebuie să indice Sector 1–6 sau codul poștal trebuie să permită determinarea sectorului.');
         }
         return 'RO-' . $code;
+    }
+
+    /**
+     * Acceptă o greșeală minoră numai când rezultatul este neambiguu.
+     * Județele scurte nu sunt corectate aproximativ (de exemplu Dolj/Gorj),
+     * iar pentru denumirile lungi permitem maximum două editări.
+     */
+    private static function closestCountyCode(string $county): string
+    {
+        $needle = preg_replace('/[^a-z0-9]+/', '', strtolower($county)) ?: '';
+        $length = strlen($needle);
+        $maximumDistance = $length >= 9 ? 2 : ($length >= 6 ? 1 : 0);
+        if ($maximumDistance === 0) return '';
+
+        $bestDistance = PHP_INT_MAX;
+        $bestCodes = [];
+        foreach (self::COUNTIES as $name => $candidateCode) {
+            $candidate = strtr($name, [
+                'ă' => 'a', 'â' => 'a', 'î' => 'i',
+                'ș' => 's', 'ş' => 's', 'ț' => 't', 'ţ' => 't',
+            ]);
+            $candidate = preg_replace('/[^a-z0-9]+/', '', $candidate) ?: '';
+            if ($candidate === '') continue;
+            $distance = levenshtein($needle, $candidate);
+            if ($distance < $bestDistance) {
+                $bestDistance = $distance;
+                $bestCodes = [$candidateCode => true];
+            } elseif ($distance === $bestDistance) {
+                $bestCodes[$candidateCode] = true;
+            }
+        }
+        return $bestDistance <= $maximumDistance && count($bestCodes) === 1
+            ? (string)array_key_first($bestCodes)
+            : '';
     }
 
     private static function normalizedCity(string $city, string $county, string $postalCode): string

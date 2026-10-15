@@ -1,0 +1,96 @@
+{
+  "sku": "KKG2MAST-BK-V6",
+  "specifications": [
+    { "group": "General", "label": "Brand", "value": "KuKirin" },
+    { "group": "General", "label": "Model", "value": "G2 Master" },
+    { "group": "General", "label": "Versiune comercială", "value": "V6 – Versiunea 6" },
+    { "group": "General", "label": "An comercializare", "value": "2026" },
+    { "group": "General", "label": "Tip produs", "value": "Trotinetă electrică off-road" },
+    { "group": "Motor", "label": "Număr motoare", "value": "2" },
+    { "group": "Motor", "label": "Tip motoare", "value": "Brushless" },
+    { "group": "Motor", "label": "Putere nominală / motor", "value": "1000W" },
+    { "group": "Motor", "label": "Putere nominală totală", "value": "2000W" },
+    { "group": "Motor", "label": "Putere maximă de vârf declarată", "value": "2 × 1200W" },
+    { "group": "Motor", "label": "Tensiune nominală", "value": "52V" },
+    { "group": "Motor", "label": "Sistem tracțiune", "value": "Dual Motor – față și spate" },
+    { "group": "Performanță", "label": "Viteză maximă declarată de furnizor pentru V6", "value": "70 km/h" },
+    { "group": "Performanță", "label": "Viteză maximă indicată de KuKirin", "value": "60 km/h" },
+    { "group": "Performanță", "label": "Autonomie maximă", "value": "70 km" },
+    { "group": "Performanță", "label": "Unghi maxim de urcare declarat", "value": "28°" },
+    { "group": "Performanță", "label": "Sarcină maximă", "value": "120 kg" },
+    { "group": "Baterie", "label": "Tip acumulator", "value": "Litiu-ion 18650" },
+    { "group": "Baterie", "label": "Tensiune acumulator", "value": "52V" },
+    { "group": "Baterie", "label": "Capacitate acumulator", "value": "20,8Ah" },
+    { "group": "Baterie", "label": "Energie nominală", "value": "1081,6Wh" },
+    { "group": "Baterie", "label": "Sistem de protecție", "value": "BMS" },
+    { "group": "Încărcare", "label": "Timp de încărcare declarat", "value": "Aproximativ 7–8 ore" },
+    { "group": "Încărcare", "label": "Tensiune ieșire încărcător", "value": "58,8V" },
+    { "group": "Încărcare", "label": "Curent ieșire încărcător", "value": "3A" },
+    { "group": "Roți și anvelope", "label": "Dimensiune roți", "value": "10 inch" },
+    { "group": "Roți și anvelope", "label": "Dimensiune anvelope", "value": "255 × 80 mm" },
+    { "group": "Roți și anvelope", "label": "Tip anvelope", "value": "Tubeless off-road" },
+    { "group": "Roți și anvelope", "label": "Presiune recomandată", "value": "350 kPa / 50 PSI" },
+    { "group": "Frânare", "label": "Sistem frânare față", "value": "Disc" },
+    { "group": "Frânare", "label": "Sistem frânare spate", "value": "Disc" },
+    { "group": "Frânare", "label": "Întrerupere motor la frânare", "value": "Da" },
+    { "group": "Suspensii", "label": "Suspensie față", "value": "Amortizare hidraulică" },
+    { "group": "Suspensii", "label": "Suspensie spate", "value": "Amortizare hidraulică" },
+    { "group": "Construcție", "label": "Material cadru", "value": "Aliaj de aluminiu" },
+    { "group": "Construcție", "label": "Greutate netă declarată", "value": "Aproximativ 33,1 kg" },
+    { "group": "Construcție", "label": "Sistem de pliere", "value": "Da" },
+    { "group": "Construcție", "label": "Dimensiuni desfăcută", "value": "1260 × 595 × 1315 mm" },
+    { "group": "Construcție", "label": "Dimensiuni pliată", "value": "1260 × 595 × 595 mm" },
+    { "group": "Protecție", "label": "Grad protecție declarat", "value": "IP54" },
+    { "group": "Iluminare", "label": "Far frontal", "value": "LED" },
+    { "group": "Iluminare", "label": "Stop spate", "value": "LED" },
+    { "group": "Iluminare", "label": "Semnalizatoare", "value": "Da" },
+    { "group": "Display", "label": "Tip afișaj", "value": "Digital LCD" },
+    { "group": "Display", "label": "Informații afișate", "value": "Viteză, kilometraj, nivel baterie și iluminare" }
+  ],
+  "questions": [
+    {
+      "question": "Ce autonomie are trotineta electrică KuKirin G2 Master V6?",
+      "answer": "KuKirin G2 Master V6 oferă o autonomie maximă declarată de până la 70 km, datorită bateriei de 52V 20,8Ah. Autonomia reală depinde de greutatea utilizatorului, viteza de deplasare, temperatura exterioară, teren și utilizarea sistemului Dual Motor."
+    },
+    {
+      "question": "Ce putere are KuKirin G2 Master Versiunea 6?",
+      "answer": "Trotineta electrică KuKirin G2 Master V6 este echipată cu două motoare brushless de câte 1000W, oferind o putere nominală totală de 2000W. Sistemul Dual Motor asigură tracțiune pe ambele roți și accelerație dinamică pe trasee solicitante."
+    },
+    {
+      "question": "Care este viteza maximă a trotinetei KuKirin G2 Master V6?",
+      "answer": "Pentru KuKirin G2 Master V6, listarea furnizorului asociată acestui SKU indică o viteză maximă de 70 km/h, în timp ce fișa tehnică KuKirin pentru G2 Master indică până la 60 km/h. Valoarea poate depinde de configurația și lotul comercializat. Utilizarea pe drumurile publice este supusă legislației aplicabile."
+    },
+    {
+      "question": "Ce baterie are trotineta electrică KuKirin G2 Master?",
+      "answer": "KuKirin G2 Master este echipată cu un acumulator litiu-ion de 52V 20,8Ah, cu o capacitate energetică nominală de aproximativ 1082Wh. Bateria este concepută pentru autonomie generoasă și pentru alimentarea celor două motoare electrice."
+    },
+    {
+      "question": "Cât durează încărcarea bateriei KuKirin G2 Master V6?",
+      "answer": "Încărcarea completă a bateriei de 52V 20,8Ah durează aproximativ 7–8 ore cu încărcătorul de 58,8V și 3A indicat în fișa tehnică KuKirin. Durata poate varia în funcție de nivelul inițial al bateriei, temperatură și starea acumulatorului."
+    },
+    {
+      "question": "KuKirin G2 Master V6 are două motoare?",
+      "answer": "Da, KuKirin G2 Master V6 dispune de două motoare electrice de câte 1000W, unul pentru roata din față și unul pentru roata din spate. Tracțiunea integrală oferă putere suplimentară și un control mai bun în condiții adecvate de utilizare."
+    },
+    {
+      "question": "Ce anvelope are KuKirin G2 Master V6?",
+      "answer": "Modelul KuKirin G2 Master V6 este echipat cu anvelope tubeless off-road de 10 inch. Pentru înlocuirea anvelopelor, este important să fie verificată dimensiunea exactă, presiunea recomandată și compatibilitatea cu versiunea trotinetei."
+    },
+    {
+      "question": "KuKirin G2 Master V6 are suspensii față și spate?",
+      "answer": "Da, trotineta electrică KuKirin G2 Master V6 dispune de suspensii față și spate cu amortizare hidraulică. Acestea contribuie la reducerea vibrațiilor și la confortul utilizatorului pe trasee cu denivelări."
+    },
+    {
+      "question": "Se poate utiliza KuKirin G2 Master pe ploaie?",
+      "answer": "KuKirin G2 Master are un grad de protecție declarat IP54, care oferă protecție limitată împotriva prafului și stropilor de apă. Se recomandă evitarea ploii abundente, bălților adânci și spălării cu jet de apă, deoarece trotineta nu este complet impermeabilă."
+    },
+    {
+      "question": "Câtă greutate suportă KuKirin G2 Master V6?",
+      "answer": "KuKirin G2 Master V6 are o sarcină maximă declarată de 120 kg. Respectarea acestei limite contribuie la siguranța utilizatorului, la funcționarea corectă a frânelor și suspensiilor și la menținerea performanțelor vehiculului."
+    },
+    {
+      "question": "Cum se întreține corect KuKirin G2 Master V6?",
+      "answer": "Pentru întreținerea trotinetei electrice KuKirin G2 Master V6, verifică periodic presiunea anvelopelor, frânele, suspensiile, șuruburile și acumulatorul. Pentru revizii, diagnosticare și înlocuirea pieselor compatibile, poți apela la G-Trots România, service specializat în trotinete electrice."
+    }
+  ]
+}

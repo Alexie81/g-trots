@@ -881,6 +881,13 @@ let tabsScrollFrame = 0;
 
 function updateProductTabsRange() {
   if (!productTabsBar) return;
+  const siteHeader = document.querySelector("header");
+  if (siteHeader) {
+    productTabsBar.style.setProperty(
+      "--product-tabs-sticky-top",
+      `${Math.max(0, siteHeader.getBoundingClientRect().bottom)}px`
+    );
+  }
   const lastVisibleProductSection = productSections
     .filter(section => !section.hidden && getComputedStyle(section).display !== "none")
     .at(-1);

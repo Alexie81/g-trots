@@ -33,7 +33,7 @@
     <link rel="preload" href="assets/magazin-produse-v1.png" as="image" type="image/png">
     <link rel="stylesheet" href="styles.css?v=20260827-shop-call">
     <link rel="stylesheet" href="magazin.css?v=20260827-2">
-    <link rel="stylesheet" href="produs.css?v=20261015-mobile-sticky-tabs-v3&amp;specs=20261015-v1">
+    <link rel="stylesheet" href="produs.css?v=20261015-mobile-sticky-tabs-v3&amp;specs=20261015-v1&amp;gallery=20261015-v1&amp;buybox=20261015-v1">
     <link rel="stylesheet" href="product-catalog-search.css?v=20261014-v12">
     <link rel="stylesheet" href="favorites.css?v=20260909-nav-v2">
     <link rel="stylesheet" href="shop-live.css?v=20261001-product-content-v4">
@@ -118,28 +118,33 @@
 
           <div class="product-detail-meta">
             <a href="#recenzii" data-review-meta hidden><span aria-hidden="true">☆☆☆☆☆</span><strong data-review-link-text></strong></a>
-            <div class="product-detail-identifiers"><small>Cod produs: <b data-product-sku>—</b></small><span class="product-warranty-badge" data-product-warranty-badge hidden></span></div>
+            <div class="product-detail-identifiers"><small>Cod produs: <b data-product-sku>—</b></small></div>
           </div>
 
           <div class="product-detail-price-row">
             <div><small>Preț</small><strong data-product-price>—</strong></div>
-          </div>
-
-          <div class="product-detail-fit">
-            <span>Compatibilitate</span>
-            <div data-product-brands></div>
+            <div class="product-quantity-block">
+              <small>Cantitate</small>
+              <div class="product-quantity" aria-label="Alege cantitatea">
+                <button type="button" data-quantity-minus aria-label="Scade cantitatea">−</button>
+                <input data-product-quantity type="number" min="1" max="10" value="1" inputmode="numeric" aria-label="Cantitate">
+                <button type="button" data-quantity-plus aria-label="Crește cantitatea">+</button>
+              </div>
+            </div>
           </div>
 
           <div class="product-purchase-row">
-            <div class="product-quantity" aria-label="Alege cantitatea">
-              <button type="button" data-quantity-minus aria-label="Scade cantitatea">−</button>
-              <input data-product-quantity type="number" min="1" max="10" value="1" inputmode="numeric" aria-label="Cantitate">
-              <button type="button" data-quantity-plus aria-label="Crește cantitatea">+</button>
-            </div>
             <button class="product-add-cart" type="button" data-product-add-cart>
               <span class="product-cart-glyph" aria-hidden="true"></span>
               <strong>Adaugă în coș</strong>
             </button>
+          </div>
+          <div class="product-purchase-details">
+            <div class="product-detail-fit">
+              <span>Compatibilitate</span>
+              <div data-product-brands></div>
+            </div>
+            <span class="product-warranty-badge" data-product-warranty-badge hidden></span>
           </div>
           <p class="product-cart-feedback" data-cart-feedback aria-live="polite"></p>
 
@@ -291,7 +296,7 @@
     </a>
 
 <script src="favorites.js?v=20260910-navbar-v1" defer></script>
-    <script src="produs.js?v=20261015-mobile-sticky-tabs-v3&amp;navbar=20261015-v4" defer></script>
+    <script src="produs.js?v=20261015-mobile-sticky-tabs-v3&amp;navbar=20261015-v4&amp;gallery=20261015-v1" defer></script>
     <script src="product-catalog-search.js?v=20261014-v12" defer></script>
     <script src="shop-live.js?v=20261001-product-content-v4" defer></script>
 <script src="/legal-footer.js?v=20260920-public-theme-v11" defer></script></body>

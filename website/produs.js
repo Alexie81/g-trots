@@ -130,6 +130,135 @@ galleryButtons.forEach((button, index) => {
 document.querySelector("[data-gallery-previous]")?.addEventListener("click", () => showGalleryView(activeGalleryIndex - 1));
 document.querySelector("[data-gallery-next]")?.addEventListener("click", () => showGalleryView(activeGalleryIndex + 1));
 
+function initializeProductThumbnailCarousel() {
+  const rail = document.querySelector(".product-gallery-thumbs");
+  if (!rail) return;
+
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let viewport = null;
+  let track = null;
+  let previous = null;
+  let next = null;
+  let resizeObserver = null;
+  let syncFrame = 0;
+
+  const thumbnailSelector = "button[data-gallery-view], button[data-live-gallery-index]";
+  const activeThumbnailSelector = "button.active[data-gallery-view], button.active[data-live-gallery-index]";
+  const requestSync = () => {
+    window.cancelAnimationFrame(syncFrame);
+    syncFrame = window.requestAnimationFrame(syncControls);
+  };
+
+  function syncControls() {
+    if (!viewport || !track || !previous || !next) return;
+    const hasOverflow = track.scrollHeight > rail.clientHeight + 2;
+    rail.classList.toggle("has-overflow", hasOverflow);
+    previous.hidden = !hasOverflow;
+    next.hidden = !hasOverflow;
+    if (!hasOverflow) viewport.scrollTop = 0;
+    const maxScroll = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+    previous.disabled = !hasOverflow || viewport.scrollTop <= 1;
+    next.disabled = !hasOverflow || viewport.scrollTop >= maxScroll - 1;
+  }
+
+  function scrollActiveThumbnail(smooth = true) {
+    if (!viewport || !track) return;
+    const active = track.querySelector(activeThumbnailSelector);
+    if (!active) {
+      requestSync();
+      return;
+    }
+    const activeTop = active.offsetTop;
+    const activeBottom = activeTop + active.offsetHeight;
+    const visibleTop = viewport.scrollTop;
+    const visibleBottom = visibleTop + viewport.clientHeight;
+    let targetTop = visibleTop;
+    if (activeTop < visibleTop) targetTop = activeTop;
+    else if (activeBottom > visibleBottom) targetTop = activeBottom - viewport.clientHeight;
+    if (Math.abs(targetTop - visibleTop) > 1) {
+      viewport.scrollTo({
+        top: targetTop,
+        behavior: smooth && !reduceMotion.matches ? "smooth" : "auto"
+      });
+    }
+    requestSync();
+  }
+
+  function createControl(direction) {
+    const control = document.createElement("button");
+    control.className = `product-gallery-thumbs__control is-${direction}`;
+    control.type = "button";
+    control.setAttribute("aria-label", direction === "previous" ? "Vezi miniaturile anterioare" : "Vezi miniaturile următoare");
+    control.innerHTML = direction === "previous"
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 15 7-7 7 7"></path></svg>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 9 7 7 7-7"></path></svg>';
+    return control;
+  }
+
+  function mountCarousel() {
+    const mountedViewport = rail.querySelector(":scope > .product-gallery-thumbs__viewport");
+    if (mountedViewport) {
+      viewport = mountedViewport;
+      track = viewport.querySelector(".product-gallery-thumbs__track");
+      previous = rail.querySelector(":scope > .product-gallery-thumbs__control.is-previous");
+      next = rail.querySelector(":scope > .product-gallery-thumbs__control.is-next");
+      requestSync();
+      return;
+    }
+
+    const thumbnails = [...rail.children].filter(node => node.matches?.(thumbnailSelector));
+    if (!thumbnails.length) return;
+
+    resizeObserver?.disconnect();
+    previous = createControl("previous");
+    next = createControl("next");
+    viewport = document.createElement("div");
+    viewport.className = "product-gallery-thumbs__viewport";
+    track = document.createElement("div");
+    track.className = "product-gallery-thumbs__track";
+    track.append(...thumbnails);
+    viewport.append(track);
+    rail.replaceChildren(previous, viewport, next);
+    rail.style.removeProperty("display");
+
+    const scrollByPage = direction => {
+      const step = Math.max(64, viewport.clientHeight * 0.72);
+      viewport.scrollBy({
+        top: step * direction,
+        behavior: reduceMotion.matches ? "auto" : "smooth"
+      });
+    };
+    previous.addEventListener("click", () => scrollByPage(-1));
+    next.addEventListener("click", () => scrollByPage(1));
+    viewport.addEventListener("scroll", requestSync, { passive: true });
+
+    if ("ResizeObserver" in window) {
+      resizeObserver = new ResizeObserver(requestSync);
+      resizeObserver.observe(rail);
+      resizeObserver.observe(track);
+    }
+    window.requestAnimationFrame(() => {
+      syncControls();
+      scrollActiveThumbnail(false);
+    });
+  }
+
+  const railObserver = new MutationObserver(records => {
+    const structureChanged = records.some(record => record.type === "childList" && record.target === rail);
+    if (structureChanged && !rail.querySelector(":scope > .product-gallery-thumbs__viewport")) mountCarousel();
+    const activeThumbnailChanged = records.some(record => record.type === "attributes" && record.target.matches?.(thumbnailSelector));
+    if (activeThumbnailChanged) window.requestAnimationFrame(() => scrollActiveThumbnail());
+  });
+  railObserver.observe(rail, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+  rail.addEventListener("click", event => {
+    if (event.target.closest(thumbnailSelector)) window.requestAnimationFrame(() => scrollActiveThumbnail());
+  });
+  window.addEventListener("resize", requestSync, { passive: true });
+  mountCarousel();
+}
+
+initializeProductThumbnailCarousel();
+
 function initializeProductImageViewer() {
   if (!productVisual || !image) return;
 

@@ -1,0 +1,80 @@
+{
+  "sku": "EU-KKG4",
+  "specifications": [
+    { "group": "General", "label": "Brand", "value": "KuKirin" },
+    { "group": "General", "label": "Model", "value": "G4" },
+    { "group": "General", "label": "An model", "value": "2026" },
+    { "group": "General", "label": "Tip produs", "value": "Trotinetă electrică off-road" },
+    { "group": "Motor", "label": "Număr motoare", "value": "1" },
+    { "group": "Motor", "label": "Tip motor", "value": "Brushless" },
+    { "group": "Motor", "label": "Putere nominală", "value": "2000W" },
+    { "group": "Motor", "label": "Tensiune nominală", "value": "60V" },
+    { "group": "Motor", "label": "Poziționare", "value": "Roată spate" },
+    { "group": "Motor", "label": "Cuplu maxim declarat", "value": "Minimum 38 Nm" },
+    { "group": "Performanță", "label": "Viteză maximă tehnică", "value": "70 km/h" },
+    { "group": "Performanță", "label": "Autonomie maximă", "value": "70 km – conform listării furnizorului" },
+    { "group": "Performanță", "label": "Moduri de viteză", "value": "20 / 40 / 70 km/h" },
+    { "group": "Performanță", "label": "Unghi maxim de urcare declarat", "value": "20°" },
+    { "group": "Performanță", "label": "Sarcină maximă", "value": "120 kg" },
+    { "group": "Baterie", "label": "Tip baterie", "value": "Litiu-ion" },
+    { "group": "Baterie", "label": "Tensiune baterie", "value": "60V" },
+    { "group": "Baterie", "label": "Capacitate baterie", "value": "20Ah" },
+    { "group": "Baterie", "label": "Energie nominală", "value": "1200Wh" },
+    { "group": "Baterie", "label": "Timp de încărcare", "value": "Aproximativ 10–12 ore" },
+    { "group": "Încărcare", "label": "Tensiune ieșire încărcător", "value": "67,2V" },
+    { "group": "Încărcare", "label": "Curent ieșire încărcător", "value": "2A" },
+    { "group": "Roți și anvelope", "label": "Dimensiune roți", "value": "11 inch" },
+    { "group": "Roți și anvelope", "label": "Tip anvelope", "value": "Pneumatice off-road" },
+    { "group": "Roți și anvelope", "label": "Presiune recomandată declarată", "value": "50 PSI" },
+    { "group": "Frânare", "label": "Frână față", "value": "Disc" },
+    { "group": "Frânare", "label": "Frână spate", "value": "Disc" },
+    { "group": "Frânare", "label": "Frână electronică", "value": "Da, conform fișei UE" },
+    { "group": "Suspensii", "label": "Suspensie față", "value": "Da" },
+    { "group": "Suspensii", "label": "Suspensie spate", "value": "Da" },
+    { "group": "Construcție", "label": "Material cadru", "value": "Aliaj de aluminiu" },
+    { "group": "Construcție", "label": "Sistem de pliere", "value": "Da" },
+    { "group": "Construcție", "label": "Gardă la sol declarată", "value": "185 mm" },
+    { "group": "Construcție", "label": "Dimensiuni desfăcută", "value": "1336 × 660 × 1295 mm" },
+    { "group": "Construcție", "label": "Dimensiuni pliată", "value": "1336 × 660 × 550 mm" },
+    { "group": "Display", "label": "Tip afișaj", "value": "Digital" },
+    { "group": "Display", "label": "Informații afișate", "value": "Viteză, baterie, mod de rulare" }
+  ],
+  "questions": [
+    {
+      "question": "Ce autonomie are trotineta electrică KuKirin G4 2026?",
+      "answer": "KuKirin G4 2026 oferă o autonomie maximă declarată de până la 70 km pentru versiunea listată, datorită acumulatorului de 60V 20Ah. Unele fișe tehnice indică până la 75 km în condiții ideale. Autonomia reală depinde de greutatea utilizatorului, temperatură, teren și viteza de deplasare."
+    },
+    {
+      "question": "Care este viteza maximă a trotinetei KuKirin G4 2026?",
+      "answer": "Trotineta electrică KuKirin G4 2026 poate atinge o viteză maximă tehnică declarată de 70 km/h. Această performanță este destinată utilizării în condiții adecvate, în special pe teren privat. Circulația pe drumurile publice este supusă reglementărilor legale."
+    },
+    {
+      "question": "Ce motor are KuKirin G4 2026?",
+      "answer": "KuKirin G4 2026 este echipată cu un singur motor electric brushless de 2000W, amplasat în roata din spate. Acesta oferă accelerație puternică și performanțe potrivite pentru utilizatorii experimentați și traseele recreative solicitante."
+    },
+    {
+      "question": "Ce baterie are KuKirin G4 și cât durează încărcarea?",
+      "answer": "Modelul KuKirin G4 2026 dispune de o baterie litiu-ion de 60V 20Ah, cu o capacitate nominală de 1200Wh. Încărcarea completă durează aproximativ 10–12 ore, în funcție de încărcător și de nivelul inițial al bateriei."
+    },
+    {
+      "question": "KuKirin G4 2026 este potrivită pentru off-road?",
+      "answer": "Da, KuKirin G4 2026 este concepută și pentru utilizare recreativă off-road, fiind echipată cu anvelope pneumatice de 11 inch, suspensii față-spate și un motor puternic de 2000W. Alegerea traseului trebuie adaptată condițiilor terenului și experienței utilizatorului."
+    },
+    {
+      "question": "Ce sistem de frânare are KuKirin G4 2026?",
+      "answer": "Trotineta electrică KuKirin G4 2026 este prevăzută cu frâne pe disc față și spate, iar fișa tehnică UE menționează și frânare electronică. Pentru siguranță, se recomandă verificarea periodică a discurilor, plăcuțelor și reglajelor sistemului de frânare."
+    },
+    {
+      "question": "Se poate utiliza KuKirin G4 2026 pe ploaie?",
+      "answer": "Se recomandă evitarea utilizării KuKirin G4 2026 în ploaie puternică, prin bălți adânci sau în condiții de umezeală excesivă. Chiar dacă este declarată o anumită protecție împotriva apei, trotineta nu trebuie considerată complet impermeabilă."
+    },
+    {
+      "question": "Care este greutatea maximă suportată de KuKirin G4?",
+      "answer": "KuKirin G4 2026 are o sarcină maximă declarată de 120 kg. Pentru performanțe și siguranță corespunzătoare, este important să nu fie depășită această limită și să se respecte instrucțiunile producătorului."
+    },
+    {
+      "question": "Cum se întreține trotineta electrică KuKirin G4 2026?",
+      "answer": "Pentru întreținerea corectă a trotinetei KuKirin G4 2026, verifică periodic presiunea anvelopelor, starea frânelor, suspensiile, șuruburile și acumulatorul. Pentru diagnosticare, revizii și înlocuirea pieselor, poți apela la G-Trots România, service specializat în trotinete electrice."
+    }
+  ]
+}

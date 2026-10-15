@@ -30,7 +30,17 @@ final class GtrotsInventoryExport
     {
         [$from, $to] = self::range($input['from'] ?? '', $input['to'] ?? '');
         [$where, $params] = self::movementWhere($from, $to, 'im');
-        $products = (int)$db->query('SELECT COUNT(*) FROM shop_products WHERE is_accounting_stock_tracked = 1')->fetchColumn();
+        $productSql = 'SELECT COUNT(DISTINCT im.product_id)
+            FROM shop_inventory_movements im INNER JOIN shop_products p ON p.id = im.product_id
+            WHERE p.is_accounting_stock_tracked = 1' . self::documentedMovementSql('im');
+        $productParams = [];
+        if ($to !== '') {
+            $productSql .= ' AND im.created_at <= ?';
+            $productParams[] = $to . ' 23:59:59';
+        }
+        $productStmt = $db->prepare($productSql);
+        $productStmt->execute($productParams);
+        $products = (int)$productStmt->fetchColumn();
         $stmt = $db->prepare('SELECT COUNT(*) AS movement_count,
             COUNT(DISTINCT CASE WHEN im.nir_document_id IS NOT NULL AND im.nir_document_id <> "" THEN im.nir_document_id WHEN im.sales_invoice_id IS NOT NULL AND im.sales_invoice_id <> "" THEN im.sales_invoice_id ELSE im.id END) AS document_count
             FROM shop_inventory_movements im INNER JOIN shop_products p ON p.id = im.product_id
@@ -70,17 +80,24 @@ final class GtrotsInventoryExport
     private static function snapshot(PDO $db, string $from, string $to): array
     {
         $company = $db->query('SELECT * FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch(PDO::FETCH_ASSOC) ?: [];
-        $products = $db->query(
+        $productSql =
             'SELECT p.id, p.name, p.sku, p.stock_mode, p.stock_quantity, p.accounting_stock_quantity,
-                    COALESCE(f.fifo_quantity, 0) AS fifo_quantity, COALESCE(f.fifo_value, 0) AS fifo_value
+                    0 AS fifo_quantity, 0 AS fifo_value
              FROM shop_products p
-             LEFT JOIN (
-                SELECT product_id, SUM(remaining_quantity) AS fifo_quantity, SUM(remaining_quantity * unit_cost_ron) AS fifo_value
-                FROM shop_inventory_cost_layers WHERE is_reversed = 0 AND remaining_quantity > 0 GROUP BY product_id
-             ) f ON f.product_id = p.id
              WHERE p.is_accounting_stock_tracked = 1
-             ORDER BY p.name ASC, p.id ASC'
-        )->fetchAll(PDO::FETCH_ASSOC);
+               AND EXISTS (
+                    SELECT 1 FROM shop_inventory_movements im_doc
+                    WHERE im_doc.product_id = p.id' . self::documentedMovementSql('im_doc');
+        $productParams = [];
+        if ($to !== '') {
+            $productSql .= ' AND im_doc.created_at <= ?';
+            $productParams[] = $to . ' 23:59:59';
+        }
+        $productSql .= ')
+             ORDER BY p.name ASC, p.id ASC';
+        $productStmt = $db->prepare($productSql);
+        $productStmt->execute($productParams);
+        $products = $productStmt->fetchAll(PDO::FETCH_ASSOC);
 
         [$where, $params] = self::movementWhere($from, $to, 'im');
         $stmt = $db->prepare(
@@ -105,21 +122,25 @@ final class GtrotsInventoryExport
         $stmt->execute($params);
         $movements = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $afterByProduct = [];
-        if ($to !== '') {
-            $after = $db->prepare(
+        $openingByProduct = [];
+        if ($from !== '') {
+            $opening = $db->prepare(
                 'SELECT im.product_id,
                         SUM(COALESCE(im.accounting_quantity_delta, im.quantity_delta, 0)) AS quantity_delta,
                         SUM(CASE WHEN COALESCE(im.accounting_quantity_delta, im.quantity_delta, 0) >= 0 THEN ABS(COALESCE(im.inventory_cost_total_ron, 0)) ELSE -ABS(COALESCE(im.inventory_cost_total_ron, 0)) END) AS value_delta,
                         SUM(COALESCE(im.fifo_quantity_pending, 0)) AS fifo_pending
                  FROM shop_inventory_movements im INNER JOIN shop_products p ON p.id = im.product_id
-                 WHERE p.is_accounting_stock_tracked = 1 AND im.created_at > ? GROUP BY im.product_id'
+                 WHERE p.is_accounting_stock_tracked = 1' . self::documentedMovementSql('im') . ' AND im.created_at < ? GROUP BY im.product_id'
             );
-            $after->execute([$to . ' 23:59:59']);
-            while ($row = $after->fetch(PDO::FETCH_ASSOC)) $afterByProduct[(string)$row['product_id']] = $row;
+            $opening->execute([$from . ' 00:00:00']);
+            while ($row = $opening->fetch(PDO::FETCH_ASSOC)) $openingByProduct[(string)$row['product_id']] = $row;
         }
 
         $periodByProduct = [];
+        $runningQuantityByProduct = [];
+        foreach ($openingByProduct as $productId => $opening) {
+            $runningQuantityByProduct[$productId] = (float)($opening['quantity_delta'] ?? 0);
+        }
         foreach ($movements as &$movement) {
             $delta = self::delta($movement);
             $movement['export_direction'] = $delta >= 0 ? 'Intrare' : 'Ieșire';
@@ -130,6 +151,8 @@ final class GtrotsInventoryExport
             $movement['export_unit'] = 'buc.';
             $movement['export_inventory_value'] = abs((float)($movement['inventory_cost_total_ron'] ?? 0));
             $productId = (string)$movement['product_id'];
+            $runningQuantityByProduct[$productId] = ($runningQuantityByProduct[$productId] ?? 0.0) + $delta;
+            $movement['export_documented_quantity_after'] = $runningQuantityByProduct[$productId];
             if (!isset($periodByProduct[$productId])) $periodByProduct[$productId] = ['delta' => 0.0, 'entries' => 0.0, 'exits' => 0.0, 'value_delta' => 0.0, 'entry_value' => 0.0, 'exit_value' => 0.0, 'pending' => 0.0, 'count' => 0];
             $cost = abs((float)($movement['inventory_cost_total_ron'] ?? 0));
             $periodByProduct[$productId]['delta'] += $delta;
@@ -144,20 +167,18 @@ final class GtrotsInventoryExport
         foreach ($products as &$product) {
             $id = (string)$product['id'];
             $period = $periodByProduct[$id] ?? ['delta' => 0.0, 'entries' => 0.0, 'exits' => 0.0, 'value_delta' => 0.0, 'entry_value' => 0.0, 'exit_value' => 0.0, 'pending' => 0.0, 'count' => 0];
-            $after = $afterByProduct[$id] ?? ['quantity_delta' => 0, 'value_delta' => 0, 'fifo_pending' => 0];
-            $closingQuantity = (float)$product['accounting_stock_quantity'] - (float)$after['quantity_delta'];
-            $closingValue = (float)$product['fifo_value'] - (float)$after['value_delta'];
-            $product['opening_quantity'] = $closingQuantity - (float)$period['delta'];
+            $opening = $openingByProduct[$id] ?? ['quantity_delta' => 0, 'value_delta' => 0, 'fifo_pending' => 0];
+            $product['opening_quantity'] = (float)$opening['quantity_delta'];
             $product['entry_quantity'] = (float)$period['entries'];
             $product['exit_quantity'] = (float)$period['exits'];
-            $product['closing_quantity'] = $closingQuantity;
-            $product['opening_value'] = $closingValue - (float)$period['value_delta'];
+            $product['closing_quantity'] = (float)$product['opening_quantity'] + (float)$period['delta'];
+            $product['opening_value'] = (float)$opening['value_delta'];
             $product['entry_value'] = (float)$period['entry_value'];
             $product['exit_value'] = (float)$period['exit_value'];
-            $product['closing_value'] = $closingValue;
+            $product['closing_value'] = (float)$product['opening_value'] + (float)$period['value_delta'];
             $product['movement_count'] = (int)$period['count'];
-            $product['fifo_pending'] = (float)$period['pending'] + (float)$after['fifo_pending'];
-            $product['reconciliation_difference'] = $closingQuantity - ((float)$product['opening_quantity'] + (float)$product['entry_quantity'] - (float)$product['exit_quantity']);
+            $product['fifo_pending'] = (float)$opening['fifo_pending'] + (float)$period['pending'];
+            $product['reconciliation_difference'] = (float)$product['closing_quantity'] - ((float)$product['opening_quantity'] + (float)$product['entry_quantity'] - (float)$product['exit_quantity']);
         }
         unset($product);
 
@@ -202,8 +223,15 @@ final class GtrotsInventoryExport
 
     private static function movementWhere(string $from, string $to, string $alias): array
     {
-        if ($from === '') return ['', []];
-        return [' AND ' . $alias . '.created_at >= ? AND ' . $alias . '.created_at <= ?', [$from . ' 00:00:00', $to . ' 23:59:59']];
+        $where = self::documentedMovementSql($alias);
+        if ($from === '') return [$where, []];
+        return [$where . ' AND ' . $alias . '.created_at >= ? AND ' . $alias . '.created_at <= ?', [$from . ' 00:00:00', $to . ' 23:59:59']];
+    }
+
+    private static function documentedMovementSql(string $alias): string
+    {
+        return " AND (({$alias}.nir_document_id IS NOT NULL AND TRIM({$alias}.nir_document_id) <> '')"
+            . " OR ({$alias}.sales_invoice_id IS NOT NULL AND TRIM({$alias}.sales_invoice_id) <> ''))";
     }
 
     private static function delta(array $row): float
@@ -351,7 +379,7 @@ final class GtrotsInventoryExport
             $headerRow=[]; foreach($headers as $i=>$header)$headerRow[$i+1]=shopNirPremiumXlsxCellSpec($header,'string',3); $rows.=shopNirPremiumXlsxRow($r++,$headerRow,43);
             if(!$items){$rows.=shopNirPremiumXlsxRow($r,[1=>shopNirPremiumXlsxCellSpec('Fără mișcări în perioada selectată.','string',22)],26);$merges[]='A'.$r.':P'.$r;$r+=2;continue;}
             foreach($items as $index=>$movement){$entry=self::delta($movement)>=0;$styleText=$entry?12:15;$styleNum=$entry?13:16;$styleMoney=$entry?14:17;
-                $rows.=shopNirPremiumXlsxRow($r++,[1=>shopNirPremiumXlsxCellSpec($index+1,'number',$styleNum),2=>shopNirPremiumXlsxCellSpec(shopNirPremiumXlsxExcelDate($movement['created_at'],true),'datetime',$entry?25:26),3=>shopNirPremiumXlsxCellSpec($movement['export_document_type'],'string',$styleText),4=>shopNirPremiumXlsxCellSpec($movement['export_document_number'],'string',$styleText),5=>shopNirPremiumXlsxCellSpec($movement['export_party'],'string',$styleText),6=>shopNirPremiumXlsxCellSpec($entry?$movement['supplier_invoice_series']:'','string',$styleText),7=>shopNirPremiumXlsxCellSpec($entry?$movement['supplier_invoice_number']:'','string',$styleText),8=>shopNirPremiumXlsxCellSpec(!$entry?($movement['output_invoice_series']?:$movement['supplier_invoice_series']):'','string',$styleText),9=>shopNirPremiumXlsxCellSpec(!$entry?($movement['output_invoice_number']?:$movement['supplier_invoice_number']):'','string',$styleText),10=>shopNirPremiumXlsxCellSpec($entry?abs(self::delta($movement)):0,'number',$styleNum),11=>shopNirPremiumXlsxCellSpec(!$entry?abs(self::delta($movement)):0,'number',$styleNum),12=>shopNirPremiumXlsxCellSpec($movement['accounting_quantity_after']??$movement['quantity_after'],'number',$styleNum),13=>shopNirPremiumXlsxCellSpec($movement['inventory_unit_cost_ron'],'number',$styleMoney),14=>shopNirPremiumXlsxCellSpec(abs((float)($movement['inventory_cost_total_ron']??0)),'number',$styleMoney),15=>shopNirPremiumXlsxCellSpec($movement['created_by'],'string',$styleText),16=>shopNirPremiumXlsxCellSpec($movement['note'],'string',$styleText)],34);
+                $rows.=shopNirPremiumXlsxRow($r++,[1=>shopNirPremiumXlsxCellSpec($index+1,'number',$styleNum),2=>shopNirPremiumXlsxCellSpec(shopNirPremiumXlsxExcelDate($movement['created_at'],true),'datetime',$entry?25:26),3=>shopNirPremiumXlsxCellSpec($movement['export_document_type'],'string',$styleText),4=>shopNirPremiumXlsxCellSpec($movement['export_document_number'],'string',$styleText),5=>shopNirPremiumXlsxCellSpec($movement['export_party'],'string',$styleText),6=>shopNirPremiumXlsxCellSpec($entry?$movement['supplier_invoice_series']:'','string',$styleText),7=>shopNirPremiumXlsxCellSpec($entry?$movement['supplier_invoice_number']:'','string',$styleText),8=>shopNirPremiumXlsxCellSpec(!$entry?($movement['output_invoice_series']?:$movement['supplier_invoice_series']):'','string',$styleText),9=>shopNirPremiumXlsxCellSpec(!$entry?($movement['output_invoice_number']?:$movement['supplier_invoice_number']):'','string',$styleText),10=>shopNirPremiumXlsxCellSpec($entry?abs(self::delta($movement)):0,'number',$styleNum),11=>shopNirPremiumXlsxCellSpec(!$entry?abs(self::delta($movement)):0,'number',$styleNum),12=>shopNirPremiumXlsxCellSpec($movement['export_documented_quantity_after'],'number',$styleNum),13=>shopNirPremiumXlsxCellSpec($movement['inventory_unit_cost_ron'],'number',$styleMoney),14=>shopNirPremiumXlsxCellSpec(abs((float)($movement['inventory_cost_total_ron']??0)),'number',$styleMoney),15=>shopNirPremiumXlsxCellSpec($movement['created_by'],'string',$styleText),16=>shopNirPremiumXlsxCellSpec($movement['note'],'string',$styleText)],34);
             }
             $rows.=shopNirPremiumXlsxRow($r,[1=>shopNirPremiumXlsxCellSpec('TOTAL FIȘĂ','string',18),10=>shopNirPremiumXlsxCellSpec($product['entry_quantity'],'number',19),11=>shopNirPremiumXlsxCellSpec($product['exit_quantity'],'number',19),12=>shopNirPremiumXlsxCellSpec($product['closing_quantity'],'number',19),14=>shopNirPremiumXlsxCellSpec($product['closing_value'],'number',20)],28);$merges[]='A'.$r.':I'.$r;$r+=2;
         }
@@ -364,7 +392,7 @@ final class GtrotsInventoryExport
         [$rows,$merges,$r]=self::sheetMasthead('Registrul cronologic al mișcărilor de stoc',self::periodLabel($data),count($headers));
         $headerRow=$r;$cells=[];foreach($headers as $i=>$header)$cells[$i+1]=shopNirPremiumXlsxCellSpec($header,'string',3);$rows.=shopNirPremiumXlsxRow($r++,$cells,48);
         foreach($data['movements'] as $index=>$movement){$entry=self::delta($movement)>=0;$st=$entry?12:15;$sn=$entry?13:16;$sm=$entry?14:17;
-            $rows.=shopNirPremiumXlsxRow($r++,[1=>shopNirPremiumXlsxCellSpec($index+1,'number',$sn),2=>shopNirPremiumXlsxCellSpec($movement['export_direction'],'string',$st),3=>shopNirPremiumXlsxCellSpec(shopNirPremiumXlsxExcelDate($movement['created_at'],true),'datetime',$entry?25:26),4=>shopNirPremiumXlsxCellSpec($movement['export_document_type'],'string',$st),5=>shopNirPremiumXlsxCellSpec($movement['warehouse_name']??'Gestiune principală','string',$st),6=>shopNirPremiumXlsxCellSpec($movement['export_document_number'],'string',$st),7=>shopNirPremiumXlsxCellSpec($movement['export_party'],'string',$st),8=>shopNirPremiumXlsxCellSpec($movement['order_number'],'string',$st),9=>shopNirPremiumXlsxCellSpec($entry?$movement['supplier_invoice_series']:'','string',$st),10=>shopNirPremiumXlsxCellSpec($entry?$movement['supplier_invoice_number']:'','string',$st),11=>shopNirPremiumXlsxCellSpec($entry?shopNirPremiumXlsxExcelDate($movement['supplier_invoice_date']):null,'date',$entry?27:28),12=>shopNirPremiumXlsxCellSpec(!$entry?($movement['output_invoice_series']?:$movement['supplier_invoice_series']):'','string',$st),13=>shopNirPremiumXlsxCellSpec(!$entry?($movement['output_invoice_number']?:$movement['supplier_invoice_number']):'','string',$st),14=>shopNirPremiumXlsxCellSpec(!$entry?shopNirPremiumXlsxExcelDate($movement['output_invoice_date']?:$movement['supplier_invoice_date']):null,'date',$entry?27:28),15=>shopNirPremiumXlsxCellSpec($movement['product_sku'],'string',$st),16=>shopNirPremiumXlsxCellSpec($movement['product_name'],'string',$st),17=>shopNirPremiumXlsxCellSpec('buc.','string',$st),18=>shopNirPremiumXlsxCellSpec($entry?abs(self::delta($movement)):0,'number',$sn),19=>shopNirPremiumXlsxCellSpec(!$entry?abs(self::delta($movement)):0,'number',$sn),20=>shopNirPremiumXlsxCellSpec($movement['accounting_quantity_after']??$movement['quantity_after'],'number',$sn),21=>shopNirPremiumXlsxCellSpec($movement['inventory_unit_cost_ron'],'number',$sm),22=>shopNirPremiumXlsxCellSpec(abs((float)($movement['inventory_cost_total_ron']??0)),'number',$sm),23=>shopNirPremiumXlsxCellSpec($movement['sale_unit_price_ron'],'number',$sm),24=>shopNirPremiumXlsxCellSpec(abs((float)($movement['sale_total_ron']??0)),'number',$sm),25=>shopNirPremiumXlsxCellSpec($movement['fifo_status']??'','string',$st),26=>shopNirPremiumXlsxCellSpec($movement['fifo_quantity_pending']??0,'number',(float)($movement['fifo_quantity_pending']??0)>0?21:$sn),27=>shopNirPremiumXlsxCellSpec($movement['created_by'],'string',$st),28=>shopNirPremiumXlsxCellSpec(str_ireplace('FIFO','lot',(string)($movement['note']??'')),'string',$st)],36);
+            $rows.=shopNirPremiumXlsxRow($r++,[1=>shopNirPremiumXlsxCellSpec($index+1,'number',$sn),2=>shopNirPremiumXlsxCellSpec($movement['export_direction'],'string',$st),3=>shopNirPremiumXlsxCellSpec(shopNirPremiumXlsxExcelDate($movement['created_at'],true),'datetime',$entry?25:26),4=>shopNirPremiumXlsxCellSpec($movement['export_document_type'],'string',$st),5=>shopNirPremiumXlsxCellSpec($movement['warehouse_name']??'Gestiune principală','string',$st),6=>shopNirPremiumXlsxCellSpec($movement['export_document_number'],'string',$st),7=>shopNirPremiumXlsxCellSpec($movement['export_party'],'string',$st),8=>shopNirPremiumXlsxCellSpec($movement['order_number'],'string',$st),9=>shopNirPremiumXlsxCellSpec($entry?$movement['supplier_invoice_series']:'','string',$st),10=>shopNirPremiumXlsxCellSpec($entry?$movement['supplier_invoice_number']:'','string',$st),11=>shopNirPremiumXlsxCellSpec($entry?shopNirPremiumXlsxExcelDate($movement['supplier_invoice_date']):null,'date',$entry?27:28),12=>shopNirPremiumXlsxCellSpec(!$entry?($movement['output_invoice_series']?:$movement['supplier_invoice_series']):'','string',$st),13=>shopNirPremiumXlsxCellSpec(!$entry?($movement['output_invoice_number']?:$movement['supplier_invoice_number']):'','string',$st),14=>shopNirPremiumXlsxCellSpec(!$entry?shopNirPremiumXlsxExcelDate($movement['output_invoice_date']?:$movement['supplier_invoice_date']):null,'date',$entry?27:28),15=>shopNirPremiumXlsxCellSpec($movement['product_sku'],'string',$st),16=>shopNirPremiumXlsxCellSpec($movement['product_name'],'string',$st),17=>shopNirPremiumXlsxCellSpec('buc.','string',$st),18=>shopNirPremiumXlsxCellSpec($entry?abs(self::delta($movement)):0,'number',$sn),19=>shopNirPremiumXlsxCellSpec(!$entry?abs(self::delta($movement)):0,'number',$sn),20=>shopNirPremiumXlsxCellSpec($movement['export_documented_quantity_after'],'number',$sn),21=>shopNirPremiumXlsxCellSpec($movement['inventory_unit_cost_ron'],'number',$sm),22=>shopNirPremiumXlsxCellSpec(abs((float)($movement['inventory_cost_total_ron']??0)),'number',$sm),23=>shopNirPremiumXlsxCellSpec($movement['sale_unit_price_ron'],'number',$sm),24=>shopNirPremiumXlsxCellSpec(abs((float)($movement['sale_total_ron']??0)),'number',$sm),25=>shopNirPremiumXlsxCellSpec($movement['fifo_status']??'','string',$st),26=>shopNirPremiumXlsxCellSpec($movement['fifo_quantity_pending']??0,'number',(float)($movement['fifo_quantity_pending']??0)>0?21:$sn),27=>shopNirPremiumXlsxCellSpec($movement['created_by'],'string',$st),28=>shopNirPremiumXlsxCellSpec(str_ireplace('FIFO','lot',(string)($movement['note']??'')),'string',$st)],36);
         }
         if(!$data['movements']){$rows.=shopNirPremiumXlsxRow($r,[1=>shopNirPremiumXlsxCellSpec('Nu există mișcări în perioada selectată.','string',22)],30);$merges[]='A'.$r.':AB'.$r;$r++;}
         return ['name'=>'Mișcări stoc','rows'=>$rows,'widths'=>[10,14,20,25,23,22,28,20,18,19,16,18,19,16,19,32,9,15,15,14,18,18,18,18,16,20,22,32],'last_row'=>$r-1,'last_column'=>28,'merges'=>$merges,'freeze_rows'=>$headerRow,'freeze_columns'=>3,'orientation'=>'landscape','auto_filter'=>'A'.$headerRow.':AB'.max($headerRow,$r-1)];
@@ -384,11 +412,11 @@ final class GtrotsInventoryExport
         [$rows,$merges,$r]=self::sheetMasthead('Metodologie, trasabilitate și semnături',self::periodLabel($data),8);
         $sections=[
             ['Scopul registrului','Centralizator electronic pentru controlul stocurilor, trasabilitatea intrărilor și ieșirilor și transmiterea către contabilitate. Nu înlocuiește documentele-sursă și procedurile interne de aprobare.'],
-            ['Baza datelor','Stocurile contabile, mișcările confirmate, NIR-urile, facturile de vânzare, comenzile și loturile de achiziție existente în aplicația G-Trots la momentul exportului.'],
-            ['Stoc inițial','Stocul contabil reconstruit imediat înaintea primei zile din perioadă. Pentru „Toată perioada”, reprezintă soldul anterior primei mișcări înregistrate.'],
+            ['Baza datelor','Exclusiv mișcările confirmate care au document justificativ: NIR pentru intrări și factură emisă pentru ieșiri. Ajustările interne sau manuale fără document nu sunt incluse.'],
+            ['Stoc inițial','Stocul documentat reconstruit imediat înaintea primei zile din perioadă, numai din NIR-uri și facturi de ieșire. Pentru „Toată perioada”, soldul inițial este zero.'],
             ['Intrări / ieșiri','Cantitățile pozitive sunt intrări, iar cantitățile negative sunt prezentate ca ieșiri în valoare absolută. Culorile au rol vizual: verde discret pentru intrări și roșu discret pentru ieșiri.'],
             ['Valoarea stocului','Valoarea stocului este calculată din loturile și costurile de achiziție documentate în RON. Pozițiile fără cost asociat trebuie reconciliate înaintea închiderii contabile.'],
-            ['Documente justificative','Pentru fiecare operațiune sunt păstrate, dacă există: tipul și numărul documentului, data, partenerul, seria și numărul facturii, produsul, cantitatea, valorile și operatorul.'],
+            ['Documente justificative','Fiecare operațiune inclusă este legată obligatoriu de un NIR sau de o factură emisă; sunt păstrate tipul și numărul documentului, data, partenerul, seria și numărul facturii, produsul, cantitatea, valorile și operatorul.'],
             ['Identificator export',$data['export_id'].' · generat la '.self::displayDate($data['generated_at'],true).' · perioadă '.self::periodLabel($data)],
         ];
         foreach($sections as [$label,$value]){$rows.=shopNirPremiumXlsxRow($r,[1=>shopNirPremiumXlsxCellSpec($label,'string',10),3=>shopNirPremiumXlsxCellSpec($value,'string',4)],44);$merges[]='A'.$r.':B'.$r;$merges[]='C'.$r.':H'.$r;$r++;}

@@ -30,9 +30,9 @@ INSERT INTO shop_inventory_movements VALUES
 $db->exec('PRAGMA query_only=ON');
 
 $estimate = GtrotsInventoryExport::estimate($db, ['from' => '2026-09-01', 'to' => '2026-09-30']);
-inventoryExportAssert($estimate['product_count'] === 2 && $estimate['movement_count'] === 3 && $estimate['document_count'] === 3, 'Estimate must use the selected period and real counts.');
+inventoryExportAssert($estimate['product_count'] === 1 && $estimate['movement_count'] === 2 && $estimate['document_count'] === 2, 'Estimate must count only products and movements backed by NIRs or sales invoices.');
 $file = GtrotsInventoryExport::download($db, ['from' => '2026-09-01', 'to' => '2026-09-30']);
-inventoryExportAssert($file['product_count'] === 2 && $file['movement_count'] === 3 && $file['document_count'] === 3, 'Export summary counts must be exact.');
+inventoryExportAssert($file['product_count'] === 1 && $file['movement_count'] === 2 && $file['document_count'] === 2, 'Export summary must include only documented stock movements.');
 $bytes = base64_decode($file['content_base64'], true);
 inventoryExportAssert(is_string($bytes) && str_starts_with($bytes, 'PK'), 'Export must be a genuine XLSX archive.');
 $path = tempnam(sys_get_temp_dir(), 'gt-stock-export-'); file_put_contents($path, $bytes);
@@ -44,6 +44,7 @@ inventoryExportAssert(str_contains($styles, 'FFEAF7EF') && str_contains($styles,
 $allSheets = '';
 for ($i = 1; $i <= 6; $i++) $allSheets .= $zip->getFromName('xl/worksheets/sheet' . $i . '.xml');
 foreach (['SE-CMM087','FT','00123','GT','0007','Cauciuc test','Furnizor Test','Client Test'] as $value) inventoryExportAssert(str_contains($allSheets, $value), 'Traceability value missing: ' . $value);
+inventoryExportAssert(!str_contains($allSheets, 'Inventar inițial') && !str_contains($allSheets, 'Controller test'), 'Undocumented manual stock must not appear in the workbook.');
 inventoryExportAssert(!str_contains(mb_strtoupper($allSheets, 'UTF-8'), 'FIFO'), 'The internal cost formula must not be exposed in workbook labels or notes.');
 inventoryExportAssert(str_contains($allSheets, 'fitToWidth="1"') && str_contains($allSheets, 'Pagina &amp;P / &amp;N'), 'Sheets must be print-ready.');
 for ($i = 0; $i < $zip->numFiles; $i++) {
@@ -52,7 +53,7 @@ for ($i = 0; $i < $zip->numFiles; $i++) {
 }
 $zip->close(); unlink($path);
 
-inventoryExportAssert(GtrotsInventoryExport::download($db, [])['movement_count'] === 3, 'All-period export must include the complete ledger.');
+inventoryExportAssert(GtrotsInventoryExport::download($db, [])['movement_count'] === 2, 'All-period export must include only the documented ledger.');
 foreach ([['2026-02-30','2026-03-01'],['','2026-09-05'],['2026-09-05','2026-09-01'],['x','y']] as [$from,$to]) {
     try { GtrotsInventoryExport::range($from,$to); throw new RuntimeException('Invalid date range accepted.'); }
     catch (InvalidArgumentException $expected) {}

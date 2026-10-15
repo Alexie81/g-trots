@@ -724,7 +724,7 @@ function ensureShopSchema(PDO $db): void {
             cycle_started_at DATETIME NULL,
             cycle_completed_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
             last_batch_at DATETIME NULL,
-            cursor CHAR(36) NOT NULL DEFAULT '',
+            catalog_cursor CHAR(36) NOT NULL DEFAULT '',
             processed_products INT UNSIGNED NOT NULL DEFAULT 0,
             error_count INT UNSIGNED NOT NULL DEFAULT 0,
             last_error VARCHAR(1000) NULL,

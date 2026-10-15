@@ -498,14 +498,14 @@ function merchantMaybeRefreshCatalogAfterVisit(
         if (!$cycleIsActive) {
             $db->exec(
                 "UPDATE shop_merchant_refresh_state
-                 SET cycle_started_at = NOW(), last_batch_at = NULL, cursor = '', processed_products = 0,
+                 SET cycle_started_at = NOW(), last_batch_at = NULL, catalog_cursor = '', processed_products = 0,
                      error_count = 0, last_error = NULL
                  WHERE id = 1"
             );
-            $state['cursor'] = '';
+            $state['catalog_cursor'] = '';
         }
 
-        $batch = merchantRefreshCatalogBatch($db, $config, (string)($state['cursor'] ?? ''), $batchSize);
+        $batch = merchantRefreshCatalogBatch($db, $config, (string)($state['catalog_cursor'] ?? ''), $batchSize);
         $batchErrors = array_values(array_filter(
             (array)($batch['results'] ?? []),
             static fn(array $result): bool => ($result['status'] ?? '') === 'error'
@@ -517,7 +517,7 @@ function merchantMaybeRefreshCatalogAfterVisit(
         if (!empty($batch['has_more'])) {
             $update = $db->prepare(
                 'UPDATE shop_merchant_refresh_state
-                 SET last_batch_at = NOW(), cursor = ?, processed_products = processed_products + ?,
+                 SET last_batch_at = NOW(), catalog_cursor = ?, processed_products = processed_products + ?,
                      error_count = error_count + ?, last_error = COALESCE(?, last_error)
                  WHERE id = 1'
             );
@@ -530,7 +530,7 @@ function merchantMaybeRefreshCatalogAfterVisit(
         } else {
             $update = $db->prepare(
                 "UPDATE shop_merchant_refresh_state
-                 SET cycle_started_at = NULL, cycle_completed_at = NOW(), last_batch_at = NOW(), cursor = '',
+                 SET cycle_started_at = NULL, cycle_completed_at = NOW(), last_batch_at = NOW(), catalog_cursor = '',
                      processed_products = processed_products + ?, error_count = error_count + ?,
                      last_error = COALESCE(?, last_error)
                  WHERE id = 1"

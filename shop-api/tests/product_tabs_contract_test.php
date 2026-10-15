@@ -20,11 +20,15 @@ foreach (['#descriere', '#specificatii', '#recenzii', '#intrebari'] as $target) 
     $assert(str_contains($html, 'data-product-target="' . $target . '"'), "lipsește ținta {$target}");
     $assert(str_contains($html, 'id="' . substr($target, 1) . '"'), "lipsește secțiunea {$target}");
 }
-$assert(str_contains($html, 'produs.js?v=20260922-product-tabs-v2'), 'versiunea JS nu invalidează cache-ul vechi');
-$assert(str_contains($html, 'produs.css?v=20261001-product-readability-v5'), 'versiunea CSS nu invalidează cache-ul vechi');
+$assert(str_contains($html, 'produs.js?v=20261015-mobile-sticky-tabs-v2'), 'versiunea JS nu invalidează cache-ul vechi');
+$assert(str_contains($html, 'produs.css?v=20261015-mobile-sticky-tabs-v2'), 'versiunea CSS nu invalidează cache-ul vechi');
 $assert(str_contains($html, 'shop-live.js?v=20261001-product-content-v4'), 'versiunea datelor live nu invalidează cache-ul vechi');
 $assert(str_contains($html, 'theme.css?v=20261001-product-content-v4'), 'versiunea temei nu invalidează cache-ul vechi');
 $assert(str_contains($js, 'tab?.dataset?.productTarget'), 'scriptul nu citește ținta sigură a butonului');
+$assert(str_contains($js, 'tabsBar.scrollTo'), 'tabul activ nu este centrat pe ecranele înguste');
+$assert(str_contains($css, 'body.gt-has-promotion-bar .product-content-tabs'), 'bara nu ține cont de promoția globală');
+$assert(str_contains($css, 'calc(4.5rem + var(--gt-promotion-height))'), 'bara mobilă nu este lipită de navbar');
+$assert(str_contains($js, 'lastVisibleProductSection.getBoundingClientRect().bottom <= stickyBottom'), 'bara nu dispare după ultima secțiune de conținut');
 $assert(str_contains($js, 'event.preventDefault()'), 'clickul tabului nu este izolat de navigare');
 $assert(str_contains($liveJs, '[data-product-target="#specificatii"]'), 'tabul Specificații nu este activat din datele produsului');
 $assert(str_contains($liveJs, '[data-product-target="#intrebari"]'), 'tabul Întrebări nu este activat din datele produsului');

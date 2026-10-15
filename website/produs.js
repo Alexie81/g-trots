@@ -466,12 +466,27 @@ const getProductTabSelector = tab => {
 const productSections = productTabs
   .map(tab => document.querySelector(getProductTabSelector(tab)))
   .filter(Boolean);
+let centeredProductTab = null;
 
 function setActiveProductTab(sectionId) {
+  let activeTab = null;
   productTabs.forEach(tab => {
     const isActive = !tab.hidden && getProductTabSelector(tab) === `#${sectionId}`;
     tab.classList.toggle("active", isActive);
     tab.toggleAttribute("aria-current", isActive);
+    if (isActive) activeTab = tab;
+  });
+
+  if (!activeTab || activeTab === centeredProductTab || !window.matchMedia("(max-width: 700px)").matches) return;
+  centeredProductTab = activeTab;
+  window.requestAnimationFrame(() => {
+    const tabsBar = activeTab.closest(".product-content-tabs");
+    if (!tabsBar) return;
+    const nextLeft = activeTab.offsetLeft - (tabsBar.clientWidth - activeTab.offsetWidth) / 2;
+    tabsBar.scrollTo({
+      left: Math.max(0, nextLeft),
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"
+    });
   });
 }
 
@@ -862,28 +877,30 @@ renderRelatedProducts();
 document.addEventListener("g-trots:live-products", event => updateRelatedProductsFromLive(event.detail));
 
 const productTabsBar = document.querySelector(".product-content-tabs");
-const relatedProductsSection = document.querySelector("[data-related-products]");
 let tabsScrollFrame = 0;
 
 function updateProductTabsRange() {
-  if (!productTabsBar || !relatedProductsSection) return;
-  const relatedTop = relatedProductsSection.getBoundingClientRect().top;
+  if (!productTabsBar) return;
+  const lastVisibleProductSection = productSections
+    .filter(section => !section.hidden && getComputedStyle(section).display !== "none")
+    .at(-1);
+  if (!lastVisibleProductSection) return;
   const stickyTop = Number.parseFloat(getComputedStyle(productTabsBar).top) || 0;
-  const desktopLimit = stickyTop + productTabsBar.offsetHeight;
-  const mobileLimit = window.innerHeight * 0.58;
-  const isPastProductContent = relatedTop <= (window.innerWidth <= 700 ? mobileLimit : desktopLimit);
+  const stickyBottom = stickyTop + productTabsBar.offsetHeight;
+  const isPastProductContent = lastVisibleProductSection.getBoundingClientRect().bottom <= stickyBottom;
   productTabsBar.classList.toggle("is-past-product-content", isPastProductContent);
   productTabsBar.setAttribute("aria-hidden", String(isPastProductContent));
   productTabsBar.toggleAttribute("inert", isPastProductContent);
 }
 
-if (productTabsBar && relatedProductsSection) {
+if (productTabsBar) {
   const scheduleTabsRangeUpdate = () => {
     window.cancelAnimationFrame(tabsScrollFrame);
     tabsScrollFrame = window.requestAnimationFrame(updateProductTabsRange);
   };
   window.addEventListener("scroll", scheduleTabsRangeUpdate, { passive: true });
   window.addEventListener("resize", scheduleTabsRangeUpdate);
+  document.addEventListener("g-trots:live-products", scheduleTabsRangeUpdate);
   updateProductTabsRange();
 }
 

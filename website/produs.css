@@ -1729,7 +1729,7 @@ body.image-viewer-open {
   margin-top: 2rem;
   padding: 0.45rem;
   position: sticky;
-  top: 5.15rem;
+  top: calc(5.15rem + 0.75rem);
   z-index: 15;
   display: flex;
   align-items: center;
@@ -1742,6 +1742,10 @@ body.image-viewer-open {
   backdrop-filter: blur(18px);
   scrollbar-width: none;
   transition: opacity 200ms ease, transform 240ms cubic-bezier(0.2, 0, 0, 1), visibility 200ms ease;
+}
+
+body.gt-has-promotion-bar .product-content-tabs {
+  top: calc(5.15rem + var(--gt-promotion-height) + 0.75rem);
 }
 
 .product-content-tabs.is-past-product-content {
@@ -1799,13 +1803,17 @@ body.image-viewer-open {
 
 .product-content-section {
   padding: clamp(2rem, 5vw, 4.5rem);
-  scroll-margin-top: 10.5rem;
+  scroll-margin-top: 4.2rem;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: clamp(1.6rem, 3vw, 2.5rem);
   background:
     radial-gradient(circle at 96% 0%, rgba(240, 127, 0, 0.08), transparent 22rem),
     #11100f;
+}
+
+body.gt-has-promotion-bar .product-content-section {
+  scroll-margin-top: calc(4.2rem + var(--gt-promotion-height));
 }
 
 .product-section-heading {
@@ -3023,13 +3031,21 @@ body.image-viewer-open {
     padding: 0.35rem;
     top: 4.5rem;
     border-radius: 1.2rem;
+    scroll-padding-inline: 0.35rem;
+    scroll-snap-type: x proximity;
+  }
+
+  body.gt-has-promotion-bar .product-content-tabs {
+    top: calc(4.5rem + var(--gt-promotion-height));
   }
 
   .product-content-tabs :is(a, button) {
     min-height: 3.1rem;
-    padding: 0 0.95rem;
+    padding: 0 0.5rem;
+    flex: 1 0 auto;
     border-radius: 0.9rem;
-    font-size: 0.61rem;
+    font-size: 0.58rem;
+    scroll-snap-align: center;
   }
 
   .product-content {
@@ -3038,8 +3054,12 @@ body.image-viewer-open {
 
   .product-content-section {
     padding: 1.35rem;
-    scroll-margin-top: 9rem;
+    scroll-margin-top: 4.1rem;
     border-radius: 1.55rem;
+  }
+
+  body.gt-has-promotion-bar .product-content-section {
+    scroll-margin-top: calc(4.1rem + var(--gt-promotion-height));
   }
 
   .product-section-heading h2,

@@ -56,7 +56,8 @@
   let cancelClientsIdleRefresh = null;
   const CLIENTS_PAGE_SIZE_KEY = 'gtrots.clientsPageSize.v1';
   const CLIENTS_PAGE_SIZES = [10, 15, 25, 50, 100];
-  const CLIENTS_REVISIT_TTL_MS = 30000;
+  const CLIENTS_REVISIT_TTL_MS = 2 * 60 * 1000;
+  const CLIENTS_REALTIME_REFRESH_MS = 2 * 60 * 1000;
   const savedClientsPageSize = Number(localStorage.getItem(CLIENTS_PAGE_SIZE_KEY) || 10);
   let clientsPageSize = CLIENTS_PAGE_SIZES.includes(savedClientsPageSize) ? savedClientsPageSize : 10;
   const clientsPageCache = new Map();
@@ -2225,7 +2226,7 @@
     if (Date.now() - clientsLastFreshAt < CLIENTS_REVISIT_TTL_MS) return;
     const refresh = () => {
       cancelClientsIdleRefresh = null;
-      if (!isClientsTabActive() || isClientActionModalOpen() || clientsLoadInFlight) return;
+      if (!isClientsTabActive() || document.hidden || isClientActionModalOpen() || clientsLoadInFlight) return;
       void refreshClientsWithoutDisrupting();
     };
     if ('requestIdleCallback' in window) {
@@ -2290,10 +2291,6 @@
       clientsTotal = Number(result?.total || 0);
       clientsPage = Math.max(Number(result?.page || clientsPage), 1);
       clientsHasMore = Boolean(result?.has_more);
-      const furthestPrefetchedPage = (result?.prefetch_pages || []).reduce((max, item) => Math.max(max, Number(item.page) || 0), clientsPage);
-      if ((furthestPrefetchedPage * Number(result?.page_size || clientsPageSize)) < clientsTotal) {
-        void fetchClientsPage({ ...request, page: furthestPrefetchedPage + 1 }, true).catch(() => {});
-      }
       const nextVersion = dataVersion(clients);
       const dataChanged = !clientsHaveLoaded || nextVersion !== clientsDataVersion;
       if (dataChanged) {
@@ -2378,15 +2375,20 @@
   }
 
   function startClientsRealtimeRefresh() {
-    if (clientsRealtimeTimer) return;
-    clientsRealtimeTimer = setInterval(() => {
-      if (isClientsTabActive() && !isClientActionModalOpen()) refreshClientsWithoutDisrupting();
-    }, 45000);
+    stopClientsRealtimeRefresh();
+    if (!isClientsTabActive() || document.hidden) return;
+    clientsRealtimeTimer = setTimeout(async () => {
+      clientsRealtimeTimer = null;
+      if (isClientsTabActive() && !document.hidden && !isClientActionModalOpen()) {
+        await refreshClientsWithoutDisrupting();
+      }
+      startClientsRealtimeRefresh();
+    }, CLIENTS_REALTIME_REFRESH_MS);
   }
 
   function stopClientsRealtimeRefresh() {
     if (!clientsRealtimeTimer) return;
-    clearInterval(clientsRealtimeTimer);
+    clearTimeout(clientsRealtimeTimer);
     clientsRealtimeTimer = null;
   }
 
@@ -2395,7 +2397,7 @@
     clientSearchTimer = setTimeout(() => {
       clientsPage = 1;
       load({ page: 1, keepMissingSelection: true });
-    }, 220);
+    }, 300);
   });
   lifecycleFilterButtons.forEach((button) => {
     button.addEventListener('click', () => {
@@ -2481,6 +2483,18 @@
   window.addEventListener('clients-change', () => {
     invalidateClientsPageCache();
     if (isClientsTabActive()) refreshClientsWithoutDisrupting();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      cancelScheduledClientsRefresh();
+      stopClientsRealtimeRefresh();
+      return;
+    }
+    if (isClientsTabActive()) {
+      scheduleClientsIdleRefresh();
+      startClientsRealtimeRefresh();
+    }
   });
 
   window.addEventListener('price-presets-change', (event) => {

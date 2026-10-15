@@ -57,7 +57,7 @@
   let cancelServiceIdleRefresh = null;
   const SERVICE_PAGE_SIZE_KEY = 'gtrots.serviceSheetsPageSize.v1';
   const SERVICE_PAGE_SIZES = [10, 15, 25, 50, 100];
-  const SERVICE_REVISIT_TTL_MS = 30000;
+  const SERVICE_REVISIT_TTL_MS = 2 * 60 * 1000;
   const savedServicePageSize = Number(localStorage.getItem(SERVICE_PAGE_SIZE_KEY) || 10);
   let servicePageSize = SERVICE_PAGE_SIZES.includes(savedServicePageSize) ? savedServicePageSize : 10;
   const servicePageCache = new Map();
@@ -613,7 +613,7 @@
     if (Date.now() - serviceLastFreshAt < SERVICE_REVISIT_TTL_MS) return;
     const refresh = () => {
       cancelServiceIdleRefresh = null;
-      if (!isServiceTabActive() || isModalOpen() || loading) return;
+      if (!isServiceTabActive() || document.hidden || isModalOpen() || loading) return;
       void loadSheets(selectedSheet?.id || '', { silent: true });
     };
     if ('requestIdleCallback' in window) {
@@ -755,10 +755,6 @@
       serviceTotal = Number(result?.total || 0);
       servicePage = Math.max(Number(result?.page || servicePage), 1);
       serviceHasMore = Boolean(result?.has_more);
-      const furthestPrefetchedPage = (result?.prefetch_pages || []).reduce((max, item) => Math.max(max, Number(item.page) || 0), servicePage);
-      if ((furthestPrefetchedPage * Number(result?.page_size || servicePageSize)) < serviceTotal) {
-        void fetchServicePage({ ...request, page: furthestPrefetchedPage + 1 }, true).catch(() => {});
-      }
       const nextVersion = nextSheets
         .map((sheet) => `${sheet.id}:${sheet.updated_at || sheet.created_at || ''}:${sheet.is_finalized ? 1 : 0}:${sheet.payment_status || ''}:${sheet.final_price || sheet.total_price || 0}`)
         .join('|');

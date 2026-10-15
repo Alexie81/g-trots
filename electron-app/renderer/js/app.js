@@ -12,7 +12,6 @@
   };
   let activeModule = localStorage.getItem(MODULE_STORAGE_KEY) === 'shop' ? 'shop' : 'service';
   let tabChangeRevision = 0;
-  let warmedTablesToken = '';
   let pendingOrderDeepLink = '';
 
   function rememberedModuleTab(moduleId) {
@@ -77,6 +76,7 @@
     document.querySelectorAll('.tab-panel').forEach(panel => {
       panel.classList.toggle('active', panel.id === 'tab-' + tabId);
     });
+    document.body.dataset.activeTab = tabId;
     const selectedButton = document.querySelector(`.nav-btn[data-tab="${tabId}"]`);
     const selectedModule = selectedButton?.closest('[data-module-nav]')?.dataset.moduleNav;
     if (selectedModule === 'service' || selectedModule === 'shop') {
@@ -126,32 +126,6 @@
     if (activeStats && !window.AUTH?.canViewStats?.()) {
       switchTab('scanner');
     }
-  });
-
-  window.addEventListener('auth-change', (event) => {
-    const authToken = String(event.detail?.token || '');
-    if (!authToken) {
-      warmedTablesToken = '';
-      return;
-    }
-    if (warmedTablesToken === authToken) return;
-    warmedTablesToken = authToken;
-    const warmTables = () => {
-      const allowedSizes = new Set([10, 15, 25, 50, 100]);
-      const savedClientsSize = Number(localStorage.getItem('gtrots.clientsPageSize.v1') || 10);
-      const savedServiceSize = Number(localStorage.getItem('gtrots.serviceSheetsPageSize.v1') || 10);
-      const clientsSize = allowedSizes.has(savedClientsSize) ? savedClientsSize : 10;
-      const serviceSize = allowedSizes.has(savedServiceSize) ? savedServiceSize : 10;
-      void Promise.allSettled([
-        window.API?.getClientsPage?.({ page: 1, pageSize: clientsSize, sortBy: 'created_at', sortDir: 'desc' }),
-        // Service pornește fără sortare explicită cât timp selectorul legacy este
-        // ascuns. Folosim aceeași formă a cererii pentru ca prima deschidere să
-        // nimerească pagina deja încălzită din cache.
-        window.API?.getServiceSheetsPage?.({ page: 1, pageSize: serviceSize }),
-      ]);
-    };
-    if ('requestIdleCallback' in window) window.requestIdleCallback(warmTables, { timeout: 1200 });
-    else window.setTimeout(warmTables, 250);
   });
 
   function openPendingOrderDeepLink() {

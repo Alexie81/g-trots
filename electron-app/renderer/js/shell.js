@@ -130,6 +130,12 @@
   let shopUnreadCount = 0;
   let shopNotificationsTimer = null;
   let refreshTimer = null;
+  let accountRefreshInFlight = false;
+  let shopNotificationsInFlight = null;
+  let lastAccountRefreshAt = 0;
+  const ACCOUNT_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
+  const ACCOUNT_FOCUS_TTL_MS = 5 * 60 * 1000;
+  const SHOP_NOTIFICATIONS_INTERVAL_MS = 2 * 60 * 1000;
   let logoutInProgress = false;
 
   function initials(value) {
@@ -296,18 +302,31 @@
   }
 
   async function refreshAccount(silent = true) {
-    if (!window.AUTH?.isLoggedIn?.() || document.hidden) return;
+    if (!window.AUTH?.isLoggedIn?.() || document.hidden || accountRefreshInFlight) return;
+    accountRefreshInFlight = true;
     try {
       await window.AUTH.refreshCurrentUser();
     } catch (error) {
       if (!silent) showToast(error.message || 'Contul nu a putut fi actualizat.', 'error');
+    } finally {
+      lastAccountRefreshAt = Date.now();
+      accountRefreshInFlight = false;
     }
   }
 
+  function scheduleAccountRefresh() {
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+    if (!window.AUTH?.isLoggedIn?.() || document.hidden) return;
+    refreshTimer = setTimeout(async () => {
+      refreshTimer = null;
+      await refreshAccount(true);
+      scheduleAccountRefresh();
+    }, ACCOUNT_REFRESH_INTERVAL_MS);
+  }
+
   function startRefresh() {
-    clearInterval(refreshTimer);
-    if (!window.AUTH?.isLoggedIn?.()) return;
-    refreshTimer = setInterval(() => refreshAccount(true), 120000);
+    scheduleAccountRefresh();
   }
 
   function shopNotificationType(item) {
@@ -410,24 +429,49 @@
   }
 
   async function refreshShopNotifications(full = false) {
-    if (!window.AUTH?.isLoggedIn?.() || !window.SHOP_API) return;
-    try {
-      if (full) renderShopNotificationFeed(await window.SHOP_API.listShopNotifications(50, true));
-      else {
-        const summary = await window.SHOP_API.getShopNotificationSummary();
-        shopUnreadCount = Math.max(0, Number(summary?.unread_count || 0));
-        renderNotifications();
+    if (!window.AUTH?.isLoggedIn?.() || !window.SHOP_API || (!full && document.hidden)) return;
+    if (shopNotificationsInFlight) {
+      await shopNotificationsInFlight;
+      if (!full) return;
+    }
+    const request = (async () => {
+      try {
+        if (full) renderShopNotificationFeed(await window.SHOP_API.listShopNotifications(50, true));
+        else {
+          const summary = await window.SHOP_API.getShopNotificationSummary();
+          shopUnreadCount = Math.max(0, Number(summary?.unread_count || 0));
+          renderNotifications();
+        }
+      } catch {
+        if (shopNotificationsSummary) shopNotificationsSummary.textContent = 'Alertele SHOP nu au putut fi verificate';
       }
-    } catch {
-      if (shopNotificationsSummary) shopNotificationsSummary.textContent = 'Alertele SHOP nu au putut fi verificate';
+    })();
+    shopNotificationsInFlight = request;
+    try {
+      await request;
+    } finally {
+      if (shopNotificationsInFlight === request) shopNotificationsInFlight = null;
     }
   }
 
-  function startShopNotifications() {
-    clearInterval(shopNotificationsTimer);
+  function scheduleShopNotifications() {
+    clearTimeout(shopNotificationsTimer);
+    shopNotificationsTimer = null;
+    if (!window.AUTH?.isLoggedIn?.() || document.hidden) return;
+    shopNotificationsTimer = setTimeout(async () => {
+      shopNotificationsTimer = null;
+      await refreshShopNotifications(false);
+      scheduleShopNotifications();
+    }, SHOP_NOTIFICATIONS_INTERVAL_MS);
+  }
+
+  function startShopNotifications(runImmediately = true) {
+    clearTimeout(shopNotificationsTimer);
+    shopNotificationsTimer = null;
     if (!window.AUTH?.isLoggedIn?.()) { shopUnreadCount = 0; renderNotifications(); return; }
-    void refreshShopNotifications(false);
-    shopNotificationsTimer = setInterval(() => void refreshShopNotifications(false), 60000);
+    if (document.hidden) return;
+    if (runImmediately) void refreshShopNotifications(false).finally(scheduleShopNotifications);
+    else scheduleShopNotifications();
   }
 
   sidebarButton?.addEventListener('click', openProfile);
@@ -522,10 +566,25 @@
   });
   window.addEventListener('auth-change', () => {
     renderAccount();
+    lastAccountRefreshAt = Date.now();
     startRefresh();
     startShopNotifications();
   });
-  window.addEventListener('focus', () => refreshAccount(true));
+  window.addEventListener('focus', () => {
+    if (Date.now() - lastAccountRefreshAt >= ACCOUNT_FOCUS_TTL_MS) void refreshAccount(true);
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      clearTimeout(refreshTimer);
+      clearTimeout(shopNotificationsTimer);
+      refreshTimer = null;
+      shopNotificationsTimer = null;
+      return;
+    }
+    if (Date.now() - lastAccountRefreshAt >= ACCOUNT_FOCUS_TTL_MS) void refreshAccount(true);
+    startRefresh();
+    startShopNotifications();
+  });
 
   window.BUSINESS_UI = { showToast, openProfile, requestLogout, closeMenus };
   renderAccount();

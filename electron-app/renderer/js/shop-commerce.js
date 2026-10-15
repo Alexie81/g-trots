@@ -19,12 +19,11 @@
   let invoiceAutomationSaveQueue = Promise.resolve();
   let invoiceAutomationSaveRevision = 0;
   let dashboardGranularityPickerCleanup = null;
-  let dashboardWarmupScheduled = false;
   let shopViewLoadGeneration = 0;
   let shopViewAuthToken = window.AUTH?.getToken?.() || '';
   let cancelShopViewIdleRefresh = null;
   let spvOAuthPollTimer = null;
-  const SHOP_VIEW_REVISIT_TTL_MS = 30000;
+  const SHOP_VIEW_REVISIT_TTL_MS = 2 * 60 * 1000;
   const shopViewFreshAt = new Map();
   const shopViewLoads = new Map();
   const quietShopContent = new Map();
@@ -512,11 +511,12 @@
 
   function scheduleShopViewRefresh(tabId) {
     cancelScheduledShopViewRefresh();
+    if (document.hidden) return;
     const freshAt = shopViewFreshAt.get(tabId) || 0;
     if (Date.now() - freshAt < SHOP_VIEW_REVISIT_TTL_MS) return;
     const refresh = () => {
       cancelShopViewIdleRefresh = null;
-      if (!isShopViewActive(tabId)) return;
+      if (!isShopViewActive(tabId) || document.hidden) return;
       void loadShopView(tabId, { force: true, quiet: true });
     };
     if ('requestIdleCallback' in window) {
@@ -551,17 +551,6 @@
       const activePanel = document.querySelector('.shop-tab-panel.active');
       const activeTab = activePanel?.id?.replace(/^tab-/, '');
       if (activeTab && loaders[activeTab]) void loadShopView(activeTab, { force: true });
-      if (!dashboardWarmupScheduled && activeTab !== 'shop-dashboard') {
-        dashboardWarmupScheduled = true;
-        const warmDashboard = () => {
-          dashboardWarmupScheduled = false;
-          if (!document.querySelector('#tab-shop-dashboard .shop-dashboard-header')) {
-            void loadShopView('shop-dashboard', { force: true, quiet: true });
-          }
-        };
-        if ('requestIdleCallback' in window) window.requestIdleCallback(warmDashboard, { timeout: 1200 });
-        else window.setTimeout(warmDashboard, 250);
-      }
     });
     window.addEventListener('shop-open-entity', event => {
       const id = String(event.detail?.id || '');

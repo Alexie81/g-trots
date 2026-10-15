@@ -8,6 +8,8 @@
   let lastUnreadCount = 0;
   let latestMessageId = null;
   let notifiedMessageIds = new Set();
+  const CHAT_ACTIVE_POLL_MS = 15000;
+  const CHAT_BACKGROUND_POLL_MS = 60000;
 
   const layout = document.getElementById('chat-layout');
   const contactsEl = document.getElementById('chat-contacts');
@@ -381,15 +383,37 @@
     }
   }
 
-  function startPolling() {
-    stopPolling();
-    pollUnread(false);
-    pollTimer = setInterval(() => pollUnread(true), 12000);
+  function chatIsActive() {
+    return document.getElementById('tab-chat')?.classList.contains('active');
+  }
+
+  function pollingDelay() {
+    return chatIsActive() ? CHAT_ACTIVE_POLL_MS : CHAT_BACKGROUND_POLL_MS;
   }
 
   function stopPolling() {
-    if (pollTimer) clearInterval(pollTimer);
+    if (pollTimer) clearTimeout(pollTimer);
     pollTimer = null;
+  }
+
+  function scheduleNextPoll() {
+    stopPolling();
+    if (!canUseChat() || document.hidden) return;
+    pollTimer = setTimeout(async () => {
+      pollTimer = null;
+      await pollUnread(true);
+      scheduleNextPoll();
+    }, pollingDelay());
+  }
+
+  function startPolling(runImmediately = true) {
+    stopPolling();
+    if (!canUseChat() || document.hidden) return;
+    if (!runImmediately) {
+      scheduleNextPoll();
+      return;
+    }
+    void pollUnread(false).finally(scheduleNextPoll);
   }
 
   function resetChat() {
@@ -512,12 +536,13 @@
     if (detail === 'chat' && canUseChat()) {
       refreshChat(true);
     }
+    if (canUseChat()) startPolling(false);
   });
 
   window.addEventListener('auth-change', () => {
     if (canUseChat()) {
       if (layout) layout.style.display = 'flex';
-      refreshChat(false).catch(resetChat);
+      if (chatIsActive()) refreshChat(false).catch(resetChat);
       startPolling();
     } else {
       stopPolling();
@@ -527,14 +552,15 @@
   });
 
   window.addEventListener('users-change', () => {
-    if (canUseChat()) refreshChat(false).catch(resetChat);
+    if (canUseChat() && chatIsActive()) refreshChat(false).catch(resetChat);
   });
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && canUseChat()) pollUnread(false);
+    if (document.hidden) stopPolling();
+    else if (canUseChat()) startPolling();
   });
 
   if (canUseChat()) {
-    refreshChat(false).catch(resetChat);
+    if (chatIsActive()) refreshChat(false).catch(resetChat);
     startPolling();
   } else {
     resetChat();

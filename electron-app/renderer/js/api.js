@@ -168,7 +168,9 @@ function actionInvalidatesTables(action) {
 
 function tablePrefetchPages(pageSize) {
   const safePageSize = Math.min(100, Math.max(10, Math.trunc(Number(pageSize) || 10)));
-  return Math.max(0, Math.min(4, Math.floor(100 / safePageSize) - 1));
+  // O singură pagină înainte este suficientă pentru navigare fluidă și evită
+  // transferarea/reținerea în memorie a încă patru pagini la fiecare căutare.
+  return Math.max(0, Math.min(1, Math.floor(100 / safePageSize) - 1));
 }
 
 function tablePageKey(authToken, kind, query = {}) {

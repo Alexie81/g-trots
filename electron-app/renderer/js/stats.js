@@ -16,7 +16,7 @@
   let statsLoadRevision = 0;
   let statsIdleHandle = null;
   let statsToken = window.AUTH?.getToken?.() || '';
-  const STATS_TTL_MS = 30000;
+  const STATS_TTL_MS = 2 * 60 * 1000;
   let chartMode = 'auto';
   let chartVisibility = {
     clients: true,
@@ -572,7 +572,7 @@
     cancelScheduledStatsLoad();
     const run = () => {
       statsIdleHandle = null;
-      if (!document.getElementById('tab-stats')?.classList.contains('active')) return;
+      if (document.hidden || !document.getElementById('tab-stats')?.classList.contains('active')) return;
       void load({ quiet });
     };
     statsIdleHandle = 'requestIdleCallback' in window

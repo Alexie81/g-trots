@@ -8,7 +8,7 @@
   let historyLoading = false;
   let historyIdleHandle = null;
   let historyToken = window.AUTH?.getToken?.() || '';
-  const HISTORY_TTL_MS = 30000;
+  const HISTORY_TTL_MS = 2 * 60 * 1000;
 
   const listEl = document.getElementById('history-list');
   const detailEl = document.getElementById('history-detail');
@@ -407,7 +407,7 @@
     cancelScheduledHistoryLoad();
     const run = () => {
       historyIdleHandle = null;
-      if (!document.getElementById('tab-history')?.classList.contains('active')) return;
+      if (document.hidden || !document.getElementById('tab-history')?.classList.contains('active')) return;
       void load({ quiet });
     };
     historyIdleHandle = 'requestIdleCallback' in window

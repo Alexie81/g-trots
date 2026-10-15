@@ -16549,3 +16549,73 @@ body video {
   .shop-product-detail-identity { align-items: flex-start; flex-direction: column; gap: 10px; }
   .shop-product-detail-identity>span:last-child { justify-items: start; text-align: left; }
 }
+
+/*
+ * Desktop performance profile
+ *
+ * Chromium păstrează fiecare blur și animație infinită într-un strat compus.
+ * Pe plăci video integrate, zecile de straturi rămâneau active chiar când
+ * utilizatorul doar citea un ecran. Păstrăm culorile, bordurile și ierarhia,
+ * dar eliminăm efectele care recalculează pixeli continuu.
+ */
+html.performance-rendering,
+html.performance-rendering body {
+  scroll-behavior: auto !important;
+}
+
+html.performance-rendering *,
+html.performance-rendering *::before,
+html.performance-rendering *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  will-change: auto !important;
+  animation-duration: .001ms !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .08s !important;
+  transition-delay: 0s !important;
+}
+
+html.performance-rendering body::before,
+html.performance-rendering body::after {
+  display: none !important;
+}
+
+html.performance-rendering .sidebar,
+html.performance-rendering .app-topbar,
+html.performance-rendering .page-header,
+html.performance-rendering .clients-list,
+html.performance-rendering .history-list,
+html.performance-rendering .chat-contacts {
+  box-shadow: none !important;
+}
+
+html.performance-rendering .tab-panel:not(.active) {
+  display: none !important;
+  visibility: hidden !important;
+  contain: strict;
+}
+
+html.performance-rendering :where(
+  .client-row,
+  .service-table-row,
+  .audit-history-row,
+  .partner-row,
+  .user-row,
+  .chat-contact-row,
+  .chat-message-row,
+  .activity-item,
+  .labor-item,
+  .stats-user-row,
+  .stats-cost-row,
+  .stats-profile-row,
+  .stats-collaborator-row,
+  .stats-command-row,
+  .shop-detail-review,
+  .shop-issued-invoice-card,
+  .shop-order-card,
+  .shop-nir-card
+) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 92px;
+}

@@ -11,6 +11,7 @@ let updateCheckInFlight = false;
 let updateDownloadInFlight = false;
 let updateCheckTimer = null;
 const updateStartupTimers = [];
+const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 let pendingOrderDeepLink = null;
 const DESKTOP_READABILITY_ZOOM = 1.08;
 const updateState = {
@@ -288,6 +289,8 @@ function createWindow() {
       nodeIntegration: true,
       contextIsolation: false,
       preload: path.join(__dirname, 'preload.js'),
+      backgroundThrottling: true,
+      spellcheck: false,
       defaultFontSize: 17,
       defaultMonospaceFontSize: 15,
       minimumFontSize: 12,
@@ -645,15 +648,13 @@ app.whenReady().then(() => {
   setupAutoUpdater();
   createWindow();
   if (app.isPackaged) {
-    // GitHub poate servi pentru câteva secunde metadatele vechi imediat după
-    // publicarea unui release. Verificările scurte de după pornire elimină
-    // dependența de butonul manual fără a întrerupe activitatea utilizatorului.
-    [4000, 25000, 90000].forEach((delay, index) => {
-      updateStartupTimers.push(setTimeout(() => runAutomaticUpdateCheck(`startup-${index + 1}`), delay));
-    });
+    // O singură verificare discretă după pornire este suficientă. Butonul
+    // manual rămâne disponibil, iar verificarea periodică nu mai trezește
+    // procesul și rețeaua la fiecare cinci minute.
+    updateStartupTimers.push(setTimeout(() => runAutomaticUpdateCheck('startup'), 15000));
     updateCheckTimer = setInterval(() => {
       runAutomaticUpdateCheck('periodic');
-    }, 5 * 60 * 1000);
+    }, UPDATE_CHECK_INTERVAL_MS);
   }
 });
 app.on('window-all-closed', () => {

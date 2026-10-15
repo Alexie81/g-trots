@@ -394,14 +394,33 @@ function merchantSyncProduct(PDO $db, array $config, string $productId): array {
     return ['status' => 'synced', 'name' => (string)($response['name'] ?? '')];
 }
 
+function merchantSyncErrorIsTransient(Throwable $error): bool {
+    return preg_match(
+        '/timed?\s*out|timeout|could not resolve|connection reset|temporar|rate limit|too many requests|\b429\b|\b5\d{2}\b/i',
+        $error->getMessage()
+    ) === 1;
+}
+
 function merchantSyncProductSafe(PDO $db, array $config, string $productId): array {
-    try {
-        return merchantSyncProduct($db, $config, $productId);
-    } catch (Throwable $error) {
-        merchantRecordProductSync($db, $productId, $error->getMessage());
-        error_log('[G-Trots Merchant] ' . $productId . ': ' . $error->getMessage());
-        return ['status' => 'error', 'error' => $error->getMessage()];
+    $maxAttempts = 3;
+    for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+        try {
+            return merchantSyncProduct($db, $config, $productId);
+        } catch (Throwable $error) {
+            if ($attempt < $maxAttempts && merchantSyncErrorIsTransient($error)) {
+                usleep(250000 * (2 ** ($attempt - 1)));
+                continue;
+            }
+            merchantRecordProductSync($db, $productId, $error->getMessage());
+            error_log('[G-Trots Merchant] ' . $productId . ' după ' . $attempt . ' încercări: ' . $error->getMessage());
+            return [
+                'status' => 'error',
+                'error' => $error->getMessage(),
+                'attempts' => $attempt,
+            ];
+        }
     }
+    return ['status' => 'error', 'error' => 'Sincronizarea Merchant s-a încheiat neașteptat.', 'attempts' => $maxAttempts];
 }
 
 function merchantSyncCatalogBatch(PDO $db, array $config, string $afterId = '', int $limit = 5): array {

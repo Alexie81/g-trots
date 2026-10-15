@@ -87,6 +87,9 @@ foreach ($priceLabelCases as [$price, $expectedLabel]) {
     $assert(merchantPriceRangeLabel($price) === $expectedLabel, 'interval de preț greșit pentru ' . $price);
 }
 $assert(merchantProductIsVisible($product), 'produsul cumpărabil este tratat ca invizibil');
+$assert(merchantSyncErrorIsTransient(new RuntimeException('Operation timed out after 35001 milliseconds')), 'timeout-ul Merchant trebuie reîncercat automat');
+$assert(merchantSyncErrorIsTransient(new RuntimeException('Google Merchant: Too many requests (429)')), 'limitarea temporară Merchant trebuie reîncercată automat');
+$assert(!merchantSyncErrorIsTransient(new RuntimeException('Google Merchant: Invalid product data (400)')), 'datele invalide nu trebuie retrimise automat');
 $product['is_purchasable'] = false;
 $assert(!merchantProductIsVisible($product), 'produsul dezactivat rămâne vizibil');
 

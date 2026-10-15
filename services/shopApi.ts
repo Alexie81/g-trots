@@ -671,6 +671,7 @@ export type ShopOrderItem = {
   discounted_line_total?: number;
   image_url?: string;
   unit_of_measure?: string;
+  product_slug?: string;
 };
 
 export type ShopOrderReturnItem = {
@@ -960,6 +961,8 @@ export type ShopOrder = {
   vat_total: number;
   net_total: number;
   currency: string;
+  tracking_token?: string | null;
+  tracking_url?: string | null;
   items: ShopOrderItem[];
   status_history?: ShopOrderStatusHistory[];
   email_notification?: ShopOrderEmailNotification;

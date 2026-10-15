@@ -29,6 +29,7 @@ import { shopApi, shopOrderCustomerDisplayName, ShopOrder, ShopOrderPage, ShopPr
 import ShopPagination from '@/components/ShopPagination';
 import KeyboardAwareScrollView from '@/components/KeyboardAwareScrollView';
 import { runWhenIdle } from '@/utils/runWhenIdle';
+import { buildOrderStatusWhatsAppMessage, isOrderWhatsAppStatusEnabled } from '@/utils/orderWhatsApp';
 
 const orderStatuses = [
   { value: 'new', label: 'În procesare (Nouă)', shortLabel: 'Nouă', description: 'Comanda a fost primită și a intrat în procesare.', color: '#38BDF8', icon: Clock3 },
@@ -212,6 +213,18 @@ async function openCustomerWhatsApp(phone: string) {
   const webUrl = `https://wa.me/${target}`;
   try { await Linking.openURL((await Linking.canOpenURL(appUrl)) ? appUrl : webUrl); }
   catch { Alert.alert('WhatsApp', 'Conversația nu a putut fi deschisă.'); }
+}
+
+async function openOrderStatusWhatsApp(order: ShopOrder) {
+  const target = whatsappPhone(order.customer_phone);
+  if (!target) return Alert.alert('WhatsApp', 'Comanda nu are un număr de telefon valid.');
+  const message = buildOrderStatusWhatsAppMessage(order);
+  if (!message) return;
+  const encodedMessage = encodeURIComponent(message);
+  const appUrl = `whatsapp://send?phone=${target}&text=${encodedMessage}`;
+  const webUrl = `https://wa.me/${target}?text=${encodedMessage}`;
+  try { await Linking.openURL((await Linking.canOpenURL(appUrl)) ? appUrl : webUrl); }
+  catch { Alert.alert('WhatsApp', 'Conversația cu mesajul de status nu a putut fi deschisă.'); }
 }
 
 function WhatsAppLogo({ size = 17, color = '#51D88A' }: { size?: number; color?: string }) {
@@ -1423,6 +1436,8 @@ function DetailInfoRow({ label, value, strong = false }: { label: string; value?
 
 function ClientInfoBlock({ order, editing, canEdit, onToggle, name, phone, email, onNameChange, onPhoneChange, onEmailChange }: { order: ShopOrder; editing: boolean; canEdit: boolean; onToggle: () => void; name: string; phone: string; email: string; onNameChange: (value: string) => void; onPhoneChange: (value: string) => void; onEmailChange: (value: string) => void }) {
   const companyOrder = isCompanyOrder(order);
+  const statusWhatsAppEnabled = isOrderWhatsAppStatusEnabled(order.status) && Boolean(whatsappPhone(order.customer_phone));
+  const statusLabel = orderStatuses.find((item) => item.value === order.status)?.shortLabel || orderStatuses.find((item) => item.value === order.status)?.label || order.status;
   return <View style={styles.info}>
     <View style={styles.infoHead}><View style={styles.infoTitleWithBadge}><Text style={styles.infoTitle}>CLIENT</Text><View style={[styles.customerTypeBadge, companyOrder && styles.customerTypeBadgeCompany]}><Text style={[styles.customerTypeBadgeText, companyOrder && styles.customerTypeBadgeTextCompany]}>{companyOrder ? 'PJ' : 'PF'}</Text></View></View>{canEdit ? <TouchableOpacity style={[styles.deliveryEditButton, editing && styles.deliveryEditButtonActive]} onPress={onToggle}>{editing ? <X size={14} color={Colors.orange} /> : <Pencil size={14} color={Colors.textPrimary} />}<Text style={[styles.deliveryEditButtonText, editing && styles.deliveryEditButtonTextActive]}>{editing ? 'Anulează' : 'Editează'}</Text></TouchableOpacity> : <Text style={styles.infoHeadHint}>{order.invoice?.spv_status === 'processing' ? 'ÎN TRANSMITERE SPV' : 'BLOCATĂ ÎN SPV'}</Text>}</View>
     {companyOrder ? <DetailInfoRow label="Denumire firmă" value={shopOrderCustomerDisplayName(order)} strong /> : null}
@@ -1443,6 +1458,20 @@ function ClientInfoBlock({ order, editing, canEdit, onToggle, name, phone, email
       <DetailInfoRow label="Sediu social" value={order.company_address} />
     </View> : null}
     {!canEdit ? <Text style={styles.customerEditLocked}>{order.invoice?.spv_status === 'processing' ? 'Datele clientului nu pot fi schimbate cât timp factura este procesată de ANAF.' : 'Datele clientului nu mai pot fi schimbate deoarece factura a fost trimisă în SPV.'}</Text> : null}
+    <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !statusWhatsAppEnabled }}
+      activeOpacity={0.78}
+      disabled={!statusWhatsAppEnabled}
+      style={[styles.statusWhatsApp, !statusWhatsAppEnabled && styles.statusWhatsAppDisabled]}
+      onPress={() => void openOrderStatusWhatsApp(order)}>
+      <View style={styles.statusWhatsAppIcon}><WhatsAppLogo size={20} color={statusWhatsAppEnabled ? '#FFFFFF' : '#7D8580'} /></View>
+      <View style={styles.statusWhatsAppCopy}>
+        <Text style={[styles.statusWhatsAppTitle, !statusWhatsAppEnabled && styles.statusWhatsAppTitleDisabled]}>Trimite statusul curent pe WhatsApp</Text>
+        <Text numberOfLines={2} style={styles.statusWhatsAppText}>{statusWhatsAppEnabled ? `Deschide conversația cu mesajul „${statusLabel}” completat.` : 'Disponibil pentru statusurile Nouă, Confirmată, În pregătire, Predată curierului și Livrată.'}</Text>
+      </View>
+      <Send size={17} color={statusWhatsAppEnabled ? '#FFFFFF' : '#6F7772'} />
+    </TouchableOpacity>
     <View style={styles.contactActions}>
       <TouchableOpacity style={styles.contactCall} activeOpacity={0.78} onPress={() => void callCustomer(order.customer_phone)}><Phone size={16} color="#EDE7E1" /><Text style={styles.contactCallText}>Apelează</Text></TouchableOpacity>
       <TouchableOpacity style={styles.contactWhatsApp} activeOpacity={0.78} onPress={() => void openCustomerWhatsApp(order.customer_phone)}><WhatsAppLogo size={17} /><Text style={styles.contactWhatsAppText}>WhatsApp</Text></TouchableOpacity>
@@ -1517,6 +1546,13 @@ const styles = StyleSheet.create({
   deliveryInputStrong: { fontFamily: 'Inter-Bold', fontSize: 11 },
   deliveryEditHelper: { color: '#FFAD70', fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 12, borderRadius: 10, padding: 9, backgroundColor: Colors.orangeDim, marginTop: 8 },
   customerEditLocked: { color: '#F9A8B8', fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 12, borderRadius: 10, padding: 9, backgroundColor: '#3A1E26', marginTop: 9 },
+  statusWhatsApp: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#34D399', borderRadius: 17, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#128C4A', marginTop: 12, shadowColor: '#25D366', shadowOpacity: 0.2, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 4 },
+  statusWhatsAppDisabled: { borderColor: '#363B38', backgroundColor: '#242725', shadowOpacity: 0, elevation: 0, opacity: 0.72 },
+  statusWhatsAppIcon: { width: 40, height: 40, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: '#FFFFFF1A' },
+  statusWhatsAppCopy: { flex: 1, minWidth: 0 },
+  statusWhatsAppTitle: { color: '#FFFFFF', fontFamily: 'Inter-Bold', fontSize: 10.5 },
+  statusWhatsAppTitleDisabled: { color: '#929994' },
+  statusWhatsAppText: { color: '#D7FBE6', fontFamily: 'Inter-Regular', fontSize: 8, lineHeight: 12, marginTop: 3 },
   contactActions: { flexDirection: 'row', gap: 8, paddingTop: 12 },
   contactCall: { flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 14, backgroundColor: '#343138' },
   contactCallText: { color: '#EDE7E1', fontFamily: 'Inter-Bold', fontSize: 10 },

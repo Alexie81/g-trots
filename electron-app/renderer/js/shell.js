@@ -1,5 +1,88 @@
 // Global business shell: account management, notifications and toasts.
 (function() {
+  function isModalBackdrop(element) {
+    if (!(element instanceof HTMLElement) || element === document.body || element === document.documentElement) return false;
+    const signature = `${element.id || ''} ${element.className || ''}`.toLowerCase();
+    if (signature.includes('overlay')) return true;
+
+    const directDialog = element.querySelector(':scope > [role="dialog"], :scope > [role="alertdialog"], :scope > form, :scope > section');
+    if (!directDialog) return false;
+    const style = window.getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    const coversViewport = style.position === 'fixed'
+      && rect.width >= window.innerWidth * 0.72
+      && rect.height >= window.innerHeight * 0.72;
+    return coversViewport && /modal|dialog|picker|popup|confirm/.test(signature);
+  }
+
+  function visibleModalBackdrops() {
+    return Array.from(document.querySelectorAll('body *')).filter(element => {
+      if (!isModalBackdrop(element) || element.hidden) return false;
+      const style = window.getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+  }
+
+  function modalCloseButton(backdrop) {
+    const selectors = [
+      '[data-commerce-close]',
+      '[data-shop-modal-close]',
+      '[data-replacement-close]',
+      '[data-picker-close]',
+      '[data-dashboard-range-close]',
+      '[data-export-close]',
+      '[data-close]',
+      'button[id$="-close"]',
+      'button[class*="modal-close"]',
+      'button[class*="dialog-close"]',
+      'button[aria-label*="închide" i]',
+      'button[aria-label*="inchide" i]',
+      'button[title*="închide" i]',
+      'button[title*="inchide" i]',
+      'button[id$="-cancel"]',
+    ];
+    return selectors
+      .map(selector => backdrop.querySelector(selector))
+      .find(button => button instanceof HTMLButtonElement && !button.disabled) || null;
+  }
+
+  function installGlobalModalGuards() {
+    ['pointerdown', 'mousedown', 'click'].forEach(type => {
+      document.addEventListener(type, event => {
+        if (!isModalBackdrop(event.target)) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }, true);
+    });
+
+    document.addEventListener('keydown', event => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      const transientSurfaceOpen = Array.from(document.querySelectorAll('[aria-haspopup][aria-expanded="true"], [role="listbox"], [role="menu"]')).some(element => {
+        if (element.hidden) return false;
+        const style = window.getComputedStyle(element);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+      });
+      if (transientSurfaceOpen) return;
+
+      queueMicrotask(() => {
+        if (event.defaultPrevented) return;
+        const backdrops = visibleModalBackdrops();
+        if (!backdrops.length) return;
+        const backdrop = backdrops
+          .map((element, index) => ({ element, index, zIndex: Number.parseInt(window.getComputedStyle(element).zIndex, 10) || 0 }))
+          .sort((left, right) => left.zIndex - right.zIndex || left.index - right.index)
+          .at(-1)?.element;
+        const closeButton = backdrop ? modalCloseButton(backdrop) : null;
+        if (!closeButton) return;
+        closeButton.click();
+      });
+    });
+  }
+
+  installGlobalModalGuards();
+
   const sidebarButton = document.getElementById('sidebar-account-btn');
   const sidebarAvatar = document.getElementById('sidebar-account-avatar');
   const sidebarName = document.getElementById('auth-user-label');

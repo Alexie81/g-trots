@@ -161,6 +161,7 @@
       } : {}),
     }), id),
     uploadNirAttachment: (id, payload) => call('uploadNirAttachment', json('POST', payload), id),
+    deleteNirAttachment: (id, attachmentId) => call('deleteNirAttachment', json('DELETE', { attachment_id: attachmentId }), id),
     extractNirAttachment: (id, attachmentId) => call('extractNirAttachment', json('POST', { attachment_id: attachmentId }), id),
     downloadNirAttachment: (id, attachmentId) => call('downloadNirAttachment', {}, id, 0, { attachment_id: attachmentId }),
     downloadAllNirAttachments: id => call('downloadAllNirAttachments', {}, id),

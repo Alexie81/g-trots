@@ -2795,7 +2795,8 @@ function shopNirAttachmentUpload(PDO $db, string $documentId, array $body, array
     $doc->execute([$documentId]);
     $status = $doc->fetchColumn();
     if ($status === false) throw new ShopNirHttpException('NIR-ul nu există.', 404);
-    if ((string)$status !== 'draft') throw new ShopNirHttpException('Documentele pot fi adăugate numai unei ciorne.', 409);
+    if (!in_array((string)$status, ['draft', 'confirmed'], true)) throw new ShopNirHttpException('Documentele pot fi adăugate numai unei ciorne sau unui NIR confirmat.', 409);
+    if ((string)$status === 'confirmed') shopNirRequire($user, 'NIR_CONFIRM');
     $originalName = mb_substr(basename(trim((string)($body['file_name'] ?? 'document'))), 0, 255);
     $mime = strtolower(trim((string)($body['mime_type'] ?? 'application/octet-stream')));
     $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
@@ -2839,6 +2840,7 @@ function shopNirAttachmentUpload(PDO $db, string $documentId, array $body, array
     if (file_put_contents($path, $bytes, LOCK_EX) !== $size) throw new RuntimeException('Documentul nu a putut fi salvat complet.');
     $relative = 'uploads/nir/' . date('Y') . '/' . date('m') . '/' . $storageName;
     $actor = shopNirActor($user);
+    $db->beginTransaction();
     try {
         $stmt = $db->prepare(
             'INSERT INTO shop_nir_attachments
@@ -2846,15 +2848,70 @@ function shopNirAttachmentUpload(PDO $db, string $documentId, array $body, array
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([$id, $documentId, $originalName, $relative, $mime, $extension, $size, $sha, $actor['name']]);
-        $db->prepare('UPDATE shop_nir_documents SET source_type = "import", source_file_hash = ?, row_version = row_version + 1, updated_by = ? WHERE id = ? AND status = "draft"')->execute([$sha, $actor['name'], $documentId]);
-        shopNirAudit($db, $user, 'NIR_DOCUMENT_IMPORTED', 'NirDocument', $documentId, null, ['attachment_id' => $id, 'name' => $originalName, 'sha256' => $sha]);
+        $updated = $db->prepare('UPDATE shop_nir_documents SET source_file_hash = ?, row_version = row_version + 1, updated_by = ? WHERE id = ? AND status = ?');
+        $updated->execute([$sha, $actor['name'], $documentId, (string)$status]);
+        if ($updated->rowCount() !== 1) throw new ShopNirHttpException('NIR-ul a fost modificat între timp. Reîncarcă documentul și încearcă din nou.', 409);
+        shopNirAudit($db, $user, (string)$status === 'confirmed' ? 'NIR_CONFIRMED_DOCUMENT_ADDED' : 'NIR_DOCUMENT_IMPORTED', 'NirDocument', $documentId, null, ['attachment_id' => $id, 'name' => $originalName, 'sha256' => $sha, 'nir_status' => (string)$status]);
+        $db->commit();
     } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
         @unlink($path);
         throw $error;
     }
     $stmt = $db->prepare('SELECT id, original_name, mime_type, extension, file_size, sha256, extraction_status, extraction_message, created_at FROM shop_nir_attachments WHERE id = ?');
     $stmt->execute([$id]);
     return $stmt->fetch();
+}
+
+function shopNirDeleteAttachment(PDO $db, string $documentId, string $attachmentId, array $user): array {
+    if ($documentId === '' || $attachmentId === '') throw new InvalidArgumentException('NIR-ul și documentul furnizorului sunt obligatorii.');
+    $documentStmt = $db->prepare('SELECT status, row_version FROM shop_nir_documents WHERE id = ? LIMIT 1');
+    $documentStmt->execute([$documentId]);
+    $document = $documentStmt->fetch();
+    if (!$document) throw new ShopNirHttpException('NIR-ul nu există.', 404);
+    $status = (string)$document['status'];
+    if (!in_array($status, ['draft', 'confirmed'], true)) throw new ShopNirHttpException('Documentele acestui NIR nu mai pot fi modificate.', 409);
+    if ($status === 'confirmed') shopNirRequire($user, 'NIR_CONFIRM');
+
+    $attachmentStmt = $db->prepare('SELECT id, original_name, storage_name, mime_type, file_size, sha256 FROM shop_nir_attachments WHERE id = ? AND nir_document_id = ? LIMIT 1');
+    $attachmentStmt->execute([$attachmentId, $documentId]);
+    $attachment = $attachmentStmt->fetch();
+    if (!$attachment) throw new ShopNirHttpException('Documentul furnizorului nu există.', 404);
+
+    $storedPath = null;
+    try {
+        $storedPath = shopNirAttachmentStoredPath((string)$attachment['storage_name']);
+    } catch (ShopNirHttpException $error) {
+        if ($error->status !== 404) throw $error;
+    }
+
+    $actor = shopNirActor($user);
+    $db->beginTransaction();
+    try {
+        $deleted = $db->prepare('DELETE FROM shop_nir_attachments WHERE id = ? AND nir_document_id = ?');
+        $deleted->execute([$attachmentId, $documentId]);
+        if ($deleted->rowCount() !== 1) throw new ShopNirHttpException('Documentul furnizorului nu mai există.', 404);
+
+        $remainingHashStmt = $db->prepare('SELECT sha256 FROM shop_nir_attachments WHERE nir_document_id = ? ORDER BY created_at DESC, id DESC LIMIT 1');
+        $remainingHashStmt->execute([$documentId]);
+        $remainingHash = $remainingHashStmt->fetchColumn();
+        $updated = $db->prepare('UPDATE shop_nir_documents SET source_file_hash = ?, row_version = row_version + 1, updated_by = ? WHERE id = ? AND status = ?');
+        $updated->execute([$remainingHash === false ? null : (string)$remainingHash, $actor['name'], $documentId, $status]);
+        if ($updated->rowCount() !== 1) throw new ShopNirHttpException('NIR-ul a fost modificat între timp. Reîncarcă documentul și încearcă din nou.', 409);
+
+        shopNirAudit($db, $user, $status === 'confirmed' ? 'NIR_CONFIRMED_DOCUMENT_REMOVED' : 'NIR_DOCUMENT_REMOVED', 'NirDocument', $documentId, $attachment, null, ['attachment_id' => $attachmentId, 'nir_status' => $status]);
+        $db->commit();
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $error;
+    }
+
+    if ($storedPath !== null && is_file($storedPath)) @unlink($storedPath);
+    return [
+        'success' => true,
+        'deleted_attachment_id' => $attachmentId,
+        'document' => shopNirFetchDocument($db, $documentId, $user),
+    ];
 }
 
 function shopNirAttachmentStoredPath(string $storageName): string {

@@ -7221,6 +7221,16 @@ try {
         jsonResponse(shopNirAttachmentUpload($db, trim((string)($_GET['id'] ?? $body['nir_id'] ?? '')), $body, $currentUser), 201);
     }
 
+    if ($action === 'deleteNirAttachment' && $method === 'DELETE') {
+        shopNirRequire($currentUser, 'NIR_EDIT_DRAFT');
+        jsonResponse(shopNirDeleteAttachment(
+            $db,
+            trim((string)($_GET['id'] ?? $body['nir_id'] ?? '')),
+            trim((string)($_GET['attachment_id'] ?? $body['attachment_id'] ?? '')),
+            $currentUser
+        ));
+    }
+
     if ($action === 'extractNirAttachment' && $method === 'POST') {
         shopNirRequire($currentUser, 'NIR_EDIT_DRAFT');
         jsonResponse(shopNirExtractAttachment($db, trim((string)($_GET['id'] ?? $body['nir_id'] ?? '')), trim((string)($body['attachment_id'] ?? '')), $currentUser));

@@ -1,0 +1,93 @@
+{
+  "sku": "C44681",
+  "specifications": [
+    { "group": "General", "label": "Brand", "value": "KuKirin" },
+    { "group": "General", "label": "Model", "value": "A1" },
+    { "group": "General", "label": "Tip produs", "value": "Trotinetă electrică" },
+    { "group": "General", "label": "Utilizare", "value": "Recreativă, pe trasee permise" },
+    { "group": "Motor", "label": "Număr motoare", "value": "1" },
+    { "group": "Motor", "label": "Tip motor", "value": "Brushless" },
+    { "group": "Motor", "label": "Putere nominală", "value": "800W" },
+    { "group": "Motor", "label": "Tensiune nominală", "value": "48V" },
+    { "group": "Motor", "label": "Cuplu maxim", "value": "25 Nm" },
+    { "group": "Motor", "label": "Turație maximă declarată", "value": "1100 RPM" },
+    { "group": "Performanță", "label": "Viteză maximă tehnică", "value": "45 km/h" },
+    { "group": "Performanță", "label": "Autonomie maximă", "value": "45 km" },
+    { "group": "Performanță", "label": "Moduri de viteză", "value": "20 / 30 / 45 km/h" },
+    { "group": "Performanță", "label": "Unghi maxim de urcare", "value": "20°" },
+    { "group": "Performanță", "label": "Sarcină maximă", "value": "120 kg" },
+    { "group": "Baterie", "label": "Tip acumulator", "value": "Litiu-ion 18650" },
+    { "group": "Baterie", "label": "Tensiune acumulator", "value": "48V" },
+    { "group": "Baterie", "label": "Capacitate acumulator", "value": "13Ah" },
+    { "group": "Baterie", "label": "Energie nominală", "value": "624Wh" },
+    { "group": "Baterie", "label": "Sistem de protecție", "value": "BMS" },
+    { "group": "Încărcare", "label": "Timp de încărcare conform fișei tehnice", "value": "Aproximativ 7–8 ore" },
+    { "group": "Încărcare", "label": "Tensiune ieșire încărcător", "value": "54,6V" },
+    { "group": "Încărcare", "label": "Curent ieșire încărcător", "value": "2A" },
+    { "group": "Roți și anvelope", "label": "Dimensiune roți", "value": "10 inch" },
+    { "group": "Roți și anvelope", "label": "Dimensiune anvelope", "value": "10 × 3 inch" },
+    { "group": "Roți și anvelope", "label": "Tip anvelope", "value": "Tubeless, pneumatice" },
+    { "group": "Roți și anvelope", "label": "Presiune recomandată", "value": "48–53 PSI" },
+    { "group": "Frânare", "label": "Frână față", "value": "Disc" },
+    { "group": "Frânare", "label": "Frână spate", "value": "Disc" },
+    { "group": "Frânare", "label": "Întrerupere motor la frânare", "value": "Da" },
+    { "group": "Suspensii", "label": "Suspensie față", "value": "GEL" },
+    { "group": "Suspensii", "label": "Suspensie spate", "value": "GEL" },
+    { "group": "Construcție", "label": "Material cadru", "value": "Aliaj de aluminiu" },
+    { "group": "Construcție", "label": "Greutate netă", "value": "Aproximativ 25,5 kg" },
+    { "group": "Construcție", "label": "Sistem de pliere", "value": "Da" },
+    { "group": "Construcție", "label": "Dimensiuni desfăcută", "value": "1154 × 580 × 1298 mm" },
+    { "group": "Construcție", "label": "Dimensiuni pliată", "value": "1154 × 580 × 535 mm" },
+    { "group": "Construcție", "label": "Dimensiune platformă", "value": "510 × 220 mm" },
+    { "group": "Construcție", "label": "Gardă la sol", "value": "160 mm" },
+    { "group": "Protecție", "label": "Grad protecție conform fișei tehnice", "value": "IPX4" },
+    { "group": "Iluminare", "label": "Far frontal", "value": "LED" },
+    { "group": "Iluminare", "label": "Stop spate", "value": "LED" },
+    { "group": "Iluminare", "label": "Semnalizatoare", "value": "Da" },
+    { "group": "Iluminare", "label": "Lumini ambientale", "value": "Da" },
+    { "group": "Display", "label": "Tip afișaj", "value": "LED digital" },
+    { "group": "Display", "label": "Informații afișate", "value": "Viteză, nivel baterie și mod de rulare" }
+  ],
+  "questions": [
+    {
+      "question": "Ce autonomie are trotineta electrică KuKirin A1?",
+      "answer": "KuKirin A1 oferă o autonomie maximă declarată de până la 45 km, datorită acumulatorului de 48V 13Ah. Autonomia reală poate varia în funcție de greutatea utilizatorului, viteza de deplasare, temperatura exterioară, teren, presiunea anvelopelor și stilul de condus."
+    },
+    {
+      "question": "Care este viteza maximă a trotinetei KuKirin A1?",
+      "answer": "Trotineta electrică KuKirin A1 are o viteză maximă tehnică declarată de 45 km/h și trei moduri de viteză: 20, 30 și 45 km/h. Aceste valori reprezintă performanțele tehnice ale vehiculului și nu constituie automat viteze permise pe drumurile publice."
+    },
+    {
+      "question": "Ce motor are KuKirin A1?",
+      "answer": "KuKirin A1 este echipată cu un motor electric brushless de 800W, alimentat la 48V, cu un cuplu maxim declarat de 25 Nm. Motorul oferă accelerație dinamică și performanțe potrivite pentru deplasările recreative desfășurate pe trasee adecvate."
+    },
+    {
+      "question": "Ce baterie are KuKirin A1 și cât durează încărcarea?",
+      "answer": "KuKirin A1 dispune de o baterie litiu-ion de 48V 13Ah, cu o capacitate energetică nominală de 624Wh și sistem de protecție BMS. Conform fișei tehnice, încărcarea completă durează aproximativ 7–8 ore, în funcție de nivelul inițial al bateriei și condițiile de încărcare."
+    },
+    {
+      "question": "Ce anvelope are trotineta electrică KuKirin A1?",
+      "answer": "KuKirin A1 este echipată cu anvelope pneumatice tubeless de 10 × 3 inch, care contribuie la aderență, stabilitate și confort. Pentru înlocuire, trebuie verificată dimensiunea exactă înscrisă pe anvelopa originală, iar presiunea recomandată este de 48–53 PSI."
+    },
+    {
+      "question": "KuKirin A1 are suspensii față și spate?",
+      "answer": "Da, trotineta electrică KuKirin A1 dispune de suspensii față și spate cu amortizare GEL. Acestea contribuie la absorbția vibrațiilor și la reducerea șocurilor pe suprafețe cu denivelări moderate, îmbunătățind confortul și controlul în timpul deplasării."
+    },
+    {
+      "question": "Ce sistem de frânare are KuKirin A1?",
+      "answer": "KuKirin A1 este prevăzută cu frâne pe disc față și spate, completate de întreruperea alimentării motorului în timpul frânării. Pentru siguranță și funcționare corectă, se recomandă verificarea periodică a discurilor, plăcuțelor și reglajelor sistemului de frânare."
+    },
+    {
+      "question": "Se poate utiliza KuKirin A1 pe ploaie?",
+      "answer": "Fișa tehnică a modelului KuKirin A1 menționează un grad de protecție IPX4 împotriva stropilor de apă. Totuși, se recomandă evitarea ploii puternice, bălților adânci și spălării cu jet de apă, pentru protejarea componentelor electrice și a acumulatorului."
+    },
+    {
+      "question": "Ce greutate suportă trotineta electrică KuKirin A1?",
+      "answer": "KuKirin A1 are o sarcină maximă declarată de 120 kg și o greutate proprie de aproximativ 25,5 kg. Respectarea limitei de încărcare contribuie la siguranța utilizării, la funcționarea corectă a frânelor și suspensiilor și la menținerea performanțelor vehiculului."
+    },
+    {
+      "question": "Cum se întreține corect trotineta electrică KuKirin A1?",
+      "answer": "Pentru întreținerea trotinetei KuKirin A1, verifică periodic presiunea anvelopelor, starea frânelor, suspensiile, sistemul de pliere, elementele de fixare și acumulatorul. Pentru diagnosticare, revizii și piese de schimb compatibile, poți apela la G-Trots România, service specializat în trotinete electrice."
+    }
+  ]
+}

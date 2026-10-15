@@ -674,6 +674,39 @@
     const pagination = document.querySelector("[data-review-pagination]");
     if (pagination) pagination.hidden = true;
 
+    async function prefillReviewFromOrderLink() {
+      const reviewParams = new URLSearchParams(window.location.search);
+      if (reviewParams.get("recenzie") !== "noua") return;
+      const token = String(reviewParams.get("review_token") || "").trim().toLowerCase();
+      if (!/^[a-f0-9]{32,64}$/.test(token)) return;
+      const helper = form.querySelector(":scope > small");
+      try {
+        const order = await api("publicTrackOrder", { query: `&token=${encodeURIComponent(token)}` });
+        const values = {
+          name: String(order.customer_name || order.customer_contact_name || order.customer_display_name || "").trim(),
+          order_number: String(order.order_number || "").trim(),
+          customer_email: String(order.customer_email || "").trim()
+        };
+        Object.entries(values).forEach(([fieldName, value]) => {
+          const field = form.elements.namedItem(fieldName);
+          if (!(field instanceof HTMLInputElement) || !value) return;
+          field.value = value;
+          field.readOnly = true;
+          field.dataset.reviewPrefilled = "true";
+        });
+        form.hidden = false;
+        form.classList.add("review-form-prefilled");
+        if (helper) helper.textContent = "Datele comenzii au fost completate automat. Alege stelele și scrie recenzia.";
+        window.requestAnimationFrame(() => {
+          document.getElementById("recenzii")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+          form.querySelector('input[name="rating"]')?.focus({ preventScroll: true });
+        });
+      } catch (error) {
+        form.hidden = false;
+        if (helper) helper.textContent = error instanceof Error ? error.message : "Datele comenzii nu au putut fi completate automat.";
+      }
+    }
+
     function reviewElement(review) {
       const article = document.createElement("article");
       article.className = "review-item";
@@ -766,7 +799,8 @@
         submit.disabled = false;
       }
     }, true);
-    await loadReviews();
+    try { await loadReviews(); } catch (_error) {}
+    await prefillReviewFromOrderLink();
   }
 
   function applyLiveProduct(product) {

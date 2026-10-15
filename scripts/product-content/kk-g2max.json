@@ -1,0 +1,91 @@
+{
+  "sku": "KK-G2MAX",
+  "specifications": [
+    { "group": "General", "label": "Brand", "value": "KuKirin" },
+    { "group": "General", "label": "Model", "value": "G2 MAX" },
+    { "group": "General", "label": "Tip produs", "value": "Trotinetă electrică" },
+    { "group": "General", "label": "Utilizare recomandată", "value": "Recreativă și off-road" },
+    { "group": "Motor", "label": "Număr motoare", "value": "1" },
+    { "group": "Motor", "label": "Tip motor", "value": "Brushless" },
+    { "group": "Motor", "label": "Putere nominală", "value": "1000W" },
+    { "group": "Motor", "label": "Tensiune nominală", "value": "48V" },
+    { "group": "Motor", "label": "Cuplu maxim declarat", "value": "25,04 Nm" },
+    { "group": "Performanță", "label": "Viteză maximă tehnică", "value": "55 km/h" },
+    { "group": "Performanță", "label": "Autonomie maximă declarată de furnizor", "value": "80 km" },
+    { "group": "Performanță", "label": "Autonomie maximă indicată de KuKirin", "value": "70 km" },
+    { "group": "Performanță", "label": "Moduri de viteză", "value": "15 / 40 / 55 km/h" },
+    { "group": "Performanță", "label": "Unghi maxim de urcare declarat", "value": "22°" },
+    { "group": "Performanță", "label": "Sarcină maximă", "value": "120 kg" },
+    { "group": "Baterie", "label": "Tip acumulator", "value": "Litiu-ion 18650" },
+    { "group": "Baterie", "label": "Tensiune acumulator", "value": "48V" },
+    { "group": "Baterie", "label": "Capacitate declarată de furnizor", "value": "20Ah" },
+    { "group": "Baterie", "label": "Capacitate indicată de KuKirin", "value": "20,8Ah" },
+    { "group": "Baterie", "label": "Energie nominală – varianta 20Ah", "value": "960Wh" },
+    { "group": "Baterie", "label": "Energie nominală – varianta 20,8Ah", "value": "998,4Wh" },
+    { "group": "Încărcare", "label": "Timp estimat de încărcare", "value": "Aproximativ 10–11 ore" },
+    { "group": "Încărcare", "label": "Tensiune ieșire încărcător", "value": "54,6V" },
+    { "group": "Încărcare", "label": "Curent ieșire încărcător", "value": "2A" },
+    { "group": "Roți și anvelope", "label": "Dimensiune roți", "value": "10 inch" },
+    { "group": "Roți și anvelope", "label": "Tip anvelope", "value": "Pneumatice off-road" },
+    { "group": "Roți și anvelope", "label": "Presiune recomandată", "value": "350 kPa / 50 PSI" },
+    { "group": "Frânare", "label": "Frână față", "value": "Disc" },
+    { "group": "Frânare", "label": "Frână spate", "value": "Disc" },
+    { "group": "Suspensii", "label": "Suspensie față", "value": "Da" },
+    { "group": "Suspensii", "label": "Suspensie spate", "value": "Da" },
+    { "group": "Suspensii", "label": "Tip sistem", "value": "Amortizare cu patru brațe" },
+    { "group": "Construcție", "label": "Material cadru", "value": "Aliaj de aluminiu" },
+    { "group": "Construcție", "label": "Greutate netă declarată", "value": "31,72 ± 0,5 kg" },
+    { "group": "Construcție", "label": "Sistem de pliere", "value": "Da" },
+    { "group": "Construcție", "label": "Dimensiuni desfăcută", "value": "1260 × 605 × 1300 mm" },
+    { "group": "Construcție", "label": "Dimensiuni pliată", "value": "1260 × 605 × 580 mm" },
+    { "group": "Construcție", "label": "Gardă la sol declarată", "value": "162 mm" },
+    { "group": "Protecție", "label": "Grad protecție declarat", "value": "IP54" },
+    { "group": "Iluminare", "label": "Far frontal", "value": "LED" },
+    { "group": "Iluminare", "label": "Stop spate", "value": "LED" },
+    { "group": "Iluminare", "label": "Sistem de iluminare", "value": "6 lumini pentru vizibilitate și siguranță" },
+    { "group": "Display", "label": "Tip afișaj", "value": "LCD digital" },
+    { "group": "Display", "label": "Informații afișate", "value": "Viteză, nivel baterie și mod de rulare" }
+  ],
+  "questions": [
+    {
+      "question": "Ce autonomie are trotineta electrică KuKirin G2 MAX?",
+      "answer": "Pentru varianta asociată acestui SKU, furnizorul declară o autonomie maximă de până la 80 km, în timp ce fișa actuală KuKirin indică până la 70 km. Autonomia reală depinde de greutatea utilizatorului, viteză, teren, temperatură, presiunea anvelopelor și stilul de condus."
+    },
+    {
+      "question": "Care este viteza maximă a trotinetei KuKirin G2 MAX?",
+      "answer": "Trotineta electrică KuKirin G2 MAX poate atinge o viteză maximă tehnică declarată de 55 km/h și dispune de trei moduri de viteză: 15, 40 și 55 km/h. Această valoare reprezintă performanța tehnică a vehiculului, iar utilizarea pe drumurile publice este supusă legislației aplicabile."
+    },
+    {
+      "question": "Ce motor are KuKirin G2 MAX?",
+      "answer": "KuKirin G2 MAX este echipată cu un motor electric brushless de 1000W, alimentat la 48V și cu un cuplu maxim declarat de aproximativ 25 Nm. Motorul oferă accelerație dinamică și performanțe potrivite pentru deplasări recreative și trasee cu diferențe de nivel."
+    },
+    {
+      "question": "Ce baterie are trotineta electrică KuKirin G2 MAX?",
+      "answer": "Varianta listată de furnizor pentru acest SKU are o baterie litiu-ion de 48V 20Ah, echivalentă cu 960Wh. Fișa actuală KuKirin prezintă și configurația de 48V 20,8Ah, cu 998,4Wh, de aceea capacitatea exactă poate depinde de lotul și versiunea comercializată."
+    },
+    {
+      "question": "Cât durează încărcarea bateriei KuKirin G2 MAX?",
+      "answer": "Încărcarea completă a bateriei KuKirin G2 MAX durează aproximativ 10–11 ore cu încărcătorul standard de 54,6V și 2A. Durata efectivă poate varia în funcție de capacitatea exactă a acumulatorului, nivelul inițial de încărcare, temperatură și starea bateriei."
+    },
+    {
+      "question": "KuKirin G2 MAX este potrivită pentru off-road?",
+      "answer": "Da, KuKirin G2 MAX este concepută și pentru trasee recreative off-road. Anvelopele pneumatice de 10 inch, suspensiile față-spate cu amortizare în patru brațe și motorul de 1000W contribuie la stabilitate și confort pe suprafețe denivelate, în condiții adecvate de utilizare."
+    },
+    {
+      "question": "Ce sistem de frânare are KuKirin G2 MAX?",
+      "answer": "Trotineta electrică KuKirin G2 MAX este prevăzută cu frâne pe disc atât pe roata din față, cât și pe roata din spate, pentru control eficient la decelerare. Pentru siguranță, se recomandă verificarea periodică a plăcuțelor, discurilor și reglajelor sistemului de frânare."
+    },
+    {
+      "question": "KuKirin G2 MAX are suspensii față și spate?",
+      "answer": "Da, KuKirin G2 MAX dispune de suspensii pe ambele roți și folosește un sistem de amortizare cu patru brațe. Acesta ajută la reducerea vibrațiilor și la absorbția șocurilor pe trasee denivelate, contribuind la confort și la menținerea controlului trotinetei."
+    },
+    {
+      "question": "Se poate utiliza KuKirin G2 MAX pe ploaie?",
+      "answer": "KuKirin G2 MAX are un grad de protecție declarat IP54, care oferă protecție limitată împotriva prafului și stropilor de apă. Se recomandă evitarea ploii abundente, bălților adânci și spălării cu jet de apă, deoarece trotineta și componentele sale electrice nu sunt complet impermeabile."
+    },
+    {
+      "question": "Cum se întreține corect trotineta electrică KuKirin G2 MAX?",
+      "answer": "Pentru întreținerea corectă a trotinetei KuKirin G2 MAX, verifică periodic presiunea anvelopelor, frânele, suspensiile, elementele de fixare și acumulatorul. Pentru diagnosticare, revizii și înlocuirea pieselor compatibile, poți apela la G-Trots România, service specializat în trotinete electrice."
+    }
+  ]
+}

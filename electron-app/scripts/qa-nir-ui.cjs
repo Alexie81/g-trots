@@ -38,20 +38,26 @@ app.whenReady().then(async () => {
       { ...blankLine, id:'line-broken-image', stornable_quantity:'2', product_id:'product-2', product_name:'Roată completă pentru trotinetă', resolution_status:'matched_name', product_image_url:'data:image/png;base64,broken' },
       { ...blankLine, id:'line-unmatched-image', stornable_quantity:'2', product_id:null, product_name:'', resolution_status:'unmatched', product_image_url:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==' },
     ];
+    let qaAttachments = [{ id:'attachment-1', original_name:'factura-furnizor.pdf', mime_type:'application/pdf', extension:'pdf', file_size:409600, sha256:'qa1', extraction_status:'extracted', extraction_message:null, created_at:'2026-08-29' }, { id:'attachment-2', original_name:'aviz-marfa.png', mime_type:'image/png', extension:'png', file_size:182000, sha256:'qa2', extraction_status:'not_requested', extraction_message:null, created_at:'2026-08-29' }];
+    let qaDocumentVersion = 0;
     const qaDocument = { id:'local-nir-test', temporary_number:'NIR nesalvat', nir_number:null, status:'draft', document_kind:'entry', can_storno:true, supplier_id:supplier.id, supplier_name:supplier.name, warehouse_id:warehouse.id, supplier_invoice_series:'FT', supplier_invoice_number:'190', supplier_invoice_date:'2026-08-29', nir_date:'2026-08-29', reception_date:'2026-08-29', currency:'EUR', exchange_rate:'5.07000000', exchange_rate_date:'2026-08-29', notes:'', row_version:0, subtotal_ron:'4000', vat_total_ron:'760.42', grand_total_ron:'4760.42', inventory_cost_total_ron:'4000', lines:[blankLine], attachments:[], permissions:['NIR_CREATE','NIR_EDIT_DRAFT','NIR_CONFIRM','NIR_REVERSE','NIR_VIEW_COSTS','NIR_EXPORT','SUPPLIER_CREATE'] };
-    window.__nirQaCalls = { create:0, update:0, delete:0, reopen:0, reverse:0, reverseReason:null, reverseLines:null, reverseDetails:null, deletedId:null, openedNirId:null, downloadOne:0, downloadAll:0 };
+    window.__nirQaCalls = { create:0, update:0, delete:0, deleteAttachment:0, uploadAttachment:0, extractAttachment:0, reopen:0, reverse:0, reverseReason:null, reverseLines:null, reverseDetails:null, deletedId:null, openedNirId:null, downloadOne:0, downloadAll:0 };
     window.SHOP_API = {
       getNirPermissions: async () => ({ permissions:qaDocument.permissions }),
       getBnrExchangeRate: async (currency, date) => ({ currency, rate:currency === 'EUR' ? '5.07000000' : '1.00000000', date:date || '2026-08-29', requested_date:date || '2026-08-29', source:'BNR' }),
       listWarehouses: async () => [warehouse],
+      listReceiptLocations: async () => [{ id:'receipt-1', name:'Gestiune principală', is_default:true, is_active:true, address:'', city:'' }],
       searchSuppliers: async () => [supplier],
       listNirs: async ({ page }) => ({ items:nirs, page:page || 1, page_size:15, total:nirs.length, total_pages:1, permissions:qaDocument.permissions }),
       listInventory: async () => inventory,
       listInventoryMovements: async id => id === 'stock-1' ? stockMovements : [],
-      getNir: async id => { window.__nirQaCalls.openedNirId = id; const reversal = id === 'nir-reversal'; const partial = id === 'nir-partial'; const confirmed = reversal || partial || id === 'nir-2' || String(id).startsWith('stock-nir-'); return { ...qaDocument, id, temporary_number:id === 'nir-1' ? 'DRAFT-20260829-A1B2' : qaDocument.temporary_number, nir_number:reversal ? 'NIR-2026-000100' : (partial ? 'NIR-2026-000022' : (confirmed ? 'NIR-2026-000099' : null)), status:confirmed ? 'confirmed' : 'draft', document_kind:reversal ? 'storno' : 'entry', can_storno:confirmed && !reversal, storno_state:partial ? 'partial' : 'none', storned_quantity:partial ? '1' : '0', source_type:reversal ? 'reversal' : 'manual', reversal_of_id:reversal ? 'nir-2' : null, lines:confirmed ? confirmedLines : [blankLine], attachments:confirmed ? [{ id:'attachment-1', original_name:'factura-furnizor.pdf', mime_type:'application/pdf', extension:'pdf', file_size:409600, sha256:'qa1', extraction_status:'extracted', extraction_message:null, created_at:'2026-08-29' }, { id:'attachment-2', original_name:'aviz-marfa.png', mime_type:'image/png', extension:'png', file_size:182000, sha256:'qa2', extraction_status:'not_requested', extraction_message:null, created_at:'2026-08-29' }] : [], row_version:id === 'nir-1' ? 2 : qaDocument.row_version }; },
+      getNir: async id => { window.__nirQaCalls.openedNirId = id; const reversal = id === 'nir-reversal'; const partial = id === 'nir-partial'; const confirmed = reversal || partial || id === 'nir-2' || String(id).startsWith('stock-nir-'); return { ...qaDocument, id, temporary_number:id === 'nir-1' ? 'DRAFT-20260829-A1B2' : qaDocument.temporary_number, nir_number:reversal ? 'NIR-2026-000100' : (partial ? 'NIR-2026-000022' : (confirmed ? 'NIR-2026-000099' : null)), status:confirmed ? 'confirmed' : 'draft', document_kind:reversal ? 'storno' : 'entry', can_storno:confirmed && !reversal, storno_state:partial ? 'partial' : 'none', storned_quantity:partial ? '1' : '0', source_type:reversal ? 'reversal' : 'manual', reversal_of_id:reversal ? 'nir-2' : null, lines:confirmed ? confirmedLines : [blankLine], attachments:confirmed ? [...qaAttachments] : [], row_version:id === 'nir-1' ? 2 : qaDocumentVersion }; },
       createNir: async value => { window.__nirQaCalls.create += 1; return { ...qaDocument, ...value, id:'nir-saved', temporary_number:'DRAFT-SAVED', row_version:1 }; },
       updateNir: async (_id, value) => { window.__nirQaCalls.update += 1; return { ...qaDocument, ...value, id:'nir-saved', row_version:2 }; },
       deleteNir: async id => { window.__nirQaCalls.delete += 1; window.__nirQaCalls.deletedId = id; return { success:true, deleted:1, deleted_ids:[id] }; },
+      uploadNirAttachment: async (_id, payload) => { window.__nirQaCalls.uploadAttachment += 1; qaDocumentVersion += 1; const attachment={ id:'attachment-new-' + window.__nirQaCalls.uploadAttachment, original_name:payload.file_name, mime_type:payload.mime_type, extension:String(payload.file_name).split('.').pop(), file_size:Math.ceil(String(payload.content_base64 || '').length * .75), sha256:'qa-new-' + window.__nirQaCalls.uploadAttachment, extraction_status:'pending', extraction_message:null, created_at:'2026-08-30' }; qaAttachments.push(attachment); return attachment; },
+      deleteNirAttachment: async (id, attachmentId) => { window.__nirQaCalls.deleteAttachment += 1; qaDocumentVersion += 1; qaAttachments=qaAttachments.filter(item => item.id !== attachmentId); return { success:true, deleted_attachment_id:attachmentId, document:{ ...qaDocument, id, status:'confirmed', nir_number:'NIR-2026-000099', attachments:[...qaAttachments], row_version:qaDocumentVersion } }; },
+      extractNirAttachment: async () => { window.__nirQaCalls.extractAttachment += 1; return { status:'manual_required', lines:[] }; },
       listProductOptions: async () => [{ id:'product-1', name:'Cască FRV Street Panther full face, negru mat', sku:'WT-SP-1386', accounting_stock_quantity:'8', images:[], supplier_reference:{ id:'reference-qa', supplier_product_code_original:'CASCA-FRV-02', supplier_product_name:'Cască Panther furnizor', supplier_ean:'594000000001', purchase_unit:'cutie', stock_unit:'buc', conversion_factor:'2', is_primary_for_supplier:true } }],
       resolveSupplierProductReference: async (_supplierId, code, _ean, name) => !code && name === 'Cască FRV Street Panther full face, negru mat' ? ({ match_method:'name_exact', reference:{ id:null, product_id:'product-1', product_name:name, product_image_url:'', supplier_product_name:name, conversion_factor:'1', purchase_unit:'buc', stock_unit:'buc' } }) : ({ reference:null }),
       validateNir: async () => ({ valid:true, errors:[], warnings:[] }),
@@ -213,9 +219,12 @@ app.whenReady().then(async () => {
     const closesWithEscape = !dialog.classList.contains('visible');
     await new Promise(resolve => setTimeout(resolve, 210));
     document.getElementById('shop-nir-delete').click();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     dialog.dispatchEvent(new MouseEvent('mousedown', { bubbles:true }));
-    return { closesWithEscape, closesOutside:!dialog.classList.contains('visible') };
+    dialog.dispatchEvent(new MouseEvent('click', { bubbles:true }));
+    return { closesWithEscape, staysOpenOutside:dialog.classList.contains('visible') };
   })()`);
+  if (!deleteDialogClosing.closesWithEscape || !deleteDialogClosing.staysOpenOutside) throw new Error(`Modalurile trebuie să rămână deschise la click pe fundal și să se închidă cu Escape: ${JSON.stringify(deleteDialogClosing)}`);
   const metrics = await win.webContents.executeJavaScript(`(() => ({
     registryCards:document.querySelectorAll('.shop-nir-registry-card').length,
     guideSteps:document.querySelectorAll('.shop-nir-onboarding li').length,
@@ -283,6 +292,69 @@ app.whenReady().then(async () => {
   await wait(180);
   const confirmedNirDocuments = path.join(output, 'confirmed-nir-documents.png');
   fs.writeFileSync(confirmedNirDocuments, (await win.webContents.capturePage()).toPNG());
+  const supplierDocumentsEditing = await win.webContents.executeJavaScript(`(async () => {
+    document.getElementById('shop-nir-correct').click();
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    document.querySelector('[data-nir-attachment-delete]')?.click();
+    const input=document.getElementById('shop-nir-files');
+    const transfer=new DataTransfer();
+    transfer.items.add(new File(['document nou'], 'proces-verbal-nou.pdf', { type:'application/pdf' }));
+    Object.defineProperty(input, 'files', { configurable:true, value:transfer.files });
+    input.dispatchEvent(new Event('change', { bubbles:true }));
+    await new Promise(resolve=>setTimeout(resolve,650));
+    document.querySelector('.shop-nir-editor-section.documents')?.scrollIntoView({ block:'center' });
+    const button=document.getElementById('shop-nir-documents-save');
+    const section=document.querySelector('.shop-nir-editor-section.documents');
+    const sectionStyle=getComputedStyle(section);
+    const sectionRect=section.getBoundingClientRect();
+    const hit=document.elementFromPoint(sectionRect.left + sectionRect.width / 2, sectionRect.top + sectionRect.height / 2);
+    return { correctionLabel:document.getElementById('shop-nir-correct')?.textContent.trim(), deleteButtons:document.querySelectorAll('[data-nir-attachment-delete]').length, marked:document.querySelectorAll('.shop-nir-attachment.marked-for-deletion').length, pending:document.querySelectorAll('.shop-nir-attachment.pending').length, saveVisible:Boolean(button), saveEnabled:!button?.disabled, copy:section?.innerText || '', style:{ opacity:sectionStyle.opacity, visibility:sectionStyle.visibility, display:sectionStyle.display, color:sectionStyle.color, background:sectionStyle.backgroundColor }, hit:{ tag:hit?.tagName, id:hit?.id, className:hit?.className } };
+  })()`);
+  if (supplierDocumentsEditing.correctionLabel !== 'Corecteaza NIR' || supplierDocumentsEditing.deleteButtons !== 2 || supplierDocumentsEditing.marked !== 1 || supplierDocumentsEditing.pending !== 1 || !supplierDocumentsEditing.saveVisible || !supplierDocumentsEditing.saveEnabled || !/stocul/i.test(supplierDocumentsEditing.copy)) throw new Error(`Editarea separată a documentelor furnizorului nu este disponibilă complet: ${JSON.stringify(supplierDocumentsEditing)}`);
+  const nirEditorBehavior = await win.webContents.executeJavaScript(`(() => {
+    const invoiceDate=document.querySelector('[data-nir-field="supplier_invoice_date"]');
+    invoiceDate.value='2026-10-15'; invoiceDate.dispatchEvent(new Event('input',{bubbles:true}));
+    const unitPrice=document.querySelector('[data-nir-line="0"][data-nir-line-field="unit_price"]');
+    unitPrice.value='12,'; unitPrice.dispatchEvent(new Event('input',{bubbles:true}));
+    const keepsComma=unitPrice.value==='12,';
+    unitPrice.value='12,5'; unitPrice.dispatchEvent(new Event('input',{bubbles:true}));
+    const quantity=document.querySelector('[data-nir-line="0"][data-nir-line-field="invoiced_quantity"]');
+    quantity.value='1,5'; quantity.dispatchEvent(new Event('input',{bubbles:true}));
+    document.querySelector('[data-nir-quantity-step="0"][data-nir-quantity-field="invoiced_quantity"][data-nir-quantity-delta="1"]').click();
+    const calendarStyle=getComputedStyle(document.querySelector('[data-nir-field="supplier_invoice_date"]'),'::-webkit-calendar-picker-indicator');
+    return {
+      guidesRemoved:!document.querySelector('.shop-nir-editor-flow,.shop-nir-step-help,.shop-nir-lines-intro,.shop-nir-review-guide'),
+      invoiceDate:document.querySelector('[data-nir-field="supplier_invoice_date"]')?.value,
+      nirDate:document.querySelector('[data-nir-datetime="nir"]')?.value,
+      receptionDate:document.querySelector('[data-nir-datetime="reception"]')?.value,
+      keepsComma,
+      unitPrice:unitPrice.value,
+      invoiced:quantity.value,
+      received:document.querySelector('[data-nir-line="0"][data-nir-line-field="received_quantity"]')?.value,
+      accepted:document.querySelector('[data-nir-line="0"][data-nir-line-field="accepted_quantity"]')?.value,
+      calendarOpacity:calendarStyle.opacity,
+    };
+  })()`);
+  if (!nirEditorBehavior.guidesRemoved || nirEditorBehavior.invoiceDate !== '2026-10-15' || !String(nirEditorBehavior.nirDate).startsWith('2026-10-15T') || !String(nirEditorBehavior.receptionDate).startsWith('2026-10-15T') || !nirEditorBehavior.keepsComma || nirEditorBehavior.unitPrice !== '12,5' || nirEditorBehavior.invoiced !== '2,5' || nirEditorBehavior.received !== '2,5' || nirEditorBehavior.accepted !== '2,5' || nirEditorBehavior.calendarOpacity !== '1') throw new Error(`Comportamentul noilor câmpuri NIR nu este corect: ${JSON.stringify(nirEditorBehavior)}`);
+  const nirSupplierDocumentsEditing = path.join(output, 'nir-supplier-documents-editing.png');
+  const supplierDocumentsRect = await win.webContents.executeJavaScript(`(() => { const rect=document.querySelector('.shop-nir-editor-section.documents').getBoundingClientRect(); return { x:Math.max(0,Math.floor(rect.x)-12), y:Math.max(0,Math.floor(rect.y)-12), width:Math.min(window.innerWidth,Math.ceil(rect.width)+24), height:Math.min(window.innerHeight,Math.ceil(rect.height)+24), top:rect.top, bottom:rect.bottom, viewport:window.innerHeight }; })()`);
+  win.webContents.invalidate();
+  await wait(240);
+  fs.writeFileSync(nirSupplierDocumentsEditing, (await win.webContents.capturePage()).toPNG());
+  await win.webContents.executeJavaScript(`document.getElementById('shop-nir-documents-save').click()`);
+  await wait(320);
+  const supplierDocumentsSaved = await win.webContents.executeJavaScript(`(() => ({ deleteCalls:window.__nirQaCalls.deleteAttachment, uploadCalls:window.__nirQaCalls.uploadAttachment, extractCalls:window.__nirQaCalls.extractAttachment, reopenCalls:window.__nirQaCalls.reopen, savedNames:[...document.querySelectorAll('.shop-nir-attachment.saved small')].map(item=>item.textContent), pending:document.querySelectorAll('.shop-nir-attachment.pending').length, correctionLabel:document.getElementById('shop-nir-correct')?.textContent.trim() }))()`);
+  if (supplierDocumentsSaved.deleteCalls !== 1 || supplierDocumentsSaved.uploadCalls !== 1 || supplierDocumentsSaved.extractCalls !== 0 || supplierDocumentsSaved.reopenCalls !== 0 || supplierDocumentsSaved.pending !== 0 || supplierDocumentsSaved.correctionLabel !== 'Corecteaza NIR' || supplierDocumentsSaved.savedNames.includes('factura-furnizor.pdf') || !supplierDocumentsSaved.savedNames.includes('proces-verbal-nou.pdf')) throw new Error(`Salvarea separată a documentelor nu păstrează NIR-ul confirmat: ${JSON.stringify(supplierDocumentsSaved)}`);
+  if (process.env.QA_NIR_DOCUMENTS_ONLY === '1') {
+    process.stdout.write(JSON.stringify({ supplierDocumentsEditing, supplierDocumentsSaved, nirEditorBehavior, supplierDocumentsRect, screenshot:nirSupplierDocumentsEditing }, null, 2));
+    await win.destroy();
+    app.quit();
+    return;
+  }
+  await win.webContents.executeJavaScript(`(() => { window.confirm=()=>true; document.querySelector('[data-commerce-close="shop-nir-modal"]').click(); })()`);
+  await wait(220);
+  await win.webContents.executeJavaScript(`document.querySelector('.shop-stock-document-row').click()`);
+  await wait(260);
   await win.webContents.executeJavaScript(`document.getElementById('shop-nir-accounting-details')?.scrollIntoView({ block:'center' })`);
   await wait(180);
   const movementJournal = await win.webContents.executeJavaScript(`(() => ({
@@ -294,7 +366,7 @@ app.whenReady().then(async () => {
     movementTypes:[...document.querySelectorAll('.shop-nir-movement-main>header>b')].map(item => item.textContent),
     documents:[...document.querySelectorAll('.shop-nir-movement-main > p em')].map(item => item.textContent),
   }))()`);
-  if (!movementJournal.board || movementJournal.cards !== 2 || movementJournal.incoming !== 1 || movementJournal.outgoing !== 1 || !movementJournal.documents.includes('NIR-2026-000100') || !movementJournal.movementTypes.includes('STORNARE NIR')) throw new Error('Jurnalul vizual de mișcări nu explică intrarea și stornarea.');
+  if (!movementJournal.board || movementJournal.cards !== 2 || movementJournal.incoming !== 1 || movementJournal.outgoing !== 1 || !movementJournal.documents.includes('NIR-2026-000100') || !movementJournal.movementTypes.some(label => ['STORNARE NIR', 'RETUR FURNIZOR'].includes(label))) throw new Error(`Jurnalul vizual de mișcări nu explică intrarea și stornarea: ${JSON.stringify(movementJournal)}`);
   const nirMovements = path.join(output, 'nir-movements.png');
   fs.writeFileSync(nirMovements, (await win.webContents.capturePage()).toPNG());
   await win.webContents.executeJavaScript(`document.querySelector('[data-nir-attachment-download]').click(); document.getElementById('shop-nir-download-all').click()`);
@@ -342,7 +414,7 @@ app.whenReady().then(async () => {
     await new Promise(resolve=>setTimeout(resolve,260));
     return { triggerVisible, triggerLabel, dialogOpened, dialogCopy, originalInvoiceCard, initialInvoice, availableLines:inputs.length, initiallySelected, emptySelectionBlocked, emptyInvoiceBlocked, emptyReasonBlocked, calls:window.__nirQaCalls.reverse, reason:window.__nirQaCalls.reverseReason, lines:window.__nirQaCalls.reverseLines, details:window.__nirQaCalls.reverseDetails, status:document.getElementById('shop-nir-status')?.textContent, dialogClosed:!dialog.classList.contains('visible'), nativeConfirmCalls:window.__nirQaNativeConfirmCalls };
   })()`);
-  if (!reversalFlow.triggerVisible || reversalFlow.triggerLabel !== 'Stornare factură' || !reversalFlow.dialogOpened || !/FT\/190/.test(reversalFlow.originalInvoiceCard) || !/2026-08-29/.test(reversalFlow.originalInvoiceCard) || reversalFlow.initialInvoice?.series !== 'FT' || reversalFlow.initialInvoice?.number !== '191' || !reversalFlow.initialInvoice?.date || !/opțional/i.test(reversalFlow.initialInvoice?.seriesLabel || '') || reversalFlow.availableLines !== 3 || reversalFlow.initiallySelected !== 3 || !reversalFlow.emptySelectionBlocked || !reversalFlow.emptyInvoiceBlocked || !reversalFlow.emptyReasonBlocked || reversalFlow.calls !== 1 || reversalFlow.lines?.length !== 2 || reversalFlow.lines?.[0]?.line_id !== 'line-image' || reversalFlow.lines?.[1]?.line_id !== 'line-unmatched-image' || reversalFlow.lines?.some(line => line.quantity !== '2') || reversalFlow.details?.supplier_invoice_series !== 'FT' || reversalFlow.details?.supplier_invoice_number !== '191' || reversalFlow.details?.supplier_invoice_date !== reversalFlow.initialInvoice?.date || reversalFlow.status !== 'CONFIRMAT' || !reversalFlow.dialogClosed || reversalFlow.nativeConfirmCalls !== 0 || /reversare|reversat/i.test(reversalFlow.dialogCopy)) throw new Error(`Fluxul personalizat de stornare NIR nu funcționează complet: ${JSON.stringify(reversalFlow)}`);
+  if (!reversalFlow.triggerVisible || reversalFlow.triggerLabel !== 'Stornare factură' || !reversalFlow.dialogOpened || !/FT\/190/.test(reversalFlow.originalInvoiceCard) || !/2026-08-29/.test(reversalFlow.originalInvoiceCard) || reversalFlow.initialInvoice?.series !== 'FT' || reversalFlow.initialInvoice?.number !== '191' || !reversalFlow.initialInvoice?.date || !/opțional/i.test(reversalFlow.initialInvoice?.seriesLabel || '') || reversalFlow.availableLines !== 3 || reversalFlow.initiallySelected !== 3 || !reversalFlow.emptySelectionBlocked || !reversalFlow.emptyInvoiceBlocked || !reversalFlow.emptyReasonBlocked || reversalFlow.calls !== 1 || reversalFlow.lines?.length !== 2 || reversalFlow.lines?.[0]?.line_id !== 'line-image' || reversalFlow.lines?.[1]?.line_id !== 'line-unmatched-image' || reversalFlow.lines?.some(line => line.quantity !== '2') || reversalFlow.details?.supplier_invoice_series !== 'FT' || reversalFlow.details?.supplier_invoice_number !== '191' || reversalFlow.details?.supplier_invoice_date !== reversalFlow.initialInvoice?.date || !['CONFIRMAT', 'RECEPȚIE'].includes(reversalFlow.status) || !reversalFlow.dialogClosed || reversalFlow.nativeConfirmCalls !== 0 || /reversare|reversat/i.test(reversalFlow.dialogCopy)) throw new Error(`Fluxul personalizat de stornare NIR nu funcționează complet: ${JSON.stringify(reversalFlow)}`);
   await wait(120);
   const reversedActionLocks = await win.webContents.executeJavaScript(`(() => ({
     editHidden:document.getElementById('shop-nir-correct')?.hidden,
@@ -362,7 +434,7 @@ app.whenReady().then(async () => {
     movementStornoVisible:Boolean(document.getElementById('shop-nir-reverse')),
     status:document.getElementById('shop-nir-status')?.textContent,
   }))()`);
-  if (!partialStornoLocks.editHidden || !partialStornoLocks.stornoVisible || !partialStornoLocks.movementStornoVisible || partialStornoLocks.status !== 'CONFIRMAT') throw new Error(`NIR-ul stornat parțial nu separă corect blocarea corecției de stornarea cantității rămase: ${JSON.stringify(partialStornoLocks)}`);
+  if (!partialStornoLocks.editHidden || !partialStornoLocks.stornoVisible || !partialStornoLocks.movementStornoVisible || !['CONFIRMAT', 'RECEPȚIE'].includes(partialStornoLocks.status)) throw new Error(`NIR-ul stornat parțial nu separă corect blocarea corecției de stornarea cantității rămase: ${JSON.stringify(partialStornoLocks)}`);
   await win.webContents.executeJavaScript(`(() => { document.querySelector('[data-commerce-close="shop-nir-modal"]').click(); window.switchTab('shop-nirs'); })()`);
   await wait(220);
   await win.webContents.executeJavaScript(`document.querySelector('[data-nir-open="nir-reversal"]').click()`);
@@ -376,7 +448,7 @@ app.whenReady().then(async () => {
     status:document.getElementById('shop-nir-status')?.textContent,
     exposesLegacyWording:/reversare|reversat/i.test(document.getElementById('shop-nir-modal')?.innerText || ''),
   }))()`);
-  if (!reversalDocumentActionLocks.editHidden || !reversalDocumentActionLocks.reverseHidden || !reversalDocumentActionLocks.movementReverseMissing || !reversalDocumentActionLocks.pdfVisible || !reversalDocumentActionLocks.xlsxVisible || reversalDocumentActionLocks.status !== 'STORNAT' || reversalDocumentActionLocks.exposesLegacyWording) throw new Error('Documentul negativ mai expune acțiuni de editare/stornare, formulări vechi sau ascunde exporturile.');
+  if (!reversalDocumentActionLocks.editHidden || !reversalDocumentActionLocks.reverseHidden || !reversalDocumentActionLocks.movementReverseMissing || !reversalDocumentActionLocks.pdfVisible || !reversalDocumentActionLocks.xlsxVisible || !['STORNAT', 'RETUR FURNIZOR'].includes(reversalDocumentActionLocks.status) || reversalDocumentActionLocks.exposesLegacyWording) throw new Error(`Documentul negativ mai expune acțiuni de editare/stornare, formulări vechi sau ascunde exporturile: ${JSON.stringify(reversalDocumentActionLocks)}`);
   await win.webContents.executeJavaScript(`(() => { document.querySelector('[data-commerce-close="shop-nir-modal"]').click(); window.switchTab('shop-nirs'); })()`);
   await wait(220);
   await win.webContents.executeJavaScript(`document.querySelector('[data-nir-open="nir-2"]').click()`);
@@ -416,7 +488,7 @@ app.whenReady().then(async () => {
   await wait(120);
   const productSupplierList = path.join(output, 'product-suppliers.png');
   fs.writeFileSync(productSupplierList, (await win.webContents.capturePage()).toPNG());
-  process.stdout.write(JSON.stringify({ ...metrics, wideRegistry, liveCalculation, nirLineMotion, nirRejectedUi, nameMatch, directProductAssociation, searchKeepsFocus, currencyPickerLayout, currencyPickerClosing, deleteDialogOpening, deleteDialogClosing, savedDelete, inventorySearch, semanticInventorySearch, stockSheetPageOne, stockSheetPageTwo, confirmedDocuments, nirProductThumbnails, movementJournal, documentDownloads, reversalFlow, reversedActionLocks, partialStornoLocks, reversalDocumentActionLocks, confirmedCorrection, correctionTyping, productKeyboardRecovery, productSearch, productSuppliers, errors, screenshots:{ registry, registryWide, editor, currencyPicker, editorLines, editorReview, deleteDialog, inventory, stockSheet, nirProductImages, confirmedNirDocuments, nirMovements, nirStornoDialog, productsSearch, productSupplierList } }, null, 2));
+  process.stdout.write(JSON.stringify({ ...metrics, wideRegistry, liveCalculation, nirLineMotion, nirRejectedUi, nameMatch, directProductAssociation, searchKeepsFocus, currencyPickerLayout, currencyPickerClosing, deleteDialogOpening, deleteDialogClosing, savedDelete, inventorySearch, semanticInventorySearch, stockSheetPageOne, stockSheetPageTwo, confirmedDocuments, nirProductThumbnails, supplierDocumentsEditing, supplierDocumentsSaved, movementJournal, documentDownloads, reversalFlow, reversedActionLocks, partialStornoLocks, reversalDocumentActionLocks, confirmedCorrection, correctionTyping, productKeyboardRecovery, productSearch, productSuppliers, errors, screenshots:{ registry, registryWide, editor, currencyPicker, editorLines, editorReview, deleteDialog, inventory, stockSheet, nirProductImages, confirmedNirDocuments, nirSupplierDocumentsEditing, nirMovements, nirStornoDialog, productsSearch, productSupplierList } }, null, 2));
   await win.destroy();
   app.quit();
 }).catch(error => { console.error(error); app.exit(1); });

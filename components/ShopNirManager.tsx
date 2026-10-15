@@ -80,6 +80,27 @@ const today = () => new Date().toISOString().slice(0, 10);
 const currentTime = () => new Date().toTimeString().slice(0, 5);
 const isLocalNir = (document: ShopNirDocument) => document.id.startsWith('local-nir-');
 const cloneNir = (document: ShopNirDocument) => JSON.parse(JSON.stringify(document)) as ShopNirDocument;
+const trimStoredNirDecimal = (value: unknown) => {
+  const source = String(value ?? '').trim();
+  if (!/^-?\d+(?:[.,]\d+)?$/.test(source)) return source;
+  const normalized = source.replace(',', '.').replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '');
+  return normalized === '-0' ? '0' : normalized;
+};
+const NIR_LINE_DECIMAL_FIELDS = [
+  'invoiced_quantity', 'received_quantity', 'accepted_quantity', 'rejected_quantity', 'conversion_factor',
+  'stock_quantity', 'unit_price', 'discount_percent', 'vat_rate', 'allocated_cost_ron', 'line_net', 'line_vat', 'line_total',
+] as const;
+const normalizeNirForEditor = (document: ShopNirDocument): ShopNirDocument => ({
+  ...document,
+  exchange_rate: trimStoredNirDecimal(document.exchange_rate),
+  lines: (document.lines || []).map((line) => {
+    const normalized = { ...line } as ShopNirLine & Record<string, unknown>;
+    NIR_LINE_DECIMAL_FIELDS.forEach((field) => {
+      if (normalized[field] !== null && normalized[field] !== undefined) normalized[field] = trimStoredNirDecimal(normalized[field]);
+    });
+    return normalized as ShopNirLine;
+  }),
+});
 const isNirReversalDocument = (document: ShopNirDocument | null | undefined) => document?.source_type === 'reversal'
   || Boolean((document as (ShopNirDocument & { reversal_of_id?: string | null }) | null | undefined)?.reversal_of_id);
 const isCustomerReturnDocument = (document: ShopNirDocument | null | undefined) => document?.operation_type === 'customer_return'
@@ -352,6 +373,8 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
   const [detailsTab, setDetailsTab] = useState<'lines' | 'movements'>('lines');
   const [detailRows, setDetailRows] = useState<ShopInventoryMovement[]>([]);
   const [pendingAttachments, setPendingAttachments] = useState<PendingNirAttachment[]>([]);
+  const [pendingAttachmentDeletes, setPendingAttachmentDeletes] = useState<string[]>([]);
+  const [documentsSaving, setDocumentsSaving] = useState(false);
   const [dateTimePicker, setDateTimePicker] = useState<{ target: 'nir' | 'reception'; mode: 'date' | 'time'; value: Date } | null>(null);
   const [currencyPicker, setCurrencyPicker] = useState(false);
   const [currencySearch, setCurrencySearch] = useState('');
@@ -436,11 +459,12 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     if (!token) return;
     setSaving(true);
     try {
-      const document = await shopApi.getNir(token, id);
+      const document = normalizeNirForEditor(await shopApi.getNir(token, id));
       setPendingAttachments([]);
+      setPendingAttachmentDeletes([]);
       setCorrectionOriginal(null);
       syncedDraftSignature.current = document.status === 'draft' ? nirDraftSignature(document) : '';
-      setEditor({ ...document, lines: document.lines || [] });
+      setEditor(document);
       setDetailsTab('lines');
       setDetailRows([]);
     } catch (error) {
@@ -478,6 +502,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     };
     syncedDraftSignature.current = '';
     setPendingAttachments([]);
+    setPendingAttachmentDeletes([]);
     setCorrectionOriginal(null);
     setEditor(document);
     setTimeout(() => { createDraftInFlight.current = false; }, 350);
@@ -534,6 +559,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     setEditor(null);
     setCorrectionOriginal(null);
     setPendingAttachments([]);
+    setPendingAttachmentDeletes([]);
     syncedDraftSignature.current = '';
     setRegistryEpoch((value) => value + 1);
     setPage(1);
@@ -541,6 +567,10 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
   };
 
   const requestLeaveEditor = () => {
+    if (documentsSaving) {
+      Alert.alert('Salvare în curs', 'Așteaptă finalizarea salvării documentelor furnizorului.');
+      return;
+    }
     if (correctionOriginal) {
       Alert.alert(
         'Sigur vrei să ieși?',
@@ -553,7 +583,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
       return;
     }
     if (!editor || editor.status !== 'draft') return leaveEditor();
-    const dirty = isLocalNir(editor) || pendingAttachments.length > 0 || nirDraftSignature(editor) !== syncedDraftSignature.current;
+    const dirty = isLocalNir(editor) || pendingAttachments.length > 0 || pendingAttachmentDeletes.length > 0 || nirDraftSignature(editor) !== syncedDraftSignature.current;
     if (!dirty) return leaveEditor();
     Alert.alert(
       'Există modificări nesalvate',
@@ -582,15 +612,52 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     }
   };
 
-  const uploadPendingAttachments = async (saved: ShopNirDocument) => {
+  const uploadPendingAttachments = async (saved: ShopNirDocument, extract = true) => {
     if (!token || !pendingAttachments.length) return saved;
     for (const pending of pendingAttachments) {
       const contentBase64 = pending.base64 || await FileSystem.readAsStringAsync(pending.uri, { encoding: FileSystem.EncodingType.Base64 });
       const attachment = await shopApi.uploadNirAttachment(token, saved.id, { file_name: pending.name, mime_type: pending.mimeType, content_base64: contentBase64 });
-      await shopApi.extractNirAttachment(token, saved.id, attachment.id);
+      if (extract) await shopApi.extractNirAttachment(token, saved.id, attachment.id);
       setPendingAttachments((current) => current.filter((item) => item.key !== pending.key));
     }
     return shopApi.getNir(token, saved.id);
+  };
+
+  const saveSupplierDocuments = async () => {
+    if (!token || !editor || !correctionOriginal || documentsSaving || (!pendingAttachments.length && !pendingAttachmentDeletes.length)) return;
+    const modified = cloneNir(editor);
+    setDocumentsSaving(true);
+    try {
+      let refreshed = await shopApi.getNir(token, editor.id);
+      for (const attachmentId of pendingAttachmentDeletes) {
+        const result = await shopApi.deleteNirAttachment(token, editor.id, attachmentId);
+        refreshed = result.document;
+        setPendingAttachmentDeletes((current) => current.filter((id) => id !== attachmentId));
+      }
+      refreshed = await uploadPendingAttachments(refreshed, false);
+      const confirmed = await shopApi.getNir(token, editor.id);
+      setCorrectionOriginal(cloneNir(confirmed));
+      setEditor({
+        ...modified,
+        row_version: confirmed.row_version,
+        attachments: confirmed.attachments || [],
+        confirmed_at: confirmed.confirmed_at,
+        confirmed_by: confirmed.confirmed_by,
+      });
+      setPendingAttachments([]);
+      setPendingAttachmentDeletes([]);
+      await loadRegistry(page);
+      Alert.alert('Documente salvate', 'Fișierele furnizorului au fost actualizate separat. Produsele, valorile și stocul NIR-ului nu au fost modificate.');
+    } catch (error) {
+      try {
+        const confirmed = await shopApi.getNir(token, editor.id);
+        setCorrectionOriginal(cloneNir(confirmed));
+        setEditor({ ...modified, row_version: confirmed.row_version, attachments: confirmed.attachments || [] });
+      } catch {}
+      Alert.alert('Documentele nu s-au salvat complet', error instanceof Error ? error.message : 'Reîncarcă NIR-ul și încearcă din nou.');
+    } finally {
+      setDocumentsSaving(false);
+    }
   };
 
   const saveDraft = async (silent = false) => {
@@ -602,7 +669,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
         : await shopApi.updateNir(token, editor.id, nirDraftPayload(editor));
       saved = await uploadPendingAttachments(saved);
       syncedDraftSignature.current = nirDraftSignature(saved);
-      setEditor(saved);
+      setEditor(normalizeNirForEditor(saved));
       await loadRegistry(page);
       if (!silent) Alert.alert('Ciornă salvată', 'Datele sunt sincronizate și pot fi continuate de pe desktop.');
     } catch (error) {
@@ -816,7 +883,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     try {
       const key = `${saved.id}-${saved.row_version}-${Date.now()}`;
       const confirmed = await shopApi.confirmNir(token, saved.id, saved.row_version, key);
-      setEditor(confirmed);
+      setEditor(normalizeNirForEditor(confirmed));
       await loadRegistry(page);
       Alert.alert(correcting ? 'NIR corectat' : 'NIR confirmat', correcting ? `${confirmed.nir_number} a fost corectat, iar stocul contabil a fost recalculat.` : `${confirmed.nir_number} a actualizat stocul contabil.`);
     } catch (error) {
@@ -860,6 +927,10 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
 
   const commitCorrection = async () => {
     if (!token || !editor || !correctionOriginal || saving) return;
+    if (pendingAttachments.length || pendingAttachmentDeletes.length) {
+      Alert.alert('Salvează mai întâi documentele', 'Ai modificări pregătite în secțiunea „Documente furnizor”. Folosește butonul „Salvează documentele”, apoi poți corecta NIR-ul.');
+      return;
+    }
     const original = cloneNir(correctionOriginal);
     const modified = cloneNir(editor);
     let serverReopened = false;
@@ -891,7 +962,8 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
       const confirmed = await shopApi.confirmNir(token, saved.id, saved.row_version, key);
       setCorrectionOriginal(null);
       setPendingAttachments([]);
-      setEditor(confirmed);
+      setPendingAttachmentDeletes([]);
+      setEditor(normalizeNirForEditor(confirmed));
       syncedDraftSignature.current = '';
       await loadRegistry(page);
       Alert.alert('NIR corectat', `${confirmed.nir_number} a fost corectat, iar stocul contabil a fost recalculat.`);
@@ -925,12 +997,12 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
       saved = await uploadPendingAttachments(saved);
       const validation = await shopApi.validateNir(token, saved.id);
       if (!validation.valid) {
-        setEditor(saved);
+        setEditor(normalizeNirForEditor(saved));
         Alert.alert('NIR-ul nu poate fi confirmat', validation.errors.join('\n'));
         return;
       }
       if (validation.warnings?.length) {
-        setEditor(saved);
+        setEditor(normalizeNirForEditor(saved));
         Alert.alert('Verificarea NIR-ului', validation.warnings.join('\n'), [
           { text: 'Revizuiește', style: 'cancel' },
           { text: 'Confirmă în continuare', onPress: () => void finalizeConfirmation(saved) },
@@ -955,6 +1027,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
         { text: 'Da, editează NIR-ul', onPress: () => {
           setCorrectionOriginal(cloneNir(editor));
           setPendingAttachments([]);
+          setPendingAttachmentDeletes([]);
           setEditor(cloneNir(editor));
           setDetailsTab('lines');
           setDetailRows([]);
@@ -1056,7 +1129,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
         try { await uploadStornoAttachments(result.reversal.id); }
         catch (uploadError) { attachmentWarning = `\n\nStornarea a fost creată, dar documentele nu s-au încărcat: ${uploadError instanceof Error ? uploadError.message : 'eroare necunoscută'}`; }
       }
-      setEditor(supplierReturnContext ? await shopApi.getNir(token, supplierReturnContext.customerReturnNirId) : result.original);
+      setEditor(normalizeNirForEditor(supplierReturnContext ? await shopApi.getNir(token, supplierReturnContext.customerReturnNirId) : result.original));
       setDetailsTab('lines');
       setDetailRows([]);
       setReverseDialog(false);
@@ -1254,18 +1327,15 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
           <View style={[styles.statusChip, { backgroundColor: `${currentStatus.color}18`, borderColor: `${currentStatus.color}55` }]}><currentStatus.Icon size={14} color={currentStatus.color} /><Text style={[styles.statusChipText, { color: currentStatus.color }]}>{currentStatus.label}</Text></View>
         </View>
         <KeyboardAwareScrollView extraScrollHeight={145} contentContainerStyle={[styles.editorContent, { paddingBottom: 166 + insets.bottom }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <NirFlowGuide />
           <Reveal delay={20}><View style={styles.editorStepCard}>
             <SectionTitle icon={<Building2 size={18} color="#5EEAD4" />} index="01" title="Alege furnizorul" subtitle="Identifică firma și factura primită" />
-            <View style={styles.stepHint}><Text style={styles.stepHintNumber}>1</Text><Text style={styles.stepHintText}>Selectează furnizorul, apoi completează seria, numărul și data facturii.</Text></View>
             <TouchableOpacity style={styles.selector} disabled={!editable} onPress={() => setSupplierPicker(true)}><View><Text style={styles.label}>FURNIZOR *</Text><Text style={editor.supplier_id ? styles.selectorValue : styles.placeholder}>{shopSupplierDisplayName(editor, 'Selectează sau creează furnizor')}</Text></View>{editable && <ChevronRight size={19} color={Colors.textMuted} />}</TouchableOpacity>
             <View style={styles.grid2}><Field label="SERIE FACTURĂ" value={editor.supplier_invoice_series || ''} editable={editable} onChangeText={(value) => patchEditor({ supplier_invoice_series: value })} placeholder="Ex: GT" /><Field label="NUMĂR FACTURĂ *" value={editor.supplier_invoice_number || ''} editable={editable} onChangeText={(value) => patchEditor({ supplier_invoice_number: value })} placeholder="Ex: 1048" /></View>
-            <Field label="DATA FACTURII *" value={editor.supplier_invoice_date || ''} editable={editable} onChangeText={(value) => patchEditor({ supplier_invoice_date: value, ...(editor.currency === 'RON' ? { exchange_rate_date: value } : {}) })} placeholder="AAAA-LL-ZZ" icon={<CalendarDays size={16} color={Colors.textMuted} />} />
+            <Field label="DATA FACTURII *" value={editor.supplier_invoice_date || ''} editable={editable} onChangeText={(value) => patchEditor({ supplier_invoice_date: value, nir_date: value, reception_date: value, ...(editor.currency === 'RON' ? { exchange_rate_date: value } : {}) })} placeholder="AAAA-LL-ZZ" icon={<CalendarDays size={17} color="#F59E0B" />} />
           </View></Reveal>
 
           <Reveal delay={70}><View style={styles.editorStepCard}>
             <SectionTitle icon={<CalendarDays size={18} color="#38BDF8" />} index="02" title="Stabilește recepția" subtitle="Alege data, ora și gestiunea în care intră marfa" />
-            <View style={styles.stepHint}><Text style={styles.stepHintNumber}>2</Text><Text style={styles.stepHintText}>Data și ora păstrează ordinea exactă a recepțiilor.</Text></View>
             <View style={styles.dateTimeCard}><DateTimeSelector label="DATA ȘI ORA NIR *" date={editor.nir_date} time={editor.nir_time} color="#38BDF8" disabled={!editable} onPress={() => openDateTimePicker('nir')} /><DateTimeSelector label="DATA ȘI ORA RECEPȚIEI *" date={editor.reception_date} time={editor.reception_time} color="#5EEAD4" disabled={!editable} onPress={() => openDateTimePicker('reception')} /></View>
             <TouchableOpacity style={styles.selector} disabled={!editable} activeOpacity={0.78} onPress={() => setWarehousePicker(true)}><View><Text style={styles.label}>GESTIUNE *</Text><Text style={styles.selectorValue}>{warehouses.find((item) => item.id === editor.warehouse_id)?.name || editor.warehouse_name || 'Selectează gestiunea'}</Text></View>{editable ? <ChevronRight size={19} color="#22C55E" /> : <Boxes size={18} color="#22C55E" />}</TouchableOpacity>
             <TouchableOpacity style={styles.selector} disabled={!editable} activeOpacity={0.78} onPress={() => setReceiptLocationPicker(true)}><View style={{ flex: 1 }}><Text style={styles.label}>LOC RECEPȚIE *</Text><Text style={styles.selectorValue}>{receiptLocations.find((item) => item.id === editor.reception_location_id)?.name || editor.reception_location || 'Gestiune principală'}</Text></View>{editable ? <ChevronRight size={19} color="#38BDF8" /> : <MapPin size={18} color="#38BDF8" />}</TouchableOpacity>
@@ -1273,7 +1343,6 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
 
           <Reveal delay={120}><View style={styles.editorStepCard}>
             <SectionTitle icon={<CircleDollarSign size={18} color="#F59E0B" />} index="03" title="Setează moneda" subtitle="Cursul este memorat exact pentru acest NIR" />
-            <View style={styles.stepHint}><Text style={styles.stepHintNumber}>3</Text><Text style={styles.stepHintText}>Alege moneda. Prețul rămâne în valuta facturii; totalurile și costul contabil se calculează în lei.</Text></View>
             <TouchableOpacity disabled={!editable} activeOpacity={0.78} style={styles.currencySelector} onPress={() => setCurrencyPicker(true)}><View style={styles.currencySelectorIcon}><CircleDollarSign size={20} color="#F59E0B" /></View><View style={{ flex: 1 }}><Text style={styles.currencySelectorLabel}>MONEDA FACTURII</Text><View style={styles.currencySelectorValue}><Text style={styles.currencySelectorCode}>{editor.currency || 'RON'}</Text><Text numberOfLines={1} style={styles.currencySelectorName}>{currencyName(editor.currency || 'RON')}</Text></View></View><ChevronRight size={19} color={Colors.textMuted} /></TouchableOpacity>
             <View style={styles.grid2}><Field label={`CURS ${editor.currency}/RON *`} value={editor.exchange_rate || ''} editable={editable && editor.currency !== 'RON'} onChangeText={(value) => patchEditor({ exchange_rate: value })} placeholder={rateLoading ? 'Se preia de la BNR...' : 'Ex: 4.9735'} keyboardType="decimal-pad" /><Field label="DATA CURSULUI BNR" value={editor.exchange_rate_date || ''} editable={editable && editor.currency !== 'RON'} onChangeText={(value) => patchEditor({ exchange_rate_date: value })} placeholder="AAAA-LL-ZZ" /></View>
             {editor.currency === 'RON' ? <View style={styles.bnrStatus}><CheckCircle2 size={15} color="#5EEAA4" /><Text style={styles.bnrStatusText}>Curs fix 1 · data cursului este data facturii</Text></View> : <TouchableOpacity disabled={!editable || rateLoading} style={styles.bnrRefresh} onPress={() => void refreshBnrRate(editor.currency, editor.exchange_rate_date || editor.supplier_invoice_date || editor.nir_date)}>{rateLoading ? <ActivityIndicator color="#38BDF8" /> : <RefreshCw size={16} color="#38BDF8" />}<View style={{ flex: 1 }}><Text style={styles.bnrRefreshTitle}>{rateLoading ? 'Se preia cursul BNR…' : 'Actualizează cursul din BNR'}</Text><Text style={styles.bnrRefreshText}>Pentru data aleasă; câmpurile rămân editabile.</Text></View></TouchableOpacity>}
@@ -1281,12 +1350,21 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
 
           <Reveal delay={170}><View style={[styles.editorStepCard, styles.editorStepCardLines]}>
             <SectionTitle icon={<PackageSearch size={18} color="#A78BFA" />} index="04" title="Adaugă produsele" subtitle="Pentru fiecare poziție urmezi doar trei pași" />
-            <View style={styles.lineGuide}><View style={styles.lineGuideLead}><PackageSearch size={17} color="#C4B5FD" /><View><Text style={styles.lineGuideEyebrow}>ORDINEA COMPLETĂRII</Text><Text style={styles.lineGuideLeadText}>Mergi simplu de la stânga la dreapta</Text></View></View><View style={styles.lineGuideTrack}><View style={styles.lineGuideStep}><Text style={styles.lineGuideNumber}>1</Text><View><Text style={styles.lineGuideTitle}>Produs</Text><Text style={styles.lineGuideDetail}>alege articolul</Text></View></View><Text style={styles.lineGuideArrow}>→</Text><View style={styles.lineGuideStep}><Text style={styles.lineGuideNumber}>2</Text><View><Text style={styles.lineGuideTitle}>Cantitate</Text><Text style={styles.lineGuideDetail}>scrie ce ai primit</Text></View></View><Text style={styles.lineGuideArrow}>→</Text><View style={styles.lineGuideStep}><Text style={styles.lineGuideNumber}>3</Text><View><Text style={styles.lineGuideTitle}>Preț</Text><Text style={styles.lineGuideDetail}>completează costul</Text></View></View></View></View>
             <View style={styles.lineList}>{(detailsTab === 'lines' ? editor.lines || [] : []).map((line, index) => <NirLineCard key={line.id || index} line={line} index={index} editable={editable} supplierName={shopSupplierDisplayName(editor, 'Furnizor neselectat')} currency={editor.currency || 'RON'} exchangeRate={editor.exchange_rate || '1'} onPatch={(patch) => patchLine(index, patch)} onSupplierCodeChange={(value) => changeSupplierCode(index, value)} onSupplierNameChange={(value) => changeSupplierName(index, value)} onPickProduct={() => { setProductPickerLine(index); setProductSearch(line.supplier_product_name || ''); }} onRemove={() => setEditor((current) => current ? { ...current, lines: (current.lines || []).filter((_, lineIndex) => lineIndex !== index) } : current)} />)}</View>
             {editable && <TouchableOpacity style={styles.addLine} onPress={() => patchEditor({ lines: [...(editor.lines || []), makeLine()] })}><Plus size={18} color={Colors.orange} /><Text style={styles.addLineText}>Adaugă încă un produs</Text></TouchableOpacity>}
-            {editable && <TouchableOpacity style={styles.importButton} onPress={chooseImportSource}><ImagePlus size={18} color="#38BDF8" /><View><Text style={styles.importTitle}>Importă documentul furnizorului</Text><Text style={styles.importText}>Alege-l acum; încărcarea începe doar când apeși Salvează.</Text></View></TouchableOpacity>}
-            {!!pendingAttachments.length && <View style={styles.attachmentList}>{pendingAttachments.map((attachment) => <View style={[styles.attachmentCard, styles.attachmentPending]} key={attachment.key}><View style={styles.attachmentIcon}><FileDown size={16} color="#FBBF24" /></View><View style={{ flex: 1 }}><Text style={styles.attachmentName} numberOfLines={1}>{attachment.name}</Text><Text style={styles.attachmentMeta}>Pregătit local · se încarcă la salvare</Text></View><TouchableOpacity style={styles.attachmentRemove} onPress={() => setPendingAttachments((current) => current.filter((item) => item.key !== attachment.key))}><X size={15} color="#FDA4AF" /></TouchableOpacity></View>)}</View>}
-            {!!editor.attachments?.length && <View style={styles.savedAttachments}><View style={styles.attachmentSectionHeader}><View style={{ flex: 1 }}><Text style={styles.attachmentSectionKicker}>DOCUMENTELE FURNIZORULUI</Text><Text style={styles.attachmentSectionTitle}>{editor.attachments.length} {editor.attachments.length === 1 ? 'document salvat' : 'documente salvate'}</Text></View>{!editable && <TouchableOpacity disabled={Boolean(attachmentDownload)} style={[styles.downloadAll, attachmentDownload && styles.downloadDisabled]} onPress={() => void downloadAllAttachments()}>{attachmentDownload === 'all' ? <ActivityIndicator size="small" color="#7DD3FC" /> : <FileDown size={16} color="#7DD3FC" />}<Text style={styles.downloadAllText}>Doar atașamentele</Text></TouchableOpacity>}</View><View style={styles.attachmentList}>{editor.attachments.map((attachment) => <View style={styles.attachmentCard} key={attachment.id}><View style={styles.attachmentIcon}><FileDown size={16} color="#38BDF8" /></View><View style={{ flex: 1 }}><Text style={styles.attachmentName} numberOfLines={1}>{attachment.original_name}</Text><Text style={styles.attachmentMeta}>{attachment.extraction_status} · {Math.max(1, Math.round(attachment.file_size / 1024))} KB</Text></View><TouchableOpacity disabled={Boolean(attachmentDownload)} style={styles.attachmentDownload} onPress={() => void downloadAttachment(attachment.id)}>{attachmentDownload === attachment.id ? <ActivityIndicator size="small" color="#7DD3FC" /> : <FileDown size={16} color="#7DD3FC" />}</TouchableOpacity></View>)}</View></View>}
+            {(editable || !!editor.attachments?.length) && <View style={styles.savedAttachments}>
+              <View style={styles.attachmentSectionHeader}>
+                <View style={{ flex: 1 }}><Text style={styles.attachmentSectionKicker}>DOCUMENTELE FURNIZORULUI</Text><Text style={styles.attachmentSectionTitle}>{(editor.attachments?.length || 0) - pendingAttachmentDeletes.length} {(editor.attachments?.length || 0) - pendingAttachmentDeletes.length === 1 ? 'document salvat' : 'documente salvate'}</Text></View>
+                {editable ? <TouchableOpacity disabled={documentsSaving} style={styles.attachmentAdd} onPress={chooseImportSource}><ImagePlus size={16} color="#7DD3FC" /><Text style={styles.attachmentAddText}>Adaugă</Text></TouchableOpacity> : <TouchableOpacity disabled={Boolean(attachmentDownload)} style={[styles.downloadAll, attachmentDownload && styles.downloadDisabled]} onPress={() => void downloadAllAttachments()}>{attachmentDownload === 'all' ? <ActivityIndicator size="small" color="#7DD3FC" /> : <FileDown size={16} color="#7DD3FC" />}<Text style={styles.downloadAllText}>Doar atașamentele</Text></TouchableOpacity>}
+              </View>
+              <Text style={styles.attachmentSectionHint}>{correctionEditing ? 'Adaugă sau marchează fișierele de șters, apoi salvează numai documentele. NIR-ul și stocul rămân neschimbate.' : 'PDF, imagini, Excel sau XML. Fișierele noi se încarcă odată cu salvarea ciornei.'}</Text>
+              {!!editor.attachments?.length && <View style={styles.attachmentList}>{editor.attachments.map((attachment) => {
+                const markedForDeletion = pendingAttachmentDeletes.includes(attachment.id);
+                return <View style={[styles.attachmentCard, markedForDeletion && styles.attachmentMarkedForDeletion]} key={attachment.id}><View style={styles.attachmentIcon}>{markedForDeletion ? <Trash2 size={16} color="#FDA4AF" /> : <FileDown size={16} color="#38BDF8" />}</View><View style={{ flex: 1 }}><Text style={[styles.attachmentName, markedForDeletion && styles.attachmentDeletedText]} numberOfLines={1}>{attachment.original_name}</Text><Text style={styles.attachmentMeta}>{markedForDeletion ? 'Va fi șters la salvarea documentelor' : `${attachment.extraction_status} · ${Math.max(1, Math.round(attachment.file_size / 1024))} KB`}</Text></View>{editable ? <TouchableOpacity disabled={documentsSaving} accessibilityLabel={markedForDeletion ? `Păstrează ${attachment.original_name}` : `Șterge ${attachment.original_name}`} style={[styles.attachmentRemove, markedForDeletion && styles.attachmentUndo]} onPress={() => setPendingAttachmentDeletes((current) => markedForDeletion ? current.filter((id) => id !== attachment.id) : [...current, attachment.id])}>{markedForDeletion ? <RotateCcw size={15} color="#FBBF24" /> : <Trash2 size={15} color="#FDA4AF" />}</TouchableOpacity> : <TouchableOpacity disabled={Boolean(attachmentDownload)} style={styles.attachmentDownload} onPress={() => void downloadAttachment(attachment.id)}>{attachmentDownload === attachment.id ? <ActivityIndicator size="small" color="#7DD3FC" /> : <FileDown size={16} color="#7DD3FC" />}</TouchableOpacity>}</View>;
+              })}</View>}
+              {!!pendingAttachments.length && <View style={[styles.attachmentList, styles.pendingAttachmentList]}>{pendingAttachments.map((attachment) => <View style={[styles.attachmentCard, styles.attachmentPending]} key={attachment.key}><View style={styles.attachmentIcon}><FilePlus2 size={16} color="#FBBF24" /></View><View style={{ flex: 1 }}><Text style={styles.attachmentName} numberOfLines={1}>{attachment.name}</Text><Text style={styles.attachmentMeta}>Fișier nou · pregătit pentru salvare</Text></View><TouchableOpacity disabled={documentsSaving} style={styles.attachmentRemove} onPress={() => setPendingAttachments((current) => current.filter((item) => item.key !== attachment.key))}><X size={15} color="#FDA4AF" /></TouchableOpacity></View>)}</View>}
+              {correctionEditing && <TouchableOpacity disabled={documentsSaving || (!pendingAttachments.length && !pendingAttachmentDeletes.length)} style={[styles.saveDocumentsButton, (!pendingAttachments.length && !pendingAttachmentDeletes.length) && styles.saveDocumentsButtonDisabled]} onPress={() => void saveSupplierDocuments()}>{documentsSaving ? <ActivityIndicator color="#082F49" /> : <Save size={17} color="#082F49" />}<View style={{ flex: 1 }}><Text style={styles.saveDocumentsButtonText}>Salvează documentele</Text><Text style={styles.saveDocumentsButtonHint}>{pendingAttachments.length || pendingAttachmentDeletes.length ? `${pendingAttachments.length} noi · ${pendingAttachmentDeletes.length} de șters` : 'Nicio modificare de salvat'}</Text></View></TouchableOpacity>}
+            </View>}
           </View></Reveal>
 
           {!editable && <>
@@ -1306,7 +1384,6 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
 
           <Reveal delay={220}><View style={styles.editorStepCard}>
             <SectionTitle icon={<ShieldCheck size={18} color="#22C55E" />} index="05" title="Verifică documentul" subtitle="Controlează cantitățile și totalurile înainte de confirmare" />
-            <View style={styles.reviewGuide}><View style={styles.reviewGuideNumber}><Text style={styles.reviewGuideNumberText}>05</Text></View><View style={{ flex: 1 }}><Text style={styles.reviewGuideTitle}>Compară cantitățile, apoi verifică valoarea finală</Text><Text style={styles.reviewGuideText}>Dacă există diferențe, corectează produsul înainte de confirmare.</Text></View><View style={styles.reviewReady}><CheckCircle2 size={13} color="#5EEAA4" /><Text style={styles.reviewReadyText}>GATA</Text></View></View>
             <View style={styles.quantitySummary}>
               <ReviewMetric icon={<FilePlus2 size={18} color="#A78BFA" />} label="FACTURAT" value={quantitySummary.invoiced} hint="pe factură" tone="purple" />
               <ReviewMetric icon={<Boxes size={18} color="#38BDF8" />} label="RECEPȚIONAT" value={quantitySummary.received} hint="numărat" tone="blue" />
@@ -1570,48 +1647,21 @@ function MotionOrb({ children }: { children: React.ReactNode }) {
 }
 
 function GuideItem({ number, label }: { number: string; label: string }) { return <View style={styles.guideItem}><View style={styles.guideBubble}><Text style={styles.guideBubbleText}>{number}</Text></View><Text style={styles.guideLabel}>{label}</Text></View>; }
-const AnimatedFlowPath = Animated.createAnimatedComponent(Path);
-const nirFlowSteps = [
-  { label: 'Furnizor', path: 'M4 21V8l8-5 8 5v13M8 21v-8h8v8M8 9h.01M12 9h.01M16 9h.01' },
-  { label: 'Recepție', path: 'M3 10h18M8 3v4M16 3v4M6 5h12a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3Z' },
-  { label: 'Monedă', path: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM15 8.5c-.8-.7-1.7-1-3-1-1.7 0-3 1-3 2.3 0 3.5 6 1.7 6 5 0 1.4-1.3 2.4-3.1 2.4-1.4 0-2.5-.4-3.4-1.2M12 5.5v13' },
-  { label: 'Produse', path: 'm4 7 8-4 8 4-8 4-8-4ZM4 7v10l8 4 8-4V7M12 11v10' },
-  { label: 'Verificare', path: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-13 0 2.5 2.5L16 9' },
-];
-
-const nirFlowStarts = [0.02, 0.18, 0.34, 0.5, 0.66];
-
-function DrawnFlowIcon({ path, index, progress }: { path: string; index: number; progress: Animated.Value }) {
-  const start = nirFlowStarts[index];
-  const drawn = start + 0.1;
-  const dashOffset = progress.interpolate({ inputRange: [0, start, drawn, 0.84, 0.96, 1], outputRange: [96, 96, 0, 0, -96, -96] });
-  const opacity = progress.interpolate({ inputRange: [0, start, drawn, 0.84, 0.96, 1], outputRange: [0.16, 0.16, 1, 1, 0, 0] });
-  const scale = progress.interpolate({ inputRange: [0, start, drawn, 0.84, 0.96, 1], outputRange: [0.88, 0.88, 1, 1, 0.94, 0.94] });
-  return <Animated.View style={[styles.flowGuideItem, { opacity, transform: [{ scale }] }]}><View style={styles.flowGuideIcon}><Svg width={24} height={24} viewBox="0 0 24 24"><AnimatedFlowPath d={path} fill="none" stroke="#5EEAD4" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="96 96" strokeDashoffset={dashOffset as unknown as number} /></Svg><Text style={styles.flowGuideBadge}>{index + 1}</Text></View><Text style={styles.flowGuideLabel}>{nirFlowSteps[index].label}</Text></Animated.View>;
-}
-
-function AnimatedFlowConnector({ index, progress }: { index: number; progress: Animated.Value }) {
-  const start = nirFlowStarts[index] + 0.1;
-  const finish = nirFlowStarts[index + 1];
-  const scaleX = progress.interpolate({ inputRange: [0, start, finish, 0.84, 0.96, 1], outputRange: [0, 0, 1, 1, 0, 0] });
-  const opacity = progress.interpolate({ inputRange: [0, start, finish, 0.84, 0.96, 1], outputRange: [0, 0.45, 1, 1, 0, 0] });
-  return <View style={styles.flowGuideLine}><Animated.View style={[styles.flowGuideLineFill, { opacity, transform: [{ scaleX }] }]}><View style={styles.flowGuideArrow} /></Animated.View></View>;
-}
-
-function NirFlowGuide() {
-  const progress = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(Animated.timing(progress, { toValue: 1, duration: 5200, easing: Easing.linear, useNativeDriver: false }), { resetBeforeIteration: true });
-    loop.start();
-    return () => loop.stop();
-  }, [progress]);
-  return <View style={styles.flowGuide}><View style={styles.flowGuideHead}><Text style={styles.flowGuideEyebrow}>GHID RAPID · URMEAZĂ SĂGEATA</Text><Text style={styles.flowGuideTitle}>Completează NIR-ul în 5 pași simpli</Text><Text style={styles.flowGuideText}>Traseul desenează fiecare pas în ordinea corectă, apoi pornește din nou.</Text></View><View style={styles.flowGuideRow}>{nirFlowSteps.map((step, index) => <React.Fragment key={step.label}><DrawnFlowIcon path={step.path} index={index} progress={progress} />{index < 4 && <AnimatedFlowConnector index={index} progress={progress} />}</React.Fragment>)}</View></View>;
-}
 
 function SectionTitle({ icon, index, title, subtitle }: { icon: React.ReactNode; index: string; title: string; subtitle: string }) { return <View style={styles.sectionTitle}><View style={styles.sectionIndex}>{icon}<Text style={styles.sectionIndexText}>{index}</Text></View><View style={{ flex: 1 }}><Text style={styles.sectionHeading}>{title}</Text><Text style={styles.sectionSubtitle}>{subtitle}</Text></View></View>; }
-function ReviewMetric({ icon, label, value, hint, tone, wide = false }: { icon: React.ReactNode; label: string; value: number; hint: string; tone: 'purple' | 'blue' | 'green' | 'red' | 'teal'; wide?: boolean }) { const toneStyle = { purple: styles.reviewTonePurple, blue: styles.reviewToneBlue, green: styles.reviewToneGreen, red: styles.reviewToneRed, teal: styles.reviewToneTeal }[tone]; return <View style={[styles.reviewMetric, toneStyle, wide && styles.reviewMetricWide]}><View style={styles.reviewMetricIcon}>{icon}</View><View style={{ flex: 1 }}><Text style={styles.reviewMetricLabel}>{label}</Text><Text style={styles.reviewMetricValue}>{value.toLocaleString('ro-RO')}</Text><Text style={styles.reviewMetricHint}>{hint}</Text></View></View>; }
+function ReviewMetric({ icon, label, value, hint, tone, wide = false }: { icon: React.ReactNode; label: string; value: number; hint: string; tone: 'purple' | 'blue' | 'green' | 'red' | 'teal'; wide?: boolean }) { const toneStyle = { purple: styles.reviewTonePurple, blue: styles.reviewToneBlue, green: styles.reviewToneGreen, red: styles.reviewToneRed, teal: styles.reviewToneTeal }[tone]; return <View style={[styles.reviewMetric, toneStyle, wide && styles.reviewMetricWide]}><View style={styles.reviewMetricIcon}>{icon}</View><View style={{ flex: 1 }}><Text style={styles.reviewMetricLabel}>{label}</Text><Text style={styles.reviewMetricValue}>{value.toLocaleString('ro-RO', { maximumFractionDigits: 12 })}</Text><Text style={styles.reviewMetricHint}>{hint}</Text></View></View>; }
 function DateTimeSelector({ label, date, time, color, disabled, onPress }: { label: string; date: string; time: string | null; color: string; disabled: boolean; onPress: () => void }) { const parsed = date ? new Date(`${date}T${String(time || '00:00').slice(0, 5)}:00`) : null; const dateLabel = parsed && !Number.isNaN(parsed.getTime()) ? parsed.toLocaleDateString('ro-RO', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Alege data'; const timeLabel = String(time || '').slice(0, 5) || '--:--'; return <TouchableOpacity disabled={disabled} activeOpacity={0.78} style={[styles.dateTimeSelector, disabled && styles.dateTimeSelectorDisabled]} onPress={onPress}><View style={[styles.dateTimeSelectorIcon, { borderColor: `${color}40`, backgroundColor: `${color}12` }]}><CalendarDays size={20} color={color} /><Clock3 size={10} color={color} style={styles.dateTimeClock} /></View><View style={{ flex: 1 }}><Text style={styles.dateTimeSelectorLabel}>{label}</Text><View style={styles.dateTimeSelectorValue}><Text style={styles.dateTimeSelectorDate}>{dateLabel}</Text><View style={[styles.dateTimeTimeChip, { backgroundColor: `${color}12` }]}><Text style={[styles.dateTimeTimeText, { color }]}>{timeLabel}</Text></View></View><Text style={styles.dateTimeSelectorHint}>Atinge pentru calendar și oră</Text></View><ChevronRight size={18} color={Colors.textMuted} /></TouchableOpacity>; }
 function Field({ label, value, onChangeText, placeholder, editable = true, keyboardType, multiline, icon }: { label: string; value: string; onChangeText?: (value: string) => void; placeholder: string; editable?: boolean; keyboardType?: 'default' | 'decimal-pad'; multiline?: boolean; icon?: React.ReactNode }) { return <View style={[styles.field, multiline && styles.fieldWide]}><Text style={styles.label}>{label}</Text><View style={styles.inputWrap}>{icon}<TextInput style={[styles.input, multiline && styles.textarea]} value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={Colors.textMuted} selectionColor="#5EEAD4" cursorColor="#5EEAD4" autoCorrect={false} editable={editable} keyboardType={keyboardType} multiline={multiline} /></View></View>; }
+function NirQuantityField({ label, value, onChangeText, editable }: { label: string; value: string; onChangeText: (value: string) => void; editable: boolean }) {
+  const step = (delta: number) => {
+    const raw = String(value || '').trim();
+    const separator = raw.includes(',') ? ',' : '.';
+    const parsed = Number(raw.replace(',', '.'));
+    const next = Math.max(0, Math.round(((Number.isFinite(parsed) ? parsed : 0) + delta) * 1e12) / 1e12);
+    onChangeText(String(next).replace('.', separator));
+  };
+  return <View style={styles.field}><Text style={styles.label}>{label}</Text><View style={[styles.inputWrap, styles.quantityInputWrap]}><TextInput style={styles.input} value={value} onChangeText={onChangeText} placeholder="0" placeholderTextColor={Colors.textMuted} selectionColor="#5EEAD4" cursorColor="#5EEAD4" autoCorrect={false} editable={editable} keyboardType="decimal-pad" /><View style={styles.quantityStepActions}><TouchableOpacity accessibilityRole="button" accessibilityLabel={`Scade ${label.toLowerCase()} cu 1`} disabled={!editable} style={[styles.quantityStepButton, !editable && styles.quantityStepButtonDisabled]} onPress={() => step(-1)}><Text style={styles.quantityStepButtonText}>−</Text></TouchableOpacity><TouchableOpacity accessibilityRole="button" accessibilityLabel={`Crește ${label.toLowerCase()} cu 1`} disabled={!editable} style={[styles.quantityStepButton, !editable && styles.quantityStepButtonDisabled]} onPress={() => step(1)}><Text style={styles.quantityStepButtonText}>+</Text></TouchableOpacity></View></View></View>;
+}
 function SearchBox({ value, onChangeText, placeholder, onSubmitEditing }: { value: string; onChangeText: (value: string) => void; placeholder: string; onSubmitEditing?: () => void }) { return <View style={styles.searchBox}><Search size={18} color={Colors.textMuted} /><TextInput style={styles.searchInput} value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={Colors.textMuted} returnKeyType="search" onSubmitEditing={onSubmitEditing} /></View>; }
 function SheetHeader({ title, onClose }: { title: string; onClose: () => void }) { return <View style={styles.sheetHeader}><Text style={styles.sheetTitle}>{title}</Text><TouchableOpacity style={styles.iconButton} onPress={onClose}><X size={20} color={Colors.textSecondary} /></TouchableOpacity></View>; }
 function Tab({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) { return <TouchableOpacity style={[styles.detailTab, active && styles.detailTabActive]} onPress={onPress}><Text style={[styles.detailTabText, active && styles.detailTabTextActive]}>{label}</Text></TouchableOpacity>; }
@@ -1685,8 +1735,8 @@ function NirLineCard({ line, index, editable, supplierName, currency, exchangeRa
       <Text style={styles.stageExplanation}>SKU-ul intern este independent. Același produs poate avea coduri și denumiri diferite la fiecare furnizor.</Text>
     </LineStage>
     <LineStage number="2" title="Verifică marfa" subtitle="Compară factura cu ce ai primit și acceptat" icon={<Boxes size={17} color="#38BDF8" />}>
-      <View style={styles.grid2}><Field label="FACTURAT" value={line.invoiced_quantity} onChangeText={(invoiced_quantity) => onPatch({ invoiced_quantity, received_quantity: invoiced_quantity, accepted_quantity: invoiced_quantity, rejected_quantity: '0' })} placeholder="0" editable={editable} keyboardType="decimal-pad" /><Field label="RECEPȚIONAT" value={received} onChangeText={(received_quantity) => onPatch({ received_quantity, rejected_quantity: '0' })} placeholder="0" editable={editable} keyboardType="decimal-pad" /></View>
-      <Field label="ACCEPTAT" value={line.accepted_quantity} onChangeText={(accepted_quantity) => onPatch({ accepted_quantity, rejected_quantity: '0' })} placeholder="0" editable={editable} keyboardType="decimal-pad" />
+      <View style={styles.grid2}><NirQuantityField label="FACTURAT" value={line.invoiced_quantity} onChangeText={(invoiced_quantity) => onPatch({ invoiced_quantity, received_quantity: invoiced_quantity, accepted_quantity: invoiced_quantity, rejected_quantity: '0' })} editable={editable} /><NirQuantityField label="RECEPȚIONAT" value={received} onChangeText={(received_quantity) => onPatch({ received_quantity, rejected_quantity: '0' })} editable={editable} /></View>
+      <NirQuantityField label="ACCEPTAT" value={line.accepted_quantity} onChangeText={(accepted_quantity) => onPatch({ accepted_quantity, rejected_quantity: '0' })} editable={editable} />
       {differs && <View style={styles.differenceBox}><Text style={styles.label}>MOTIVUL DIFERENȚEI *</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.differenceReasons}>{differenceReasons.map(([value, label]) => <TouchableOpacity key={value} disabled={!editable} style={[styles.differenceChip, differenceReason === value && styles.differenceChipActive]} onPress={() => onPatch({ difference_reason: value, mismatch_reason: value, ...(value !== 'other' ? { difference_notes: '' } : {}) })}><Text style={[styles.differenceChipText, differenceReason === value && styles.differenceChipTextActive]}>{label}</Text></TouchableOpacity>)}</ScrollView>{(differenceReason === 'other' || Boolean(line.difference_notes)) && <Field label={differenceReason === 'other' ? 'EXPLICAȚIE *' : 'OBSERVAȚII'} value={line.difference_notes || ''} onChangeText={(difference_notes) => onPatch({ difference_notes, mismatch_reason: difference_notes || differenceReason })} placeholder="Descrie diferența constatată" editable={editable} />}</View>}
       <View style={styles.grid2}><Field label="UNITATE ACHIZIȚIE" value={line.purchase_unit} onChangeText={(purchase_unit) => onPatch({ purchase_unit })} placeholder="cutie" editable={editable} /><Field label="UNITATE STOC" value={line.stock_unit} onChangeText={(stock_unit) => onPatch({ stock_unit })} placeholder="buc" editable={editable} /></View>
       <Field label="FACTOR CONVERSIE" value={line.conversion_factor} onChangeText={(conversion_factor) => onPatch({ conversion_factor })} placeholder="1" editable={editable} keyboardType="decimal-pad" />
@@ -1713,7 +1763,7 @@ const styles = StyleSheet.create({
   emptyBox: { minHeight: 130, padding: 18, alignItems: 'center', gap: 13, borderWidth: 1, borderColor: '#F9731630', backgroundColor: '#F9731608', borderRadius: 24, flexDirection: 'row' }, emptyEyebrow: { color: Colors.orange, fontSize: 8, fontWeight: '900', letterSpacing: 1 }, emptyTitle: { marginTop: 4, color: Colors.textPrimary, fontSize: 15, fontWeight: '900' }, emptyText: { marginTop: 4, color: Colors.textSecondary, fontSize: 11, lineHeight: 16 }, emptyAction: { minHeight: 42, paddingHorizontal: 13, borderRadius: 14, backgroundColor: '#5EEAD4', flexDirection: 'row', alignItems: 'center', gap: 6 }, emptyActionText: { color: '#081311', fontSize: 11, fontWeight: '900' }, pagination: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 18, marginTop: 12 }, pageButton: { width: 44, height: 44, borderRadius: 15, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder, alignItems: 'center', justifyContent: 'center' }, pageText: { color: Colors.textSecondary, fontSize: 12, fontWeight: '800' }, fab: { position: 'absolute', right: 18, height: 54, paddingHorizontal: 21, borderRadius: 19, flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: Colors.orange, shadowColor: Colors.orange, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8 }, fabText: { color: Colors.white, fontWeight: '900' },
   editorHeader: { minHeight: 72, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 11, borderBottomWidth: 1, borderBottomColor: Colors.cardBorder, backgroundColor: Colors.surface }, editorHeaderCopy: { flex: 1 }, editorEyebrow: { color: Colors.orange, fontSize: 8, fontWeight: '900', letterSpacing: 1 }, editorTitle: { marginTop: 3, color: Colors.textPrimary, fontSize: 16, fontWeight: '900' }, editorContent: { padding: 14, gap: 12 },
   sectionTitle: { marginBottom: 3, flexDirection: 'row', alignItems: 'center', gap: 12 }, sectionIndex: { width: 48, height: 48, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF08', borderWidth: 1, borderColor: Colors.cardBorder }, sectionIndexText: { position: 'absolute', right: 4, bottom: 3, color: Colors.textMuted, fontSize: 7, fontWeight: '900' }, sectionHeading: { color: Colors.textPrimary, fontSize: 17, fontWeight: '900' }, sectionSubtitle: { marginTop: 3, color: Colors.textMuted, fontSize: 11, lineHeight: 16 },
-  selector: { minHeight: 70, padding: 14, borderRadius: 18, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }, selectorValue: { marginTop: 7, color: Colors.textPrimary, fontSize: 14, fontWeight: '800' }, placeholder: { marginTop: 7, color: Colors.textMuted, fontSize: 13 }, grid2: { flexDirection: 'row', gap: 10 }, dateTimeCard: { padding: 10, gap: 9, borderRadius: 19, backgroundColor: '#38BDF807', borderWidth: 1, borderColor: '#38BDF826' }, dateTimeSelector: { minHeight: 82, flexDirection: 'row', alignItems: 'center', gap: 11, padding: 11, borderRadius: 17, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder }, dateTimeSelectorDisabled: { opacity: 0.62 }, dateTimeSelectorIcon: { position: 'relative', width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, borderWidth: 1 }, dateTimeClock: { position: 'absolute', right: 5, bottom: 5 }, dateTimeSelectorLabel: { color: Colors.textMuted, fontSize: 8, fontWeight: '900', letterSpacing: 0.7 }, dateTimeSelectorValue: { marginTop: 5, flexDirection: 'row', alignItems: 'center', gap: 7 }, dateTimeSelectorDate: { color: Colors.textPrimary, fontSize: 13, fontWeight: '900' }, dateTimeTimeChip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 }, dateTimeTimeText: { fontSize: 10, fontWeight: '900' }, dateTimeSelectorHint: { marginTop: 4, color: Colors.textMuted, fontSize: 8 }, quantityGrid: { flexDirection: 'row', gap: 7 }, field: { flex: 1, minWidth: 0 }, fieldWide: { flex: 0, width: '100%' }, label: { marginLeft: 3, marginBottom: 6, color: Colors.textMuted, fontSize: 9, fontWeight: '900', letterSpacing: 0.7 }, inputWrap: { minHeight: 52, paddingHorizontal: 13, borderRadius: 15, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder, flexDirection: 'row', alignItems: 'center', gap: 8 }, input: { flex: 1, color: Colors.textPrimary, fontSize: 13, paddingVertical: 11 }, textarea: { minHeight: 88, textAlignVertical: 'top' },
+  selector: { minHeight: 70, padding: 14, borderRadius: 18, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }, selectorValue: { marginTop: 7, color: Colors.textPrimary, fontSize: 14, fontWeight: '800' }, placeholder: { marginTop: 7, color: Colors.textMuted, fontSize: 13 }, grid2: { flexDirection: 'row', gap: 10 }, dateTimeCard: { padding: 10, gap: 9, borderRadius: 19, backgroundColor: '#38BDF807', borderWidth: 1, borderColor: '#38BDF826' }, dateTimeSelector: { minHeight: 82, flexDirection: 'row', alignItems: 'center', gap: 11, padding: 11, borderRadius: 17, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder }, dateTimeSelectorDisabled: { opacity: 0.62 }, dateTimeSelectorIcon: { position: 'relative', width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, borderWidth: 1 }, dateTimeClock: { position: 'absolute', right: 5, bottom: 5 }, dateTimeSelectorLabel: { color: Colors.textMuted, fontSize: 8, fontWeight: '900', letterSpacing: 0.7 }, dateTimeSelectorValue: { marginTop: 5, flexDirection: 'row', alignItems: 'center', gap: 7 }, dateTimeSelectorDate: { color: Colors.textPrimary, fontSize: 13, fontWeight: '900' }, dateTimeTimeChip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 }, dateTimeTimeText: { fontSize: 10, fontWeight: '900' }, dateTimeSelectorHint: { marginTop: 4, color: Colors.textMuted, fontSize: 8 }, quantityGrid: { flexDirection: 'row', gap: 7 }, field: { flex: 1, minWidth: 0 }, fieldWide: { flex: 0, width: '100%' }, label: { marginLeft: 3, marginBottom: 6, color: Colors.textMuted, fontSize: 9, fontWeight: '900', letterSpacing: 0.7 }, inputWrap: { minHeight: 52, paddingHorizontal: 13, borderRadius: 15, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder, flexDirection: 'row', alignItems: 'center', gap: 8 }, input: { flex: 1, color: Colors.textPrimary, fontSize: 13, paddingVertical: 11 }, textarea: { minHeight: 88, textAlignVertical: 'top' }, quantityInputWrap: { paddingLeft: 13, paddingRight: 5, gap: 5 }, quantityStepActions: { flexDirection: 'row', gap: 5 }, quantityStepButton: { width: 34, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F59E0B12', borderWidth: 1, borderColor: '#F59E0B42' }, quantityStepButtonDisabled: { opacity: 0.35 }, quantityStepButtonText: { color: '#FBBF24', fontSize: 20, lineHeight: 22, fontWeight: '800' },
   currencyRow: { flexDirection: 'row', gap: 8 }, currencyChip: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 14, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder }, currencyChipActive: { backgroundColor: Colors.orangeDim, borderColor: Colors.orange }, currencyText: { color: Colors.textSecondary, fontWeight: '900' }, currencyTextActive: { color: Colors.orange }, currencySelector: { minHeight: 72, padding: 11, borderRadius: 18, backgroundColor: '#F59E0B08', borderWidth: 1, borderColor: '#F59E0B30', flexDirection: 'row', alignItems: 'center', gap: 11 }, currencySelectorIcon: { width: 45, height: 45, borderRadius: 14, backgroundColor: '#F59E0B12', alignItems: 'center', justifyContent: 'center' }, currencySelectorLabel: { color: Colors.textMuted, fontSize: 7, fontWeight: '900', letterSpacing: 0.7 }, currencySelectorValue: { marginTop: 5, flexDirection: 'row', alignItems: 'center', gap: 8 }, currencySelectorCode: { color: '#FBBF24', fontSize: 15, fontWeight: '900' }, currencySelectorName: { flex: 1, color: Colors.textSecondary, fontSize: 10 }, bnrStatus: { minHeight: 45, paddingHorizontal: 12, borderRadius: 14, backgroundColor: '#22C55E08', borderWidth: 1, borderColor: '#22C55E22', flexDirection: 'row', alignItems: 'center', gap: 8 }, bnrStatusText: { color: '#8FE3B2', fontSize: 9, fontWeight: '800' }, bnrRefresh: { minHeight: 56, paddingHorizontal: 12, borderRadius: 15, backgroundColor: '#38BDF808', borderWidth: 1, borderColor: '#38BDF82C', flexDirection: 'row', alignItems: 'center', gap: 10 }, bnrRefreshTitle: { color: '#38BDF8', fontSize: 10, fontWeight: '900' }, bnrRefreshText: { marginTop: 3, color: Colors.textMuted, fontSize: 8 }, currencySheet: { maxHeight: '88%' }, currencyCount: { marginTop: 11, paddingHorizontal: 3, flexDirection: 'row', alignItems: 'center', gap: 6 }, currencyCountText: { color: Colors.textMuted, fontSize: 9, fontWeight: '800' }, currencyList: { paddingTop: 8, gap: 6 }, currencyOption: { minHeight: 57, paddingHorizontal: 10, borderRadius: 15, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder, flexDirection: 'row', alignItems: 'center', gap: 10 }, currencyOptionActive: { backgroundColor: '#22C55E08', borderColor: '#22C55E32' }, currencyOptionCode: { width: 48, height: 34, borderRadius: 11, backgroundColor: '#FFFFFF08', alignItems: 'center', justifyContent: 'center' }, currencyOptionCodeActive: { backgroundColor: '#22C55E12' }, currencyOptionCodeText: { color: '#FBBF24', fontSize: 10, fontWeight: '900' }, currencyOptionCodeTextActive: { color: '#5EEAA4' }, currencyOptionName: { flex: 1, color: Colors.textPrimary, fontSize: 11, fontWeight: '700' },
   lineList: { gap: 12 }, lineCard: { padding: 11, borderRadius: 23, backgroundColor: '#17161A', borderWidth: 1, borderColor: Colors.cardBorder, gap: 10 }, lineCardMatched: { borderColor: '#22C55E55' }, lineHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 3, paddingVertical: 3 }, lineHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 7 }, lineExpandButton: { width: 38, height: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#A78BFA0D', borderWidth: 1, borderColor: '#A78BFA28' }, lineCollapsible: { overflow: 'hidden' }, lineExpandableContent: { gap: 10 }, lineNumber: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#A78BFA16', borderWidth: 1, borderColor: '#A78BFA30' }, lineProductImage: { flexShrink: 0, width: 44, height: 44, borderRadius: 14, borderWidth: 1, borderColor: '#2DD4BF38', backgroundColor: '#F7F7F5', overflow: 'hidden' }, lineProductPlaceholder: { flexShrink: 0, width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#A78BFA12', borderWidth: 1, borderColor: '#A78BFA38' }, lineProductPlaceholderMatched: { backgroundColor: '#2DD4BF10', borderColor: '#2DD4BF38' }, lineNumberText: { color: '#A78BFA', fontSize: 11, fontWeight: '900' }, lineProduct: { color: Colors.textPrimary, fontSize: 14, fontWeight: '800' }, matchText: { marginTop: 4, fontSize: 10, fontWeight: '800' }, deleteLine: { width: 38, height: 38, borderRadius: 13, backgroundColor: Colors.errorDim, alignItems: 'center', justifyContent: 'center' }, productAssociation: { flex: 1, minHeight: 45, paddingHorizontal: 10, borderRadius: 13, borderWidth: 1, borderColor: Colors.orangeMid, backgroundColor: Colors.orangeDim, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }, productAssociationMatched: { borderColor: '#22C55E44', backgroundColor: Colors.successDim }, productAssociationText: { flex: 0, color: Colors.orange, fontSize: 10, fontWeight: '800' }, autoCodeStatus: { minHeight: 53, paddingHorizontal: 12, borderRadius: 14, backgroundColor: '#38BDF80A', borderWidth: 1, borderColor: '#38BDF82B', flexDirection: 'row', alignItems: 'center', gap: 9 }, autoCodeStatusMatched: { backgroundColor: '#22C55E09', borderColor: '#22C55E2E' }, autoCodeTitle: { color: '#38BDF8', fontSize: 10, fontWeight: '900' }, autoCodeText: { marginTop: 3, color: Colors.textMuted, fontSize: 9, lineHeight: 13 }, lineTotal: { minHeight: 75, padding: 12, borderRadius: 15, backgroundColor: '#F9731610', borderWidth: 1, borderColor: '#F9731635', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, lineTotalLabel: { color: Colors.orangeLight, fontSize: 9, fontWeight: '900' }, lineTotalHint: { marginTop: 4, color: Colors.textMuted, fontSize: 8 }, lineTotalCost: { marginTop: 5, color: '#D6A27B', fontSize: 8, fontWeight: '800' }, lineTotalValue: { color: Colors.orangeLight, fontSize: 16, fontWeight: '900' },
   priceComparison: { padding: 12, gap: 8, borderRadius: 15, backgroundColor: '#38BDF80A', borderWidth: 1, borderColor: '#38BDF82E' }, priceComparisonWarning: { backgroundColor: '#F59E0B0D', borderColor: '#F59E0B4A' }, priceComparisonLabel: { color: Colors.textMuted, fontSize: 8, fontWeight: '900', letterSpacing: 0.6 }, priceComparisonValue: { marginTop: 4, color: Colors.textPrimary, fontSize: 12, fontWeight: '800' }, priceComparisonMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 }, priceComparisonMetaText: { color: Colors.textSecondary, fontSize: 10 }, priceComparisonVariance: { color: '#38BDF8', fontSize: 11, fontWeight: '900' }, priceComparisonAlert: { color: Colors.warning, fontSize: 10, lineHeight: 15, fontWeight: '700' },
@@ -1721,6 +1771,17 @@ const styles = StyleSheet.create({
   stockItemToggle: { minHeight: 64, paddingHorizontal: 13, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFFFFF05', borderWidth: 1, borderColor: Colors.cardBorder }, stockItemToggleActive: { backgroundColor: '#22C55E0A', borderColor: '#22C55E33' }, stockItemText: { color: Colors.textSecondary, fontSize: 11, fontWeight: '900' }, stockItemTextActive: { color: Colors.success }, stockItemHint: { marginTop: 4, color: Colors.textMuted, fontSize: 9, lineHeight: 13 }, stockSwitchTrack: { width: 48, height: 28, padding: 3, borderRadius: 14, backgroundColor: '#37343C', justifyContent: 'center' }, stockSwitchTrackActive: { backgroundColor: '#22C55E55' }, stockSwitchThumb: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: '#8B8790' }, stockSwitchThumbActive: { marginLeft: 20, backgroundColor: '#5EEAA4' },
   addLine: { minHeight: 50, paddingHorizontal: 15, borderRadius: 16, borderWidth: 1, borderStyle: 'dashed', borderColor: Colors.orangeMid, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }, addLineText: { color: Colors.orange, fontSize: 12, fontWeight: '900' }, importButton: { padding: 15, borderRadius: 18, backgroundColor: '#38BDF810', borderWidth: 1, borderColor: '#38BDF833', flexDirection: 'row', alignItems: 'center', gap: 12 }, importTitle: { color: '#38BDF8', fontSize: 13, fontWeight: '900' }, importText: { maxWidth: 290, marginTop: 3, color: Colors.textSecondary, fontSize: 10, lineHeight: 15 },
   savedAttachments: { marginTop: 14, padding: 11, borderWidth: 1, borderColor: '#38BDF82B', borderRadius: 18, backgroundColor: '#38BDF806' }, attachmentSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 9 }, attachmentSectionKicker: { color: '#7DD3FC', fontSize: 7, fontWeight: '900', letterSpacing: 0.7 }, attachmentSectionTitle: { color: Colors.textPrimary, fontSize: 12, fontWeight: '800', marginTop: 3 }, downloadAll: { minHeight: 38, paddingHorizontal: 11, borderRadius: 12, borderWidth: 1, borderColor: '#38BDF84A', backgroundColor: '#38BDF812', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }, downloadDisabled: { opacity: 0.5 }, downloadAllText: { color: '#7DD3FC', fontSize: 9, fontWeight: '900' }, attachmentList: { gap: 7 }, attachmentCard: { minHeight: 58, paddingHorizontal: 10, borderRadius: 15, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder }, attachmentPending: { borderColor: '#FBBF2438', backgroundColor: '#FBBF2408' }, attachmentIcon: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: '#38BDF810' }, attachmentName: { color: Colors.textPrimary, fontSize: 11, fontWeight: '800' }, attachmentMeta: { marginTop: 3, color: Colors.textMuted, fontSize: 9 }, attachmentRemove: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FB718510' }, attachmentDownload: { width: 36, height: 36, borderRadius: 12, borderWidth: 1, borderColor: '#38BDF838', backgroundColor: '#38BDF80F', alignItems: 'center', justifyContent: 'center' },
+  attachmentSectionHint: { color: Colors.textMuted, fontSize: 9, lineHeight: 14, marginBottom: 10 },
+  attachmentAdd: { minHeight: 38, paddingHorizontal: 11, borderRadius: 12, borderWidth: 1, borderColor: '#38BDF84A', backgroundColor: '#38BDF812', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  attachmentAddText: { color: '#7DD3FC', fontSize: 9, fontWeight: '900' },
+  pendingAttachmentList: { marginTop: 7 },
+  attachmentMarkedForDeletion: { borderColor: '#FB71855C', backgroundColor: '#FB71850B', opacity: 0.82 },
+  attachmentDeletedText: { color: '#FDA4AF', textDecorationLine: 'line-through' },
+  attachmentUndo: { backgroundColor: '#FBBF2412' },
+  saveDocumentsButton: { minHeight: 58, marginTop: 11, paddingHorizontal: 13, borderRadius: 15, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#7DD3FC', borderWidth: 1, borderColor: '#BAE6FD' },
+  saveDocumentsButtonDisabled: { opacity: 0.42 },
+  saveDocumentsButtonText: { color: '#082F49', fontSize: 12, fontWeight: '900' },
+  saveDocumentsButtonHint: { color: '#0C4A6E', fontSize: 8, fontWeight: '700', marginTop: 2 },
   reviewGuide: { padding: 11, borderRadius: 16, backgroundColor: '#22C55E08', borderWidth: 1, borderColor: '#22C55E22', flexDirection: 'row', alignItems: 'center', gap: 10 }, reviewGuideNumber: { width: 29, height: 29, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#22C55E13' }, reviewGuideNumberText: { color: '#5EEAA4', fontSize: 9, fontWeight: '900' }, reviewGuideTitle: { color: Colors.textPrimary, fontSize: 10, fontWeight: '900' }, reviewGuideText: { marginTop: 3, color: Colors.textMuted, fontSize: 8, lineHeight: 12 }, reviewReady: { paddingHorizontal: 8, paddingVertical: 6, borderRadius: 999, backgroundColor: '#22C55E10', flexDirection: 'row', alignItems: 'center', gap: 4 }, reviewReadyText: { color: '#5EEAA4', fontSize: 7, fontWeight: '900' },
   quantitySummary: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, reviewMetric: { width: '48.5%', minHeight: 86, padding: 11, borderRadius: 18, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 9 }, reviewMetricWide: { width: '100%', minHeight: 76 }, reviewMetricIcon: { width: 37, height: 37, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF08' }, reviewMetricLabel: { color: Colors.textMuted, fontSize: 7, fontWeight: '900', letterSpacing: 0.5 }, reviewMetricValue: { marginTop: 3, color: Colors.textPrimary, fontSize: 18, fontWeight: '900' }, reviewMetricHint: { marginTop: 2, color: Colors.textMuted, fontSize: 8 }, reviewTonePurple: { backgroundColor: '#A78BFA08', borderColor: '#A78BFA24' }, reviewToneBlue: { backgroundColor: '#38BDF808', borderColor: '#38BDF824' }, reviewToneGreen: { backgroundColor: '#22C55E08', borderColor: '#22C55E28' }, reviewToneRed: { backgroundColor: '#FB718508', borderColor: '#FB718526' }, reviewToneTeal: { backgroundColor: '#2DD4BF0A', borderColor: '#2DD4BF2B' },
   totalCard: { padding: 12, borderRadius: 21, backgroundColor: '#F9731609', borderWidth: 1, borderColor: '#F9731638', gap: 9 }, totalMetric: { minHeight: 61, padding: 10, borderRadius: 15, backgroundColor: '#17161A', borderWidth: 1, borderColor: Colors.cardBorder, flexDirection: 'row', alignItems: 'center', gap: 10 }, totalMetricIcon: { width: 35, height: 35, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }, totalLabel: { color: Colors.textMuted, fontSize: 8, fontWeight: '900' }, totalSub: { marginTop: 3, color: Colors.textPrimary, fontSize: 14, fontWeight: '900' }, totalHint: { marginTop: 3, color: Colors.textMuted, fontSize: 8 }, totalMain: { minHeight: 69, paddingHorizontal: 12, borderRadius: 16, backgroundColor: '#F9731612', borderWidth: 1, borderColor: Colors.orangeMid, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, totalMainLabel: { color: Colors.orangeLight, fontSize: 9, fontWeight: '900' }, totalMainValue: { color: Colors.orangeLight, fontSize: 20, fontWeight: '900' },

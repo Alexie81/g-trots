@@ -9,7 +9,7 @@
     products: [], orders: [], invoices: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], newsletterSubscribers: [], promotions: [], companies: [], receiptLocations: [], nirs: [], nirPermissions: [], nirWarehouses: [], nirReceiptLocations: [], invoiceThemeSettings: null, invoiceAutomationSettings: null, invoiceAutomationSaving: false, selectedInvoiceTheme: 'orange', invoiceSettingsDraft: { invoice_series: 'GT', next_number: 1, due_days: 7, default_notes: '' }, invoiceThemeSaving: false, invoiceQuery: '', invoiceStatusFilter: 'all', invoiceBusy: '', spvConnection: null, spvDraft: null, spvBusy: '', spvWaitingForOAuth: false, spvDiagnostics: null,
     editingProduct: null, editingOrder: null, orderItemDrafts: [], orderProductPickerTimer: null, orderReplacementTransportConfirmed: false, orderReplacementShippingCost: 0, orderReplacementReturnPayer: '', orderReplacementReturnCost: 0, invoiceIssueOrder: null, invoiceDetail: null, shippingNoteOrder: null, shippingNoteBusy: '', editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, editingReceiptLocation: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
     productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, productTotal: 0, productSearchTimer: null, productLoadRequestId: 0, productSkuCheckTimer: null, productSkuCheckRequestId: 0, productSkuAvailability: 'available', slugTouched: false, productQuery: '', orderQuery: '', orderSearchTimer: null, orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
-    customerQuery: '', newsletterQuery: '', newsletterStatus: 'all', productSaveProgressTimer: null, inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirStornoDocument: null, nirSupplierReturnContext: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false, nirBundleDownloading: '', nirRegistryDownloadPeriod: 'current_month', nirRegistryDownloadContent: 'complete', nirRegistryDownloading: false, nirExportProgressTimer: null,
+    customerQuery: '', newsletterQuery: '', newsletterStatus: 'all', productSaveProgressTimer: null, inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirStornoDocument: null, nirSupplierReturnContext: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirPendingAttachmentDeletes: [], nirDocumentsSaving: false, nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false, nirBundleDownloading: '', nirRegistryDownloadPeriod: 'current_month', nirRegistryDownloadContent: 'complete', nirRegistryDownloading: false, nirExportProgressTimer: null,
     pages: { products: 1, orders: 1, invoices: 1, inventory: 1, stockFlow: 1, stockMovements: 1, productSales: 1, productReviews: 1, productPurchases: 1, customers: 1, newsletter: 1, customerOrders: 1, nirs: 1 },
     pageSizes: { products: 10, orders: 10, invoices: 10, inventory: 10, stockFlow: 5, stockMovements: 5, productSales: 5, productReviews: 5, productPurchases: 5, customers: 10, newsletter: 12, customerOrders: 5, nirs: 15 },
     dashboardPeriod: dashboardPreferences.period, dashboardStartDate: dashboardPreferences.startDate, dashboardEndDate: dashboardPreferences.endDate, dashboardGranularity: dashboardPreferences.granularity, dashboardRequestId: 0, dashboardSeries: new Set(['revenue', 'returns', 'pending', 'orders', 'acquisitions', 'profit']),
@@ -1044,12 +1044,13 @@
       renderNirStornoFiles();
     }
     if (id === 'shop-nir-modal' && state.nirCorrectionOriginal) {
-      if (state.nirSaving || state.nirSavePromise) return toast('Așteaptă finalizarea corectării înainte să închizi.', 'error');
+      if (state.nirSaving || state.nirSavePromise || state.nirDocumentsSaving) return toast('Așteaptă finalizarea salvării înainte să închizi.', 'error');
       const leave = confirm('Sigur vrei să ieși?\n\nModificările nu se salvează, iar NIR-ul rămâne confirmat exact cum era înainte.');
       if (!leave) return;
       state.nirEditor = JSON.parse(JSON.stringify(state.nirCorrectionOriginal));
       state.nirCorrectionOriginal = null;
       state.nirPendingFiles = [];
+      state.nirPendingAttachmentDeletes = [];
       state.nirEditRevision = 0;
     } else if (id === 'shop-nir-modal' && state.nirEditor?.status === 'draft' && state.nirEditRevision > 0) {
       const leave = confirm('Există modificări nesalvate.\n\nDacă închizi acum, datele introduse după ultima salvare vor fi eliminate. Nimic nu se salvează în fundal.');
@@ -4527,6 +4528,25 @@
   const nirEditableDecimal = (value, decimals = 2) => Number.isFinite(Number(value))
     ? Number(value).toFixed(decimals).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
     : '0';
+  const nirTrimStoredDecimal = value => {
+    const source = String(value ?? '').trim();
+    if (!/^-?\d+(?:[.,]\d+)?$/.test(source)) return source;
+    const normalized = source.replace(',', '.').replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '');
+    return normalized === '-0' ? '0' : normalized;
+  };
+  const nirNormalizeEditorDecimals = document => {
+    if (!document) return document;
+    const decimalFields = ['invoiced_quantity', 'received_quantity', 'accepted_quantity', 'rejected_quantity', 'conversion_factor', 'stock_quantity', 'unit_price', 'discount_percent', 'vat_rate', 'allocated_cost_ron', 'line_net', 'line_vat', 'line_total'];
+    return {
+      ...document,
+      exchange_rate: nirTrimStoredDecimal(document.exchange_rate),
+      lines: (document.lines || []).map(line => {
+        const normalized = { ...line };
+        decimalFields.forEach(field => { if (normalized[field] !== null && normalized[field] !== undefined) normalized[field] = nirTrimStoredDecimal(normalized[field]); });
+        return normalized;
+      }),
+    };
+  };
   const nirCurrencyCodes = (() => {
     try { return Intl.supportedValuesOf('currency'); }
     catch { return 'AED AFN ALL AMD ANG AOA ARS AUD AWG AZN BAM BBD BDT BGN BHD BIF BMD BND BOB BRL BSD BTN BWP BYN BZD CAD CDF CHF CLP CNY COP CRC CUP CVE CZK DJF DKK DOP DZD EGP ERN ETB EUR FJD FKP GBP GEL GHS GIP GMD GNF GTQ GYD HKD HNL HTG HUF IDR ILS INR IQD IRR ISK JMD JOD JPY KES KGS KHR KMF KPW KRW KWD KYD KZT LAK LBP LKR LRD LSL LYD MAD MDL MGA MKD MMK MNT MOP MRU MUR MVR MWK MXN MYR MZN NAD NGN NIO NOK NPR NZD OMR PAB PEN PGK PHP PKR PLN PYG QAR RON RSD RUB RWF SAR SBD SCR SDG SEK SGD SHP SLE SOS SRD SSP STN SVC SYP SZL THB TJS TMT TND TOP TRY TTD TWD TZS UAH UGX USD UYU UZS VES VND VUV WST XAF XCD XOF XPF YER ZAR ZMW ZWG'.split(' '); }
@@ -4730,6 +4750,7 @@
         lines: [blankNirLine()], attachments: [], permissions: state.nirPermissions,
       };
       state.nirPendingFiles = [];
+      state.nirPendingAttachmentDeletes = [];
       state.nirEditRevision = 0;
       state.nirCorrectionOriginal = null;
       renderNirEditor(); openModal('shop-nir-modal');
@@ -4739,8 +4760,9 @@
 
   async function openNir(id) {
     try {
-      state.nirEditor = await window.SHOP_API.getNir(id);
+      state.nirEditor = nirNormalizeEditorDecimals(await window.SHOP_API.getNir(id));
       state.nirPendingFiles = [];
+      state.nirPendingAttachmentDeletes = [];
       state.nirEditRevision = 0;
       state.nirCorrectionOriginal = null;
       renderNirEditor(); openModal('shop-nir-modal');
@@ -4784,7 +4806,7 @@
     }), { invoiced: 0, received: 0, accepted: 0, stock: 0 });
     const quantityValues = [quantities.invoiced, quantities.received, quantities.accepted, quantities.stock];
     editor.querySelectorAll('.shop-nir-editor-section.review .shop-nir-quantity-summary>span strong').forEach((element, index) => {
-      element.textContent = Number(quantityValues[index] || 0).toLocaleString('ro-RO');
+      element.textContent = Number(quantityValues[index] || 0).toLocaleString('ro-RO', { maximumFractionDigits: 12 });
     });
     const documentTotals = lineTotals.reduce((total, line) => ({
       netRon: total.netRon + line.netRon,
@@ -4845,21 +4867,23 @@
     const receiptLocationOptions = historicalReceiptLocation + state.nirReceiptLocations.map(location => `<option value="${esc(location.id)}" ${location.id === document.reception_location_id ? 'selected' : ''}>${esc(location.name)}${location.is_default ? ' · implicit' : ''}${[location.address, location.city].filter(Boolean).length ? ` — ${esc([location.address, location.city].filter(Boolean).join(', '))}` : ''}</option>`).join('');
     const lines = (document.lines || []).map((line, index) => renderNirLine(line, index, editable)).join('');
     const attachmentKind = (name, mime = '') => { const extension = String(name || '').split('.').pop().toUpperCase(); if (String(mime).startsWith('image/') || ['JPG', 'JPEG', 'PNG', 'WEBP'].includes(extension)) return `Imagine ${extension || ''}`.trim(); if (extension === 'PDF') return 'Factura PDF'; if (extension === 'XLSX') return 'Fisier Excel'; if (extension === 'XML') return 'Fisier XML'; return `Document ${extension || ''}`.trim(); };
-    const attachments = (document.attachments || []).map(file => `<article class="shop-nir-attachment saved"><span>${nirUiIcon('document')}</span><div><strong>${esc(attachmentKind(file.original_name, file.mime_type))}</strong><small title="${esc(file.original_name)}">${esc(file.original_name)}</small><em>Salvat · ${esc(file.extraction_status)} · ${(Number(file.file_size || 0) / 1024).toFixed(0)} KB</em></div><button type="button" class="shop-nir-attachment-download" data-nir-attachment-download="${esc(file.id)}" aria-label="Descarca ${esc(file.original_name)}" title="Descarca documentul">${nirUiIcon('download')}</button></article>`).join('');
+    const attachments = (document.attachments || []).map(file => {
+      const markedForDeletion = state.nirPendingAttachmentDeletes.includes(file.id);
+      return `<article class="shop-nir-attachment saved ${markedForDeletion ? 'marked-for-deletion' : ''}"><span>${markedForDeletion ? nirUiIcon('trash') : nirUiIcon('document')}</span><div><strong>${esc(attachmentKind(file.original_name, file.mime_type))}</strong><small title="${esc(file.original_name)}">${esc(file.original_name)}</small><em>${markedForDeletion ? 'Va fi sters cand salvezi documentele' : `Salvat · ${esc(file.extraction_status)} · ${(Number(file.file_size || 0) / 1024).toFixed(0)} KB`}</em></div><aside class="shop-nir-attachment-actions"><button type="button" class="shop-nir-attachment-download" data-nir-attachment-download="${esc(file.id)}" aria-label="Descarca ${esc(file.original_name)}" title="Descarca documentul">${nirUiIcon('download')}</button>${editable ? `<button type="button" class="shop-nir-attachment-delete ${markedForDeletion ? 'undo' : ''}" data-nir-attachment-delete="${esc(file.id)}" aria-label="${markedForDeletion ? 'Pastreaza' : 'Sterge'} ${esc(file.original_name)}" title="${markedForDeletion ? 'Anuleaza stergerea' : 'Sterge documentul'}">${markedForDeletion ? nirUiIcon('reverse') : nirUiIcon('trash')}</button>` : ''}</aside></article>`;
+    }).join('');
     const pendingAttachments = state.nirPendingFiles.map((file, index) => `<article class="shop-nir-attachment pending"><span>${nirUiIcon('document')}</span><div><strong>${esc(attachmentKind(file.name, file.type))}</strong><small title="${esc(file.name)}">${esc(file.name)}</small><em>In asteptarea salvarii · ${(Number(file.size || 0) / 1024).toFixed(0)} KB</em></div>${editable ? `<button type="button" data-nir-pending-remove="${index}" aria-label="Elimina documentul" title="Elimina documentul">${nirUiIcon('close')}</button>` : ''}</article>`).join('');
     const liveLineTotals = (document.lines || []).map(line => nirLocalLineTotals(line, document.exchange_rate));
     const liveDocumentTotals = liveLineTotals.reduce((total, line) => ({ netRon: total.netRon + line.netRon, vatRon: total.vatRon + line.vatRon, totalRon: total.totalRon + line.totalRon }), { netRon: 0, vatRon: 0, totalRon: 0 });
     const quantities = (document.lines || []).reduce((summary, line, index) => ({ invoiced: summary.invoiced + Number(line.invoiced_quantity || 0), received: summary.received + Number(line.received_quantity || 0), accepted: summary.accepted + Number(line.accepted_quantity || 0), stock: summary.stock + (editable ? liveLineTotals[index].stockQuantity : Number(line.stock_quantity || 0)) }), { invoiced: 0, received: 0, accepted: 0, stock: 0 });
     const displayedTotals = editable ? liveDocumentTotals : { netRon: Number(document.subtotal_ron || 0), vatRon: Number(document.vat_total_ron || 0), totalRon: Number(document.grand_total_ron || 0) };
-    $('shop-nir-editor').innerHTML = `<section class="shop-nir-editor-flow"><div><small>GHID RAPID</small><strong>Completeaza NIR-ul in 5 pasi</strong><span>Urmeaza sageata: fiecare pas este desenat pe rand, apoi fluxul porneste din nou.</span></div><ol><i class="shop-nir-flow-trail" aria-hidden="true"><b></b></i><li style="--flow-index:0"><i>${nirUiIcon('supplier')}</i><b>1</b><span>Furnizor</span></li><li style="--flow-index:1"><i>${nirUiIcon('calendar')}</i><b>2</b><span>Receptie</span></li><li style="--flow-index:2"><i>${nirUiIcon('currency')}</i><b>3</b><span>Moneda</span></li><li style="--flow-index:3"><i>${nirUiIcon('product')}</i><b>4</b><span>Produse</span></li><li style="--flow-index:4"><i>${nirUiIcon('check')}</i><b>5</b><span>Verificare</span></li></ol></section>
-      <div class="shop-nir-editor-grid">
-        <section class="shop-nir-editor-section supplier"><header>${nirStepBadge('01', 'supplier')}<span><strong>Alege furnizorul</strong><small>Identifica firma si factura primita</small></span></header><p class="shop-nir-step-help"><b>1</b>Selecteaza furnizorul, apoi completeaza datele facturii.</p><div class="shop-nir-supplier-line"><label>Denumire furnizor *<select data-nir-field="supplier_id" ${editable ? '' : 'disabled'}>${supplierOptions}</select></label>${editable && nirCan('SUPPLIER_CREATE') ? '<button type="button" id="shop-nir-new-supplier">+ Furnizor nou</button>' : ''}</div><div class="shop-commerce-columns three">${nirInput('Serie factura', 'supplier_invoice_series', document.supplier_invoice_series, editable ? '' : 'disabled')}${nirInput('Numar factura *', 'supplier_invoice_number', document.supplier_invoice_number, editable ? 'required' : 'disabled')}${nirInput('Data facturii *', 'supplier_invoice_date', document.supplier_invoice_date, `type="date" ${editable ? '' : 'disabled'}`)}</div></section>
-        <section class="shop-nir-editor-section reception"><header>${nirStepBadge('02', 'calendar')}<span><strong>Stabileste receptia</strong><small>Alege data, ora, gestiunea și locul fizic</small></span></header><p class="shop-nir-step-help"><b>2</b>Locul recepției rămâne memorat în document, separat de gestiunea contabilă.</p><div class="shop-nir-reception-fields">${nirDateTimeInput('Data si ora NIR *', 'nir', document.nir_date, document.nir_time, editable)}${nirDateTimeInput('Data si ora receptiei *', 'reception', document.reception_date, document.reception_time, editable)}<label>Gestiune *<select data-nir-field="warehouse_id" ${editable ? '' : 'disabled'}>${warehouseOptions}</select></label><label>Loc recepție *<select data-nir-field="reception_location_id" ${editable ? '' : 'disabled'}>${receiptLocationOptions || `<option value="">${esc(document.reception_location || 'Gestiune principală')}</option>`}</select></label></div></section>
-        <section class="shop-nir-editor-section currency"><header>${nirStepBadge('03', 'currency')}<span><strong>Seteaza moneda</strong><small>Cursul si etichetele de pret se adapteaza automat</small></span></header><p class="shop-nir-step-help"><b>3</b>Alege moneda din lista. Pentru valuta preluam automat cursul oficial BNR, dar il poti modifica.</p><div class="shop-commerce-columns three">${nirCurrencyPicker(document.currency, editable)}${nirInput(`Curs ${esc(document.currency || 'RON')}/RON *`, 'exchange_rate', document.exchange_rate, `type="number" min="0.00000001" step="0.00000001" placeholder="${state.nirRateLoading === document.currency ? 'Se preia de la BNR...' : 'Curs in lei'}" ${editable && document.currency !== 'RON' ? '' : 'disabled'}`)}${nirInput('Data cursului BNR', 'exchange_rate_date', document.exchange_rate_date, `type="date" ${editable && document.currency !== 'RON' ? '' : 'disabled'}`)}</div><p class="shop-nir-bnr-note">${document.currency === 'RON' ? `${nirUiIcon('check')} RON: curs fix 1, data cursului este data facturii.` : state.nirRateLoading === document.currency ? `${nirUiIcon('currency')} Se preia cursul oficial BNR...` : `${nirUiIcon('check')} Curs BNR din ${esc(document.exchange_rate_date || 'data facturii')} · totalurile si costul contabil sunt calculate in lei.`}</p></section>
+    $('shop-nir-editor').innerHTML = `<div class="shop-nir-editor-grid">
+        <section class="shop-nir-editor-section supplier"><header>${nirStepBadge('01', 'supplier')}<span><strong>Alege furnizorul</strong><small>Identifica firma si factura primita</small></span></header><div class="shop-nir-supplier-line"><label>Denumire furnizor *<select data-nir-field="supplier_id" ${editable ? '' : 'disabled'}>${supplierOptions}</select></label>${editable && nirCan('SUPPLIER_CREATE') ? '<button type="button" id="shop-nir-new-supplier">+ Furnizor nou</button>' : ''}</div><div class="shop-commerce-columns three">${nirInput('Serie factura', 'supplier_invoice_series', document.supplier_invoice_series, editable ? '' : 'disabled')}${nirInput('Numar factura *', 'supplier_invoice_number', document.supplier_invoice_number, editable ? 'required' : 'disabled')}${nirInput('Data facturii *', 'supplier_invoice_date', document.supplier_invoice_date, `type="date" ${editable ? '' : 'disabled'}`)}</div></section>
+        <section class="shop-nir-editor-section reception"><header>${nirStepBadge('02', 'calendar')}<span><strong>Stabileste receptia</strong><small>Alege data, ora, gestiunea și locul fizic</small></span></header><div class="shop-nir-reception-fields">${nirDateTimeInput('Data si ora NIR *', 'nir', document.nir_date, document.nir_time, editable)}${nirDateTimeInput('Data si ora receptiei *', 'reception', document.reception_date, document.reception_time, editable)}<label>Gestiune *<select data-nir-field="warehouse_id" ${editable ? '' : 'disabled'}>${warehouseOptions}</select></label><label>Loc recepție *<select data-nir-field="reception_location_id" ${editable ? '' : 'disabled'}>${receiptLocationOptions || `<option value="">${esc(document.reception_location || 'Gestiune principală')}</option>`}</select></label></div></section>
+        <section class="shop-nir-editor-section currency"><header>${nirStepBadge('03', 'currency')}<span><strong>Seteaza moneda</strong><small>Cursul si etichetele de pret se adapteaza automat</small></span></header><div class="shop-commerce-columns three">${nirCurrencyPicker(document.currency, editable)}${nirInput(`Curs ${esc(document.currency || 'RON')}/RON *`, 'exchange_rate', document.exchange_rate, `type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="${state.nirRateLoading === document.currency ? 'Se preia de la BNR...' : 'Curs in lei'}" ${editable && document.currency !== 'RON' ? '' : 'disabled'}`)}${nirInput('Data cursului BNR', 'exchange_rate_date', document.exchange_rate_date, `type="date" ${editable && document.currency !== 'RON' ? '' : 'disabled'}`)}</div><p class="shop-nir-bnr-note">${document.currency === 'RON' ? `${nirUiIcon('check')} RON: curs fix 1, data cursului este data facturii.` : state.nirRateLoading === document.currency ? `${nirUiIcon('currency')} Se preia cursul oficial BNR...` : `${nirUiIcon('check')} Curs BNR din ${esc(document.exchange_rate_date || 'data facturii')} · totalurile si costul contabil sunt calculate in lei.`}</p></section>
       </div>
-      <section class="shop-nir-editor-section documents ${editable ? '' : 'is-confirmed'}"><header><b class="shop-nir-step-badge optional">${nirUiIcon('document')}<i>+</i></b><span><strong>Documente furnizor</strong><small>${editable ? 'Le poti alege acum; sunt incarcate numai cand apesi Salveaza' : `${(document.attachments || []).length} documente salvate impreuna cu acest NIR`}</small></span>${editable ? '<button type="button" id="shop-nir-import">Alege documente</button>' : (document.attachments || []).length ? `<button type="button" id="shop-nir-download-all">${nirUiIcon('download')} Descarca toate</button>` : ''}</header><div class="shop-nir-attachments shop-nir-dropzone ${editable ? '' : 'is-confirmed'}" role="${editable ? 'button' : 'group'}" tabindex="${editable ? '0' : '-1'}" aria-label="${editable ? 'Adauga documentele furnizorului' : 'Documentele furnizorului'}">${editable ? `<div class="shop-nir-drop-hint"><span><i></i>${nirUiIcon('document')}</span><div><strong>Trage factura aici</strong><small>Documentele raman local pana apesi Salveaza ciorna</small><em>PDF · JPG · PNG · WEBP · XLSX · XML</em></div></div>` : ''}${attachments || pendingAttachments ? `<div class="shop-nir-attachment-list">${attachments}${pendingAttachments}</div>` : '<p>Nu exista documente atasate acestui NIR.</p>'}</div></section>
-      <section class="shop-nir-editor-section lines"><header>${nirStepBadge('04', 'product')}<span><strong>Produsele din factura</strong><small>Fiecare rand reprezinta un produs primit de la furnizor.</small></span>${editable ? '<button type="button" id="shop-nir-add-line">+ Produs</button>' : ''}</header><div class="shop-nir-lines-intro"><strong>${nirUiIcon('product')}<span><small>ORDINEA COMPLETARII</small>Urmeaza traseul de la stanga la dreapta</span></strong><ol><li><i>1</i><span><b>Alege produsul</b><small>cauta sau asociaza articolul</small></span></li><em>→</em><li><i>2</i><span><b>Scrie cantitatea</b><small>cat ai primit efectiv</small></span></li><em>→</em><li><i>3</i><span><b>Completeaza pretul</b><small>costul din factura</small></span></li></ol></div><div id="shop-nir-lines" class="shop-nir-line-list">${lines || '<p class="shop-nir-no-lines">Adauga cel putin un produs.</p>'}</div></section>
-      <section class="shop-nir-editor-section review"><header>${nirStepBadge('05', 'check')}<span><strong>Verifica documentul</strong><small>Ultimul control inainte ca marfa sa intre in gestiune</small></span><em class="shop-nir-review-ready">${nirUiIcon('check')} GATA DE VERIFICARE</em></header><p class="shop-nir-review-guide"><b>05</b><span><strong>Compara cantitatile, apoi verifica valoarea finala.</strong><small>Daca exista diferente, corecteaza pozitia produsului inainte de confirmare.</small></span></p><section class="shop-nir-quantity-summary"><span><i>${nirUiIcon('document')}</i><b><small>FACTURAT</small><strong>${quantities.invoiced.toLocaleString('ro-RO')}</strong><em>unitati pe factura</em></b></span><span><i>${nirUiIcon('calendar')}</i><b><small>RECEPTIONAT</small><strong>${quantities.received.toLocaleString('ro-RO')}</strong><em>unitati numarate</em></b></span><span class="accepted"><i>${nirUiIcon('check')}</i><b><small>ACCEPTAT</small><strong>${quantities.accepted.toLocaleString('ro-RO')}</strong><em>unitati conforme</em></b></span><span class="stock"><i>${nirUiIcon('product')}</i><b><small>INTRA EFECTIV IN STOC</small><strong>${quantities.stock.toLocaleString('ro-RO')}</strong><em>cantitatea finala</em></b></span></section>${nirCan('NIR_VIEW_COSTS') ? `<section class="shop-nir-totals"><span><i>${nirUiIcon('currency')}</i><b><small>VALOARE FARA TVA</small><strong>${money(displayedTotals.netRon)}</strong><em>Baza de calcul</em></b></span><span><i>${nirUiIcon('document')}</i><b><small>TVA</small><strong>${money(displayedTotals.vatRon)}</strong><em>Valoarea taxei</em></b></span><span class="grand"><i>${nirUiIcon('check')}</i><b><small>TOTAL CONTABIL RON</small><strong>${money(displayedTotals.totalRon)}</strong><em>Valoarea care va fi confirmata</em></b></span></section>` : ''}<label class="shop-nir-review-notes"><span><b>Observatii interne</b><small>Optional · noteaza diferente, explicatii sau detalii utile pentru contabilitate</small></span><textarea data-nir-field="notes" rows="3" placeholder="Exemplu: ambalaj deteriorat, diferenta explicata de furnizor..." ${editable ? '' : 'disabled'}>${esc(document.notes || '')}</textarea></label></section><section id="shop-nir-accounting-details" class="shop-nir-accounting-details" ${editable ? 'hidden' : ''}><div class="shop-commerce-loading">Se incarca miscarile de stoc...</div></section>`;
+      <section class="shop-nir-editor-section documents ${editable ? '' : 'is-confirmed'}"><header><b class="shop-nir-step-badge optional">${nirUiIcon('document')}<i>+</i></b><span><strong>Documente furnizor</strong><small>${correctionEditing ? 'Adauga sau sterge fisiere fara sa modifici produsele, valorile ori stocul' : editable ? 'Le poti alege acum; sunt incarcate numai cand salvezi ciorna' : `${(document.attachments || []).length} documente salvate impreuna cu acest NIR`}</small></span>${editable ? '<button type="button" id="shop-nir-import">+ Adauga documente</button>' : (document.attachments || []).length ? `<button type="button" id="shop-nir-download-all">${nirUiIcon('download')} Descarca toate</button>` : ''}</header><div class="shop-nir-attachments shop-nir-dropzone ${editable ? '' : 'is-confirmed'}" role="${editable ? 'button' : 'group'}" tabindex="${editable ? '0' : '-1'}" aria-label="${editable ? 'Adauga documentele furnizorului' : 'Documentele furnizorului'}">${editable ? `<div class="shop-nir-drop-hint"><span><i></i>${nirUiIcon('document')}</span><div><strong>Trage documentele aici</strong><small>${correctionEditing ? 'Modificarile raman pregatite pana apesi Salveaza documentele' : 'Documentele raman local pana apesi Salveaza ciorna'}</small><em>PDF · JPG · PNG · WEBP · XLSX · XML</em></div></div>` : ''}${attachments || pendingAttachments ? `<div class="shop-nir-attachment-list">${attachments}${pendingAttachments}</div>` : '<p>Nu exista documente atasate acestui NIR.</p>'}</div>${correctionEditing ? `<footer class="shop-nir-documents-save"><span><b>${Math.max(0, (document.attachments || []).length - state.nirPendingAttachmentDeletes.length)} salvate</b><small>${state.nirPendingFiles.length} noi · ${state.nirPendingAttachmentDeletes.length} de sters</small></span><button type="button" id="shop-nir-documents-save" ${(state.nirDocumentsSaving || (!state.nirPendingFiles.length && !state.nirPendingAttachmentDeletes.length)) ? 'disabled' : ''}>${state.nirDocumentsSaving ? '<i class="shop-nir-documents-spinner"></i>' : nirUiIcon('check')}<span>Salveaza documentele</span></button></footer>` : ''}</section>
+      <section class="shop-nir-editor-section lines"><header>${nirStepBadge('04', 'product')}<span><strong>Produsele din factura</strong><small>Fiecare rand reprezinta un produs primit de la furnizor.</small></span>${editable ? '<button type="button" id="shop-nir-add-line">+ Produs</button>' : ''}</header><div id="shop-nir-lines" class="shop-nir-line-list">${lines || '<p class="shop-nir-no-lines">Adauga cel putin un produs.</p>'}</div></section>
+      <section class="shop-nir-editor-section review"><header>${nirStepBadge('05', 'check')}<span><strong>Verifica documentul</strong><small>Ultimul control inainte ca marfa sa intre in gestiune</small></span><em class="shop-nir-review-ready">${nirUiIcon('check')} GATA DE VERIFICARE</em></header><section class="shop-nir-quantity-summary"><span><i>${nirUiIcon('document')}</i><b><small>FACTURAT</small><strong>${quantities.invoiced.toLocaleString('ro-RO', { maximumFractionDigits: 12 })}</strong><em>unitati pe factura</em></b></span><span><i>${nirUiIcon('calendar')}</i><b><small>RECEPTIONAT</small><strong>${quantities.received.toLocaleString('ro-RO', { maximumFractionDigits: 12 })}</strong><em>unitati numarate</em></b></span><span class="accepted"><i>${nirUiIcon('check')}</i><b><small>ACCEPTAT</small><strong>${quantities.accepted.toLocaleString('ro-RO', { maximumFractionDigits: 12 })}</strong><em>unitati conforme</em></b></span><span class="stock"><i>${nirUiIcon('product')}</i><b><small>INTRA EFECTIV IN STOC</small><strong>${quantities.stock.toLocaleString('ro-RO', { maximumFractionDigits: 12 })}</strong><em>cantitatea finala</em></b></span></section>${nirCan('NIR_VIEW_COSTS') ? `<section class="shop-nir-totals"><span><i>${nirUiIcon('currency')}</i><b><small>VALOARE FARA TVA</small><strong>${money(displayedTotals.netRon)}</strong><em>Baza de calcul</em></b></span><span><i>${nirUiIcon('document')}</i><b><small>TVA</small><strong>${money(displayedTotals.vatRon)}</strong><em>Valoarea taxei</em></b></span><span class="grand"><i>${nirUiIcon('check')}</i><b><small>TOTAL CONTABIL RON</small><strong>${money(displayedTotals.totalRon)}</strong><em>Valoarea care va fi confirmata</em></b></span></section>` : ''}<label class="shop-nir-review-notes"><span><b>Observatii interne</b><small>Optional · noteaza diferente, explicatii sau detalii utile pentru contabilitate</small></span><textarea data-nir-field="notes" rows="3" placeholder="Exemplu: ambalaj deteriorat, diferenta explicata de furnizor..." ${editable ? '' : 'disabled'}>${esc(document.notes || '')}</textarea></label></section><section id="shop-nir-accounting-details" class="shop-nir-accounting-details" ${editable ? 'hidden' : ''}><div class="shop-commerce-loading">Se incarca miscarile de stoc...</div></section>`;
     if (!editable) {
       const accounting = $('shop-nir-accounting-details');
       accounting?.insertAdjacentHTML('beforebegin', renderCustomerReturnSupplierOrigins(document));
@@ -4912,6 +4936,8 @@
     const differs = String(line.invoiced_quantity ?? '') !== String(received ?? '') || String(received ?? '') !== String(line.accepted_quantity ?? '');
     const input = (field, value, attrs = '') => `<input data-nir-line="${index}" data-nir-line-field="${field}" value="${esc(value ?? '')}" ${attrs} ${editable ? '' : 'disabled'} />`;
     const field = (label, name, value, attrs = '') => `<label><span>${label}</span>${input(name, value, attrs)}</label>`;
+    const decimalField = (label, name, value, attrs = '') => field(label, name, value, `type="text" inputmode="decimal" autocomplete="off" spellcheck="false" ${attrs}`);
+    const quantityField = (label, name, value) => `<label><span>${label}</span><span class="shop-nir-decimal-stepper">${input(name, value, 'type="text" inputmode="decimal" autocomplete="off" spellcheck="false"')}<span class="shop-nir-decimal-step-actions" aria-label="Modifică valoarea din 1 în 1"><button type="button" tabindex="-1" data-nir-quantity-step="${index}" data-nir-quantity-field="${name}" data-nir-quantity-delta="1" aria-label="Crește ${label.toLowerCase()} cu 1">⌃</button><button type="button" tabindex="-1" data-nir-quantity-step="${index}" data-nir-quantity-field="${name}" data-nir-quantity-delta="-1" aria-label="Scade ${label.toLowerCase()} cu 1">⌄</button></span></span></label>`;
     const storedDifferenceReason = line.difference_reason || (line.mismatch_reason ? 'other' : '');
     const differenceReason = storedDifferenceReason === 'rejected' ? 'other' : storedDifferenceReason;
     const differenceLabels = { shortage: 'Lipsa cantitativa', surplus: 'Surplus', damaged: 'Produs deteriorat', wrong_product: 'Produs gresit', price_difference: 'Pret diferit', vat_difference: 'TVA diferit', other: 'Alt motiv' };
@@ -4929,8 +4955,8 @@
       <summary class="shop-nir-line-summary"><span class="shop-nir-line-index">${String(index + 1).padStart(2, '0')}</span>${linePicture}<span class="shop-nir-summary-copy"><small>PRODUS DIN FACTURA</small><strong>${esc(line.product_name || line.supplier_product_name || 'Produs fara denumire')}</strong><em>${esc(line.supplier_product_code || 'Asociere dupa denumirea facturii')}</em></span><span class="shop-nir-summary-facts"><b>${esc(line.accepted_quantity || 0)} ${esc(line.stock_unit || 'buc')}</b><strong>${money(lineTotal)}</strong></span><b class="shop-nir-match ${matched ? 'ok' : 'warn'}">● ${matchLabel}</b><i class="shop-nir-line-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg></i></summary>
       <div class="shop-nir-line-details"><div class="shop-nir-line-details-inner"><div class="shop-nir-line-panels">
         <section class="shop-nir-line-panel identity"><header><span class="shop-nir-panel-icon">${nirUiIcon('product')}<i>01</i></span><div><strong>Ce produs este?</strong><small>Îl caut automat după cod, EAN sau denumirea memorată pentru furnizor.</small></div></header><div class="shop-nir-supplier-context"><small>DENUMIRE FURNIZOR</small><strong>${esc(supplierName)}</strong></div><div class="shop-nir-field-grid">${field('COD FURNIZOR', 'supplier_product_code', line.supplier_product_code, 'placeholder="Optional · ex: COD-1025" autocomplete="off"')}${field('DENUMIRE PE FACTURA', 'supplier_product_name', line.supplier_product_name, 'placeholder="Denumirea exacta de pe factura"')}</div><div class="shop-nir-code-feedback ${matched ? 'ok' : ''}" data-nir-code-state="${index}">${nirUiIcon(matched ? 'check' : 'search')}<span><b>${matched ? 'Produs recunoscut' : 'Cautare automata dupa cod sau nume'}</b><small>${matched ? esc(line.product_name || '') : 'La prima achizitie alegi produsul intern; apoi aceasta denumire se recunoaste automat la acel furnizor.'}</small></span></div><div class="shop-nir-product-link"><div><small>PRODUS INTERN</small><strong>${esc(line.product_name || 'Niciun produs asociat')}</strong><span class="${matched ? 'ok' : 'warn'}">${matched ? (line.resolution_status === 'matched_name' ? 'Denumirea furnizorului este asociata produsului intern.' : 'Codul furnizorului este asociat produsului intern.') : 'Daca nu este gasit automat, alege produsul din catalog.'}</span></div>${editable && isStockItem ? `<span class="shop-nir-line-actions"><button type="button" class="primary" data-nir-product="${index}">${matched ? 'Schimba produsul' : 'Alege produsul'}</button></span>` : ''}</div><p class="shop-nir-panel-help">SKU-ul intern este independent. Același produs poate avea coduri și denumiri diferite la fiecare furnizor.</p></section>
-        <section class="shop-nir-line-panel reception"><header><span class="shop-nir-panel-icon">${nirUiIcon('calendar')}<i>02</i></span><div><strong>Verifica marfa</strong><small>Compara factura cu ce ai primit si acceptat</small></div></header><div class="shop-nir-quantities">${field('FACTURAT', 'invoiced_quantity', line.invoiced_quantity, 'type="number" min="0" step="0.0001"')}${field('RECEPTIONAT', 'received_quantity', received, 'type="number" min="0" step="0.0001"')}${field('ACCEPTAT', 'accepted_quantity', line.accepted_quantity, 'type="number" min="0" step="0.0001"')}</div><div class="shop-nir-units">${field('UM ACHIZITIE', 'purchase_unit', line.purchase_unit || 'buc', 'placeholder="buc"')}<i>→</i>${field('UM STOC', 'stock_unit', line.stock_unit || 'buc', 'placeholder="buc"')}</div>${differenceFields}</section>
-        <section class="shop-nir-line-panel pricing"><header><span class="shop-nir-panel-icon">${nirUiIcon('currency')}<i>03</i></span><div><strong>Completeaza costul</strong><small>Pretul, valorile fara/cu TVA si costul pozitiei</small></div></header><div class="shop-nir-price-fields">${field(`PRET UNITAR · ${esc(state.nirEditor?.currency || 'RON')}`, 'unit_price', editable && line.price_entry_mode !== 'unit_net' ? nirEditableDecimal(localTotals.unitPrice, 6) : line.unit_price, 'type="number" min="0" step="0.000001"')}${field('DISCOUNT %', 'discount_percent', line.discount_percent, 'type="number" min="0" max="100" step="0.01"')}${field('TVA %', 'vat_rate', line.vat_rate, 'type="number" min="0" max="100" step="0.01"')}${field('COST SUPLIMENTAR RON', 'allocated_cost_ron', line.allocated_cost_ron || '0', 'type="number" min="0" step="0.01"')}${field(`VALOARE FARA TVA · ${esc(state.nirEditor?.currency || 'RON')}`, 'line_net', editable && ['line_net', 'line_vat'].includes(line.price_entry_mode) ? line.line_net || '0' : nirEditableDecimal(localTotals.net), 'type="number" min="0" step="0.01"')}${field(`VALOARE TVA · ${esc(state.nirEditor?.currency || 'RON')}`, 'line_vat', editable && line.price_entry_mode === 'line_vat' ? line.line_vat || '0' : nirEditableDecimal(localTotals.vat), 'type="number" min="0" step="0.01"')}${field(`VALOARE CU TVA · ${esc(state.nirEditor?.currency || 'RON')}`, 'line_total', editable && line.price_entry_mode === 'line_gross' ? line.line_total || '0' : nirEditableDecimal(localTotals.total), 'type="number" min="0" step="0.01"')}</div><div class="shop-nir-line-total"><span><small>TOTAL POZITIE</small><strong>${money(editable ? localTotals.totalRon : line.line_total_ron || 0)}</strong></span><span><small>COST UNITAR CONTABIL</small><b>${money(editable ? localTotals.inventoryUnitCostRon : line.inventory_unit_cost_ron || 0)}/u</b></span></div>${priceComparison}</section>
+        <section class="shop-nir-line-panel reception"><header><span class="shop-nir-panel-icon">${nirUiIcon('calendar')}<i>02</i></span><div><strong>Verifica marfa</strong><small>Compara factura cu ce ai primit si acceptat</small></div></header><div class="shop-nir-quantities">${quantityField('FACTURAT', 'invoiced_quantity', line.invoiced_quantity)}${quantityField('RECEPTIONAT', 'received_quantity', received)}${quantityField('ACCEPTAT', 'accepted_quantity', line.accepted_quantity)}</div><div class="shop-nir-units">${field('UM ACHIZITIE', 'purchase_unit', line.purchase_unit || 'buc', 'placeholder="buc"')}<i>→</i>${field('UM STOC', 'stock_unit', line.stock_unit || 'buc', 'placeholder="buc"')}</div>${differenceFields}</section>
+        <section class="shop-nir-line-panel pricing"><header><span class="shop-nir-panel-icon">${nirUiIcon('currency')}<i>03</i></span><div><strong>Completeaza costul</strong><small>Pretul, valorile fara/cu TVA si costul pozitiei</small></div></header><div class="shop-nir-price-fields">${decimalField(`PRET UNITAR · ${esc(state.nirEditor?.currency || 'RON')}`, 'unit_price', editable && line.price_entry_mode !== 'unit_net' ? nirEditableDecimal(localTotals.unitPrice, 6) : line.unit_price)}${decimalField('DISCOUNT %', 'discount_percent', line.discount_percent)}${decimalField('TVA %', 'vat_rate', line.vat_rate)}${decimalField('COST SUPLIMENTAR RON', 'allocated_cost_ron', line.allocated_cost_ron || '0')}${decimalField(`VALOARE FARA TVA · ${esc(state.nirEditor?.currency || 'RON')}`, 'line_net', editable && ['line_net', 'line_vat'].includes(line.price_entry_mode) ? line.line_net || '0' : nirEditableDecimal(localTotals.net))}${decimalField(`VALOARE TVA · ${esc(state.nirEditor?.currency || 'RON')}`, 'line_vat', editable && line.price_entry_mode === 'line_vat' ? line.line_vat || '0' : nirEditableDecimal(localTotals.vat))}${decimalField(`VALOARE CU TVA · ${esc(state.nirEditor?.currency || 'RON')}`, 'line_total', editable && line.price_entry_mode === 'line_gross' ? line.line_total || '0' : nirEditableDecimal(localTotals.total))}</div><div class="shop-nir-line-total"><span><small>TOTAL POZITIE</small><strong>${money(editable ? localTotals.totalRon : line.line_total_ron || 0)}</strong></span><span><small>COST UNITAR CONTABIL</small><b>${money(editable ? localTotals.inventoryUnitCostRon : line.inventory_unit_cost_ron || 0)}/u</b></span></div>${priceComparison}</section>
       </div>${editable ? `<footer class="shop-nir-line-footer"><span>Asocierea si costul se memoreaza numai cand salvezi NIR-ul.</span><button type="button" class="danger" data-nir-remove="${index}" aria-label="Sterge produsul" title="Sterge produsul">${nirUiIcon('trash')}</button></footer>` : ''}</div></div>
     </details>`;
   }
@@ -5145,7 +5171,14 @@
       }
       if (field === 'currency') input.value = state.nirEditor.currency;
       if (field === 'currency' && state.nirEditor.currency === 'RON') { state.nirEditor.exchange_rate = '1'; state.nirEditor.exchange_rate_date = state.nirEditor.nir_date; renderNirEditor(); }
-      if (field === 'supplier_invoice_date' && state.nirEditor.currency === 'RON') { state.nirEditor.exchange_rate_date = input.value; scheduleNirAutosave(); renderNirEditor(); return; }
+      if (field === 'supplier_invoice_date') {
+        state.nirEditor.nir_date = input.value;
+        state.nirEditor.reception_date = input.value;
+        if (state.nirEditor.currency === 'RON') state.nirEditor.exchange_rate_date = input.value;
+        scheduleNirAutosave();
+        renderNirEditor();
+        return;
+      }
       if (field === 'exchange_rate') { updateNirLiveCalculations(); scheduleNirAutosave(); return; }
       scheduleNirAutosave();
     }));
@@ -5216,6 +5249,20 @@
       }
       scheduleNirAutosave();
     }));
+    $('shop-nir-editor').querySelectorAll('[data-nir-quantity-step]').forEach(button => button.addEventListener('click', () => {
+      const lineIndex = Number(button.dataset.nirQuantityStep);
+      const field = button.dataset.nirQuantityField;
+      const delta = Number(button.dataset.nirQuantityDelta || 0);
+      const target = $('shop-nir-editor').querySelector(`[data-nir-line="${lineIndex}"][data-nir-line-field="${field}"]`);
+      if (!target || target.disabled || !Number.isFinite(delta)) return;
+      const source = String(target.value || '0');
+      const separator = source.includes(',') ? ',' : '.';
+      const current = Number(source.replace(',', '.'));
+      const next = Math.max(0, (Number.isFinite(current) ? current : 0) + delta);
+      target.value = nirEditableDecimal(next, 12).replace('.', separator);
+      target.dispatchEvent(new Event('input', { bubbles: true }));
+      target.focus({ preventScroll: true });
+    }));
     $('shop-nir-editor').querySelectorAll('[data-nir-resolve]').forEach(button => button.addEventListener('click', () => void resolveNirLine(Number(button.dataset.nirResolve))));
     $('shop-nir-editor').querySelectorAll('[data-nir-product]').forEach(button => button.addEventListener('click', () => openNirProductPicker(Number(button.dataset.nirProduct))));
     $('shop-nir-editor').querySelectorAll('[data-nir-remove]').forEach(button => button.addEventListener('click', () => { state.nirEditor.lines.splice(Number(button.dataset.nirRemove), 1); renderNirEditor(); scheduleNirAutosave(); }));
@@ -5225,6 +5272,15 @@
       $('shop-nir-files').click();
     });
     $('shop-nir-editor').querySelectorAll('[data-nir-pending-remove]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); state.nirPendingFiles.splice(Number(button.dataset.nirPendingRemove), 1); renderNirEditor(); }));
+    $('shop-nir-editor').querySelectorAll('[data-nir-attachment-delete]').forEach(button => button.addEventListener('click', event => {
+      event.stopPropagation();
+      const attachmentId = button.dataset.nirAttachmentDelete;
+      state.nirPendingAttachmentDeletes = state.nirPendingAttachmentDeletes.includes(attachmentId)
+        ? state.nirPendingAttachmentDeletes.filter(id => id !== attachmentId)
+        : [...state.nirPendingAttachmentDeletes, attachmentId];
+      renderNirEditor();
+    }));
+    $('shop-nir-documents-save')?.addEventListener('click', event => { event.stopPropagation(); void saveNirSupplierDocuments(); });
     const dropzone = $('shop-nir-editor').querySelector('.shop-nir-attachments');
     dropzone?.addEventListener('dragover', event => { event.preventDefault(); dropzone.classList.add('dragging'); });
     dropzone?.addEventListener('dragleave', event => { if (!dropzone.contains(event.relatedTarget)) dropzone.classList.remove('dragging'); });
@@ -5273,6 +5329,7 @@
       }
       state.nirEditor = null;
       state.nirPendingFiles = [];
+      state.nirPendingAttachmentDeletes = [];
       state.nirEditRevision = 0;
       state.nirProductLineIndex = -1;
       closeModal('shop-nir-delete-dialog');
@@ -5287,14 +5344,55 @@
     }
   }
 
-  async function uploadPendingNirFiles(documentId) {
+  async function uploadPendingNirFiles(documentId, options = {}) {
     for (const file of [...state.nirPendingFiles]) {
       const base64 = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result || '').split(',').pop()); reader.onerror = reject; reader.readAsDataURL(file); });
       const attachment = await window.SHOP_API.uploadNirAttachment(documentId, { file_name: file.name, mime_type: file.type || 'application/octet-stream', content_base64: base64 });
-      await window.SHOP_API.extractNirAttachment(documentId, attachment.id);
+      if (options.extract !== false) await window.SHOP_API.extractNirAttachment(documentId, attachment.id);
       state.nirPendingFiles = state.nirPendingFiles.filter(item => item !== file);
     }
     return window.SHOP_API.getNir(documentId);
+  }
+
+  async function saveNirSupplierDocuments() {
+    const document = state.nirEditor;
+    const original = state.nirCorrectionOriginal;
+    if (!document || !original || state.nirDocumentsSaving || (!state.nirPendingFiles.length && !state.nirPendingAttachmentDeletes.length)) return;
+    const modified = JSON.parse(JSON.stringify(document));
+    state.nirDocumentsSaving = true;
+    renderNirEditor();
+    try {
+      let refreshed = await window.SHOP_API.getNir(document.id);
+      for (const attachmentId of [...state.nirPendingAttachmentDeletes]) {
+        const result = await window.SHOP_API.deleteNirAttachment(document.id, attachmentId);
+        refreshed = result.document;
+        state.nirPendingAttachmentDeletes = state.nirPendingAttachmentDeletes.filter(id => id !== attachmentId);
+      }
+      if (state.nirPendingFiles.length) refreshed = await uploadPendingNirFiles(document.id, { extract: false });
+      refreshed = await window.SHOP_API.getNir(document.id);
+      state.nirCorrectionOriginal = JSON.parse(JSON.stringify(refreshed));
+      state.nirEditor = {
+        ...modified,
+        row_version: refreshed.row_version,
+        attachments: refreshed.attachments || [],
+        confirmed_at: refreshed.confirmed_at,
+        confirmed_by: refreshed.confirmed_by,
+      };
+      state.nirPendingFiles = [];
+      state.nirPendingAttachmentDeletes = [];
+      await loadNirs(state.pages.nirs);
+      toast('Documentele furnizorului au fost salvate separat. Produsele, valorile si stocul NIR-ului nu s-au modificat.');
+    } catch (error) {
+      try {
+        const refreshed = await window.SHOP_API.getNir(document.id);
+        state.nirCorrectionOriginal = JSON.parse(JSON.stringify(refreshed));
+        state.nirEditor = { ...modified, row_version: refreshed.row_version, attachments: refreshed.attachments || [] };
+      } catch (_) { /* editorul ramane disponibil pentru reincercare */ }
+      toast(error.message || 'Documentele furnizorului nu s-au salvat complet.', 'error');
+    } finally {
+      state.nirDocumentsSaving = false;
+      renderNirEditor();
+    }
   }
 
   function nirUpdatePayload(document, rowVersion = document.row_version) {
@@ -5320,7 +5418,7 @@
       if (includeAttachments && state.nirPendingFiles.length) saved = await uploadPendingNirFiles(saved.id);
       if (state.nirEditor?.id === snapshot.id) {
         if (state.nirEditRevision === revision) {
-          state.nirEditor = saved;
+          state.nirEditor = nirNormalizeEditorDecimals(saved);
           state.nirEditRevision = 0;
         } else if (localDraft) {
           state.nirEditor = { ...saved, ...state.nirEditor, id: saved.id, temporary_number: saved.temporary_number, row_version: saved.row_version, attachments: saved.attachments || [] };
@@ -5400,7 +5498,7 @@
       if (!validation.valid) return toast(validation.errors.join(' · '), 'error');
       if (validation.warnings?.length && !confirm(`${validation.warnings.join('\n')}\n\nContinui confirmarea?`)) return;
       const key = `${saved.id}-${saved.row_version}-${Date.now()}`;
-      state.nirEditor = await window.SHOP_API.confirmNir(saved.id, saved.row_version, key);
+      state.nirEditor = nirNormalizeEditorDecimals(await window.SHOP_API.confirmNir(saved.id, saved.row_version, key));
       state.nirEditRevision = 0;
       renderNirEditor(); void loadNirAccountingDetails(); await loadNirs(state.pages.nirs); toast(correcting ? `NIR ${state.nirEditor.nir_number} corectat. Stocul Conta a fost recalculat.` : `NIR ${state.nirEditor.nir_number} confirmat. Stocul Conta a fost actualizat.`);
     } catch (error) { toast(error.message || 'Confirmarea a esuat. Nu s-a pastrat nicio modificare partiala.', 'error'); }
@@ -5438,6 +5536,7 @@
     state.nirCorrectionOriginal = JSON.parse(JSON.stringify(document));
     state.nirEditor = JSON.parse(JSON.stringify(document));
     state.nirPendingFiles = [];
+    state.nirPendingAttachmentDeletes = [];
     state.nirEditRevision = 0;
     renderNirEditor();
     requestAnimationFrame(() => {
@@ -5455,6 +5554,10 @@
     const original = state.nirCorrectionOriginal;
     const modified = state.nirEditor;
     if (!original || !modified || state.nirSaving || state.nirSavePromise) return;
+    if (state.nirPendingFiles.length || state.nirPendingAttachmentDeletes.length) {
+      toast('Salveaza mai intai modificarile din sectiunea Documente furnizor.', 'error');
+      return;
+    }
     const button = $('shop-nir-correct');
     if (button) button.disabled = true;
     state.nirSaving = true;
@@ -5489,9 +5592,10 @@
       if (state.nirPendingFiles.length) saved = await uploadPendingNirFiles(saved.id);
       const key = `${saved.id}-correction-${saved.row_version}-${Date.now()}`;
       const confirmed = await window.SHOP_API.confirmNir(saved.id, saved.row_version, key);
-      state.nirEditor = confirmed;
+      state.nirEditor = nirNormalizeEditorDecimals(confirmed);
       state.nirCorrectionOriginal = null;
       state.nirPendingFiles = [];
+      state.nirPendingAttachmentDeletes = [];
       state.nirEditRevision = 0;
       renderNirEditor();
       void loadNirAccountingDetails();
@@ -5534,7 +5638,7 @@
       if (!duplicate) state.nirPendingFiles.push(file);
     }
     renderNirEditor();
-    toast(`${files.length === 1 ? 'Document pregatit' : 'Documente pregatite'} local. Se incarca numai cand apesi Salveaza ciorna.`);
+    toast(`${files.length === 1 ? 'Document pregatit' : 'Documente pregatite'} local. Se incarca numai cand apesi ${state.nirCorrectionOriginal ? 'Salveaza documentele' : 'Salveaza ciorna'}.`);
   }
 
   async function loadNirAccountingDetails() {
@@ -5757,9 +5861,9 @@
       }
       const updatedOriginal = result?.original || result?.document || result?.storno?.original || await window.SHOP_API.getNir(document.id);
       const fullyStorned = Boolean(result?.fully_storned || updatedOriginal?.fully_storned || updatedOriginal?.status === 'reversed');
-      state.nirEditor = supplierReturnContext
+      state.nirEditor = nirNormalizeEditorDecimals(supplierReturnContext
         ? await window.SHOP_API.getNir(supplierReturnContext.customerReturnNirId)
-        : { ...updatedOriginal, ...(fullyStorned ? { fully_storned: true, can_storno: false } : {}) };
+        : { ...updatedOriginal, ...(fullyStorned ? { fully_storned: true, can_storno: false } : {}) });
       state.nirReversing = false;
       closeModal('shop-nir-reverse-dialog');
       renderNirEditor();

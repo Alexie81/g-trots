@@ -441,3 +441,116 @@ function merchantSyncCatalogBatch(PDO $db, array $config, string $afterId = '', 
         'has_more' => $hasMore,
     ];
 }
+
+function merchantRefreshCatalogBatch(PDO $db, array $config, string $afterId = '', int $limit = 20): array {
+    $limit = max(1, min(20, $limit));
+    $ids = function_exists('catalogRepresentativeProductIds')
+        ? array_keys(catalogRepresentativeProductIds($db))
+        : array_values(array_map('strval', $db->query('SELECT id FROM shop_products WHERE is_active = 1')->fetchAll(PDO::FETCH_COLUMN)));
+    sort($ids, SORT_STRING);
+    if ($afterId !== '') {
+        $ids = array_values(array_filter($ids, static fn(string $id): bool => strcmp($id, $afterId) > 0));
+    }
+    $hasMore = count($ids) > $limit;
+    $batch = array_slice($ids, 0, $limit);
+    $results = [];
+    foreach ($batch as $id) $results[] = ['product_id' => $id, ...merchantSyncProductSafe($db, $config, $id)];
+    return [
+        'configured' => merchantIsConfigured($config),
+        'enabled' => merchantSyncIsEnabled($config),
+        'processed' => count($batch),
+        'results' => $results,
+        'next_cursor' => $batch ? (string)end($batch) : $afterId,
+        'has_more' => $hasMore,
+    ];
+}
+
+function merchantMaybeRefreshCatalogAfterVisit(
+    PDO $db,
+    array $config,
+    int $maxAgeDays = 7,
+    int $batchSize = 20,
+    int $minimumBatchIntervalSeconds = 60
+): ?array {
+    if (!merchantSyncIsEnabled($config) || !merchantIsConfigured($config)) return null;
+
+    $lockName = 'g-trots-merchant-weekly-refresh';
+    $lock = $db->prepare('SELECT GET_LOCK(?, 0)');
+    $lock->execute([$lockName]);
+    if ((int)$lock->fetchColumn() !== 1) return null;
+
+    try {
+        $state = $db->query('SELECT * FROM shop_merchant_refresh_state WHERE id = 1 LIMIT 1')->fetch();
+        if (!$state) {
+            $db->exec('INSERT INTO shop_merchant_refresh_state (id) VALUES (1)');
+            $state = $db->query('SELECT * FROM shop_merchant_refresh_state WHERE id = 1 LIMIT 1')->fetch();
+        }
+
+        $cycleStartedAt = trim((string)($state['cycle_started_at'] ?? ''));
+        $cycleCompletedAt = trim((string)($state['cycle_completed_at'] ?? ''));
+        $lastBatchAt = trim((string)($state['last_batch_at'] ?? ''));
+        $cycleIsActive = $cycleStartedAt !== '';
+        $cycleIsDue = $cycleCompletedAt === ''
+            || strtotime($cycleCompletedAt) < time() - max(1, $maxAgeDays) * 86400;
+        if (!$cycleIsActive && !$cycleIsDue) return null;
+        if ($lastBatchAt !== '' && strtotime($lastBatchAt) > time() - max(1, $minimumBatchIntervalSeconds)) return null;
+
+        if (!$cycleIsActive) {
+            $db->exec(
+                "UPDATE shop_merchant_refresh_state
+                 SET cycle_started_at = NOW(), last_batch_at = NULL, cursor = '', processed_products = 0,
+                     error_count = 0, last_error = NULL
+                 WHERE id = 1"
+            );
+            $state['cursor'] = '';
+        }
+
+        $batch = merchantRefreshCatalogBatch($db, $config, (string)($state['cursor'] ?? ''), $batchSize);
+        $batchErrors = array_values(array_filter(
+            (array)($batch['results'] ?? []),
+            static fn(array $result): bool => ($result['status'] ?? '') === 'error'
+        ));
+        $lastError = $batchErrors
+            ? mb_substr((string)($batchErrors[0]['error'] ?? 'Eroare Merchant necunoscută.'), 0, 1000)
+            : null;
+
+        if (!empty($batch['has_more'])) {
+            $update = $db->prepare(
+                'UPDATE shop_merchant_refresh_state
+                 SET last_batch_at = NOW(), cursor = ?, processed_products = processed_products + ?,
+                     error_count = error_count + ?, last_error = COALESCE(?, last_error)
+                 WHERE id = 1'
+            );
+            $update->execute([
+                (string)($batch['next_cursor'] ?? ''),
+                (int)($batch['processed'] ?? 0),
+                count($batchErrors),
+                $lastError,
+            ]);
+        } else {
+            $update = $db->prepare(
+                "UPDATE shop_merchant_refresh_state
+                 SET cycle_started_at = NULL, cycle_completed_at = NOW(), last_batch_at = NOW(), cursor = '',
+                     processed_products = processed_products + ?, error_count = error_count + ?,
+                     last_error = COALESCE(?, last_error)
+                 WHERE id = 1"
+            );
+            $update->execute([(int)($batch['processed'] ?? 0), count($batchErrors), $lastError]);
+        }
+
+        return $batch;
+    } catch (Throwable $error) {
+        try {
+            $failure = $db->prepare(
+                'UPDATE shop_merchant_refresh_state SET last_batch_at = NOW(), last_error = ? WHERE id = 1'
+            );
+            $failure->execute([mb_substr($error->getMessage(), 0, 1000)]);
+        } catch (Throwable) {
+        }
+        error_log('[G-Trots Merchant weekly refresh] ' . $error->getMessage());
+        return null;
+    } finally {
+        $release = $db->prepare('SELECT RELEASE_LOCK(?)');
+        $release->execute([$lockName]);
+    }
+}

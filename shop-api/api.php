@@ -183,8 +183,8 @@ function jsonResponse($payload, int $status = 200): void {
 }
 
 function scheduleSupplierStockSyncAfterResponse(PDO $db, array $config): void {
-    // Trimitem mai intai catalogul catre client, apoi lasam sincronizarea
-    // periodica Boomag sa ruleze in fundal. Hostingul live foloseste LiteSpeed,
+    // Trimitem mai intai catalogul catre client, apoi lasam mentenanta periodica
+    // a canalelor externe sa ruleze in fundal. Hostingul live foloseste LiteSpeed,
     // iar mediile locale/de rezerva pot folosi PHP-FPM.
     $finishRequest = function_exists('litespeed_finish_request')
         ? 'litespeed_finish_request'
@@ -193,7 +193,12 @@ function scheduleSupplierStockSyncAfterResponse(PDO $db, array $config): void {
     register_shutdown_function(static function () use ($db, $config, $finishRequest): void {
         $finishRequest();
         ignore_user_abort(true);
-        @set_time_limit(120);
+        @set_time_limit(180);
+        try {
+            merchantMaybeRefreshCatalogAfterVisit($db, $config, 7, 20, 60);
+        } catch (Throwable $error) {
+            error_log('Refresh-ul Merchant de dupa raspuns a esuat: ' . $error->getMessage());
+        }
         try {
             gomagMaybeSyncSupplierStock($db, $config, 1);
         } catch (Throwable $error) {
@@ -266,7 +271,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026101401;
+    $schemaVersion = 2026101501;
     // Ruta normala face doar SELECT-ul indexat. Un CREATE TABLE IF NOT EXISTS la
     // fiecare request tot cere verificari de metadata si poate astepta lock-uri.
     try {
@@ -713,6 +718,20 @@ function ensureShopSchema(PDO $db): void {
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
     );
+    $db->exec(
+        "CREATE TABLE IF NOT EXISTS shop_merchant_refresh_state (
+            id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+            cycle_started_at DATETIME NULL,
+            cycle_completed_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
+            last_batch_at DATETIME NULL,
+            cursor CHAR(36) NOT NULL DEFAULT '',
+            processed_products INT UNSIGNED NOT NULL DEFAULT 0,
+            error_count INT UNSIGNED NOT NULL DEFAULT 0,
+            last_error VARCHAR(1000) NULL,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $db->exec('INSERT IGNORE INTO shop_merchant_refresh_state (id) VALUES (1)');
     $db->exec(
         "CREATE TABLE IF NOT EXISTS shop_product_brands (
             product_id CHAR(36) NOT NULL,

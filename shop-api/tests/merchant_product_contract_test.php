@@ -122,6 +122,11 @@ $assert(str_contains($api, '$feedSync[\'stock_changed\']'), 'schimbarea de stoc 
 $assert(str_contains($api, "'litespeed_finish_request'"), 'sincronizarea automată Boomag nu rulează după răspuns pe hostingul LiteSpeed');
 $assert(str_contains($api, 'gomagMaybeSyncSupplierStock($db, $config, 1)'), 'feedul Boomag nu este verificat automat la interval de un minut');
 $assert(str_contains($api, 'scheduleSupplierStockSyncAfterResponse($db, $config);'), 'catalogul public nu programează sincronizarea automată Boomag');
+$assert(str_contains($api, 'merchantMaybeRefreshCatalogAfterVisit($db, $config, 7, 20, 60)'), 'catalogul public nu programează refresh-ul Merchant după răspuns');
+$assert(str_contains($api, 'ignore_user_abort(true)'), 'refresh-ul după vizită se oprește dacă vizitatorul închide pagina');
+$assert(str_contains($merchant, "GET_LOCK(?, 0)"), 'refresh-ul Merchant nu este protejat împotriva rulărilor simultane');
+$assert(str_contains($merchant, 'shop_merchant_refresh_state'), 'refresh-ul Merchant nu își păstrează cursorul între vizite');
+$assert(str_contains($merchant, 'merchantRefreshCatalogBatch'), 'refresh-ul săptămânal Merchant nu procesează catalogul în loturi');
 $assert(str_contains($api, '$merchantSync = merchantSyncProductSafe($db, $config, $id);'), 'ajustarea manuală de stoc nu declanșează Merchant');
 $assert(str_contains($stripe, "'stock_quantity' =>"), 'Stripe nu primește stocul curent al produsului');
 $assert(str_contains($gomag, 'array_keys($stocksChanged)'), 'sincronizarea completă Boomag nu propagă stocul în Merchant');

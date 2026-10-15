@@ -883,9 +883,12 @@ function updateProductTabsRange() {
   if (!productTabsBar) return;
   const siteHeader = document.querySelector("header");
   if (siteHeader) {
+    const headerInner = siteHeader.querySelector(".header-inner");
+    const stickyAnchorBottom = headerInner?.getBoundingClientRect().bottom
+      ?? siteHeader.getBoundingClientRect().bottom;
     productTabsBar.style.setProperty(
       "--product-tabs-sticky-top",
-      `${Math.max(0, siteHeader.getBoundingClientRect().bottom)}px`
+      `${Math.max(0, stickyAnchorBottom - 1)}px`
     );
   }
   const lastVisibleProductSection = productSections

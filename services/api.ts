@@ -22,7 +22,7 @@ import type {
   UserRole,
 } from '@/types';
 import { generateQrCode } from '@/utils/qr';
-import * as SecureStore from 'expo-secure-store';
+import { getAppStorageItem, setAppStorageItem } from '@/utils/appStorage';
 import { calculateClientPayment, normalizeServiceSheetWorkPrice } from '@/constants/financial';
 
 const API_CONFIG_STORAGE_KEY = 'gtrots.systemApiConfig';
@@ -301,7 +301,7 @@ async function readStoredApiConfig(): Promise<RuntimeApiConfig> {
     apiKey: DEFAULT_API_CONFIG.apiKey.trim(),
   };
   try {
-    const raw = await SecureStore.getItemAsync(API_CONFIG_STORAGE_KEY);
+    const raw = await getAppStorageItem(API_CONFIG_STORAGE_KEY);
     if (!raw) return fallback;
     const saved = JSON.parse(raw) as Partial<RuntimeApiConfig>;
     const config = {
@@ -309,7 +309,7 @@ async function readStoredApiConfig(): Promise<RuntimeApiConfig> {
       apiKey: String(saved.apiKey || fallback.apiKey).trim(),
     };
     if (saved.apiUrl !== config.apiUrl || saved.apiKey !== config.apiKey) {
-      await SecureStore.setItemAsync(API_CONFIG_STORAGE_KEY, JSON.stringify(config));
+      await setAppStorageItem(API_CONFIG_STORAGE_KEY, JSON.stringify(config));
     }
     return config;
   } catch {
@@ -331,7 +331,7 @@ export async function saveRuntimeApiConfig(config: RuntimeApiConfig): Promise<Ru
     throw new Error('Adresa API trebuie sa inceapa cu http:// sau https://.');
   }
   if (!next.apiKey) throw new Error('API Key este obligatoriu.');
-  await SecureStore.setItemAsync(API_CONFIG_STORAGE_KEY, JSON.stringify(next));
+  await setAppStorageItem(API_CONFIG_STORAGE_KEY, JSON.stringify(next));
   runtimeConfigPromise = Promise.resolve(next);
   clearReferenceCaches();
   clearTableCaches();

@@ -16,6 +16,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Updates from 'expo-updates';
 import { useFocusEffect } from 'expo-router';
 import Constants from 'expo-constants';
 import { Colors } from '@/constants/colors';
@@ -862,6 +863,24 @@ export default function SettingsScreen() {
     setMobileUpdateStatus('checking');
     setMobileUpdateMessage('Se verifica daca exista o versiune noua...');
     try {
+      if (Platform.OS === 'ios') {
+        setMobileAvailableVersion('');
+        setMobileDownloadUrl('');
+        if (__DEV__ || !Updates.isEnabled) {
+          setMobileUpdateStatus('current');
+          setMobileUpdateMessage('Actualizarile iPhone se verifica automat in versiunea instalata din TestFlight sau App Store.');
+          return;
+        }
+        const update = await Updates.checkForUpdateAsync();
+        setMobileUpdateStatus(update.isAvailable ? 'available' : 'current');
+        setMobileUpdateMessage(
+          update.isAvailable
+            ? 'O actualizare compatibila pentru iPhone este pregatita pentru instalare.'
+            : 'Ai deja cea mai noua actualizare disponibila pentru iPhone.'
+        );
+        return;
+      }
+
       const info = await getMobileAppUpdate(mobileCurrentVersion);
       setMobileAvailableVersion(info.available_version || '');
       setMobileDownloadUrl(info.download_url || '');
@@ -909,6 +928,20 @@ export default function SettingsScreen() {
   }, []);
 
   const openMobileUpdate = async () => {
+    if (Platform.OS === 'ios') {
+      setMobileUpdateStatus('opening');
+      setMobileUpdateMessage('Se descarca actualizarea pentru iPhone...');
+      try {
+        await Updates.fetchUpdateAsync();
+        setMobileUpdateMessage('Actualizarea este instalata. Aplicatia reporneste acum.');
+        await Updates.reloadAsync();
+      } catch (e: any) {
+        setMobileUpdateStatus('error');
+        setMobileUpdateMessage(e.message || 'Actualizarea pentru iPhone nu a putut fi instalata.');
+      }
+      return;
+    }
+
     const url = mobileDownloadUrl || 'https://g-trots.ro/download-app/GTrotsApp.apk';
     setMobileUpdateStatus('opening');
     setMobileUpdateMessage('Se deschide descarcarea APK...');
@@ -1010,7 +1043,9 @@ export default function SettingsScreen() {
             </View>
             <View style={styles.mobileUpdateCopy}>
               <Text style={styles.mobileUpdateTitle}>Actualizare aplicatie</Text>
-              <Text style={styles.mobileUpdateSub}>G-Trots Android · versiunea ta {mobileCurrentVersion}</Text>
+              <Text style={styles.mobileUpdateSub}>
+                G-Trots {Platform.OS === 'ios' ? 'iPhone' : 'Android'} · versiunea ta {mobileCurrentVersion}
+              </Text>
             </View>
             <View style={[
               styles.mobileUpdateBadge,
@@ -1063,7 +1098,9 @@ export default function SettingsScreen() {
                   <Download size={15} color={Colors.white} />
                 )}
                 <Text style={styles.mobileUpdatePrimaryText}>
-                  {mobileUpdateStatus === 'opening' ? 'Se deschide...' : 'Actualizeaza'}
+                  {mobileUpdateStatus === 'opening'
+                    ? (Platform.OS === 'ios' ? 'Se instaleaza...' : 'Se deschide...')
+                    : 'Actualizeaza'}
                 </Text>
               </TouchableOpacity>
             ) : null}

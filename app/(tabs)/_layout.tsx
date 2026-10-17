@@ -1,6 +1,6 @@
 import { Tabs, usePathname } from 'expo-router';
 import { useEffect } from 'react';
-import * as SecureStore from 'expo-secure-store';
+import { getAppStorageItem } from '@/utils/appStorage';
 import { Users, BarChart3, Settings, ScanLine, FileText } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -67,8 +67,8 @@ export default function TabLayout() {
     const task = runWhenIdle(() => {
       warmedServiceToken = token;
       void Promise.all([
-        SecureStore.getItemAsync('gtrots.clientsPageSize.v1'),
-        SecureStore.getItemAsync('gtrots.serviceSheetsPageSize.v1'),
+        getAppStorageItem('gtrots.clientsPageSize.v1'),
+        getAppStorageItem('gtrots.serviceSheetsPageSize.v1'),
       ]).then(([clientsSizeRaw, serviceSizeRaw]) => {
         const allowedSizes = new Set([10, 15, 25, 50, 100]);
         const clientsSize = allowedSizes.has(Number(clientsSizeRaw)) ? Number(clientsSizeRaw) : 10;

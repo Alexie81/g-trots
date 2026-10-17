@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import { deleteAppStorageItem, getAppStorageItem, setAppStorageItem } from '@/utils/appStorage';
 import {
   getCurrentAppUser,
   isAuthenticationApiError,
@@ -58,8 +58,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const [rawSession, rawPreferences] = await Promise.all([
-          SecureStore.getItemAsync(AUTH_SESSION_STORAGE_KEY),
-          SecureStore.getItemAsync(AUTH_PREFERENCES_STORAGE_KEY),
+          getAppStorageItem(AUTH_SESSION_STORAGE_KEY),
+          getAppStorageItem(AUTH_PREFERENCES_STORAGE_KEY),
         ]);
         if (!active) return;
 
@@ -74,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!rawSession) return;
         const session = JSON.parse(rawSession) as StoredAuthSession;
         if (!session.token || !session.user?.id) {
-          await SecureStore.deleteItemAsync(AUTH_SESSION_STORAGE_KEY);
+          await deleteAppStorageItem(AUTH_SESSION_STORAGE_KEY);
           return;
         }
 
@@ -93,13 +93,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!active) return;
           userRef.current = freshUser;
           setUser(freshUser);
-          await SecureStore.setItemAsync(AUTH_SESSION_STORAGE_KEY, JSON.stringify({
+          await setAppStorageItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify({
             ...session,
             user: freshUser,
           }));
         } catch (error) {
           if (isAuthenticationApiError(error)) {
-            await SecureStore.deleteItemAsync(AUTH_SESSION_STORAGE_KEY);
+            await deleteAppStorageItem(AUTH_SESSION_STORAGE_KEY);
             if (!active) return;
             rememberLoginRef.current = false;
             tokenRef.current = '';
@@ -132,18 +132,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setRememberedUsername(normalizedUsername);
       setRememberedLogin(rememberMe);
       lastRefreshAtRef.current = Date.now();
-      await SecureStore.setItemAsync(AUTH_PREFERENCES_STORAGE_KEY, JSON.stringify({
+      await setAppStorageItem(AUTH_PREFERENCES_STORAGE_KEY, JSON.stringify({
         username: normalizedUsername,
         rememberMe,
       })).catch(() => {});
       if (rememberMe) {
-        await SecureStore.setItemAsync(AUTH_SESSION_STORAGE_KEY, JSON.stringify({
+        await setAppStorageItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify({
           token: result.token,
           user: result.user,
           username: normalizedUsername,
         } satisfies StoredAuthSession)).catch(() => {});
       } else {
-        await SecureStore.deleteItemAsync(AUTH_SESSION_STORAGE_KEY).catch(() => {});
+        await deleteAppStorageItem(AUTH_SESSION_STORAGE_KEY).catch(() => {});
       }
     } finally {
       setLoading(false);
@@ -159,7 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userRef.current = null;
     lastRefreshAtRef.current = 0;
     refreshInFlightRef.current = null;
-    await SecureStore.deleteItemAsync(AUTH_SESSION_STORAGE_KEY).catch(() => {});
+    await deleteAppStorageItem(AUTH_SESSION_STORAGE_KEY).catch(() => {});
     if (currentToken) {
       try {
         await logoutAppUser(currentToken);
@@ -180,7 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userRef.current = freshUser;
         setUser((current) => JSON.stringify(current) === JSON.stringify(freshUser) ? current : freshUser);
         if (rememberLoginRef.current) {
-          SecureStore.setItemAsync(AUTH_SESSION_STORAGE_KEY, JSON.stringify({
+          setAppStorageItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify({
             token,
             user: freshUser,
             username: freshUser.username || rememberedUsername,
@@ -196,7 +196,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(null);
           userRef.current = null;
           lastRefreshAtRef.current = 0;
-          await SecureStore.deleteItemAsync(AUTH_SESSION_STORAGE_KEY).catch(() => {});
+          await deleteAppStorageItem(AUTH_SESSION_STORAGE_KEY).catch(() => {});
           return null;
         }
         // O eroare temporara de internet/API nu invalideaza o sesiune locala valida.

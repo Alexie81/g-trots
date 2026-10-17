@@ -27,7 +27,14 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "name": "G-Trots",
+      "shortName": "G-Trots",
+      "splash": {
+        "image": "./assets/images/logo.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#080706"
+      }
     },
     "plugins": [
       "expo-router",
@@ -77,7 +84,8 @@
       "expo-status-bar"
     ],
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": true,
+      "baseUrl": "/aplicatie"
     },
     "runtimeVersion": {
       "policy": "appVersion"

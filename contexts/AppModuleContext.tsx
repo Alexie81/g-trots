@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import * as SecureStore from 'expo-secure-store';
+import { getAppStorageItem, setAppStorageItem } from '@/utils/appStorage';
 import * as Linking from 'expo-linking';
 
 const APP_MODULE_STORAGE_KEY = 'gtrots.activeModule.v1';
@@ -35,7 +35,7 @@ export function AppModuleProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let active = true;
-    SecureStore.getItemAsync(APP_MODULE_STORAGE_KEY)
+    getAppStorageItem(APP_MODULE_STORAGE_KEY)
       .then((storedModule) => {
         if (active && !deepLinkRequestedRef.current && isAppModule(storedModule)) setActiveModule(storedModule);
       })
@@ -50,7 +50,7 @@ export function AppModuleProvider({ children }: { children: React.ReactNode }) {
 
   const selectModule = useCallback((module: AppModule) => {
     setActiveModule(module);
-    void SecureStore.setItemAsync(APP_MODULE_STORAGE_KEY, module).catch(() => {});
+    void setAppStorageItem(APP_MODULE_STORAGE_KEY, module).catch(() => {});
   }, []);
 
   const openShopOrder = useCallback((orderId: string) => {
@@ -58,7 +58,7 @@ export function AppModuleProvider({ children }: { children: React.ReactNode }) {
     deepLinkRequestedRef.current = true;
     setPendingShopOrderId(orderId.toLowerCase());
     setActiveModule('shop');
-    void SecureStore.setItemAsync(APP_MODULE_STORAGE_KEY, 'shop').catch(() => {});
+    void setAppStorageItem(APP_MODULE_STORAGE_KEY, 'shop').catch(() => {});
   }, []);
 
   const consumePendingShopOrder = useCallback(() => setPendingShopOrderId(null), []);

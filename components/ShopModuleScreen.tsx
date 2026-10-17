@@ -37,7 +37,7 @@ import Reanimated, {
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as SecureStore from 'expo-secure-store';
+import { getAppStorageItem, setAppStorageItem } from '@/utils/appStorage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Boxes,
@@ -477,7 +477,7 @@ export default function ShopModuleScreen() {
 
   useEffect(() => {
     let active = true;
-    void SecureStore.getItemAsync(SHOP_VIEW_STORAGE_KEY).then((stored) => {
+    void getAppStorageItem(SHOP_VIEW_STORAGE_KEY).then((stored) => {
       if (!active || !stored || !shopViews.has(stored as ShopView)) return;
       // Do not override a navigation action that happened while storage loaded.
       if (viewRef.current === 'home' && persistedShopView === 'home') setView(stored as ShopView);
@@ -488,7 +488,7 @@ export default function ShopModuleScreen() {
   useEffect(() => {
     persistedShopView = view;
     viewRef.current = view;
-    void SecureStore.setItemAsync(SHOP_VIEW_STORAGE_KEY, view).catch(() => {});
+    void setAppStorageItem(SHOP_VIEW_STORAGE_KEY, view).catch(() => {});
   }, [view]);
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -504,7 +504,7 @@ export default function ShopModuleScreen() {
 
   useEffect(() => {
     let active = true;
-    void SecureStore.getItemAsync(SHOP_DASHBOARD_PREFERENCES_STORAGE_KEY)
+    void getAppStorageItem(SHOP_DASHBOARD_PREFERENCES_STORAGE_KEY)
       .then((stored) => {
         if (!active) return;
         const preferences = readStoredDashboardPreferences(stored);
@@ -522,7 +522,7 @@ export default function ShopModuleScreen() {
 
   useEffect(() => {
     if (!dashboardPreferencesReady) return;
-    void SecureStore.setItemAsync(SHOP_DASHBOARD_PREFERENCES_STORAGE_KEY, JSON.stringify({
+    void setAppStorageItem(SHOP_DASHBOARD_PREFERENCES_STORAGE_KEY, JSON.stringify({
       period: dashboardPeriod,
       startDate: dashboardPeriod === 'custom' ? dashboardAppliedStartDate : '',
       endDate: dashboardPeriod === 'custom' ? dashboardAppliedEndDate : '',

@@ -23,7 +23,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useFocusEffect, useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
+import { getAppStorageItem, setAppStorageItem } from '@/utils/appStorage';
 import { CalendarArrowDown, CalendarClock, CheckCircle2, CircleDollarSign, Clock, Edit3, FileText, Plus, RefreshCw, Search, Trash2, UserRound, X } from 'lucide-react-native';
 import Header from '@/components/Header';
 import MobileChatHeaderButton from '@/components/MobileChatHeaderButton';
@@ -363,7 +363,7 @@ export default function ServiceSheetsScreen() {
 
   useEffect(() => {
     let active = true;
-    void SecureStore.getItemAsync(SERVICE_PAGE_SIZE_KEY).then((saved) => {
+    void getAppStorageItem(SERVICE_PAGE_SIZE_KEY).then((saved) => {
       const nextSize = Number(saved || DEFAULT_SERVICE_PAGE_SIZE);
       if (!active || !TABLE_PAGE_SIZES.has(nextSize) || nextSize === pageSizeRef.current) return;
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
@@ -635,7 +635,7 @@ export default function ServiceSheetsScreen() {
     currentPageRef.current = 1;
     setPageSize(nextSize);
     setLoadedPage(1);
-    void SecureStore.setItemAsync(SERVICE_PAGE_SIZE_KEY, String(nextSize)).catch(() => {});
+    void setAppStorageItem(SERVICE_PAGE_SIZE_KEY, String(nextSize)).catch(() => {});
     void load({ ...queryRef.current, page: 1 }, { showLoading: false, scrollToTop: true });
   }, [invalidateServiceData, load]);
 

@@ -17,7 +17,7 @@ import {
   Modal,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
+import { getAppStorageItem, setAppStorageItem } from '@/utils/appStorage';
 import { Colors } from '@/constants/colors';
 import Header from '@/components/Header';
 import ClientCard from '@/components/ClientCard';
@@ -357,7 +357,7 @@ export default function ClientsScreen() {
 
   useEffect(() => {
     let active = true;
-    void SecureStore.getItemAsync(CLIENTS_PAGE_SIZE_KEY).then((saved) => {
+    void getAppStorageItem(CLIENTS_PAGE_SIZE_KEY).then((saved) => {
       const nextSize = Number(saved || DEFAULT_CLIENTS_PAGE_SIZE);
       if (!active || !TABLE_PAGE_SIZES.has(nextSize) || nextSize === pageSizeRef.current) return;
       pageSizeRef.current = nextSize;
@@ -717,7 +717,7 @@ export default function ClientsScreen() {
     pageCacheGenerationRef.current += 1;
     pageCacheRef.current.clear();
     pageRequestsRef.current.clear();
-    void SecureStore.setItemAsync(CLIENTS_PAGE_SIZE_KEY, String(nextSize)).catch(() => {});
+    void setAppStorageItem(CLIENTS_PAGE_SIZE_KEY, String(nextSize)).catch(() => {});
     void load(searchRef.current, selectedProfileRef.current, { page: 1, restoreScroll: false, silent: true, scrollToTop: true });
   }, [load]);
 

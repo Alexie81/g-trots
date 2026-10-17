@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { Alert, AppState } from 'react-native';
+import { Alert, AppState, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { getMobileAppUpdate } from '@/services/api';
@@ -21,7 +21,9 @@ export default function MobileUpdateStartupNotifier() {
   const lastCheckedAt = useRef(0);
 
   const checkForUpdate = useCallback(async () => {
-    if (!user || checkInFlight.current) return;
+    // iOS receives compatible updates through expo-updates and native releases
+    // through the App Store. The custom manifest below is only for Android APKs.
+    if (Platform.OS !== 'android' || !user || checkInFlight.current) return;
     const now = Date.now();
     if (now - lastCheckedAt.current < 60000) return;
 

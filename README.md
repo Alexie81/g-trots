@@ -57,6 +57,12 @@ Conținutul `dist/` se publică în `/g-trots.ro/aplicatie`, iar pe iPhone aplic
 
 Fiecare build PWA primește automat o amprentă nouă. După publicare, aplicațiile deja instalate detectează noua versiune prin service worker, înlocuiesc cache-ul vechi și se reîncarcă fără reinstalare. Acest flux este separat de EAS Update și de APK-ul Android.
 
+Pentru o actualizare PWA completă (build și publicare):
+
+```powershell
+npm run update:pwa
+```
+
 Aplicația desktop:
 
 ```powershell

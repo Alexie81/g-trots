@@ -1336,6 +1336,7 @@ function ShopBottomNavigation({
   bottomInset: number;
 }) {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const navigationBottomInset = Platform.OS === 'web' ? 0 : bottomInset;
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -1349,7 +1350,7 @@ function ShopBottomNavigation({
     <View
       style={[
         styles.bottomNavigation,
-        { height: 66 + bottomInset, paddingBottom: Math.max(bottomInset, 6) },
+        { height: 66 + navigationBottomInset, paddingBottom: Math.max(navigationBottomInset, 6) },
       ]}>
       {primaryTabs.map(({ key, title, Icon }) => {
         const active = activeTab === key;

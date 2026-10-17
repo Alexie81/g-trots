@@ -1,5 +1,6 @@
 import { Tabs, usePathname } from 'expo-router';
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { getAppStorageItem } from '@/utils/appStorage';
 import { Users, BarChart3, Settings, ScanLine, FileText } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
@@ -43,6 +44,7 @@ function accessibleServiceTab(
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
+  const navigationBottomInset = Platform.OS === 'web' ? 0 : insets.bottom;
   const pathname = usePathname();
   const { token, user } = useAuth();
   const { activeModule } = useAppModule();
@@ -114,8 +116,8 @@ export default function TabLayout() {
           backgroundColor: 'rgba(20,20,20,0.84)',
           borderTopColor: 'rgba(255,255,255,0.08)',
           borderTopWidth: 1,
-          height: 62 + insets.bottom,
-          paddingBottom: 8 + insets.bottom,
+          height: 62 + navigationBottomInset,
+          paddingBottom: 8 + navigationBottomInset,
           paddingTop: 6,
         },
         tabBarActiveTintColor: Colors.orange,

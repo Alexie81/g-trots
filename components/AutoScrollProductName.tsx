@@ -1,11 +1,36 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, LayoutChangeEvent, StyleProp, Text, TextStyle, View } from 'react-native';
+import { Animated, Easing, LayoutChangeEvent, Platform, StyleProp, StyleSheet, Text, TextStyle, View } from 'react-native';
 
 export default function AutoScrollProductName({ value, style }: { value: string; style?: StyleProp<TextStyle> }) {
   const translateX = useRef(new Animated.Value(0)).current;
   const [containerWidth, setContainerWidth] = useState(0);
   const [textWidth, setTextWidth] = useState(0);
   const distance = Math.max(0, textWidth - containerWidth + 10);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+
+    let active = true;
+    const measure = () => {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (!context) return;
+
+      const resolved = StyleSheet.flatten(style) || {};
+      const fontSize = typeof resolved.fontSize === 'number' ? resolved.fontSize : 14;
+      const fontFamily = typeof resolved.fontFamily === 'string' ? resolved.fontFamily : 'sans-serif';
+      const fontWeight = resolved.fontWeight || '400';
+      const fontStyle = resolved.fontStyle || 'normal';
+      const letterSpacing = typeof resolved.letterSpacing === 'number' ? resolved.letterSpacing : 0;
+      context.font = `${fontStyle} ${fontWeight} ${fontSize}px "${fontFamily}"`;
+      const measured = context.measureText(value).width + Math.max(0, value.length - 1) * letterSpacing;
+      if (active) setTextWidth(Math.ceil(measured));
+    };
+
+    measure();
+    void document.fonts?.ready.then(measure).catch(() => {});
+    return () => { active = false; };
+  }, [style, value]);
 
   useEffect(() => {
     translateX.stopAnimation();
@@ -38,7 +63,7 @@ export default function AutoScrollProductName({ value, style }: { value: string;
       >
         {value}
       </Text>
-      <Animated.View style={{ alignSelf: 'flex-start', width: animatedWidth, opacity: textWidth > 0 ? 1 : 0, transform: [{ translateX }] }}>
+      <Animated.View style={{ alignSelf: 'flex-start', width: animatedWidth, opacity: Platform.OS === 'web' ? 1 : textWidth > 0 ? 1 : 0, transform: [{ translateX }] }}>
         <Text numberOfLines={1} ellipsizeMode="clip" style={style}>{value}</Text>
       </Animated.View>
     </View>

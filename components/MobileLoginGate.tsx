@@ -78,7 +78,9 @@ export default function MobileLoginGate({ children }: { children: React.ReactNod
         style={styles.keyboard}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 18 : 0}>
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <TouchableWithoutFeedback
+          onPress={Platform.OS === 'web' ? undefined : Keyboard.dismiss}
+          accessible={false}>
           <KeyboardAwareScrollView
             extraScrollHeight={120}
             style={styles.scroll}

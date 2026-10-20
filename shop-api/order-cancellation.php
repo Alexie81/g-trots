@@ -77,8 +77,12 @@ final class GtrotsOrderCancellation
                 }
             }
 
-            $alreadyRefunded = $currentStatus === 'refunded' || (string)$order['payment_status'] === 'refunded';
-            $paidCard = (string)$order['payment_method'] === 'card' && (string)$order['payment_status'] === 'paid';
+            $paymentStatusBeforeCancellation = trim((string)($order['payment_status'] ?? ''));
+            if (!in_array($paymentStatusBeforeCancellation, ['pending', 'paid', 'failed', 'refunded'], true)) {
+                $paymentStatusBeforeCancellation = 'pending';
+            }
+            $alreadyRefunded = $currentStatus === 'refunded' || $paymentStatusBeforeCancellation === 'refunded';
+            $paidCard = (string)$order['payment_method'] === 'card' && $paymentStatusBeforeCancellation === 'paid';
             $paymentStatus = $alreadyRefunded ? 'refunded' : ($paidCard ? 'paid' : 'failed');
             $refundStatus = $alreadyRefunded ? (string)($order['refund_status'] ?? 'completed') : ($paidCard ? 'pending' : 'none');
             $refundDueAt = $alreadyRefunded ? ($order['refund_due_at'] ?? null) : ($paidCard ? date('Y-m-d', strtotime('+15 days')) : null);
@@ -87,13 +91,14 @@ final class GtrotsOrderCancellation
             $adminNotes = trim($adminNotes . ($adminNotes !== '' ? "\n" : '') . mb_substr($note, 0, 1200));
             $update = $db->prepare(
                 "UPDATE shop_orders
-                 SET status = 'cancelled', payment_status = ?, customer_cancellation_reason = ?, customer_cancelled_at = CURRENT_TIMESTAMP,
+                 SET status = 'cancelled', payment_status = ?, payment_status_before_cancellation = ?,
+                     customer_cancellation_reason = ?, customer_cancelled_at = CURRENT_TIMESTAMP,
                      cancellation_source = ?, cancellation_invoice_action = ?, return_invoice_id = ?, refund_status = ?, refund_due_at = ?,
                      admin_notes = ?
                  WHERE id = ?"
             );
             $update->execute([
-                $paymentStatus, $reason, $source, $invoiceAction, $returnInvoice['id'] ?? null,
+                $paymentStatus, $paymentStatusBeforeCancellation, $reason, $source, $invoiceAction, $returnInvoice['id'] ?? null,
                 $refundStatus, $refundDueAt, mb_substr($adminNotes, 0, 5000), $orderId,
             ]);
             self::releasePromotion($db, $orderId);

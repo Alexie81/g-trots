@@ -19,7 +19,8 @@ $db->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 $db->exec('CREATE TABLE shop_orders (
     id TEXT PRIMARY KEY, order_number TEXT, tracking_token TEXT, status TEXT, payment_status TEXT, payment_method TEXT,
     customer_email TEXT, admin_notes TEXT, customer_cancellation_reason TEXT, customer_cancelled_at TEXT,
-    cancellation_source TEXT, cancellation_invoice_action TEXT, return_invoice_id TEXT, refund_status TEXT DEFAULT "none",
+    cancellation_source TEXT, cancellation_invoice_action TEXT, payment_status_before_cancellation TEXT,
+    return_invoice_id TEXT, refund_status TEXT DEFAULT "none",
     refund_due_at TEXT, cancellation_email_sent_at TEXT, cancellation_email_error TEXT
 )');
 $db->exec('CREATE TABLE shop_invoices (id TEXT PRIMARY KEY, order_id TEXT, invoice_type TEXT, spv_status TEXT, series TEXT, invoice_number TEXT)');
@@ -31,6 +32,7 @@ $insert->execute(['customer-order', 'CMD-CUSTOMER', str_repeat('a', 48), 'proces
 $result = GtrotsOrderCancellation::cancelByCustomer($db, ['token' => str_repeat('a', 48)], 'Am comandat din greșeală.', []);
 cancellationAssert(($result['order']['status'] ?? '') === 'cancelled', 'Clientul trebuie să poată anula înainte de predarea către curier.');
 cancellationAssert(($result['order']['refund_status'] ?? '') === 'pending' && ($result['order']['refund_due_at'] ?? '') !== '', 'Plata cu cardul trebuie programată pentru rambursare în 15 zile.');
+cancellationAssert(($result['order']['payment_status_before_cancellation'] ?? '') === 'paid', 'Anularea trebuie să păstreze statusul Plătită pentru o eventuală revenire exactă.');
 cancellationAssert(($result['invoice_action'] ?? '') === 'none', 'Fără factură emisă nu trebuie creat niciun document fiscal.');
 cancellationAssert((int)$db->query("SELECT COUNT(*) FROM shop_invoices WHERE order_id='customer-order'")->fetchColumn() === 0, 'Anularea unei comenzi fără factură nu trebuie să emită factură.');
 
@@ -46,11 +48,17 @@ $insert->execute(['shipped-staff', 'CMD-SHIPPED-STAFF', str_repeat('c', 48), 'sh
 $staff = GtrotsOrderCancellation::cancelByStaff($db, 'shipped-staff', 'Clientul a refuzat coletul la curier.', [], ['display_name' => 'Operator Test']);
 cancellationAssert(($staff['order']['status'] ?? '') === 'cancelled', 'Operatorul trebuie să poată anula manual și după predarea către curier.');
 cancellationAssert(($staff['order']['cancellation_source'] ?? '') === 'staff', 'Anularea manuală trebuie identificată separat în baza de date.');
+cancellationAssert(($staff['order']['payment_status_before_cancellation'] ?? '') === 'pending', 'Anularea ramburs trebuie să păstreze statusul În așteptare înainte de a marca plata Eșuată.');
 cancellationAssert((int)$db->query("SELECT customer_notified FROM shop_order_status_history WHERE order_id='shipped-staff'")->fetchColumn() === 1, 'Confirmarea anulării manuale trebuie trimisă automat clientului.');
+
+$insert->execute(['failed-staff', 'CMD-FAILED-STAFF', str_repeat('e', 48), 'completed', 'failed', 'cash_on_delivery', 'client5@example.com']);
+$failedStaff = GtrotsOrderCancellation::cancelByStaff($db, 'failed-staff', 'Anulare comandă cu plată deja eșuată.', [], ['display_name' => 'Operator Test']);
+cancellationAssert(($failedStaff['order']['payment_status_before_cancellation'] ?? '') === 'failed', 'Anularea trebuie să păstreze exact și un status de plată deja Eșuată.');
 
 $insert->execute(['refunded-staff', 'CMD-REFUNDED-STAFF', str_repeat('d', 48), 'refunded', 'refunded', 'card', 'client4@example.com']);
 $refundedStaff = GtrotsOrderCancellation::cancelByStaff($db, 'refunded-staff', 'Corecție manuală de status.', [], ['display_name' => 'Operator Test']);
 cancellationAssert(($refundedStaff['order']['status'] ?? '') === 'cancelled', 'Operatorul trebuie să poată schimba manual inclusiv un status terminal.');
 cancellationAssert(($refundedStaff['order']['payment_status'] ?? '') === 'refunded', 'Anularea administrativă nu trebuie să anuleze o rambursare deja efectuată.');
+cancellationAssert(($refundedStaff['order']['payment_status_before_cancellation'] ?? '') === 'refunded', 'Statusul Rambursată trebuie păstrat în instantaneul anterior anulării.');
 
 echo "order_cancellation_test: OK\n";

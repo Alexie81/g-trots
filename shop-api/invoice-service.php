@@ -1172,11 +1172,13 @@ final class GtrotsInvoiceService
         if ($isReturn) {
             if (!self::returnInvoiceWasNeverSubmittedToSpv($db, $invoice, $lock)) return false;
             $suffix = $lock && strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME)) !== 'sqlite' ? ' FOR UPDATE' : '';
-            $order = $db->prepare('SELECT status, payment_status, refund_status, cancellation_invoice_action, return_invoice_id FROM shop_orders WHERE id = ? LIMIT 1' . $suffix);
+            $order = $db->prepare('SELECT status, payment_status, payment_status_before_cancellation, refund_status, cancellation_invoice_action, return_invoice_id FROM shop_orders WHERE id = ? LIMIT 1' . $suffix);
             $order->execute([(string)($invoice['order_id'] ?? '')]);
             $orderState = $order->fetch();
             if (!$orderState || !in_array((string)($orderState['status'] ?? ''), ['return_confirmed', 'cancelled'], true)) return false;
-            if ((string)($orderState['payment_status'] ?? '') === 'refunded' || (string)($orderState['refund_status'] ?? '') === 'completed') return false;
+            if ((string)($orderState['payment_status'] ?? '') === 'refunded'
+                || (string)($orderState['payment_status_before_cancellation'] ?? '') === 'refunded'
+                || (string)($orderState['refund_status'] ?? '') === 'completed') return false;
             if ((string)$orderState['status'] === 'cancelled') {
                 if ((string)($orderState['cancellation_invoice_action'] ?? '') !== 'return_invoice_created') return false;
                 if ((string)($orderState['return_invoice_id'] ?? '') !== (string)($invoice['id'] ?? '')) return false;
@@ -1416,6 +1418,7 @@ final class GtrotsInvoiceService
                 throw new InvalidArgumentException('Factura de retur nu este documentul fiscal asociat anulării curente.');
             }
         }
+        $restoredPaymentStatus = self::paymentStatusAfterReturnDeletion($db, $invoice, $order, $fromStatus);
         $changedBy = mb_substr(trim((string)($actor['display_name'] ?? $actor['username'] ?? 'Administrator')), 0, 180) ?: 'Administrator';
         $note = 'Retur anulat prin ștergerea ultimei facturi de retur netrimise în SPV ('
             . trim((string)$invoice['series'] . ' ' . (string)$invoice['invoice_number'])
@@ -1423,7 +1426,8 @@ final class GtrotsInvoiceService
         $adminNotes = trim((string)($order['admin_notes'] ?? ''));
         $adminNotes = trim($adminNotes . ($adminNotes !== '' ? "\n" : '') . $note);
         $db->prepare(
-            "UPDATE shop_orders SET status = 'completed', payment_status = 'paid', return_invoice_id = NULL,
+            "UPDATE shop_orders SET status = 'completed', payment_status = ?, payment_status_before_cancellation = NULL,
+             return_invoice_id = NULL,
              return_reason = NULL, return_bank_iban = NULL, return_bank_account_holder = NULL,
              return_shipping_cost = NULL, return_shipping_payer = NULL, return_refund_amount = NULL,
              return_requested_at = NULL, return_request_source = NULL, return_request_email_sent_at = NULL,
@@ -1437,12 +1441,41 @@ final class GtrotsInvoiceService
              refund_status = 'none', refund_due_at = NULL,
              cancellation_email_sent_at = NULL, cancellation_email_error = NULL,
              admin_notes = ? WHERE id = ?"
-        )->execute([mb_substr($adminNotes, 0, 5000), (string)$invoice['order_id']]);
+        )->execute([$restoredPaymentStatus, mb_substr($adminNotes, 0, 5000), (string)$invoice['order_id']]);
         $db->prepare('DELETE FROM shop_order_return_items WHERE order_id = ?')->execute([(string)$invoice['order_id']]);
         $historyId = self::uuid();
         $db->prepare("INSERT INTO shop_order_status_history (id, order_id, from_status, to_status, changed_by, customer_notified, email_status) VALUES (?, ?, ?, 'completed', ?, 0, 'pending')")
             ->execute([$historyId, (string)$invoice['order_id'], $fromStatus, $changedBy]);
         return $historyId;
+    }
+
+    private static function paymentStatusAfterReturnDeletion(PDO $db, array $invoice, array $order, string $fromStatus): string
+    {
+        $allowed = ['pending', 'paid', 'failed'];
+        $current = trim((string)($order['payment_status'] ?? ''));
+        if ($fromStatus !== 'cancelled') {
+            return in_array($current, $allowed, true) ? $current : 'pending';
+        }
+
+        $snapshot = trim((string)($order['payment_status_before_cancellation'] ?? ''));
+        if ($snapshot === 'refunded') {
+            throw new InvalidArgumentException('Comanda era deja rambursată înaintea anulării și factura de retur nu mai poate fi ștearsă.');
+        }
+        if (in_array($snapshot, $allowed, true)) return $snapshot;
+
+        // Compatibilitate pentru anulările create înainte de introducerea
+        // instantaneului: factura pozitivă a fost emisă înainte ca anularea să
+        // transforme plata ramburs din pending în failed.
+        if ($current === 'paid' || trim((string)($order['stripe_paid_at'] ?? '')) !== '') return 'paid';
+        $originalId = trim((string)($invoice['original_invoice_id'] ?? ''));
+        if ($originalId !== '') {
+            $original = $db->prepare("SELECT document_status FROM shop_invoices WHERE id = ? AND invoice_type = 'invoice' LIMIT 1");
+            $original->execute([$originalId]);
+            $documentStatus = (string)$original->fetchColumn();
+            if ($documentStatus === 'paid') return 'paid';
+            if ($documentStatus === 'unpaid') return 'pending';
+        }
+        return 'pending';
     }
 
     private static function resetSequence(PDO $db, string $series): void

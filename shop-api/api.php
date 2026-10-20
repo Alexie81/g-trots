@@ -271,7 +271,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026101501;
+    $schemaVersion = 2026102001;
     // Ruta normala face doar SELECT-ul indexat. Un CREATE TABLE IF NOT EXISTS la
     // fiecare request tot cere verificari de metadata si poate astepta lock-uri.
     try {
@@ -1744,6 +1744,7 @@ function ensureShopSchema(PDO $db): void {
         $db->exec('ALTER TABLE shop_orders ADD UNIQUE INDEX idx_shop_orders_tracking_token (tracking_token)');
     }
     $orderCancellationColumns = [
+        'payment_status_before_cancellation' => 'VARCHAR(30) NULL AFTER payment_status',
         'customer_cancellation_reason' => 'TEXT NULL AFTER admin_notes',
         'customer_cancelled_at' => 'DATETIME NULL AFTER customer_cancellation_reason',
         'cancellation_source' => 'VARCHAR(30) NULL AFTER customer_cancelled_at',
@@ -1759,6 +1760,25 @@ function ensureShopSchema(PDO $db): void {
             $db->exec("ALTER TABLE shop_orders ADD COLUMN {$column} {$definition}");
         }
     }
+    // Completează anulările istorice pentru care vechea versiune nu păstra
+    // statusul plății de dinaintea anulării. Factura pozitivă este instantaneul
+    // fiscal disponibil înainte ca plata ramburs să fie marcată Eșuată.
+    $db->exec(
+        "UPDATE shop_orders o
+         LEFT JOIN shop_invoices r ON r.id = o.return_invoice_id AND r.invoice_type = 'return'
+         LEFT JOIN shop_invoices original_invoice ON original_invoice.id = r.original_invoice_id
+         SET o.payment_status_before_cancellation = CASE
+             WHEN o.payment_status = 'paid' THEN 'paid'
+             WHEN original_invoice.document_status = 'paid' THEN 'paid'
+             WHEN original_invoice.document_status = 'unpaid' THEN 'pending'
+             WHEN o.payment_status = 'pending' THEN 'pending'
+             ELSE NULL
+         END
+         WHERE o.status = 'cancelled'
+           AND o.payment_status_before_cancellation IS NULL
+           AND o.return_invoice_id IS NOT NULL
+           AND o.payment_status <> 'refunded'"
+    );
     $orderReturnColumns = [
         'return_reason' => 'TEXT NULL AFTER admin_notes',
         'return_bank_iban' => 'VARCHAR(64) NULL AFTER return_reason',

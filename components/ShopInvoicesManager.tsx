@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useAndroidSearchBack from '@/hooks/useAndroidSearchBack';
-import { ActivityIndicator, Alert, Animated, Easing, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Easing, Image, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Clipboard from 'expo-clipboard';
@@ -149,35 +149,42 @@ export default function ShopInvoicesManager({ initialInvoiceId = null, onInitial
     setBusy(null);
     if (!verifiedInvoice.can_delete) return;
     const isReturnInvoice = verifiedInvoice.invoice_type === 'return' || verifiedInvoice.status === 'return';
-    Alert.alert(
-      isReturnInvoice ? 'Ștergi factura de retur?' : 'Ștergi ultima factură?',
-      isReturnInvoice
-        ? `${verifiedInvoice.display_number} este ultima factură și nu a fost trimisă în SPV. Se vor șterge factura, NIR-ul de retur și intrarea aferentă din stoc. Comanda va reveni la Livrată, iar clientul va primi automat e-mailul de livrare.`
-        : `${verifiedInvoice.display_number} este netrimisă în SPV. Stocul și mișcările vor fi refăcute, iar numărul va fi reutilizat la următoarea factură.`,
-      [
-        { text: 'Renunță', style: 'cancel' },
-        { text: isReturnInvoice ? 'Șterge returul' : 'Șterge factura', style: 'destructive', onPress: async () => {
-          setBusy(verifiedInvoice.id);
-          try {
-            const result = await shopApi.deleteInvoice(token, verifiedInvoice.id);
-            setSelectedInvoice(null);
-            setInvoices((current) => current.filter((item) => item.id !== verifiedInvoice.id));
-            if (result.return_invoice_deleted) {
-              const emailSent = Boolean(result.email_notification?.sent);
-              Alert.alert(
-                'Returul a fost anulat',
-                `${verifiedInvoice.display_number}${result.nir_number ? ` și ${result.nir_number}` : ''} au fost șterse, stocul a fost rectificat, iar comanda a revenit la Livrată.${emailSent ? ' Clientul a primit e-mailul de livrare.' : ` E-mailul de livrare nu a putut fi trimis${result.email_notification?.error ? `: ${result.email_notification.error}` : '.'}`}`,
-              );
-            } else {
-              Alert.alert('Factura a fost ștearsă', `Numărul ${verifiedInvoice.display_number} este disponibil pentru următoarea factură.`);
-            }
-            void load();
-          } catch (deleteError) {
-            Alert.alert('Factura nu a fost ștearsă', deleteError instanceof Error ? deleteError.message : 'Încearcă din nou.');
-          } finally { setBusy(null); }
-        } },
-      ],
-    );
+    const confirmationTitle = isReturnInvoice ? 'Ștergi factura de retur?' : 'Ștergi ultima factură?';
+    const confirmationMessage = isReturnInvoice
+      ? `${verifiedInvoice.display_number} este ultima factură și nu a fost trimisă în SPV. Se vor șterge factura, NIR-ul de retur și intrarea aferentă din stoc. Comanda va reveni la Livrată, iar clientul va primi automat e-mailul de livrare.`
+      : `${verifiedInvoice.display_number} este netrimisă în SPV. Stocul și mișcările vor fi refăcute, iar numărul va fi reutilizat la următoarea factură.`;
+    const notify = (title: string, message: string) => {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') window.alert(`${title}\n\n${message}`);
+      else Alert.alert(title, message);
+    };
+    const performDelete = async () => {
+      setBusy(verifiedInvoice.id);
+      try {
+        const result = await shopApi.deleteInvoice(token, verifiedInvoice.id);
+        setSelectedInvoice(null);
+        setInvoices((current) => current.filter((item) => item.id !== verifiedInvoice.id));
+        if (result.return_invoice_deleted) {
+          const emailSent = Boolean(result.email_notification?.sent);
+          notify(
+            'Returul a fost anulat',
+            `${verifiedInvoice.display_number}${result.nir_number ? ` și ${result.nir_number}` : ''} au fost șterse, stocul a fost rectificat, iar comanda a revenit la Livrată.${emailSent ? ' Clientul a primit e-mailul de livrare.' : ` E-mailul de livrare nu a putut fi trimis${result.email_notification?.error ? `: ${result.email_notification.error}` : '.'}`}`,
+          );
+        } else {
+          notify('Factura a fost ștearsă', `Numărul ${verifiedInvoice.display_number} este disponibil pentru următoarea factură.`);
+        }
+        void load();
+      } catch (deleteError) {
+        notify('Factura nu a fost ștearsă', deleteError instanceof Error ? deleteError.message : 'Încearcă din nou.');
+      } finally { setBusy(null); }
+    };
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (window.confirm(`${confirmationTitle}\n\n${confirmationMessage}`)) await performDelete();
+      return;
+    }
+    Alert.alert(confirmationTitle, confirmationMessage, [
+      { text: 'Renunță', style: 'cancel' },
+      { text: isReturnInvoice ? 'Șterge returul' : 'Șterge factura', style: 'destructive', onPress: () => { void performDelete(); } },
+    ]);
   };
 
   const sendEmail = async (invoice: ShopIssuedInvoice) => {

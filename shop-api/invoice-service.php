@@ -704,23 +704,46 @@ final class GtrotsInvoiceService
      * inventory/FIFO effect produced by issuing it. The released sequence is
      * intentionally reused by the next invoice in the same series.
      */
-    public static function delete(PDO $db, string $id, array $config, bool $manageTransaction = true): array
+    public static function delete(PDO $db, string $id, array $config, bool $manageTransaction = true, array $actor = []): array
     {
         $id = trim($id);
         if ($id === '') throw new InvalidArgumentException('Factura nu a fost selectată.');
         $deletedInvoice = null;
+        $returnRollback = ['nir_deleted' => false, 'nir_id' => null, 'nir_number' => null];
+        $restoredOrderStatus = null;
+        $historyId = null;
         if ($manageTransaction) $db->beginTransaction();
         try {
             $invoice = self::findForUpdate($db, $id);
             if (!$invoice) throw new InvalidArgumentException('Factura nu există.');
+            $isReturn = (string)($invoice['invoice_type'] ?? '') === 'return'
+                && (string)($invoice['document_status'] ?? '') === 'return'
+                && trim((string)($invoice['original_invoice_id'] ?? '')) !== '';
             if ((string)($invoice['spv_status'] ?? 'not_sent') === 'sent') {
                 throw new InvalidArgumentException('Factura a fost trimisă în SPV și nu mai poate fi ștearsă.');
             }
+            if ($isReturn && !self::returnInvoiceWasNeverSubmittedToSpv($db, $invoice, true)) {
+                throw new InvalidArgumentException('Factura de retur a intrat deja în procesul SPV și nu mai poate fi ștearsă.');
+            }
             if (!self::canDelete($db, $invoice, true)) {
-                throw new InvalidArgumentException('Poți șterge numai ultima factură emisă. Există deja un document emis după aceasta.');
+                throw new InvalidArgumentException($isReturn
+                    ? 'Poți șterge numai ultima factură de retur netrimisă în SPV, pentru o comandă aflată în Retur confirmat și încă nerambursată.'
+                    : 'Poți șterge numai ultima factură emisă. Există deja un document emis după aceasta.');
             }
 
-            self::rollbackStock($db, $invoice);
+            if ($isReturn) {
+                $returnRollback = self::rollbackReturnStock($db, $invoice);
+                $historyId = self::restoreDeliveredOrderAfterReturnDeletion($db, $invoice, $actor);
+                $restoredOrderStatus = 'completed';
+            } else {
+                self::rollbackStock($db, $invoice);
+            }
+            try {
+                $db->prepare('DELETE FROM shop_spv_outbox WHERE invoice_id = ?')->execute([$id]);
+            } catch (PDOException $error) {
+                // Tabela apare odată cu migrarea SPV. Instalările vechi pot
+                // șterge în continuare o factură care nu a intrat în SPV.
+            }
             $db->prepare('DELETE FROM shop_invoice_theme_assignments WHERE document_id = ? OR (invoice_series = ? AND invoice_number = ?)')
                 ->execute([(string)$invoice['id'], (string)$invoice['series'], (string)$invoice['invoice_number']]);
             $db->prepare('DELETE FROM shop_invoices WHERE id = ?')->execute([$id]);
@@ -741,6 +764,13 @@ final class GtrotsInvoiceService
             'id' => $id,
             'order_id' => (string)($deletedInvoice['order_id'] ?? ''),
             'released_number' => trim((string)($deletedInvoice['series'] ?? '') . ' ' . (string)($deletedInvoice['invoice_number'] ?? '')),
+            'invoice_type' => (string)($deletedInvoice['invoice_type'] ?? 'invoice'),
+            'return_invoice_deleted' => (string)($deletedInvoice['invoice_type'] ?? '') === 'return',
+            'nir_deleted' => (bool)($returnRollback['nir_deleted'] ?? false),
+            'nir_id' => $returnRollback['nir_id'] ?? null,
+            'nir_number' => $returnRollback['nir_number'] ?? null,
+            'restored_order_status' => $restoredOrderStatus,
+            'status_history_id' => $historyId,
         ];
     }
 
@@ -1127,18 +1157,28 @@ final class GtrotsInvoiceService
     private static function deletableInvoiceId(PDO $db): string
     {
         $cast = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'sqlite' ? 'INTEGER' : 'UNSIGNED';
-        $row = $db->query("SELECT * FROM shop_invoices WHERE invoice_type = 'invoice' ORDER BY issued_at DESC, CAST(invoice_number AS {$cast}) DESC, series DESC LIMIT 1")->fetch();
+        $row = $db->query("SELECT * FROM shop_invoices ORDER BY issued_at DESC, CAST(invoice_number AS {$cast}) DESC, series DESC, id DESC LIMIT 1")->fetch();
         return $row && self::canDelete($db, $row) ? (string)$row['id'] : '';
     }
 
     private static function canDelete(PDO $db, array $invoice, bool $lock = false): bool
     {
-        if ((string)($invoice['invoice_type'] ?? 'invoice') !== 'invoice') return false;
-        // Fail closed for return/credit documents, including migrated rows whose
-        // type may be inconsistent but still retain the original invoice link.
-        if ((string)($invoice['document_status'] ?? '') === 'return') return false;
-        if (trim((string)($invoice['original_invoice_id'] ?? '')) !== '') return false;
-        if ((string)($invoice['spv_status'] ?? 'not_sent') === 'sent') return false;
+        $invoiceType = (string)($invoice['invoice_type'] ?? 'invoice');
+        $isReturn = $invoiceType === 'return'
+            && (string)($invoice['document_status'] ?? '') === 'return'
+            && trim((string)($invoice['original_invoice_id'] ?? '')) !== '';
+        if (!$isReturn && $invoiceType !== 'invoice') return false;
+        if (!$isReturn && ((string)($invoice['document_status'] ?? '') === 'return' || trim((string)($invoice['original_invoice_id'] ?? '')) !== '')) return false;
+        if ($isReturn) {
+            if (!self::returnInvoiceWasNeverSubmittedToSpv($db, $invoice, $lock)) return false;
+            $suffix = $lock && strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME)) !== 'sqlite' ? ' FOR UPDATE' : '';
+            $order = $db->prepare('SELECT status, payment_status FROM shop_orders WHERE id = ? LIMIT 1' . $suffix);
+            $order->execute([(string)($invoice['order_id'] ?? '')]);
+            $orderState = $order->fetch();
+            if (!$orderState || (string)$orderState['status'] !== 'return_confirmed' || (string)($orderState['payment_status'] ?? '') === 'refunded') return false;
+        } elseif ((string)($invoice['spv_status'] ?? 'not_sent') === 'sent') {
+            return false;
+        }
         $series = (string)($invoice['series'] ?? '');
         $number = (int)($invoice['invoice_number'] ?? 0);
         if ($series === '' || $number <= 0) return false;
@@ -1159,6 +1199,28 @@ final class GtrotsInvoiceService
         $assignments->execute([$series]);
         $assignmentNumber = (int)$assignments->fetchColumn();
         return $assignmentNumber <= $number;
+    }
+
+    private static function returnInvoiceWasNeverSubmittedToSpv(PDO $db, array $invoice, bool $lock = false): bool
+    {
+        if ((string)($invoice['spv_status'] ?? 'not_sent') !== 'not_sent') return false;
+        if (trim((string)($invoice['spv_sent_at'] ?? '')) !== '' || trim((string)($invoice['spv_submission_id'] ?? '')) !== '') return false;
+        try {
+            $suffix = $lock && strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME)) !== 'sqlite' ? ' FOR UPDATE' : '';
+            $stmt = $db->prepare('SELECT status, attempts, upload_index, download_id, sent_at, accepted_at FROM shop_spv_outbox WHERE invoice_id = ? LIMIT 1' . $suffix);
+            $stmt->execute([(string)($invoice['id'] ?? '')]);
+            $job = $stmt->fetch();
+            if (!$job) return true;
+            if ((int)($job['attempts'] ?? 0) > 0) return false;
+            foreach (['upload_index', 'download_id', 'sent_at', 'accepted_at'] as $field) {
+                if (trim((string)($job[$field] ?? '')) !== '') return false;
+            }
+            return in_array((string)($job['status'] ?? ''), ['awaiting_configuration', 'awaiting_connection', 'scheduled', 'queued'], true);
+        } catch (PDOException $error) {
+            // Compatibilitate cu testele/migrările vechi unde tabela SPV nu a
+            // fost încă inițializată. Starea facturii rămâne protecția minimă.
+            return true;
+        }
     }
 
     private static function rollbackStock(PDO $db, array $invoice): void
@@ -1201,6 +1263,167 @@ final class GtrotsInvoiceService
             $deleteConsumption->execute([(string)$consumption['id']]);
         }
         $db->prepare("DELETE FROM shop_inventory_movements WHERE sales_invoice_id = ? AND movement_type = 'sale'")->execute([(string)$invoice['id']]);
+    }
+
+    /**
+     * Reverses the automatic customer-return NIR and every stock/FIFO effect
+     * created together with a never-submitted return invoice.
+     */
+    private static function rollbackReturnStock(PDO $db, array $invoice): array
+    {
+        $invoiceId = (string)$invoice['id'];
+        $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
+        $lock = $driver === 'sqlite' ? '' : ' FOR UPDATE';
+        $nirStmt = $db->prepare("SELECT * FROM shop_nir_documents WHERE return_invoice_id = ? AND source_type = 'customer_return' AND operation_type = 'customer_return' LIMIT 1" . $lock);
+        $nirStmt->execute([$invoiceId]);
+        $nir = $nirStmt->fetch() ?: null;
+        $nirId = trim((string)($nir['id'] ?? ''));
+
+        $origins = $db->prepare('SELECT * FROM shop_customer_return_fifo_origins WHERE return_invoice_id = ? ORDER BY created_at, id' . $lock);
+        $origins->execute([$invoiceId]);
+        $originRows = $origins->fetchAll();
+        if ($originRows) {
+            $originIds = array_map(static fn(array $origin): string => (string)$origin['id'], $originRows);
+            $placeholders = implode(',', array_fill(0, count($originIds), '?'));
+            $allocations = $db->prepare("SELECT COUNT(*) FROM shop_customer_return_supplier_storno_allocations WHERE customer_return_origin_id IN ({$placeholders})");
+            $allocations->execute($originIds);
+            if ((int)$allocations->fetchColumn() > 0) {
+                throw new InvalidArgumentException('NIR-ul returului a fost deja folosit într-un retur către furnizor și nu mai poate fi șters automat.');
+            }
+        }
+
+        $layerStmt = $db->prepare('SELECT * FROM shop_inventory_cost_layers WHERE id = ? LIMIT 1' . $lock);
+        $updateLayer = $db->prepare('UPDATE shop_inventory_cost_layers SET remaining_quantity = ?, status = ?, row_version = row_version + 1 WHERE id = ?');
+        $consumptionStmt = $db->prepare(
+            "SELECT * FROM shop_inventory_layer_consumptions
+             WHERE source_document_type = 'SALES_INVOICE' AND source_document_id = ? AND source_line_id = ? AND inventory_cost_layer_id = ?
+             LIMIT 1" . $lock
+        );
+        $restoreFullConsumption = $db->prepare('UPDATE shop_inventory_layer_consumptions SET reversed_at = NULL, reversal_consumption_id = NULL, row_version = row_version + 1 WHERE id = ?');
+        $restorePartialConsumption = $db->prepare('UPDATE shop_inventory_layer_consumptions SET quantity = ?, total_cost_ron = ?, reversed_quantity = ?, reversal_consumption_id = NULL, row_version = row_version + 1 WHERE id = ?');
+
+        foreach ($originRows as $origin) {
+            $restored = max(0.0, round((float)($origin['restored_quantity'] ?? 0), 4));
+            if ($restored <= 0.00005) continue;
+            $layerId = (string)$origin['inventory_cost_layer_id'];
+            $layerStmt->execute([$layerId]);
+            $layer = $layerStmt->fetch();
+            if (!$layer || (float)($layer['remaining_quantity'] ?? 0) + 0.00005 < $restored) {
+                throw new InvalidArgumentException('Stocul readus prin retur a fost deja consumat de alte documente. Anulează mai întâi ieșirile ulterioare.');
+            }
+            $remaining = max(0.0, round((float)$layer['remaining_quantity'] - $restored, 4));
+            $originalQuantity = max(0.0, (float)($layer['original_quantity'] ?? 0));
+            $status = $remaining <= 0.00005 ? 'consumed' : (abs($remaining - $originalQuantity) <= 0.00005 ? 'open' : 'partially_consumed');
+            $updateLayer->execute([$remaining, $status, $layerId]);
+
+            $consumptionStmt->execute([
+                (string)$origin['sales_invoice_id'],
+                (string)$origin['sales_invoice_line_id'],
+                $layerId,
+            ]);
+            $consumption = $consumptionStmt->fetch();
+            if (!$consumption || ($nirId !== '' && (string)($consumption['reversal_consumption_id'] ?? '') !== $nirId)) {
+                throw new RuntimeException('Trasabilitatea FIFO a returului nu mai corespunde documentului NIR asociat.');
+            }
+            if (($consumption['reversed_at'] ?? null) !== null) {
+                $restoreFullConsumption->execute([(string)$consumption['id']]);
+            } else {
+                $quantity = round((float)$consumption['quantity'] + $restored, 4);
+                $reversedQuantity = max(0.0, round((float)($consumption['reversed_quantity'] ?? 0) - $restored, 4));
+                $restorePartialConsumption->execute([
+                    $quantity,
+                    round($quantity * (float)$consumption['unit_cost_ron'], 2),
+                    $reversedQuantity,
+                    (string)$consumption['id'],
+                ]);
+            }
+        }
+
+        $movements = $db->prepare("SELECT * FROM shop_inventory_movements WHERE sales_invoice_id = ? AND movement_type = 'RETURN_IN' ORDER BY created_at, id" . $lock);
+        $movements->execute([$invoiceId]);
+        $product = $db->prepare('SELECT stock_quantity, accounting_stock_quantity FROM shop_products WHERE id = ? LIMIT 1' . $lock);
+        $updateProduct = $db->prepare('UPDATE shop_products SET stock_quantity = ?, accounting_stock_quantity = ? WHERE id = ?');
+        foreach ($movements->fetchAll() as $movement) {
+            $productId = trim((string)($movement['product_id'] ?? ''));
+            if ($productId === '') continue;
+            $product->execute([$productId]);
+            $current = $product->fetch();
+            if (!$current) continue;
+            $stockAfter = round((float)($current['stock_quantity'] ?? 0) - (float)($movement['quantity_delta'] ?? 0), 4);
+            $accountingAfter = round((float)($current['accounting_stock_quantity'] ?? 0) - (float)($movement['accounting_quantity_delta'] ?? 0), 4);
+            $updateProduct->execute([$stockAfter, $accountingAfter, $productId]);
+        }
+
+        $db->prepare("DELETE FROM shop_inventory_movements WHERE sales_invoice_id = ? AND movement_type = 'RETURN_IN'")->execute([$invoiceId]);
+        $db->prepare('DELETE FROM shop_customer_return_fifo_origins WHERE return_invoice_id = ?')->execute([$invoiceId]);
+        if ($nirId !== '') {
+            foreach (['shop_nir_attachments', 'shop_nir_idempotency'] as $optionalTable) {
+                try {
+                    $db->prepare("DELETE FROM {$optionalTable} WHERE nir_document_id = ?")->execute([$nirId]);
+                } catch (PDOException $error) {
+                    // Unele baze vechi/teste nu au încă aceste tabele opționale.
+                }
+            }
+            $db->prepare('DELETE FROM shop_nir_lines WHERE nir_document_id = ?')->execute([$nirId]);
+            $db->prepare('DELETE FROM shop_nir_documents WHERE id = ?')->execute([$nirId]);
+            self::releaseAutomaticReturnNirNumber($db, (string)($nir['nir_number'] ?? ''));
+        }
+
+        return [
+            'nir_deleted' => $nirId !== '',
+            'nir_id' => $nirId !== '' ? $nirId : null,
+            'nir_number' => trim((string)($nir['nir_number'] ?? '')) ?: null,
+        ];
+    }
+
+    private static function releaseAutomaticReturnNirNumber(PDO $db, string $nirNumber): void
+    {
+        if (!preg_match('/(\d+)$/', trim($nirNumber), $match)) return;
+        $released = (int)$match[1];
+        if ($released <= 0) return;
+        $settings = $db->query('SELECT next_sequence FROM shop_nir_settings WHERE id = 1')->fetchColumn();
+        if ((int)$settings !== $released + 1) return;
+        $remaining = $db->query("SELECT nir_number FROM shop_nir_documents WHERE nir_number IS NOT NULL ORDER BY created_at DESC, id DESC LIMIT 1")->fetchColumn();
+        if ($remaining !== false && preg_match('/(\d+)$/', (string)$remaining, $remainingMatch) && (int)$remainingMatch[1] >= $released) return;
+        $db->prepare('UPDATE shop_nir_settings SET next_sequence = ? WHERE id = 1 AND next_sequence = ?')->execute([$released, $released + 1]);
+    }
+
+    private static function restoreDeliveredOrderAfterReturnDeletion(PDO $db, array $invoice, array $actor): string
+    {
+        $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
+        $lock = $driver === 'sqlite' ? '' : ' FOR UPDATE';
+        $orderStmt = $db->prepare('SELECT * FROM shop_orders WHERE id = ? LIMIT 1' . $lock);
+        $orderStmt->execute([(string)$invoice['order_id']]);
+        $order = $orderStmt->fetch();
+        if (!$order || (string)($order['status'] ?? '') !== 'return_confirmed') {
+            throw new InvalidArgumentException('Comanda trebuie să fie în statusul Retur confirmat pentru a reveni în siguranță la Livrată.');
+        }
+        if ((string)($order['payment_status'] ?? '') === 'refunded') {
+            throw new InvalidArgumentException('Comanda este deja rambursată și factura de retur nu mai poate fi ștearsă.');
+        }
+        $changedBy = mb_substr(trim((string)($actor['display_name'] ?? $actor['username'] ?? 'Administrator')), 0, 180) ?: 'Administrator';
+        $note = 'Retur anulat prin ștergerea ultimei facturi de retur netrimise în SPV ('
+            . trim((string)$invoice['series'] . ' ' . (string)$invoice['invoice_number'])
+            . '). Comanda a revenit la Livrată.';
+        $adminNotes = trim((string)($order['admin_notes'] ?? ''));
+        $adminNotes = trim($adminNotes . ($adminNotes !== '' ? "\n" : '') . $note);
+        $db->prepare(
+            "UPDATE shop_orders SET status = 'completed', return_invoice_id = NULL,
+             return_reason = NULL, return_bank_iban = NULL, return_bank_account_holder = NULL,
+             return_shipping_cost = NULL, return_shipping_payer = NULL, return_refund_amount = NULL,
+             return_requested_at = NULL, return_request_source = NULL, return_request_email_sent_at = NULL,
+             return_request_email_error = NULL, return_confirmed_at = NULL,
+             return_confirmation_email_sent_at = NULL, return_confirmation_email_error = NULL,
+             return_policy_type = NULL, return_deadline_at = NULL, return_items_gross = NULL,
+             return_delivery_refund = NULL, return_is_full = 0, withdrawal_statement = NULL,
+             withdrawal_submitted_at = NULL, withdrawal_confirmation_email_sent_at = NULL,
+             admin_notes = ? WHERE id = ?"
+        )->execute([mb_substr($adminNotes, 0, 5000), (string)$invoice['order_id']]);
+        $db->prepare('DELETE FROM shop_order_return_items WHERE order_id = ?')->execute([(string)$invoice['order_id']]);
+        $historyId = self::uuid();
+        $db->prepare("INSERT INTO shop_order_status_history (id, order_id, from_status, to_status, changed_by, customer_notified, email_status) VALUES (?, ?, 'return_confirmed', 'completed', ?, 0, 'pending')")
+            ->execute([$historyId, (string)$invoice['order_id'], $changedBy]);
+        return $historyId;
     }
 
     private static function resetSequence(PDO $db, string $series): void

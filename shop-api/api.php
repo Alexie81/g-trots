@@ -7051,7 +7051,18 @@ try {
     }
 
     if ($action === 'deleteInvoice' && $method === 'DELETE') {
-        jsonResponse(GtrotsInvoiceService::delete($db, trim((string)($_GET['id'] ?? '')), $config));
+        $result = GtrotsInvoiceService::delete($db, trim((string)($_GET['id'] ?? '')), $config, true, (array)$currentUser);
+        if (!empty($result['return_invoice_deleted']) && (string)($result['restored_order_status'] ?? '') === 'completed') {
+            $orderStmt = $db->prepare('SELECT o.*' . GtrotsInvoiceService::orderJoinColumns() . ' FROM shop_orders o' . GtrotsInvoiceService::orderJoinSql('o') . ' WHERE o.id = ? LIMIT 1');
+            $orderStmt->execute([(string)$result['order_id']]);
+            $savedOrder = $orderStmt->fetch();
+            $emailResult = $savedOrder
+                ? gtSendOrderStatusEmail(orderRow($db, $savedOrder, $config, true), $config, 'completed')
+                : ['sent' => false, 'error' => 'Comanda nu a putut fi recitită pentru e-mailul de livrare.'];
+            if (!empty($result['status_history_id'])) updateOrderHistoryEmail($db, (string)$result['status_history_id'], $emailResult);
+            $result['email_notification'] = array_merge(['requested' => true], $emailResult);
+        }
+        jsonResponse($result);
     }
 
     if ($action === 'prepareShippingNote' && $method === 'GET') {

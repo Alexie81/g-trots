@@ -148,18 +148,29 @@ export default function ShopInvoicesManager({ initialInvoiceId = null, onInitial
     }
     setBusy(null);
     if (!verifiedInvoice.can_delete) return;
+    const isReturnInvoice = verifiedInvoice.invoice_type === 'return' || verifiedInvoice.status === 'return';
     Alert.alert(
-      'Ștergi ultima factură?',
-      `${verifiedInvoice.display_number} este netrimisă în SPV. Stocul și mișcările vor fi refăcute, iar numărul va fi reutilizat la următoarea factură.`,
+      isReturnInvoice ? 'Ștergi factura de retur?' : 'Ștergi ultima factură?',
+      isReturnInvoice
+        ? `${verifiedInvoice.display_number} este ultima factură și nu a fost trimisă în SPV. Se vor șterge factura, NIR-ul de retur și intrarea aferentă din stoc. Comanda va reveni la Livrată, iar clientul va primi automat e-mailul de livrare.`
+        : `${verifiedInvoice.display_number} este netrimisă în SPV. Stocul și mișcările vor fi refăcute, iar numărul va fi reutilizat la următoarea factură.`,
       [
         { text: 'Renunță', style: 'cancel' },
-        { text: 'Șterge factura', style: 'destructive', onPress: async () => {
+        { text: isReturnInvoice ? 'Șterge returul' : 'Șterge factura', style: 'destructive', onPress: async () => {
           setBusy(verifiedInvoice.id);
           try {
-            await shopApi.deleteInvoice(token, verifiedInvoice.id);
+            const result = await shopApi.deleteInvoice(token, verifiedInvoice.id);
             setSelectedInvoice(null);
             setInvoices((current) => current.filter((item) => item.id !== verifiedInvoice.id));
-            Alert.alert('Factura a fost ștearsă', `Numărul ${verifiedInvoice.display_number} este disponibil pentru următoarea factură.`);
+            if (result.return_invoice_deleted) {
+              const emailSent = Boolean(result.email_notification?.sent);
+              Alert.alert(
+                'Returul a fost anulat',
+                `${verifiedInvoice.display_number}${result.nir_number ? ` și ${result.nir_number}` : ''} au fost șterse, stocul a fost rectificat, iar comanda a revenit la Livrată.${emailSent ? ' Clientul a primit e-mailul de livrare.' : ` E-mailul de livrare nu a putut fi trimis${result.email_notification?.error ? `: ${result.email_notification.error}` : '.'}`}`,
+              );
+            } else {
+              Alert.alert('Factura a fost ștearsă', `Numărul ${verifiedInvoice.display_number} este disponibil pentru următoarea factură.`);
+            }
             void load();
           } catch (deleteError) {
             Alert.alert('Factura nu a fost ștearsă', deleteError instanceof Error ? deleteError.message : 'Încearcă din nou.');

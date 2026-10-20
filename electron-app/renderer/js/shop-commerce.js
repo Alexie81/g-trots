@@ -2315,14 +2315,25 @@
       return;
     } finally { state.invoiceBusy = ''; }
     if (!invoice?.can_delete) return;
-    if (!confirm(`Ștergi ${invoice.display_number}?\n\nFactura este netrimisă în SPV. Stocul și mișcările vor fi refăcute, iar acest număr va fi reutilizat la următoarea emitere.`)) return;
+    const isReturnInvoice = invoice.invoice_type === 'return' || invoice.status === 'return';
+    const confirmation = isReturnInvoice
+      ? `Ștergi factura de retur ${invoice.display_number}?\n\nFactura este ultima emisă și nu a fost trimisă în SPV. Se vor șterge și NIR-ul de retur și intrarea aferentă din stoc. Comanda va reveni la Livrată, iar clientul va primi automat e-mailul de livrare.`
+      : `Ștergi ${invoice.display_number}?\n\nFactura este netrimisă în SPV. Stocul și mișcările vor fi refăcute, iar acest număr va fi reutilizat la următoarea emitere.`;
+    if (!confirm(confirmation)) return;
     state.invoiceBusy = id;
     try {
       const result = await window.SHOP_API.deleteInvoice(id);
       if (state.invoiceDetail?.id === id) closeModal('shop-invoice-detail-modal');
       state.invoiceDetail = null;
       state.invoices = state.invoices.filter(item => item.id !== id);
-      toast(`${result.released_number || invoice.display_number} a fost eliberat pentru următoarea factură.`);
+      if (result.return_invoice_deleted) {
+        const emailStatus = result.email_notification?.sent
+          ? ' Clientul a primit e-mailul de livrare.'
+          : ` E-mailul de livrare nu a putut fi trimis${result.email_notification?.error ? `: ${result.email_notification.error}` : '.'}`;
+        toast(`${result.released_number || invoice.display_number}${result.nir_number ? ` și ${result.nir_number}` : ''} au fost șterse. Stocul a fost rectificat, iar comanda a revenit la Livrată.${emailStatus}`, result.email_notification?.sent ? 'success' : 'warning');
+      } else {
+        toast(`${result.released_number || invoice.display_number} a fost eliberat pentru următoarea factură.`);
+      }
       await Promise.all([loadInvoices(), loadOrders()]);
     } catch (error) { toast(error.message || 'Factura nu a putut fi ștearsă.', 'error'); }
     finally { state.invoiceBusy = ''; }

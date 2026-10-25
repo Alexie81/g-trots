@@ -508,10 +508,15 @@
   box-shadow: 0 0 0 0.25rem rgba(240, 127, 0, 0.08);
 }
 
-.checkout-fields label.is-invalid input,
-.checkout-fields label.is-invalid textarea {
-  border-color: rgba(240, 93, 94, 0.65);
-  box-shadow: 0 0 0 0.25rem rgba(240, 93, 94, 0.07);
+html .checkout-fields label.is-invalid input,
+html .checkout-fields label.is-invalid textarea {
+  border-color: #f04757 !important;
+  background: linear-gradient(135deg, rgba(240, 71, 87, 0.11), rgba(240, 71, 87, 0.035)) !important;
+  box-shadow: 0 0 0 0.25rem rgba(240, 71, 87, 0.14), 0 0.65rem 1.4rem rgba(166, 28, 43, 0.08) !important;
+}
+
+html .checkout-fields label.is-invalid > span {
+  color: #ff6876 !important;
 }
 
 .checkout-fields label > small {
@@ -523,6 +528,11 @@
 
 .checkout-fields label.is-invalid > small {
   display: block;
+  padding: 0.2rem 0.35rem 0;
+  color: #ff6876 !important;
+  font-weight: 800;
+  line-height: 1.45;
+  animation: checkout-validation-error-in 180ms ease both;
 }
 
 .checkout-fields input:-webkit-autofill,
@@ -1164,6 +1174,57 @@
 .checkout-confirmation.is-invalid {
   border-color: rgba(240, 93, 94, 0.5);
   animation:checkout-checkpoint-shake .34s ease both;
+}
+
+.checkout-required-hint {
+  margin: 0.85rem 0 0;
+  padding: 0.85rem 0.95rem;
+  display: grid;
+  gap: 0.18rem;
+  border: 1px solid rgba(240, 127, 0, 0.2);
+  border-radius: 1rem;
+  color: #8d857d;
+  background: rgba(240, 127, 0, 0.055);
+  font-size: 0.54rem;
+  line-height: 1.45;
+}
+
+.checkout-required-hint strong {
+  color: #f6a44e;
+  font-size: 0.62rem;
+}
+
+.checkout-confirmation-error {
+  display: none;
+  grid-column: 1 / -1;
+  padding: 0.1rem 0.35rem 0;
+  color: #ff6876;
+  font-size: 0.54rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+body.checkout-page .checkout-summary .checkout-confirmation.is-invalid {
+  border-color: #f04757 !important;
+  background: linear-gradient(135deg, rgba(240, 71, 87, 0.14), rgba(240, 71, 87, 0.04)) !important;
+  box-shadow: 0 0 0 0.22rem rgba(240, 71, 87, 0.11), 0 0.85rem 1.8rem rgba(166, 28, 43, 0.08) !important;
+}
+
+body.checkout-page .checkout-summary .checkout-confirmation.is-invalid .checkout-checkpoint {
+  border-color: #f04757;
+  color: #ff6876;
+  background: rgba(240, 71, 87, 0.12);
+  box-shadow: 0 0 1rem rgba(240, 71, 87, 0.16);
+}
+
+.checkout-confirmation.is-invalid .checkout-confirmation-error {
+  display: block;
+  animation: checkout-validation-error-in 180ms ease both;
+}
+
+@keyframes checkout-validation-error-in {
+  from { opacity: 0; transform: translateY(-0.2rem); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes checkout-checkpoint-ring { from{stroke-dashoffset:57;transform:rotate(-90deg);transform-origin:center} to{stroke-dashoffset:0;transform:rotate(-90deg);transform-origin:center} }

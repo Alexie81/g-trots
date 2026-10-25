@@ -508,15 +508,30 @@
 
   function clearValidation(form) {
     form.querySelectorAll(".is-invalid").forEach(element => element.classList.remove("is-invalid"));
+    form.querySelectorAll("[aria-invalid='true']").forEach(element => element.removeAttribute("aria-invalid"));
     form.querySelectorAll("[data-field-error]").forEach(element => { element.textContent = ""; });
+    delete form.dataset.validationMessage;
   }
 
   function invalidate(field, message) {
     const label = field?.closest("label");
     if (!label) return;
     label.classList.add("is-invalid");
+    field.setAttribute("aria-invalid", "true");
     const error = label.querySelector("[data-field-error]");
     if (error) error.textContent = message;
+  }
+
+  function revealFirstValidationError(field) {
+    const target = field?.closest("label") || field;
+    if (!target) return;
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    const mobileOffset = window.innerWidth <= 820 ? 92 : 124;
+    window.requestAnimationFrame(() => {
+      const top = Math.max(0, window.scrollY + target.getBoundingClientRect().top - mobileOffset);
+      window.scrollTo({ top, behavior: reduceMotion ? "auto" : "smooth" });
+      window.setTimeout(() => field?.focus?.({ preventScroll: true }), reduceMotion ? 0 : 380);
+    });
   }
 
   function validate(form) {
@@ -539,36 +554,45 @@
     requiredFields.forEach(([field, message]) => {
       if (!String(field?.value || "").trim()) {
         invalidate(field, message);
-        errors.push(field);
+        errors.push({ field, message });
       }
     });
     const phoneField = formField(form, "customer_phone");
     const phone = String(phoneField?.value || "").replace(/\D/g, "");
     if (phone && phone.length < 7) {
-      invalidate(phoneField, "Introdu un număr de telefon valid.");
-      errors.push(phoneField);
+      const validationMessage = "Introdu un număr de telefon valid.";
+      invalidate(phoneField, validationMessage);
+      errors.push({ field: phoneField, message: validationMessage });
     }
     const emailField = formField(form, "customer_email");
     const email = String(emailField?.value || "").trim();
     if (!email) {
-      invalidate(emailField, "Completează adresa de e-mail.");
-      errors.push(emailField);
+      const validationMessage = "Completează adresa de e-mail.";
+      invalidate(emailField, validationMessage);
+      errors.push({ field: emailField, message: validationMessage });
     } else if (email && !emailField.checkValidity()) {
-      invalidate(emailField, "Introdu o adresă de e-mail validă.");
-      errors.push(emailField);
+      const validationMessage = "Introdu o adresă de e-mail validă.";
+      invalidate(emailField, validationMessage);
+      errors.push({ field: emailField, message: validationMessage });
     }
     const confirmationField = formField(form, "confirm_order");
     if (!confirmationField?.checked) {
-      confirmationField?.closest("label")?.classList.add("is-invalid");
-      errors.push(confirmationField);
+      const validationMessage = "Bifează confirmarea că datele comenzii sunt corecte.";
+      invalidate(confirmationField, validationMessage);
+      errors.push({ field: confirmationField, message: validationMessage });
     }
     const termsField = formField(form, "accept_terms");
     if (!termsField?.checked) {
-      termsField?.closest("label")?.classList.add("is-invalid");
-      errors.push(termsField);
+      const validationMessage = "Acceptă Termenii și condițiile și Politica de retur.";
+      invalidate(termsField, validationMessage);
+      errors.push({ field: termsField, message: validationMessage });
     }
-    errors[0]?.focus?.({ preventScroll: true });
-    errors[0]?.closest?.("label")?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    if (errors.length) {
+      form.dataset.validationMessage = errors.length === 1
+        ? errors[0].message
+        : `${errors.length} câmpuri obligatorii trebuie completate. Primul: ${errors[0].message}`;
+      revealFirstValidationError(errors[0].field);
+    }
     return errors.length === 0;
   }
 
@@ -634,7 +658,11 @@
       promoInput?.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); void applyManualPromotion(); } });
 
       form.addEventListener("change", event => {
-        event.target.closest("label")?.classList.remove("is-invalid");
+        const label = event.target.closest("label");
+        label?.classList.remove("is-invalid");
+        event.target.removeAttribute("aria-invalid");
+        const fieldError = label?.querySelector("[data-field-error]");
+        if (fieldError) fieldError.textContent = "";
         if (event.target.matches('input[type="radio"]')) {
           updateTotals(cartRows(), config);
           if (event.target.name === "payment_method") updateSubmitLabel(form, submit);
@@ -643,7 +671,11 @@
       form.addEventListener("reset", () => window.requestAnimationFrame(() => updateSubmitLabel(form, submit)));
       window.addEventListener("pageshow", () => updateSubmitLabel(form, submit));
       form.addEventListener("input", event => {
-        event.target.closest("label")?.classList.remove("is-invalid");
+        const label = event.target.closest("label");
+        label?.classList.remove("is-invalid");
+        event.target.removeAttribute("aria-invalid");
+        const fieldError = label?.querySelector("[data-field-error]");
+        if (fieldError) fieldError.textContent = "";
       });
 
       form.addEventListener("submit", async event => {
@@ -652,7 +684,7 @@
         message.textContent = "";
         if (!validate(form)) {
           message.classList.add("is-error");
-          message.textContent = "Verifică câmpurile marcate înainte să trimiți comanda.";
+          message.textContent = form.dataset.validationMessage || "Verifică toate câmpurile marcate cu roșu.";
           return;
         }
 

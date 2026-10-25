@@ -30,7 +30,18 @@ export default function ModuleSwitcher() {
         onPress={() => setVisible(true)}
         accessibilityRole="button"
         accessibilityLabel={`Modul curent ${current.title}. Schimba modulul.`}>
-        <Image source={appLogo} style={styles.logo} />
+        <View style={styles.logoShell} accessibilityElementsHidden>
+          <View style={styles.logoFallback}>
+            <Text style={styles.logoFallbackLight}>G</Text>
+            <Text style={styles.logoFallbackDark}>T</Text>
+          </View>
+          <Image
+            source={appLogo}
+            style={styles.logo}
+            resizeMode="cover"
+            fadeDuration={0}
+          />
+        </View>
         <View style={styles.triggerCopy}>
           <Text style={styles.brand}>G-Trots</Text>
           <View style={styles.moduleLine}>
@@ -87,8 +98,28 @@ export default function ModuleSwitcher() {
 }
 
 const styles = StyleSheet.create({
-  trigger: { flexDirection: 'row', alignItems: 'center', minWidth: 102, gap: 7 },
-  logo: { width: 30, height: 30, borderRadius: 12 },
+  trigger: { flexDirection: 'row', alignItems: 'center', minWidth: 102, gap: 7, flexShrink: 0 },
+  logoShell: {
+    width: 30,
+    height: 30,
+    minWidth: 30,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#FF9000',
+  },
+  logoFallback: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoFallbackLight: { color: '#FFFFFF', fontSize: 13, fontFamily: 'Inter-Bold', letterSpacing: -1 },
+  logoFallbackDark: { color: '#111111', fontSize: 13, fontFamily: 'Inter-Bold', letterSpacing: -1 },
+  logo: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, width: 30, height: 30 },
   triggerCopy: { justifyContent: 'center' },
   brand: { color: Colors.textPrimary, fontSize: 13, fontFamily: 'Inter-SemiBold', lineHeight: 15 },
   moduleLine: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },

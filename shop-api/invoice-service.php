@@ -34,6 +34,10 @@ final class GtrotsInvoiceService
                 return self::row($existing, true, self::canDelete($db, $existing));
             }
 
+            if ((string)($order['payment_method'] ?? '') === 'card' && (string)($order['payment_status'] ?? '') !== 'paid') {
+                throw new InvalidArgumentException('Factura pentru plata cu cardul poate fi emisă numai după confirmarea plății.');
+            }
+
             $company = $db->query('SELECT * FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch() ?: [];
             if (trim((string)($company['legal_name'] ?? '')) === '' || trim((string)($company['cui'] ?? '')) === '') {
                 throw new InvalidArgumentException('Completează denumirea juridică și CUI-ul în Datele firmei înainte de emitere.');

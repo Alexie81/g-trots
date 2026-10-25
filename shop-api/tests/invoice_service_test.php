@@ -61,6 +61,15 @@ $db->exec("INSERT INTO shop_inventory_cost_layers (id, product_id, warehouse_id,
 $insertItem->execute(['item-1', 'order-1', 'product-1', 'Produs test', 'GT-TEST', 4, 25.00, 100.00, 25.00, 100.00]);
 
 $actor = ['display_name' => 'Administrator Test'];
+$insertOrder->execute(['order-card-pending', 'CMD-CARD-PENDING', 'new', 'pending', 'card', 'RON', 87.99, 0, '', 87.99, 0, 1, 19, 'individual', 'Client Card Neplătit', 'card-pending@example.com', '0700000001', 'Str. Card 1', 'București', 'București', '010100', '']);
+try {
+    GtrotsInvoiceService::issue($db, 'order-card-pending', $actor, []);
+    throw new RuntimeException('Emiterea trebuia refuzată pentru o plată cu cardul neconfirmată.');
+} catch (InvalidArgumentException $error) {
+    invoiceAssert(str_contains($error->getMessage(), 'numai după confirmarea plății'), 'Mesajul trebuie să explice blocarea facturii până la confirmarea plății cu cardul.');
+}
+invoiceAssert((int)$db->query("SELECT COUNT(*) FROM shop_invoices WHERE order_id='order-card-pending'")->fetchColumn() === 0, 'Comanda cu card neplătit nu trebuie să creeze factură.');
+
 $first = GtrotsInvoiceService::issue($db, 'order-1', $actor, []);
 invoiceAssert($first['display_number'] === 'GT 001', 'Prima factura trebuie sa fie GT 001.');
 invoiceAssert($first['theme'] === 'purple', 'Factura trebuie sa fixeze tema activa mov.');

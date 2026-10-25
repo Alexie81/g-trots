@@ -83,6 +83,10 @@ function isCompanyOrder(order: ShopOrder) {
   return order.customer_type === 'company' || Boolean(String(order.company_name || order.company_cui || order.company_registration_number || '').trim());
 }
 
+function canIssueOrderInvoice(order: ShopOrder) {
+  return order.payment_method !== 'card' || order.payment_status === 'paid';
+}
+
 const mainOrderFlow: ShopOrder['status'][] = ['new', 'confirmed', 'processing', 'shipped', 'completed', 'return_requested', 'return_refused', 'return_confirmed'];
 const terminalOrderStatuses: ShopOrder['status'][] = ['refunded', 'cancelled'];
 
@@ -868,6 +872,10 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
       Alert.alert('Emiterea nu este permisă', 'Nu poți emite o factură normală pentru o comandă anulată sau rambursată.');
       return;
     }
+    if (!canIssueOrderInvoice(order)) {
+      Alert.alert('Plata nu este confirmată', 'Factura pentru plata cu cardul poate fi emisă numai după ce statusul plății devine Plătită.');
+      return;
+    }
     setInvoicePromptOrder(order);
     setInvoiceSendEmail(Boolean(order.customer_email));
     setInvoiceSendReturnEmail(order.status === 'return_confirmed' && Boolean(order.customer_email));
@@ -1025,12 +1033,13 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
       </View> : null}
       {pagedOrders.length ? pagedOrders.map((order) => {
         const statusMeta = orderStatuses.find((item) => item.value === order.status) || orderStatuses[0];
+        const invoiceActionAvailable = Boolean(order.invoice) || canIssueOrderInvoice(order);
         return <TouchableOpacity key={order.id} style={styles.orderCard} activeOpacity={0.76} onPress={() => open(order)}>
           <View style={styles.orderCardMain}><View style={[styles.orderIcon, { backgroundColor: `${statusMeta.color}15` }]}><ShoppingCart size={22} color={statusMeta.color} /></View>
             <View style={styles.orderCopy}><View style={styles.orderTop}><View style={styles.orderIdentity}><Text style={styles.orderNumber}>{order.order_number}</Text><View style={[styles.customerTypeBadge, isCompanyOrder(order) && styles.customerTypeBadgeCompany]}><Text style={[styles.customerTypeBadgeText, isCompanyOrder(order) && styles.customerTypeBadgeTextCompany]}>{isCompanyOrder(order) ? 'PJ' : 'PF'}</Text></View></View><Text style={[styles.status, { color: statusMeta.color }]}>{(statusMeta.shortLabel || statusMeta.label).toUpperCase()}</Text></View><Text style={styles.customer}>{shopOrderCustomerDisplayName(order)} · {order.customer_phone}</Text></View>
             <View style={styles.orderArrow}><ChevronRight size={19} color="#FFFFFF" strokeWidth={2.5} /></View>
           </View>
-          <View style={styles.orderBottom}><View style={styles.orderDateMeta}><Clock3 size={13} color="#AAA39C" /><Text numberOfLines={1} style={styles.orderDate}>{dateTime(order.created_at)}</Text></View><View style={[styles.paymentMethodChip, order.payment_method === 'card' ? styles.paymentMethodCard : styles.paymentMethodCash]}>{order.payment_method === 'card' ? <CreditCard size={12} color="#C4B5FD" /> : <HandCoins size={12} color="#7DD3FC" />}<Text style={[styles.paymentMethodText, order.payment_method === 'card' ? styles.paymentMethodCardText : styles.paymentMethodCashText]}>{order.payment_method === 'card' ? 'Card' : 'Ramburs'}</Text></View><Text style={styles.orderTotal}>{money(order.total)}</Text><TouchableOpacity disabled={Boolean(invoiceBusy)} accessibilityLabel={order.invoice ? `Deschide factura ${order.invoice.display_number}` : 'Emite factura'} style={[styles.invoiceQuick, order.invoice && styles.invoiceQuickIssued]} onPress={(event) => { event.stopPropagation(); chooseInvoiceAction(order); }}>{invoiceBusy === order.id || invoiceBusy === order.invoice?.id ? <ActivityIndicator size="small" color={order.invoice ? '#34D399' : Colors.orange} /> : <FileCheck2 size={18} color={order.invoice ? '#34D399' : Colors.orange} />}</TouchableOpacity></View>
+          <View style={styles.orderBottom}><View style={styles.orderDateMeta}><Clock3 size={13} color="#AAA39C" /><Text numberOfLines={1} style={styles.orderDate}>{dateTime(order.created_at)}</Text></View><View style={[styles.paymentMethodChip, order.payment_method === 'card' ? styles.paymentMethodCard : styles.paymentMethodCash]}>{order.payment_method === 'card' ? <CreditCard size={12} color="#C4B5FD" /> : <HandCoins size={12} color="#7DD3FC" />}<Text style={[styles.paymentMethodText, order.payment_method === 'card' ? styles.paymentMethodCardText : styles.paymentMethodCashText]}>{order.payment_method === 'card' ? 'Card' : 'Ramburs'}</Text></View><Text style={styles.orderTotal}>{money(order.total)}</Text>{invoiceActionAvailable ? <TouchableOpacity disabled={Boolean(invoiceBusy)} accessibilityLabel={order.invoice ? `Deschide factura ${order.invoice.display_number}` : 'Emite factura'} style={[styles.invoiceQuick, order.invoice && styles.invoiceQuickIssued]} onPress={(event) => { event.stopPropagation(); chooseInvoiceAction(order); }}>{invoiceBusy === order.id || invoiceBusy === order.invoice?.id ? <ActivityIndicator size="small" color={order.invoice ? '#34D399' : Colors.orange} /> : <FileCheck2 size={18} color={order.invoice ? '#34D399' : Colors.orange} />}</TouchableOpacity> : null}</View>
         </TouchableOpacity>;
       }) : <View style={styles.empty}><PackageCheck size={34} color="#38BDF8" /><Text style={styles.emptyTitle}>{hasActiveSearch ? 'Nicio comandă găsită' : 'Nicio comandă'}</Text><Text style={styles.emptyText}>{hasActiveSearch ? 'Schimbă căutarea sau resetează filtrele.' : 'Comenzile trimise de pe site vor apărea automat aici.'}</Text>{hasActiveSearch ? <TouchableOpacity style={styles.emptyReset} onPress={resetFilters}><Text style={styles.emptyResetText}>Resetează filtrele</Text></TouchableOpacity> : null}</View>}
       <ShopPagination page={page} pageSize={pageSize} total={ordersTotal} onPageChange={setPage} onPageSizeChange={setPageSize} />
@@ -1101,8 +1110,8 @@ export default function ShopOrdersManager({ initialStatusFilter = 'all', initial
             </View>
             <View style={[styles.invoicePanel, selected.invoice && styles.invoicePanelIssued]}>
               <View style={styles.invoicePanelIcon}>{selected.invoice ? <FileCheck2 size={22} color="#34D399" /> : <FileCheck2 size={22} color={Colors.orange} />}</View>
-              <View style={styles.invoicePanelCopy}><Text style={styles.invoicePanelKicker}>FACTURĂ FISCALĂ</Text><Text style={styles.invoicePanelTitle}>{selected.invoice ? selected.invoice.display_number : 'Factura nu este emisă'}</Text><Text style={styles.invoicePanelText}>{selected.invoice ? `${selected.invoice.status === 'paid' ? 'Plătită' : 'Neplătită'} · tema ${selected.invoice.theme} · ${selected.invoice.total.toLocaleString('ro-RO')} ${selected.invoice.currency}` : 'Poți emite documentul simplu sau îl poți trimite imediat pe e-mail clientului.'}</Text></View>
-              <TouchableOpacity disabled={Boolean(invoiceBusy)} style={[styles.invoicePanelButton, selected.invoice && styles.invoicePanelButtonIssued]} onPress={() => chooseInvoiceAction(selected)}>{invoiceBusy === selected.id || invoiceBusy === selected.invoice?.id ? <ActivityIndicator size="small" color="#FFFFFF" /> : selected.invoice ? <><FileCheck2 size={16} color="#FFFFFF" /><Text style={styles.invoicePanelButtonText}>Vezi factura</Text></> : <><Send size={16} color="#FFFFFF" /><Text style={styles.invoicePanelButtonText}>Emite</Text></>}</TouchableOpacity>
+              <View style={styles.invoicePanelCopy}><Text style={styles.invoicePanelKicker}>FACTURĂ FISCALĂ</Text><Text style={styles.invoicePanelTitle}>{selected.invoice ? selected.invoice.display_number : 'Factura nu este emisă'}</Text><Text style={styles.invoicePanelText}>{selected.invoice ? `${selected.invoice.status === 'paid' ? 'Plătită' : 'Neplătită'} · tema ${selected.invoice.theme} · ${selected.invoice.total.toLocaleString('ro-RO')} ${selected.invoice.currency}` : canIssueOrderInvoice(selected) ? 'Poți emite documentul simplu sau îl poți trimite imediat pe e-mail clientului.' : 'Factura va fi disponibilă pentru emitere după confirmarea plății cu cardul.'}</Text></View>
+              {selected.invoice || canIssueOrderInvoice(selected) ? <TouchableOpacity disabled={Boolean(invoiceBusy)} style={[styles.invoicePanelButton, selected.invoice && styles.invoicePanelButtonIssued]} onPress={() => chooseInvoiceAction(selected)}>{invoiceBusy === selected.id || invoiceBusy === selected.invoice?.id ? <ActivityIndicator size="small" color="#FFFFFF" /> : selected.invoice ? <><FileCheck2 size={16} color="#FFFFFF" /><Text style={styles.invoicePanelButtonText}>Vezi factura</Text></> : <><Send size={16} color="#FFFFFF" /><Text style={styles.invoicePanelButtonText}>Emite</Text></>}</TouchableOpacity> : null}
             </View>
             <View style={[styles.shippingNotePanel, selected.shipping_note && styles.shippingNotePanelIssued]}>
               <View style={styles.shippingNoteHead}>

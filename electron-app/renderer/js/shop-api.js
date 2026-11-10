@@ -212,6 +212,7 @@
     issueInvoice: (orderId, sendEmail = false, sendReturnEmail = false) => call('issueInvoice', json('POST', { order_id: orderId, send_email: sendEmail, send_return_email: sendReturnEmail }), orderId),
     listInvoices: () => call('listInvoices'),
     getInvoice: (id) => call('getInvoice', {}, id),
+    generateReturnNir: (id) => call('generateReturnNir', json('POST', { invoice_id: id }), id),
     downloadInvoice: (id, format = 'pdf') => call('downloadInvoice', {}, id, 0, { format }),
     getInvoicePublicLink: (id, format = 'pdf') => call('getInvoicePublicLink', {}, id, 0, { format }),
     sendInvoiceEmail: (id) => call('sendInvoiceEmail', json('POST', { invoice_id: id }), id),

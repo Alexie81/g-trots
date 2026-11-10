@@ -822,6 +822,13 @@ export type ShopIssuedInvoice = {
     updated_at: string | null;
   } | null;
   can_delete: boolean;
+  return_receipt_required?: boolean;
+  return_receipt_pending?: boolean;
+  return_receipt_completed?: boolean;
+  can_generate_return_nir?: boolean;
+  return_nir_id?: string | null;
+  return_nir_number?: string | null;
+  created?: boolean;
   payload?: ShopInvoicePayload;
   pdf_url?: string;
   existing?: boolean;
@@ -1690,6 +1697,7 @@ export const shopApi = {
   issueInvoice: (token: string, orderId: string, sendEmail = false, sendReturnEmail = false) => shopCall<ShopIssuedInvoice>('issueInvoice', token, { method: 'POST', body: JSON.stringify({ order_id: orderId, send_email: sendEmail, send_return_email: sendReturnEmail }) }, orderId),
   listInvoices: (token: string) => shopCall<ShopIssuedInvoice[]>('listInvoices', token),
   getInvoice: (token: string, id: string) => shopCall<ShopIssuedInvoice>('getInvoice', token, undefined, id),
+  generateReturnNir: (token: string, id: string) => shopCall<ShopIssuedInvoice>('generateReturnNir', token, { method: 'POST', body: JSON.stringify({ invoice_id: id }) }, id),
   downloadInvoice: (token: string, id: string, format: 'pdf' | 'xlsx' | 'xml' = 'pdf') => shopCall<{ file_name: string; mime_type: string; content_base64: string; public_url?: string; stored?: boolean; anaf_validation?: { stare: string; trace_id?: string } }>('downloadInvoice', token, undefined, id, 0, { format }),
   getInvoicePublicLink: (token: string, id: string, format: 'pdf' | 'xlsx' | 'xml' = 'pdf') => shopCall<{ url: string; file_name: string; mime_type: string; format: 'pdf' | 'xlsx' | 'xml' }>('getInvoicePublicLink', token, undefined, id, 0, { format }),
   sendInvoiceEmail: (token: string, id: string) => shopCall<ShopOrderEmailNotification>('sendInvoiceEmail', token, { method: 'POST', body: JSON.stringify({ invoice_id: id }) }, id),

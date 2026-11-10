@@ -231,6 +231,9 @@
     </button>
     <div class="shop-nav-group" data-tone="sales">
       <div class="shop-nav-section"><span>Vânzări</span></div>
+      <button class="nav-btn" data-tab="shop-invoices">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg><span>Facturi emise</span>
+      </button>
       <button class="nav-btn" data-tab="shop-orders">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="20" r="1"/><circle cx="19" cy="20" r="1"/><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L21 8H7"/></svg><span>Comenzi</span>
       </button>
@@ -242,9 +245,6 @@
       </button>
       <button class="nav-btn" data-tab="shop-newsletter">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/><path d="m16 17 2 2 4-4"/></svg><span>Abonați newsletter</span>
-      </button>
-      <button class="nav-btn" data-tab="shop-invoices">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg><span>Facturi emise</span>
       </button>
     </div>
     <div class="shop-nav-group" data-tone="catalog">
@@ -1444,6 +1444,11 @@
       </div>
 
       <section class="shop-area-grid">
+        <button type="button" class="shop-area-card amber" data-shop-open="shop-invoices">
+          <span class="shop-area-icon"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span>
+          <span class="shop-area-copy"><small>DOCUMENTE</small><strong>Facturi emise</strong><em>Documente fiscale, încasări, PDF și e-mail.</em></span>
+          <span class="shop-area-arrow">&rarr;</span>
+        </button>
         <button type="button" class="shop-area-card blue" data-shop-open="shop-orders">
           <span class="shop-area-icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="20" r="1"/><circle cx="19" cy="20" r="1"/><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L21 8H7"/></svg></span>
           <span class="shop-area-copy"><small>VANZARI</small><strong>Comenzi</strong><em>Urmareste fluxul si statusul comenzilor.</em></span>
@@ -1472,11 +1477,6 @@
         <button type="button" class="shop-area-card green" data-shop-open="shop-inventory">
           <span class="shop-area-icon"><svg viewBox="0 0 24 24"><path d="M21 8 12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg></span>
           <span class="shop-area-copy"><small>INVENTAR</small><strong>Stoc</strong><em>Controleaza cantitatile, miscarile si alertele.</em></span>
-          <span class="shop-area-arrow">&rarr;</span>
-        </button>
-        <button type="button" class="shop-area-card amber" data-shop-open="shop-invoices">
-          <span class="shop-area-icon"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span>
-          <span class="shop-area-copy"><small>DOCUMENTE</small><strong>Facturi emise</strong><em>Documente fiscale, încasări, PDF și e-mail.</em></span>
           <span class="shop-area-arrow">&rarr;</span>
         </button>
       </section>

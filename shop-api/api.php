@@ -36,6 +36,7 @@ require_once __DIR__ . '/product-page-service.php';
 require_once __DIR__ . '/gomag.php';
 require_once __DIR__ . '/nir-domain.php';
 require_once __DIR__ . '/nir-service.php';
+require_once __DIR__ . '/fixed-assets-service.php';
 $nirBundlePath = __DIR__ . '/nir-bundle.php';
 if (is_file($nirBundlePath) && filesize($nirBundlePath) > 0) require_once $nirBundlePath;
 
@@ -271,7 +272,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026102001;
+    $schemaVersion = 2026111001;
     // Ruta normala face doar SELECT-ul indexat. Un CREATE TABLE IF NOT EXISTS la
     // fiecare request tot cere verificari de metadata si poate astepta lock-uri.
     try {
@@ -298,6 +299,7 @@ function ensureShopSchemaIsCurrent(PDO $db): void {
         $stmt->execute(['schema_version']);
         if ((int)$stmt->fetchColumn() < $schemaVersion) {
             ensureShopSchema($db);
+            GtrotsFixedAssets::ensureSchema($db);
             $save = $db->prepare(
                 'INSERT INTO shop_schema_meta (meta_key, meta_value) VALUES (?, ?)
                  ON DUPLICATE KEY UPDATE meta_value = VALUES(meta_value)'
@@ -6914,6 +6916,30 @@ try {
     }
 
     $currentUser = validateAuthToken($db, $config, $body);
+
+    if ($action === 'listFixedAssets' && $method === 'GET') {
+        jsonResponse(GtrotsFixedAssets::list($db, $_GET));
+    }
+
+    if ($action === 'getFixedAsset' && $method === 'GET') {
+        jsonResponse(GtrotsFixedAssets::get($db, trim((string)($_GET['id'] ?? ''))));
+    }
+
+    if ($action === 'createFixedAssetDocument' && $method === 'POST') {
+        jsonResponse(GtrotsFixedAssets::create($db, $body, (array)$currentUser), 201);
+    }
+
+    if ($action === 'disposeFixedAsset' && $method === 'POST') {
+        jsonResponse(GtrotsFixedAssets::dispose($db, trim((string)($_GET['id'] ?? $body['fixed_asset_id'] ?? '')), $body, (array)$currentUser), 201);
+    }
+
+    if ($action === 'downloadFixedAssetDocument' && $method === 'GET') {
+        jsonResponse(GtrotsFixedAssets::download($db, trim((string)($_GET['id'] ?? ''))));
+    }
+
+    if ($action === 'exportFixedAssets' && $method === 'GET') {
+        jsonResponse(GtrotsFixedAssets::export($db, $_GET, strtolower(trim((string)($_GET['format'] ?? 'xlsx')))));
+    }
     // Pe LiteSpeed/PHP-FPM, răspunsul ajunge întâi la aplicație, iar coada SPV
     // este procesată apoi în fundal. Navigarea rămâne rapidă pe telefon și desktop.
     if (!in_array($action, ['exportProducts', 'exportCatalog', 'exportInvoiceRegistry', 'getInventoryExportEstimate', 'exportInventoryLedger'], true)) {

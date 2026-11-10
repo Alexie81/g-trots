@@ -60,6 +60,7 @@ FILES = (
     "nir-bundle.php",
     "nir-pdf.php",
     "nir-xlsx.php",
+    "fixed-assets-service.php",
 )
 
 

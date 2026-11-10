@@ -4719,7 +4719,7 @@
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
     return now.toISOString().slice(0, 10);
   };
-  const newFixedAssetLine = () => ({ product_name: '', quantity: 1, unit_price: 0, vat_rate: 19 });
+  const newFixedAssetLine = () => ({ product_name: '', quantity: 1, unit_price: 0, vat_rate: 21 });
 
   function fixedAssetDocumentNumber(asset) {
     return [asset?.series, asset?.document_number].map(value => String(value || '').trim()).filter(Boolean).join(' ') || '—';

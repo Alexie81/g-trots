@@ -84,6 +84,20 @@ $excelBytes = base64_decode($excel['content_base64'], true);
 expectFixedAsset(str_starts_with($excelBytes, "PK\x03\x04"), 'Exportul Excel trebuie să fie un pachet XLSX valid.');
 expectFixedAsset(str_contains($excelBytes, 'Uzură tehnică ireparabilă'), 'Exportul trebuie să includă motivul casării.');
 
+GtrotsFixedAssets::dispose($db, (string)$first['id'], ['disposal_date' => '2026-12-01', 'quantity' => -1, 'reason' => 'A doua casare'], ['display_name' => 'Test']);
+$exportRows = new ReflectionMethod(GtrotsFixedAssets::class, 'exportRows');
+$rows = $exportRows->invoke(null, $db, ['from' => '2026-11-01', 'to' => '2026-11-30']);
+expectFixedAsset(count($rows) === 3, 'Se păstrează toate casările, inclusiv cele ulterioare perioadei documentului.');
+$totals = GtrotsFixedAssetExport::totals($rows);
+expectFixedAsset($totals['count'] === 2 && $totals['total'] === 5355.0, 'Valorile bunurilor nu se dublează pentru casări multiple.');
+$all = GtrotsFixedAssets::export($db, [], 'xlsx');
+expectFixedAsset(str_contains($all['file_name'], 'registru-complet'), 'Exportul trebuie să permită toată perioada.');
+foreach ([['from' => '2026-11-01'], ['from' => '2026-11-30', 'to' => '2026-11-01'], ['from' => '2026-02-30', 'to' => '2026-03-01']] as $invalid) {
+    $rejected = false;
+    try { GtrotsFixedAssets::export($db, $invalid, 'xlsx'); } catch (InvalidArgumentException $error) { $rejected = true; }
+    expectFixedAsset($rejected, 'Perioada incompletă sau invalidă trebuie respinsă.');
+}
+
 $storageName = (string)$document['storage_name'];
 $storedPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $storageName);
 if (is_file($storedPath)) unlink($storedPath);

@@ -285,91 +285,58 @@ final class GtrotsFixedAssets
     {
         $params = [];
         $where = self::filters($filters, $params);
-        $stmt = $db->prepare('SELECT d.document_date, d.document_type, d.series, d.document_number, a.product_name, a.quantity, a.unit_price, a.net_value, a.vat_rate, a.vat_value, a.total_value,
+        $stmt = $db->prepare('SELECT a.id AS asset_id, d.document_date, d.document_type, d.series, d.document_number, a.product_name, a.quantity, a.unit_price, a.net_value, a.vat_rate, a.vat_value, a.total_value,
                 x.disposal_date, x.quantity AS disposed_quantity, x.reason AS disposal_reason
             FROM shop_fixed_assets a INNER JOIN shop_fixed_asset_documents d ON d.id = a.document_id
-            LEFT JOIN shop_fixed_asset_disposals x ON x.fixed_asset_id = a.id' . $where . ' ORDER BY d.document_date ASC, d.created_at ASC, a.line_number ASC, x.disposal_date ASC');
+            LEFT JOIN shop_fixed_asset_disposals x ON x.fixed_asset_id = a.id' . $where . ' ORDER BY d.document_date ASC, d.created_at ASC, d.id ASC, a.line_number ASC, a.id ASC, x.disposal_date ASC, x.id ASC');
         $stmt->execute($params);
-        return $stmt->fetchAll();
-    }
-
-    private static function xml($value): string
-    {
-        return htmlspecialchars((string)$value, ENT_XML1 | ENT_QUOTES, 'UTF-8');
-    }
-
-    private static function xlsx(array $rows): string
-    {
-        $headers = ['Nr. crt.', 'Data doc.', 'Tip doc.', 'Serie/nr. doc.', 'Denumire produs', 'Cantitate', 'Preț unitar', 'Valoare', 'TVA %', 'TVA', 'Valoare totală', 'Data casării', 'Cantitatea casată', 'Motivul casării'];
-        $sheetRows = [$headers];
-        foreach ($rows as $index => $row) $sheetRows[] = [$index + 1, $row['document_date'], self::typeLabel($row['document_type']), trim($row['series'] . ' ' . $row['document_number']), $row['product_name'], $row['quantity'], $row['unit_price'], $row['net_value'], $row['vat_rate'], $row['vat_value'], $row['total_value'], $row['disposal_date'] ?? '', $row['disposed_quantity'] ?? '', $row['disposal_reason'] ?? ''];
-        $xmlRows = '';
-        foreach ($sheetRows as $rowIndex => $cells) {
-            $xmlRows .= '<row r="' . ($rowIndex + 1) . '">';
-            foreach ($cells as $column => $cell) {
-                $reference = self::column($column + 1) . ($rowIndex + 1);
-                $numeric = $rowIndex > 0 && $column !== 1 && $column !== 2 && $column !== 3 && $column !== 4 && $column !== 11 && $column !== 13 && $cell !== '' && is_numeric((string)$cell);
-                $xmlRows .= $numeric ? '<c r="' . $reference . '"><v>' . self::xml($cell) . '</v></c>' : '<c r="' . $reference . '" t="inlineStr"><is><t>' . self::xml($cell) . '</t></is></c>';
-            }
-            $xmlRows .= '</row>';
+        $rows = $stmt->fetchAll();
+        $seen = [];
+        foreach ($rows as &$row) {
+            $row['continuation'] = isset($seen[$row['asset_id']]);
+            $seen[$row['asset_id']] = true;
         }
-        $sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' . $xmlRows . '</sheetData></worksheet>';
-        return shopNirBuildZip([
-            '[Content_Types].xml' => '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
-            '_rels/.rels' => '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
-            'xl/workbook.xml' => '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Mijloace fixe" sheetId="1" r:id="rId1"/></sheets></workbook>',
-            'xl/_rels/workbook.xml.rels' => '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
-            'xl/worksheets/sheet1.xml' => $sheet,
-        ]);
+        unset($row);
+        return $rows;
     }
 
-    private static function column(int $number): string
+    private static function xlsx(array $rows, array $filters = [], array $company = []): string
     {
-        $column = '';
-        while ($number > 0) { $number--; $column = chr(65 + ($number % 26)) . $column; $number = intdiv($number, 26); }
-        return $column;
+        require_once __DIR__ . '/fixed-assets-export.php';
+        return GtrotsFixedAssetExport::xlsx($rows, $filters, $company);
     }
 
-    private static function typeLabel(string $type): string
+    private static function pdf(array $rows, array $filters, array $company = []): string
     {
-        return ['factura' => 'Factură', 'bon' => 'Bon', 'pv' => 'Proces-verbal'][$type] ?? $type;
-    }
-
-    private static function pdf(array $rows, array $filters): string
-    {
-        $runtime = __DIR__ . '/lib/dompdf-runtime.phar';
-        $autoload = __DIR__ . '/lib/dompdf/autoload.inc.php';
-        if (is_file($runtime)) require_once 'phar://' . $runtime . '/autoload.inc.php';
-        elseif (is_file($autoload)) require_once $autoload;
-        else throw new RuntimeException('Motorul PDF nu este instalat.');
-        $e = static fn($value): string => htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $money = static fn($value): string => number_format((float)$value, 2, ',', '.');
-        $body = '';
-        foreach ($rows as $index => $row) {
-            $body .= '<tr><td>' . ($index + 1) . '</td><td>' . $e($row['document_date']) . '</td><td>' . $e(self::typeLabel($row['document_type'])) . '</td><td>' . $e(trim($row['series'] . ' ' . $row['document_number'])) . '</td><td>' . $e($row['product_name']) . '</td><td>' . $e($row['quantity']) . '</td><td>' . $money($row['unit_price']) . '</td><td>' . $money($row['net_value']) . '</td><td>' . $e($row['vat_rate']) . '% / ' . $money($row['vat_value']) . '</td><td>' . $money($row['total_value']) . '</td><td>' . $e($row['disposal_date'] ?? '') . '</td><td>' . $e($row['disposed_quantity'] ?? '') . '</td><td>' . $e($row['disposal_reason'] ?? '') . '</td></tr>';
-        }
-        $period = trim((string)($filters['from'] ?? '')) . ' — ' . trim((string)($filters['to'] ?? ''));
-        $html = '<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4 landscape;margin:18px}body{font-family:DejaVu Sans,sans-serif;color:#152035;font-size:7px}h1{font-size:19px;margin:0;color:#f47b20}p{margin:4px 0 14px;color:#64748b}table{width:100%;border-collapse:collapse}th{background:#172033;color:#fff;padding:6px 4px;text-align:left}td{border-bottom:1px solid #dbe2ea;padding:5px 4px;vertical-align:top}tr:nth-child(even){background:#f7f9fc}</style></head><body><h1>Gestiune mijloace fixe</h1><p>Perioadă: ' . $e($period) . ' · generat la ' . date('d.m.Y H:i') . '</p><table><thead><tr><th>Nr.</th><th>Data</th><th>Tip</th><th>Serie/nr.</th><th>Produs</th><th>Cant.</th><th>Preț</th><th>Valoare</th><th>TVA</th><th>Total</th><th>Data casării</th><th>Cant. casată</th><th>Motiv</th></tr></thead><tbody>' . $body . '</tbody></table></body></html>';
-        $options = new Dompdf\Options();
-        $options->set('isRemoteEnabled', false);
-        $dompdf = new Dompdf\Dompdf($options);
-        $dompdf->loadHtml($html, 'UTF-8');
-        $dompdf->setPaper('A4', 'landscape');
-        $dompdf->render();
-        return $dompdf->output();
+        require_once __DIR__ . '/fixed-assets-export.php';
+        return GtrotsFixedAssetExport::pdf($rows, $filters, $company);
     }
 
     public static function export(PDO $db, array $filters, string $format): array
     {
-        if (trim((string)($filters['from'] ?? '')) === '' || trim((string)($filters['to'] ?? '')) === '') throw new InvalidArgumentException('Alege data de început și data de sfârșit.');
-        self::date($filters['from'], 'Data de început');
-        self::date($filters['to'], 'Data de sfârșit');
-        if ((string)$filters['from'] > (string)$filters['to']) throw new InvalidArgumentException('Data de început nu poate fi după data de sfârșit.');
+        $from = trim((string)($filters['from'] ?? ''));
+        $to = trim((string)($filters['to'] ?? ''));
+        if (($from === '') !== ($to === '')) throw new InvalidArgumentException('Completează ambele date ale perioadei.');
+        if ($from !== '') {
+            self::date($from, 'Data de început');
+            self::date($to, 'Data de sfârșit');
+            if ($from > $to) throw new InvalidArgumentException('Data de început nu poate fi după data de sfârșit.');
+        }
+        $filters = array_merge($filters, ['from' => $from, 'to' => $to]);
+        $company = [];
+        try {
+            $company = $db->query('SELECT * FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch(PDO::FETCH_ASSOC) ?: [];
+        } catch (PDOException $error) {
+            // Isolated installations can have no company profile yet.
+            $missingTable = (string)$error->getCode() === '42S02'
+                || ($db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite' && str_contains($error->getMessage(), 'no such table: shop_company_settings'));
+            if (!$missingTable) throw $error;
+        }
         $rows = self::exportRows($db, $filters);
         if (!$rows) throw new ShopNirHttpException('Nu există mijloace fixe în perioada aleasă.', 404);
-        $base = 'Gestiune-mijloace-fixe-' . $filters['from'] . '-' . $filters['to'];
-        if ($format === 'xlsx') return ['file_name' => $base . '.xlsx', 'mime_type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'content_base64' => base64_encode(self::xlsx($rows))];
-        if ($format === 'pdf') return ['file_name' => $base . '.pdf', 'mime_type' => 'application/pdf', 'content_base64' => base64_encode(self::pdf($rows, $filters))];
+        $base = 'Gestiune-mijloace-fixe-' . ($from === '' ? 'registru-complet' : $from . '-' . $to);
+        if ($format === 'xlsx') return ['file_name' => $base . '.xlsx', 'mime_type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'content_base64' => base64_encode(self::xlsx($rows, $filters, $company))];
+        if ($format === 'pdf') return ['file_name' => $base . '.pdf', 'mime_type' => 'application/pdf', 'content_base64' => base64_encode(self::pdf($rows, $filters, $company))];
         throw new InvalidArgumentException('Formatul de export trebuie să fie PDF sau Excel.');
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 $root = dirname(__DIR__, 2);
 $api = (string)file_get_contents($root . '/shop-api/api.php');
 $service = (string)file_get_contents($root . '/shop-api/fixed-assets-service.php');
+$export = (string)file_get_contents($root . '/shop-api/fixed-assets-export.php');
 $desktop = (string)file_get_contents($root . '/electron-app/renderer/js/shop-commerce.js');
 $html = (string)file_get_contents($root . '/electron-app/renderer/index.html');
 $client = (string)file_get_contents($root . '/electron-app/renderer/js/shop-api.js');
@@ -28,6 +29,6 @@ foreach (['listFixedAssets', 'getFixedAsset', 'createFixedAssetDocument', 'dispo
 $expect(str_contains($service, 'shop_fixed_asset_documents') && str_contains($service, 'shop_fixed_assets') && str_contains($service, 'shop_fixed_asset_disposals'), 'Schema persistentă a modulului este incompletă.');
 $expect(str_contains($service, 'Cantitatea casată trebuie introdusă cu minus.'), 'Validarea cantității negative lipsește.');
 $expect(str_contains($service, 'Cantitatea casată depășește cantitatea disponibilă.'), 'Protecția împotriva supracasării lipsește.');
-$expect(str_contains($service, "'Data casării'") && str_contains($service, "'Cantitatea casată'") && str_contains($service, "'Motivul casării'"), 'Exportul nu include toate câmpurile casării.');
+$expect(str_contains($export, "'Data casării'") && str_contains($export, "'Cantitatea casată'") && str_contains($export, "'Motivul casării'"), 'Exportul nu include toate câmpurile casării.');
 
 echo "fixed_assets_contract_test: ok\n";

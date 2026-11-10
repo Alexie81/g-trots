@@ -7054,6 +7054,23 @@ try {
         jsonResponse($invoice);
     }
 
+    if ($action === 'generateReturnNir' && $method === 'POST') {
+        shopNirRequire($currentUser, 'NIR_CREATE');
+        shopNirRequire($currentUser, 'NIR_CONFIRM');
+        $invoiceId = trim((string)($_GET['id'] ?? $body['invoice_id'] ?? ''));
+        $invoice = GtrotsInvoiceService::generateReturnNir($db, $invoiceId, (array)$currentUser, $config);
+        $productStmt = $db->prepare(
+            "SELECT DISTINCT product_id FROM shop_inventory_movements
+             WHERE sales_invoice_id = ? AND movement_type = 'RETURN_IN' AND product_id IS NOT NULL"
+        );
+        $productStmt->execute([$invoiceId]);
+        $invoice['catalog_stock_sync'] = syncCommerceStockProducts($db, $config, array_values(array_filter(array_map('strval', $productStmt->fetchAll(PDO::FETCH_COLUMN)))));
+        $invoice['spv_job'] = GtrotsSpvService::invoiceState($db, $invoiceId);
+        $invoice['spv_reference'] = GtrotsSpvService::invoiceReference($invoice, $invoice['spv_job']);
+        jsonResponse($invoice, !empty($invoice['created']) ? 201 : 200);
+    }
+
+
     if ($action === 'downloadInvoice' && $method === 'GET') {
         jsonResponse(GtrotsInvoiceService::download($db, trim((string)($_GET['id'] ?? '')), trim((string)($_GET['format'] ?? 'pdf')), $config));
     }

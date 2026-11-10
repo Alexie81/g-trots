@@ -117,7 +117,7 @@ final class GtrotsInvoiceService
             $existingReturn = self::findByOrderType($db, $orderId, $returnInvoiceType, true);
             if ($existingReturn) {
                 if ($manageTransaction) $db->commit();
-                return self::row($existingReturn, true, false);
+                return self::withReturnReceiptState($db, $existingReturn, self::row($existingReturn, true, false));
             }
             $original = self::findByOrderType($db, $orderId, 'invoice', true);
             if (!$original) throw new InvalidArgumentException('Comanda nu are o factură care poate fi returnată.');
@@ -233,18 +233,17 @@ final class GtrotsInvoiceService
                 $encoded,
                 $assignedBy,
             ]);
-            // Emiterea facturii de retur reprezintă și recepția fizică. Stocul
-            // este însă justificat de documentul separat „Retur client”, nu de
-            // factura fiscală în sine. Ambele sunt create în aceeași tranzacție.
-            $stockReturnSelection = array_values(array_filter($returnSelection, static fn(array $item): bool => trim((string)($item['product_id'] ?? '')) !== ''));
-            if ($stockReturnSelection) self::postReturnStock($db, $original, $stockReturnSelection, $invoiceId, $series, $number, $reason, $actor);
+            // Factura fiscală de retur nu dovedește singură recepția fizică a
+            // produselor. Intrarea în stoc și NIR-ul de recepție retur sunt
+            // create numai la acțiunea explicită a operatorului din fișa
+            // facturii, după ce produsele au ajuns efectiv în gestiune.
             if (class_exists('GtrotsSpvService')) GtrotsSpvService::enqueue($db, $invoiceId, 'credit_note');
             if ($manageTransaction) $db->commit();
 
             $saved = self::find($db, $invoiceId);
             if (!$saved) throw new RuntimeException('Factura de retur a fost emisă, dar nu a putut fi recitită.');
             if ($manageTransaction) self::warmStoredDocuments($db, $saved, $config);
-            return self::row($saved, false, false);
+            return self::withReturnReceiptState($db, $saved, self::row($saved, false, false));
         } catch (Throwable $error) {
             if ($manageTransaction && $db->inTransaction()) $db->rollBack();
             throw $error;
@@ -271,14 +270,16 @@ final class GtrotsInvoiceService
              LIMIT 1000'
         )->fetchAll();
         $deletableId = self::deletableInvoiceId($db);
-        return array_map(static fn(array $row): array => self::row($row, true, (string)$row['id'] === $deletableId), $rows);
+        return array_map(static function (array $row) use ($db, $deletableId): array {
+            return self::withReturnReceiptState($db, $row, self::row($row, true, (string)$row['id'] === $deletableId));
+        }, $rows);
     }
 
     public static function get(PDO $db, string $id, array $config = []): array
     {
         $invoice = self::find($db, trim($id));
         if (!$invoice) throw new InvalidArgumentException('Factura nu există.');
-        $result = self::row($invoice, true, self::canDelete($db, $invoice));
+        $result = self::withReturnReceiptState($db, $invoice, self::row($invoice, true, self::canDelete($db, $invoice)));
         $payload = json_decode((string)($invoice['payload_json'] ?? ''), true, 512, JSON_THROW_ON_ERROR);
         if (!is_array($payload)) throw new RuntimeException('Datele facturii nu mai sunt disponibile.');
         $result['payload'] = self::detailPayload($db, $invoice, self::refreshPayloadState($invoice, $payload));
@@ -290,6 +291,65 @@ final class GtrotsInvoiceService
             if (is_file($path) && (int)@filesize($path) > 0) $result['pdf_url'] = (string)$stored['public_url'];
         }
         return $result;
+    }
+
+    /**
+     * Confirms the physical receipt of a customer return. This is deliberately
+     * separate from issuing the fiscal credit note: only this action restores
+     * stock, reverses the original FIFO consumption and, for accounting stock,
+     * creates the confirmed customer-return NIR.
+     */
+    public static function generateReturnNir(PDO $db, string $id, array $actor, array $config = [], bool $manageTransaction = true): array
+    {
+        $id = trim($id);
+        if ($id === '') throw new InvalidArgumentException('Factura de retur nu a fost selectată.');
+        if ($manageTransaction) $db->beginTransaction();
+        try {
+            $locked = self::findForUpdate($db, $id);
+            if (!$locked) throw new InvalidArgumentException('Factura nu există.');
+            if (!in_array((string)($locked['invoice_type'] ?? ''), ['return', 'correction_return'], true)
+                || (string)($locked['document_status'] ?? '') !== 'return') {
+                throw new InvalidArgumentException('NIR-ul de recepție retur poate fi generat numai pentru o factură de retur.');
+            }
+
+            $invoice = self::find($db, $id);
+            if (!$invoice) throw new InvalidArgumentException('Factura nu există.');
+            $before = self::returnReceiptState($db, $invoice);
+            if (empty($before['return_receipt_pending'])) {
+                if ($manageTransaction) $db->commit();
+                return array_merge(['created' => false], self::get($db, $id, $config));
+            }
+
+            $originalId = trim((string)($invoice['original_invoice_id'] ?? ''));
+            $original = $originalId !== '' ? self::find($db, $originalId) : null;
+            if (!$original) throw new InvalidArgumentException('Factura fiscală inițială nu mai există.');
+            $payload = json_decode((string)($invoice['payload_json'] ?? ''), true, 512, JSON_THROW_ON_ERROR);
+            if (!is_array($payload)) throw new RuntimeException('Datele facturii de retur nu mai sunt disponibile.');
+            $selection = self::returnSelectionFromPayload($payload);
+            if (!$selection) throw new InvalidArgumentException('Factura de retur nu conține produse care pot fi recepționate.');
+
+            self::postReturnStock(
+                $db,
+                $original,
+                $selection,
+                $id,
+                (string)$invoice['series'],
+                (string)$invoice['invoice_number'],
+                (string)($payload['return_reason'] ?? $payload['notes'] ?? ''),
+                $actor
+            );
+            $after = self::returnReceiptState($db, $invoice);
+            if (!empty($after['return_receipt_pending'])) {
+                throw new RuntimeException('Recepția returului nu a putut fi înregistrată complet. Verifică legătura produselor cu factura inițială.');
+            }
+            if ($manageTransaction) $db->commit();
+            $result = self::get($db, $id, $config);
+            $result['created'] = true;
+            return $result;
+        } catch (Throwable $error) {
+            if ($manageTransaction && $db->inTransaction()) $db->rollBack();
+            throw $error;
+        }
     }
 
     /** Read-only export: reuse the same fiscal snapshot and payment presentation as individual downloads. */
@@ -915,6 +975,108 @@ final class GtrotsInvoiceService
         return $row ?: null;
     }
 
+    private static function withReturnReceiptState(PDO $db, array $invoice, array $result): array
+    {
+        return array_merge($result, self::returnReceiptState($db, $invoice));
+    }
+
+    private static function returnReceiptState(PDO $db, array $invoice): array
+    {
+        $defaults = [
+            'return_receipt_required' => false,
+            'return_receipt_pending' => false,
+            'return_receipt_completed' => false,
+            'can_generate_return_nir' => false,
+            'return_nir_id' => null,
+            'return_nir_number' => null,
+        ];
+        if (!in_array((string)($invoice['invoice_type'] ?? ''), ['return', 'correction_return'], true)
+            || (string)($invoice['document_status'] ?? '') !== 'return') {
+            return $defaults;
+        }
+
+        $nirStmt = $db->prepare(
+            "SELECT id,nir_number FROM shop_nir_documents
+             WHERE return_invoice_id = ? AND source_type = 'customer_return' AND operation_type = 'customer_return'
+             ORDER BY created_at DESC,id DESC LIMIT 1"
+        );
+        $nirStmt->execute([(string)$invoice['id']]);
+        $nir = $nirStmt->fetch() ?: null;
+
+        $payload = json_decode((string)($invoice['payload_json'] ?? ''), true);
+        $selection = is_array($payload) ? self::returnSelectionFromPayload($payload) : [];
+        $lineIds = array_values(array_unique(array_filter(array_map(
+            static fn(array $item): string => trim((string)($item['order_item_id'] ?? '')),
+            $selection
+        ))));
+        $originalId = trim((string)($invoice['original_invoice_id'] ?? ''));
+        if ($originalId === '' || !$lineIds) {
+            return array_merge($defaults, [
+                'return_nir_id' => $nir ? (string)$nir['id'] : null,
+                'return_nir_number' => $nir ? (trim((string)$nir['nir_number']) ?: null) : null,
+            ]);
+        }
+
+        $placeholders = implode(',', array_fill(0, count($lineIds), '?'));
+        $sourceStmt = $db->prepare(
+            "SELECT id FROM shop_inventory_movements
+             WHERE sales_invoice_id = ? AND movement_type = 'sale'
+               AND sales_invoice_line_id IN ({$placeholders})"
+        );
+        $sourceStmt->execute(array_merge([$originalId], $lineIds));
+        $sourceIds = array_values(array_filter(array_map('strval', $sourceStmt->fetchAll(PDO::FETCH_COLUMN))));
+        if (!$sourceIds) {
+            return array_merge($defaults, [
+                'return_nir_id' => $nir ? (string)$nir['id'] : null,
+                'return_nir_number' => $nir ? (trim((string)$nir['nir_number']) ?: null) : null,
+            ]);
+        }
+
+        $movementPlaceholders = implode(',', array_fill(0, count($sourceIds), '?'));
+        $receivedStmt = $db->prepare(
+            "SELECT COUNT(DISTINCT reversal_of_movement_id) FROM shop_inventory_movements
+             WHERE sales_invoice_id = ? AND movement_type IN ('return','RETURN_IN')
+               AND reversal_of_movement_id IN ({$movementPlaceholders})"
+        );
+        $receivedStmt->execute(array_merge([(string)$invoice['id']], $sourceIds));
+        $received = (int)$receivedStmt->fetchColumn();
+        $completed = $nir !== null || $received >= count($sourceIds);
+        return [
+            'return_receipt_required' => true,
+            'return_receipt_pending' => !$completed,
+            'return_receipt_completed' => $completed,
+            'can_generate_return_nir' => !$completed,
+            'return_nir_id' => $nir ? (string)$nir['id'] : null,
+            'return_nir_number' => $nir ? (trim((string)$nir['nir_number']) ?: null) : null,
+        ];
+    }
+
+    private static function returnSelectionFromPayload(array $payload): array
+    {
+        $rows = is_array($payload['return_items'] ?? null) ? $payload['return_items'] : [];
+        if (!$rows) {
+            foreach ((array)($payload['items'] ?? []) as $item) {
+                if ((string)($item['sku'] ?? '') === 'TRANSPORT') continue;
+                $rows[] = [
+                    'order_item_id' => (string)($item['order_item_id'] ?? ''),
+                    'product_id' => (string)($item['product_id'] ?? ''),
+                    'accepted_quantity' => (float)($item['quantity'] ?? 0),
+                ];
+            }
+        }
+        $selection = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) continue;
+            $lineId = trim((string)($row['order_item_id'] ?? ''));
+            $quantity = (float)($row['accepted_quantity'] ?? $row['quantity'] ?? 0);
+            if ($lineId === '' || $quantity <= 0.00005) continue;
+            $row['order_item_id'] = $lineId;
+            $row['accepted_quantity'] = $quantity;
+            $selection[] = $row;
+        }
+        return $selection;
+    }
+
     private static function row(array $row, bool $existing, bool $canDelete = false): array
     {
         $status = self::effectiveStatus($row);
@@ -1277,8 +1439,8 @@ final class GtrotsInvoiceService
     }
 
     /**
-     * Reverses the automatic customer-return NIR and every stock/FIFO effect
-     * created together with a never-submitted return invoice.
+     * Reverses a manually confirmed customer-return receipt and every
+     * stock/FIFO effect associated with a never-submitted return invoice.
      */
     private static function rollbackReturnStock(PDO $db, array $invoice): array
     {
@@ -1377,7 +1539,7 @@ final class GtrotsInvoiceService
             }
             $db->prepare('DELETE FROM shop_nir_lines WHERE nir_document_id = ?')->execute([$nirId]);
             $db->prepare('DELETE FROM shop_nir_documents WHERE id = ?')->execute([$nirId]);
-            self::releaseAutomaticReturnNirNumber($db, (string)($nir['nir_number'] ?? ''));
+            self::releaseReturnNirNumber($db, (string)($nir['nir_number'] ?? ''));
         }
 
         return [
@@ -1387,7 +1549,7 @@ final class GtrotsInvoiceService
         ];
     }
 
-    private static function releaseAutomaticReturnNirNumber(PDO $db, string $nirNumber): void
+    private static function releaseReturnNirNumber(PDO $db, string $nirNumber): void
     {
         if (!preg_match('/(\d+)$/', trim($nirNumber), $match)) return;
         $released = (int)$match[1];

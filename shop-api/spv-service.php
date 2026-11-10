@@ -1233,6 +1233,63 @@ final class GtrotsSpvService
             }
         } catch (Throwable $ignored) { }
 
+        // O factură de retur nu înseamnă că marfa a ajuns deja fizic în
+        // gestiune. Până la recepția explicită, reamintim zilnic operatorului
+        // să genereze documentul NIR. Cheia include ziua curentă: dacă
+        // notificarea este ștearsă, rămâne ascunsă azi și reapare mâine.
+        try {
+            $today = (new DateTimeImmutable('now', new DateTimeZone('Europe/Bucharest')))->format('Y-m-d');
+            $pendingReturns = $db->query(
+                "SELECT i.id,i.series,i.invoice_number,i.issue_date,o.order_number
+                 FROM shop_invoices i
+                 INNER JOIN shop_orders o ON o.id=i.order_id
+                 WHERE i.invoice_type IN ('return','correction_return')
+                   AND i.document_status='return'
+                   AND i.original_invoice_id IS NOT NULL
+                   AND EXISTS (
+                       SELECT 1 FROM shop_inventory_movements sale
+                       WHERE sale.sales_invoice_id=i.original_invoice_id AND sale.movement_type='sale'
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM shop_nir_documents n
+                       WHERE n.return_invoice_id=i.id AND n.source_type='customer_return' AND n.operation_type='customer_return'
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM shop_inventory_movements receipt
+                       WHERE receipt.sales_invoice_id=i.id AND receipt.movement_type IN ('return','RETURN_IN')
+                   )
+                 ORDER BY i.issue_date,i.issued_at,i.id
+                 LIMIT 250"
+            )->fetchAll();
+            $pendingIds = [];
+            foreach ($pendingReturns as $invoice) {
+                $invoiceId = (string)$invoice['id'];
+                $pendingIds[] = $invoiceId;
+                $label = trim((string)$invoice['series'] . ' ' . (string)$invoice['invoice_number']);
+                $orderNumber = trim((string)($invoice['order_number'] ?? ''));
+                $dedupe = 'return-nir-missing:' . $invoiceId . ':' . $today;
+                $db->prepare("DELETE FROM shop_notifications WHERE notification_type='return_nir_missing' AND entity_type='invoice' AND entity_id=? AND dedupe_key<>?")
+                    ->execute([$invoiceId, $dedupe]);
+                self::notify(
+                    $db,
+                    'return_nir_missing',
+                    'NIR de recepție retur lipsă · ' . $label,
+                    'Produsele facturii de retur ' . $label . ($orderNumber !== '' ? ' (comanda ' . $orderNumber . ')' : '') . ' nu au fost încă recepționate în stoc. Deschide factura și generează NIR-ul după primirea fizică.',
+                    'invoice',
+                    $invoiceId,
+                    'warning',
+                    $dedupe
+                );
+            }
+            if ($pendingIds) {
+                $placeholders = implode(',', array_fill(0, count($pendingIds), '?'));
+                $cleanup = $db->prepare("DELETE FROM shop_notifications WHERE notification_type='return_nir_missing' AND entity_id NOT IN ({$placeholders})");
+                $cleanup->execute($pendingIds);
+            } else {
+                $db->exec("DELETE FROM shop_notifications WHERE notification_type='return_nir_missing'");
+            }
+        } catch (Throwable $ignored) { }
+
         $settings = self::settings($db);
         if (empty($settings['reminders_enabled'])) return;
         try {

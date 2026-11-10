@@ -12,7 +12,6 @@ final class GtrotsInvoiceUbl
 {
     public const CUSTOMIZATION_ID = 'urn:cen.eu:en16931:2017#compliant#urn:efactura.mfinante.ro:CIUS-RO:1.0.1';
     private const NS_INVOICE = 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2';
-    private const NS_CREDIT_NOTE = 'urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2';
     private const NS_CBC = 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2';
     private const NS_CAC = 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2';
 
@@ -35,6 +34,7 @@ final class GtrotsInvoiceUbl
     {
         self::validateSource($invoice);
         $isReturn = strtolower(trim((string)($invoice['status'] ?? ''))) === 'return';
+        $documentSign = $isReturn ? -1.0 : 1.0;
         $currency = strtoupper(trim((string)($invoice['currency'] ?? 'RON'))) ?: 'RON';
         $sellerVatPayer = !empty($invoice['seller']['vat_payer'])
             || str_starts_with(strtoupper(trim((string)($invoice['seller']['cui'] ?? ''))), 'RO');
@@ -42,18 +42,20 @@ final class GtrotsInvoiceUbl
         $lines = [];
         $taxGroups = [];
         foreach ($items as $index => $item) {
-            $quantity = round((float)($item['quantity'] ?? 0), 4);
+            $unsignedQuantity = round((float)($item['quantity'] ?? 0), 4);
+            $quantity = $documentSign * $unsignedQuantity;
             $price = round((float)($item['unit_price'] ?? 0), 8);
             $discount = max(0.0, min(100.0, (float)($item['discount_percent'] ?? 0)));
-            $net = round($quantity * $price * (1 - $discount / 100), 2);
+            $unsignedNet = round($unsignedQuantity * $price * (1 - $discount / 100), 2);
+            $net = $documentSign * $unsignedNet;
             $rate = round(max(0.0, min(100.0, (float)($item['vat_rate'] ?? 0))), 2);
             $taxIdentity = self::taxIdentity($item, $sellerVatPayer, $rate);
             $category = $taxIdentity['category'];
             $key = $category . ':' . self::decimal($rate, 2) . ':' . $taxIdentity['exemption_code'] . ':' . $taxIdentity['exemption_reason'];
             if (!isset($taxGroups[$key])) $taxGroups[$key] = ['category' => $category, 'rate' => $rate, 'net' => 0.0, 'tax' => 0.0] + $taxIdentity;
             $taxGroups[$key]['net'] = round($taxGroups[$key]['net'] + $net, 2);
-            $base = round($quantity * $price, 2);
-            $lines[] = ['index' => $index + 1, 'item' => $item, 'quantity' => $quantity, 'price' => $price, 'discount' => $discount, 'discount_amount' => round($base - $net, 2), 'base' => $base, 'net' => $net, 'rate' => $rate, 'category' => $category];
+            $base = round($unsignedQuantity * $price, 2);
+            $lines[] = ['index' => $index + 1, 'item' => $item, 'quantity' => $quantity, 'price' => $price, 'discount' => $discount, 'discount_amount' => round($base - $unsignedNet, 2), 'base' => $base, 'net' => $net, 'rate' => $rate, 'category' => $category];
         }
         foreach ($taxGroups as &$group) $group['tax'] = round($group['net'] * $group['rate'] / 100, 2);
         unset($group);
@@ -61,28 +63,32 @@ final class GtrotsInvoiceUbl
         $returnCostGross = $isReturn ? max(0.0, round((float)($invoice['return_shipping_cost'] ?? 0), 2)) : 0.0;
         $returnCostRate = $isReturn ? round(max(0.0, min(100.0, (float)($invoice['return_shipping_cost_vat_rate'] ?? ($lines[0]['rate'] ?? 0)))), 2) : 0.0;
         $returnCostNet = $returnCostGross > 0 ? round($returnCostGross / (1 + $returnCostRate / 100), 2) : 0.0;
-        if ($returnCostNet > $lineExtension) {
-            $returnCostNet = $lineExtension;
+        if ($returnCostNet > abs($lineExtension)) {
+            $returnCostNet = abs($lineExtension);
             $returnCostGross = round($returnCostNet * (1 + $returnCostRate / 100), 2);
         }
         if ($returnCostNet > 0) {
             $returnTaxIdentity = self::taxIdentity(['vat_category' => $lines[0]['category'] ?? null], $sellerVatPayer, $returnCostRate);
             $returnKey = $returnTaxIdentity['category'] . ':' . self::decimal($returnCostRate, 2) . ':' . $returnTaxIdentity['exemption_code'] . ':' . $returnTaxIdentity['exemption_reason'];
             if (!isset($taxGroups[$returnKey])) $taxGroups[$returnKey] = ['category' => $returnTaxIdentity['category'], 'rate' => $returnCostRate, 'net' => 0.0, 'tax' => 0.0] + $returnTaxIdentity;
-            $taxGroups[$returnKey]['net'] = round(max(0.0, $taxGroups[$returnKey]['net'] - $returnCostNet), 2);
+            // Într-o factură 380 de stornare, pozițiile returnate sunt negative,
+            // iar costul direct al returului reținut clientului este o majorare
+            // pozitivă care reduce valoarea absolută a rambursării.
+            $taxGroups[$returnKey]['net'] = round($taxGroups[$returnKey]['net'] + $returnCostNet, 2);
             $taxGroups[$returnKey]['tax'] = round($taxGroups[$returnKey]['net'] * $returnCostRate / 100, 2);
         }
-        $exclusive = round($lineExtension - $returnCostNet, 2);
+        $exclusive = round($lineExtension + $returnCostNet, 2);
         $tax = round(array_sum(array_column($taxGroups, 'tax')), 2);
         $inclusive = round($exclusive + $tax, 2);
-        $declaredTotal = round((float)($invoice['total'] ?? $inclusive), 2);
+        $declaredTotalSource = round((float)($invoice['total'] ?? $inclusive), 2);
+        $declaredTotal = $isReturn ? -abs($declaredTotalSource) : $declaredTotalSource;
         $rounding = round($declaredTotal - $inclusive, 2);
-        $paid = (string)($invoice['status'] ?? 'unpaid') === 'paid' ? $declaredTotal : 0.0;
+        $paid = !$isReturn && (string)($invoice['status'] ?? 'unpaid') === 'paid' ? $declaredTotal : 0.0;
         $payable = round($inclusive + $rounding - $paid, 2);
 
         $document = new DOMDocument('1.0', 'UTF-8');
         $document->formatOutput = true;
-        $root = $document->createElementNS($isReturn ? self::NS_CREDIT_NOTE : self::NS_INVOICE, $isReturn ? 'CreditNote' : 'Invoice');
+        $root = $document->createElementNS(self::NS_INVOICE, 'Invoice');
         $root->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:cac', self::NS_CAC);
         $root->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:cbc', self::NS_CBC);
         $document->appendChild($root);
@@ -91,7 +97,7 @@ final class GtrotsInvoiceUbl
         self::cbc($document, $root, 'ID', self::invoiceId($invoice));
         self::cbc($document, $root, 'IssueDate', self::date((string)$invoice['issue_date'], 'Data emiterii'));
         if (!$isReturn && trim((string)($invoice['due_date'] ?? '')) !== '') self::cbc($document, $root, 'DueDate', self::date((string)$invoice['due_date'], 'Data scadenței'));
-        self::cbc($document, $root, $isReturn ? 'CreditNoteTypeCode' : 'InvoiceTypeCode', $isReturn ? '381' : '380');
+        self::cbc($document, $root, 'InvoiceTypeCode', '380');
         if (trim((string)($invoice['notes'] ?? '')) !== '') self::cbc($document, $root, 'Note', self::text((string)$invoice['notes'], 300));
         self::cbc($document, $root, 'DocumentCurrencyCode', $currency);
         if ($currency !== 'RON') self::cbc($document, $root, 'TaxCurrencyCode', 'RON');
@@ -129,10 +135,10 @@ final class GtrotsInvoiceUbl
 
         if ($returnCostNet > 0) {
             $allowance = self::cac($document, $root, 'AllowanceCharge');
-            self::cbc($document, $allowance, 'ChargeIndicator', 'false');
+            self::cbc($document, $allowance, 'ChargeIndicator', 'true');
             self::cbc($document, $allowance, 'AllowanceChargeReason', 'Cost direct al returului suportat de client');
             self::amount($document, $allowance, 'Amount', $returnCostNet, $currency);
-            self::amount($document, $allowance, 'BaseAmount', $lineExtension, $currency);
+            self::amount($document, $allowance, 'BaseAmount', abs($lineExtension), $currency);
             $category = self::cac($document, $allowance, 'TaxCategory');
             self::cbc($document, $category, 'ID', (string)$returnTaxIdentity['category']);
             if ($returnTaxIdentity['category'] !== 'O') self::cbc($document, $category, 'Percent', self::decimal($returnCostRate, 2));
@@ -159,7 +165,7 @@ final class GtrotsInvoiceUbl
         self::amount($document, $totals, 'LineExtensionAmount', $lineExtension, $currency);
         self::amount($document, $totals, 'TaxExclusiveAmount', $exclusive, $currency);
         self::amount($document, $totals, 'TaxInclusiveAmount', $inclusive, $currency);
-        if ($returnCostNet > 0) self::amount($document, $totals, 'AllowanceTotalAmount', $returnCostNet, $currency);
+        if ($returnCostNet > 0) self::amount($document, $totals, 'ChargeTotalAmount', $returnCostNet, $currency);
         if ($paid > 0) self::amount($document, $totals, 'PrepaidAmount', $paid, $currency);
         if (abs($rounding) >= 0.005) self::amount($document, $totals, 'PayableRoundingAmount', $rounding, $currency);
         self::amount($document, $totals, 'PayableAmount', $payable, $currency);
@@ -304,15 +310,15 @@ final class GtrotsInvoiceUbl
     private static function invoiceLine(DOMDocument $document, DOMElement $root, array $line, string $currency, bool $isReturn): void
     {
         $item = (array)$line['item'];
-        $node = self::cac($document, $root, $isReturn ? 'CreditNoteLine' : 'InvoiceLine');
+        $node = self::cac($document, $root, 'InvoiceLine');
         self::cbc($document, $node, 'ID', (string)$line['index']);
-        $quantity = self::cbc($document, $node, $isReturn ? 'CreditedQuantity' : 'InvoicedQuantity', self::decimal($line['quantity'], 4));
+        $quantity = self::cbc($document, $node, 'InvoicedQuantity', self::decimal($line['quantity'], 4));
         $quantity->setAttribute('unitCode', 'C62');
         self::amount($document, $node, 'LineExtensionAmount', $line['net'], $currency);
         if ((float)($line['discount_amount'] ?? 0) > 0) {
             $allowance = self::cac($document, $node, 'AllowanceCharge');
-            self::cbc($document, $allowance, 'ChargeIndicator', 'false');
-            self::cbc($document, $allowance, 'AllowanceChargeReason', 'Reducere comercială');
+            self::cbc($document, $allowance, 'ChargeIndicator', $isReturn ? 'true' : 'false');
+            self::cbc($document, $allowance, 'AllowanceChargeReason', $isReturn ? 'Reversare reducere comercială' : 'Reducere comercială');
             self::cbc($document, $allowance, 'MultiplierFactorNumeric', self::decimal((float)$line['discount'] / 100, 8));
             self::amount($document, $allowance, 'Amount', (float)$line['discount_amount'], $currency);
             self::amount($document, $allowance, 'BaseAmount', (float)$line['base'], $currency);

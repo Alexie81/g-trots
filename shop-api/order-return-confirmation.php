@@ -144,8 +144,8 @@ final class GtrotsOrderReturnConfirmation
     private static function queueForSpv(PDO $db, string $invoiceId): void
     {
         $sql = self::isSqlite($db)
-            ? "INSERT OR IGNORE INTO shop_spv_outbox (id, invoice_id, document_kind, status) VALUES (?, ?, 'credit_note', 'awaiting_configuration')"
-            : "INSERT IGNORE INTO shop_spv_outbox (id, invoice_id, document_kind, status) VALUES (?, ?, 'credit_note', 'awaiting_configuration')";
+            ? "INSERT OR IGNORE INTO shop_spv_outbox (id, invoice_id, document_kind, status) VALUES (?, ?, 'return_invoice', 'awaiting_configuration')"
+            : "INSERT IGNORE INTO shop_spv_outbox (id, invoice_id, document_kind, status) VALUES (?, ?, 'return_invoice', 'awaiting_configuration')";
         $db->prepare($sql)->execute([self::uuid(), $invoiceId]);
     }
 

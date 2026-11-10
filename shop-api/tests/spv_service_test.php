@@ -46,6 +46,7 @@ spvAssert(($invoiceJob['status'] ?? '') === 'scheduled', 'Factura pozitivă treb
 spvAssert(($invoiceJob['scheduled_at'] ?? '') === '2026-09-08 00:00:00', 'Două zile lucrătoare după vineri trebuie să însemne întreaga zi de marți, fără condiție de oră.');
 spvAssert(($returnJob['status'] ?? '') === 'manual', 'Factura de retur veche nu trebuie trimisă din coada veche când regula curentă este manuală.');
 spvAssert(($returnJob['mode_snapshot'] ?? '') === 'manual', 'Coada veche trebuie rescrisă după automatizarea actuală.');
+spvAssert(($returnJob['document_kind'] ?? '') === 'return_invoice', 'Joburile vechi FCN netrimise trebuie migrate la factura de retur Invoice 380.');
 $db->exec("UPDATE shop_spv_outbox SET status='processing', scheduled_at='2026-09-24 12:00:00', next_attempt_at='2026-09-24 12:01:30', last_error='în așteptarea răspunsului ANAF' WHERE invoice_id='invoice-1'");
 GtrotsSpvService::reconcileOutbox($db);
 $processingJob = $db->query("SELECT * FROM shop_spv_outbox WHERE invoice_id='invoice-1'")->fetch();

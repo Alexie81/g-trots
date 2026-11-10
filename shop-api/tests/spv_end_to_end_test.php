@@ -14,6 +14,9 @@ final class GtrotsInvoiceService
     {
         if ($format !== 'xml') throw new RuntimeException('Testul acceptă numai XML.');
         if ($id === 'invoice-generation-error') throw new InvalidArgumentException('Județul nu poate fi transformat în codul ISO ANAF.');
+        if ($id === 'legacy-credit-note') {
+            return ['content_base64' => base64_encode('<?xml version="1.0" encoding="UTF-8"?><CreditNote><ID>legacy-credit-note</ID></CreditNote>')];
+        }
         return ['content_base64' => base64_encode('<?xml version="1.0" encoding="UTF-8"?><Invoice><ID>' . htmlspecialchars($id, ENT_XML1) . '</ID></Invoice>')];
     }
 
@@ -105,8 +108,9 @@ GtrotsSpvService::setHttpTransportForTests(static function (string $method, stri
         return ['status' => 200, 'body' => '{"mesaje":[],"titlu":"Lista Mesaje"}'];
     }
     if (str_contains($url, '/upload')) {
-        spvE2eAssert($method === 'POST' && (str_contains($url, 'standard=UBL') || str_contains($url, 'standard=CN')) && str_contains($url, 'cif=12345678'), 'Uploadul trebuie să folosească standardul documentului și CIF-ul numeric.');
-        if (str_contains((string)$body, '<CreditNote')) spvE2eAssert(str_contains($url, 'standard=CN'), 'Factura de corecție 381 trebuie încărcată cu standard=CN.');
+        $isLegacyCreditNote = str_contains((string)$body, '<CreditNote');
+        $expectedStandard = $isLegacyCreditNote ? 'standard=CN' : 'standard=UBL';
+        spvE2eAssert($method === 'POST' && str_contains($url, $expectedStandard) && str_contains($url, 'cif=12345678'), 'Standardul uploadului trebuie derivat din rădăcina XML și trebuie trimis CIF-ul numeric.');
         spvE2eAssert((bool)array_filter($headers, static fn(string $header): bool => str_starts_with($header, 'Authorization: Bearer ')), 'Uploadul trebuie autorizat Bearer.');
         if ($scenario === 'upload_error') return ['status' => 503, 'body' => 'temporarily unavailable'];
         return ['status' => 200, 'body' => '<header ExecutionStatus="0" index_incarcare="UPLOAD-123"/>'];
@@ -142,11 +146,11 @@ GtrotsSpvService::updateSettings($db, [
 
 $diagnostics = GtrotsSpvService::runTestDiagnostics($db, $config);
 spvE2eAssert(($diagnostics['environment'] ?? '') === 'test' && !empty($diagnostics['isolated']) && empty($diagnostics['fiscal_effect']), 'Diagnosticul trebuie limitat explicit la sandbox, fără efect fiscal.');
-spvE2eAssert(count((array)($diagnostics['documents'] ?? [])) === 2, 'Diagnosticul trebuie să încarce atât Invoice 380, cât și CreditNote 381.');
+spvE2eAssert(count((array)($diagnostics['documents'] ?? [])) === 2, 'Diagnosticul trebuie să încarce atât factura pozitivă 380, cât și factura de retur 380 cu minus.');
 spvE2eAssert(count(array_filter((array)$diagnostics['documents'], static fn(array $document): bool => ($document['state'] ?? '') === 'accepted')) === 2, 'Ambele documente sintetice trebuie să parcurgă uploadul și citirea statusului.');
 spvE2eAssert((int)$db->query('SELECT COUNT(*) FROM shop_invoices')->fetchColumn() === 0, 'Diagnosticul nu trebuie să creeze facturi fiscale locale.');
 $diagnosticUploads = array_values(array_filter($calls, static fn(array $call): bool => str_contains((string)$call['url'], '/upload')));
-spvE2eAssert(str_contains((string)$diagnosticUploads[0]['url'], 'standard=UBL') && str_contains((string)$diagnosticUploads[1]['url'], 'standard=CN'), 'Diagnosticul trebuie să trimită Invoice cu UBL și CreditNote cu CN.');
+spvE2eAssert(str_contains((string)$diagnosticUploads[0]['url'], 'standard=UBL') && str_contains((string)$diagnosticUploads[1]['url'], 'standard=UBL'), 'Diagnosticul trebuie să trimită ambele documente Invoice 380 cu standard=UBL.');
 
 $insert = $db->prepare('INSERT INTO shop_invoices (id,invoice_type,issue_date,issued_at,spv_status,series,invoice_number) VALUES (?,?,?,?,?,?,?)');
 $insert->execute(['invoice-accepted', 'invoice', '2026-09-04', '2026-09-04 12:00:00', 'not_sent', 'GT', '101']);
@@ -197,9 +201,16 @@ GtrotsSpvService::sendManual($db, $config, 'invoice-list-fallback');
 $acceptedFromList = spvE2eForceStatusPoll($db, $config, 'invoice-list-fallback');
 spvE2eAssert(($acceptedFromList['invoice']['spv_status'] ?? '') === 'sent' && ($acceptedFromList['job']['download_id'] ?? '') === 'DOWNLOAD-FROM-LIST', 'Dacă stareMesaj nu oferă id_descarcare, acesta trebuie recuperat din lista oficială după id_solicitare.');
 
+$scenario = 'accepted';
+$insert->execute(['legacy-credit-note', 'return', '2026-09-04', '2026-09-04 12:07:00', 'not_sent', 'GT', '101C']);
+GtrotsSpvService::enqueue($db, 'legacy-credit-note', 'credit_note');
+GtrotsSpvService::sendManual($db, $config, 'legacy-credit-note');
+$legacyUploads = array_values(array_filter($calls, static fn(array $call): bool => str_contains((string)$call['url'], '/upload') && str_contains((string)($call['body'] ?? ''), '<CreditNote')));
+spvE2eAssert(count($legacyUploads) === 1 && str_contains((string)$legacyUploads[0]['url'], 'standard=CN'), 'Un CreditNote 381 istoric deja stocat trebuie păstrat și încărcat prin standard=CN.');
+
 $scenario = 'rejected';
 $insert->execute(['invoice-rejected', 'return', '2026-09-04', '2026-09-04 12:10:00', 'not_sent', 'GT', '102']);
-GtrotsSpvService::enqueue($db, 'invoice-rejected', 'credit_note');
+GtrotsSpvService::enqueue($db, 'invoice-rejected', 'return_invoice');
 GtrotsSpvService::sendManual($db, $config, 'invoice-rejected');
 $rejected = spvE2eForceStatusPoll($db, $config, 'invoice-rejected');
 spvE2eAssert(($rejected['invoice']['spv_status'] ?? '') === 'rejected', 'Un NOK ANAF trebuie afișat drept respins, nu trimis.');
@@ -208,7 +219,7 @@ spvE2eAssert((int)$db->query("SELECT COUNT(*) FROM shop_notifications WHERE enti
 
 $scenario = 'rejected_phrase';
 $insert->execute(['invoice-rejected-phrase', 'return', '2026-09-04', '2026-09-04 12:15:00', 'not_sent', 'GT', '102B']);
-GtrotsSpvService::enqueue($db, 'invoice-rejected-phrase', 'credit_note');
+GtrotsSpvService::enqueue($db, 'invoice-rejected-phrase', 'return_invoice');
 GtrotsSpvService::sendManual($db, $config, 'invoice-rejected-phrase');
 $rejectedPhrase = spvE2eForceStatusPoll($db, $config, 'invoice-rejected-phrase');
 spvE2eAssert(($rejectedPhrase['invoice']['spv_status'] ?? '') === 'rejected', 'Mesajul ANAF „nepreluat/cu erori” trebuie tratat drept respins, nu lăsat în procesare.');

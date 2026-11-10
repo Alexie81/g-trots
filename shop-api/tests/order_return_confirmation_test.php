@@ -95,7 +95,7 @@ $db->exec("INSERT INTO shop_orders (id, order_number, status, return_reason, cus
 $db->exec("INSERT INTO shop_invoices (id, order_id, series, invoice_number, invoice_type) VALUES ('positive-o2', 'o2', 'GT', '1', 'invoice')");
 $result = GtrotsOrderReturnConfirmation::confirm($db, 'o2', [], ['display_name' => 'Admin'], false);
 assertReturnConfirmation($result['invoice_action'] === 'return_invoice_created', 'Factura de retur nu a fost creată.');
-assertReturnConfirmation((string)$db->query("SELECT document_kind FROM shop_spv_outbox WHERE invoice_id = 'return-o2'")->fetchColumn() === 'credit_note', 'Factura de retur nu a fost pusă în coada SPV.');
+assertReturnConfirmation((string)$db->query("SELECT document_kind FROM shop_spv_outbox WHERE invoice_id = 'return-o2'")->fetchColumn() === 'return_invoice', 'Factura de retur 380 nu a fost pusă în coada SPV.');
 assertReturnConfirmation(GtrotsInvoiceService::$emailed === ['return-o2'], 'Factura de retur nu a fost trimisă automat o singură dată.');
 assertReturnConfirmation($statusEmails === [], 'E-mailul de status nu trebuie trimis când opțiunea este oprită.');
 

@@ -237,7 +237,7 @@ final class GtrotsInvoiceService
             // produselor. Intrarea în stoc și NIR-ul de recepție retur sunt
             // create numai la acțiunea explicită a operatorului din fișa
             // facturii, după ce produsele au ajuns efectiv în gestiune.
-            if (class_exists('GtrotsSpvService')) GtrotsSpvService::enqueue($db, $invoiceId, 'credit_note');
+            if (class_exists('GtrotsSpvService')) GtrotsSpvService::enqueue($db, $invoiceId, 'return_invoice');
             if ($manageTransaction) $db->commit();
 
             $saved = self::find($db, $invoiceId);

@@ -73,7 +73,7 @@ final class GtrotsOrderCancellation
                         'username' => 'order-cancellation',
                     ], $config, false);
                     $invoiceAction = 'return_invoice_created';
-                    self::queueForSpv($db, (string)$returnInvoice['id'], 'credit_note');
+                    self::queueForSpv($db, (string)$returnInvoice['id'], 'return_invoice');
                 }
             }
 

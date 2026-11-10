@@ -116,16 +116,16 @@ try {{
     $names = [];
     foreach ($xpath->query('//cac:InvoiceLine/cac:Item/cbc:Name') ?: [] as $name) $names[] = mb_strlen((string)$name->textContent, 'UTF-8');
 
-    $credit = $invoice;
-    $credit['number'] = $stamp . '2';
-    $credit['status'] = 'return';
-    $credit['total'] = 80.00;
-    $credit['return_shipping_cost'] = 20.00;
-    $credit['return_shipping_cost_vat_rate'] = !empty($company['vat_payer']) ? (float)$company['vat_rate'] : 0;
-    $credit['items'] = [['name' => 'Produs returnat', 'sku' => 'AUDIT-RET', 'quantity' => 1, 'unit_price' => !empty($company['vat_payer']) ? round(100 / (1 + (float)$company['vat_rate'] / 100), 8) : 100, 'discount_percent' => 0, 'vat_rate' => !empty($company['vat_payer']) ? (float)$company['vat_rate'] : 0]];
-    $credit['related_invoice'] = ['series' => $invoice['series'], 'number' => $invoice['number'], 'date' => $invoice['issue_date']];
-    $creditXml = GtrotsInvoiceUbl::render($credit);
-    $creditValidation = GtrotsInvoiceUbl::validateWithAnaf($creditXml, $config);
+    $returnInvoice = $invoice;
+    $returnInvoice['number'] = $stamp . '2';
+    $returnInvoice['status'] = 'return';
+    $returnInvoice['total'] = 80.00;
+    $returnInvoice['return_shipping_cost'] = 20.00;
+    $returnInvoice['return_shipping_cost_vat_rate'] = !empty($company['vat_payer']) ? (float)$company['vat_rate'] : 0;
+    $returnInvoice['items'] = [['name' => 'Produs returnat', 'sku' => 'AUDIT-RET', 'quantity' => 1, 'unit_price' => !empty($company['vat_payer']) ? round(100 / (1 + (float)$company['vat_rate'] / 100), 8) : 100, 'discount_percent' => 0, 'vat_rate' => !empty($company['vat_payer']) ? (float)$company['vat_rate'] : 0]];
+    $returnInvoice['related_invoice'] = ['series' => $invoice['series'], 'number' => $invoice['number'], 'date' => $invoice['issue_date']];
+    $returnXml = GtrotsInvoiceUbl::render($returnInvoice);
+    $returnValidation = GtrotsInvoiceUbl::validateWithAnaf($returnXml, $config);
 
     echo json_encode([
         'ok' => true,
@@ -143,7 +143,7 @@ try {{
             'iban_present' => trim((string)($company['iban'] ?? '')) !== '',
         ],
         'invoice_380_validation' => $invoiceValidation,
-        'credit_note_381_validation' => $creditValidation,
+        'return_invoice_380_validation' => $returnValidation,
         'customization_id' => GtrotsInvoiceUbl::CUSTOMIZATION_ID,
         'item_name_lengths' => $names,
         'invoice_line_count' => (int)$xpath->evaluate('count(//cac:InvoiceLine)'),

@@ -242,7 +242,7 @@ $returnDetail = GtrotsInvoiceService::get($db, $return['id']);
 invoiceAssert($returnDetail['can_delete'] === false, 'Factura de retur nu trebuie să poată fi ștearsă cât timp comanda nu este în Retur confirmat.');
 invoiceAssert(($returnDetail['payload']['related_invoice']['series'] ?? '') === 'GT' && ($returnDetail['payload']['related_invoice']['number'] ?? '') === '002', 'Returul trebuie să refere explicit factura fiscală inițială GT 002.');
 invoiceAssert(($returnDetail['payload']['order_reference'] ?? '') === 'CMD-002', 'Returul trebuie să refere explicit comanda CMD-002.');
-invoiceAssert((int)$db->query("SELECT stock_quantity FROM shop_products WHERE id='product-2'")->fetchColumn() === 9, 'Emiterea facturii de retur nu trebuie să refacă stocul înaintea recepției fizice.');
+invoiceAssert((int)$db->query("SELECT stock_quantity FROM shop_products WHERE id='product-2'")->fetchColumn() === 8, 'Emiterea facturii de retur nu trebuie să refacă stocul înaintea recepției fizice.');
 invoiceAssert((int)$db->query("SELECT COUNT(*) FROM shop_nir_documents WHERE return_invoice_id='" . $return['id'] . "'")->fetchColumn() === 0, 'Factura de retur nu trebuie să genereze automat NIR.');
 invoiceAssert($returnDetail['return_receipt_pending'] === true && $returnDetail['can_generate_return_nir'] === true, 'Fișa facturii trebuie să ceară explicit generarea NIR-ului de recepție retur.');
 $receivedReturn = GtrotsInvoiceService::generateReturnNir($db, $return['id'], $actor);
@@ -258,7 +258,7 @@ invoiceAssert((int)$db->query("SELECT stock_quantity FROM shop_products WHERE id
 $returnXlsx = base64_decode((string)GtrotsInvoiceService::download($db, $return['id'], 'xlsx')['content_base64'], true);
 invoiceAssert(is_string($returnXlsx) && str_contains($returnXlsx, 'RETUR PENTRU FACTURA FISCALĂ EMISĂ GT 002') && str_contains($returnXlsx, 'COMANDA CMD-002'), 'XLSX-ul de retur trebuie să afișeze factura inițială și comanda.');
 $returnXml = base64_decode((string)GtrotsInvoiceService::download($db, $return['id'], 'xml', ['anaf_validation_enabled' => false])['content_base64'], true);
-invoiceAssert(is_string($returnXml) && str_contains($returnXml, '<cbc:CreditNoteTypeCode>381</cbc:CreditNoteTypeCode>') && str_contains($returnXml, 'BillingReference') && str_contains($returnXml, 'GT 002'), 'XML-ul de retur trebuie să fie UBL CreditNote cu BT-3=381 și să refere factura inițială.');
+invoiceAssert(is_string($returnXml) && str_contains($returnXml, '<cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode>') && str_contains($returnXml, 'BillingReference') && str_contains($returnXml, 'GT 002'), 'XML-ul de retur trebuie să fie UBL Invoice cu BT-3=380, valori negative și referință la factura inițială.');
 
 $orderWithDocuments = $db->query("SELECT o.*" . GtrotsInvoiceService::orderJoinColumns() . " FROM shop_orders o" . GtrotsInvoiceService::orderJoinSql('o') . " WHERE o.id='order-2'")->fetch();
 invoiceAssert((GtrotsInvoiceService::orderSummary($orderWithDocuments)['display_number'] ?? '') === 'GT 002', 'Fișa comenzii trebuie să păstreze factura pozitivă.');
@@ -281,7 +281,7 @@ $db->exec("INSERT INTO shop_order_return_items (id, order_id, order_item_id, pro
 $partialReturn = GtrotsInvoiceService::issueReturn($db, 'order-4', 'Retur comercial aprobat numai pentru primul produs.', $actor, []);
 invoiceAssert($partialReturn['display_number'] === 'GT 006' && (float)$partialReturn['total'] === -80.0, 'Factura parțială trebuie să continue seria și să corecteze exact 80 RON.');
 $db->prepare("UPDATE shop_orders SET return_invoice_id=?, return_confirmed_at='2026-09-05 11:00:00' WHERE id='order-4'")->execute([$partialReturn['id']]);
-$db->prepare("INSERT INTO shop_spv_outbox (id, invoice_id, document_kind, status) VALUES ('spv-partial-return', ?, 'credit_note', 'awaiting_configuration')")->execute([$partialReturn['id']]);
+$db->prepare("INSERT INTO shop_spv_outbox (id, invoice_id, document_kind, status) VALUES ('spv-partial-return', ?, 'return_invoice', 'awaiting_configuration')")->execute([$partialReturn['id']]);
 $partialDetail = GtrotsInvoiceService::get($db, $partialReturn['id']);
 invoiceAssert($partialDetail['can_delete'] === true, 'Ultima factură de retur, încărcată doar în coada locală și netrimisă în SPV, trebuie să poată fi ștearsă.');
 invoiceAssert(count((array)$partialDetail['payload']['items']) === 1, 'Factura de retur parțial trebuie să conțină exclusiv produsul acceptat.');
@@ -304,9 +304,10 @@ invoiceAssert(is_string($partialXml) && $partialDocument->loadXML($partialXml), 
 $partialXpath = new DOMXPath($partialDocument);
 $partialXpath->registerNamespace('cbc', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2');
 $partialXpath->registerNamespace('cac', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2');
-invoiceAssert($partialXpath->query('//cac:CreditNoteLine')->length === 1, 'UBL-ul trebuie să conțină exclusiv linia acceptată.');
-invoiceAssert((string)$partialXpath->evaluate('string(//cac:AllowanceCharge[cbc:ChargeIndicator="false"]/cbc:Amount)') === '20.00', 'UBL-ul trebuie să declare costul direct al returului ca ajustare de 20 RON.');
-invoiceAssert((string)$partialXpath->evaluate('string(//cac:LegalMonetaryTotal/cbc:PayableAmount)') === '80.00', 'Totalul plătibil al facturii de retur trebuie să fie exact 80 RON.');
+invoiceAssert($partialXpath->query('//cac:InvoiceLine')->length === 1, 'UBL-ul trebuie să conțină exclusiv linia acceptată.');
+invoiceAssert((string)$partialXpath->evaluate('string(//cac:InvoiceLine/cbc:InvoicedQuantity)') === '-1', 'UBL-ul returului parțial trebuie să inverseze numai cantitatea acceptată.');
+invoiceAssert((string)$partialXpath->evaluate('string(/*/cac:AllowanceCharge[cbc:ChargeIndicator="true"]/cbc:Amount)') === '20.00', 'UBL-ul trebuie să declare costul direct al returului ca majorare de 20 RON.');
+invoiceAssert((string)$partialXpath->evaluate('string(//cac:LegalMonetaryTotal/cbc:PayableAmount)') === '-80.00', 'Totalul facturii de retur trebuie să fie exact -80 RON.');
 $partialXlsx = base64_decode((string)GtrotsInvoiceService::download($db, $partialReturn['id'], 'xlsx')['content_base64'], true);
 invoiceAssert(is_string($partialXlsx) && str_contains($partialXlsx, 'Produs acceptat parțial') && !str_contains($partialXlsx, 'Produs refuzat'), 'Excel-ul facturii de retur trebuie să conțină numai produsul acceptat.');
 invoiceAssert(str_contains($partialXlsx, 'COST DIRECT RETUR CURIER') && str_contains($partialXlsx, '20.00'), 'Excel-ul trebuie să afișeze explicit costul direct al returului.');
@@ -407,8 +408,8 @@ invoiceAssert($restoredPendingOrder['payment_status_before_cancellation'] === nu
 
 if ((string)getenv('GTROTS_LIVE_ANAF_VALIDATE') === '1') {
     invoiceAssert((GtrotsInvoiceUbl::validateWithAnaf($xml)['stare'] ?? '') === 'ok', 'Validatorul oficial ANAF trebuie să accepte factura UBL 380.');
-    invoiceAssert((GtrotsInvoiceUbl::validateWithAnaf($returnXml)['stare'] ?? '') === 'ok', 'Validatorul oficial ANAF trebuie să accepte factura de corecție UBL cu BT-3=381.');
-    echo "Validatorul oficial ANAF a acceptat Invoice 380 și factura de corecție 381.\n";
+    invoiceAssert((GtrotsInvoiceUbl::validateWithAnaf($returnXml)['stare'] ?? '') === 'ok', 'Validatorul oficial ANAF trebuie să accepte factura de retur UBL Invoice cu BT-3=380 și valori negative.');
+    echo "Validatorul oficial ANAF a acceptat factura pozitivă și factura de retur Invoice 380.\n";
 }
 
 $db->exec("UPDATE shop_orders SET status='refunded' WHERE id='order-1'");

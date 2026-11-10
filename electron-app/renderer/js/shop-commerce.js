@@ -11,7 +11,7 @@
     productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, productTotal: 0, productSearchTimer: null, productLoadRequestId: 0, productSkuCheckTimer: null, productSkuCheckRequestId: 0, productSkuAvailability: 'available', slugTouched: false, productQuery: '', orderQuery: '', orderSearchTimer: null, orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
     customerQuery: '', newsletterQuery: '', newsletterStatus: 'all', productSaveProgressTimer: null, inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirStornoDocument: null, nirSupplierReturnContext: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirPendingAttachmentDeletes: [], nirDocumentsSaving: false, nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false, nirBundleDownloading: '', nirRegistryDownloadPeriod: 'current_month', nirRegistryDownloadContent: 'complete', nirRegistryDownloading: false, nirExportProgressTimer: null,
     pages: { products: 1, orders: 1, invoices: 1, inventory: 1, stockFlow: 1, stockMovements: 1, productSales: 1, productReviews: 1, productPurchases: 1, customers: 1, newsletter: 1, customerOrders: 1, nirs: 1 },
-    pageSizes: { products: 10, orders: 10, invoices: 10, inventory: 10, stockFlow: 5, stockMovements: 5, productSales: 5, productReviews: 5, productPurchases: 5, customers: 10, newsletter: 12, customerOrders: 5, nirs: 15 },
+    pageSizes: { products: 10, orders: 10, invoices: 10, inventory: 10, stockFlow: 5, stockMovements: 5, productSales: 5, productReviews: 5, productPurchases: 5, customers: 10, newsletter: 12, customerOrders: 5, nirs: 10 },
     dashboardPeriod: dashboardPreferences.period, dashboardStartDate: dashboardPreferences.startDate, dashboardEndDate: dashboardPreferences.endDate, dashboardGranularity: dashboardPreferences.granularity, dashboardRequestId: 0, dashboardSeries: new Set(['revenue', 'returns', 'pending', 'orders', 'acquisitions', 'profit']),
   };
   const PAGE_SIZE_OPTIONS = [10, 25, 50];
@@ -1129,11 +1129,11 @@
     state.pageSizes[key] = pageSize;
     return { page, pageCount, pageSize, items: items.slice((page - 1) * pageSize, page * pageSize) };
   }
-  function pagination(key, total, page, pageCount, pageSize, pageSizeOptions = PAGE_SIZE_OPTIONS) {
+  function pagination(key, total, page, pageCount, pageSize, pageSizeOptions = PAGE_SIZE_OPTIONS, instance = '') {
     if (!total) return '';
     const first = (page - 1) * pageSize + 1;
     const last = Math.min(total, page * pageSize);
-    const selectId = `shop-${key}-page-size`;
+    const selectId = `shop-${key}-page-size${instance ? `-${instance}` : ''}`;
     const options = pageSizeOptions.map(value => `<option value="${value}" ${value === pageSize ? 'selected' : ''}>${value}</option>`).join('');
     const chevron = direction => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${direction === 'left' ? 'm15 18-6-6 6-6' : 'm9 18 6-6-6-6'}"/></svg>`;
     return `<nav class="shop-commerce-pagination" aria-label="Paginare"><div class="shop-commerce-page-size"><label for="${selectId}">Randuri pe pagina:</label><span><select id="${selectId}" data-page-size-key="${key}" aria-label="Randuri pe pagina">${options}</select><i aria-hidden="true">⌄</i></span></div><span class="shop-commerce-pagination-range" aria-live="polite">${first}–${last} din ${total}</span><label class="shop-commerce-page-jump"><span>Pagina</span><input type="number" inputmode="numeric" min="1" max="${pageCount}" value="${page}" data-page-input-key="${key}" data-page-count="${pageCount}" aria-label="Mergi la pagina, între 1 și ${pageCount}"><em>/ ${pageCount}</em></label><div class="shop-commerce-pagination-arrows"><button type="button" data-page-key="${key}" data-page="${page - 1}" aria-label="Pagina anterioara" title="Pagina anterioara" ${page === 1 ? 'disabled' : ''}>${chevron('left')}</button><button type="button" data-page-key="${key}" data-page="${page + 1}" aria-label="Pagina urmatoare" title="Pagina urmatoare" ${page === pageCount ? 'disabled' : ''}>${chevron('right')}</button></div></nav>`;
@@ -1157,13 +1157,13 @@
       input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); submitPage(); } });
       input.addEventListener('change', submitPage);
     });
-    $(containerId).querySelector(`[data-page-size-key="${key}"]`)?.addEventListener('change', event => {
+    $(containerId).querySelectorAll(`[data-page-size-key="${key}"]`).forEach(select => select.addEventListener('change', event => {
       const pageSize = Number(event.target.value);
       if (!pageSizeOptions.includes(pageSize)) return;
       state.pageSizes[key] = pageSize;
       state.pages[key] = 1;
       render();
-    });
+    }));
   }
   function imageBackground(image) {
     const url = image?.preview || image?.url || '';
@@ -2011,9 +2011,9 @@
     const documents = Array.isArray(diagnostics?.documents) ? diagnostics.documents : [];
     const rows = documents.map(document => {
       const stateLabel = document.state === 'accepted' ? 'ACCEPTAT' : document.state === 'rejected' ? 'RESPINS' : 'ÎN PROCESARE';
-      return `<article class="${esc(document.state || 'processing')}"><span>${document.state === 'accepted' ? '✓' : document.state === 'rejected' ? '!' : '…'}</span><div><small>${document.kind === 'credit_note_381' ? 'CREDIT NOTE · 381' : 'INVOICE · 380'}</small><strong>${esc(document.document_id || 'Document de diagnostic')}</strong><p>XML ${document.ubl_valid ? 'valid' : 'invalid'} · index ${esc(document.upload_index || 'în așteptare')}</p></div><b>${stateLabel}</b></article>`;
+      return `<article class="${esc(document.state || 'processing')}"><span>${document.state === 'accepted' ? '✓' : document.state === 'rejected' ? '!' : '…'}</span><div><small>${document.kind === 'return_invoice_380' ? 'RETUR INVOICE · 380' : 'INVOICE · 380'}</small><strong>${esc(document.document_id || 'Document de diagnostic')}</strong><p>XML ${document.ubl_valid ? 'valid' : 'invalid'} · index ${esc(document.upload_index || 'în așteptare')}</p></div><b>${stateLabel}</b></article>`;
     }).join('');
-    return `<section class="shop-spv-diagnostics"><header><div><small>TEST IZOLAT · FĂRĂ EFECT FISCAL</small><h2>Verifică fluxul complet ANAF Test</h2><p>Generează o factură 380 și un retur 381 sintetice, le validează, le încarcă în sandbox și citește statusul. Facturile reale, numerotarea, stocul și încasările nu sunt modificate.</p></div><button type="button" id="shop-spv-diagnostics" ${state.spvBusy ? 'disabled' : ''}>${state.spvBusy === 'diagnostics' ? '<i class="shop-spv-spinner"></i> Se testează…' : 'Rulează testul complet'}</button></header>${rows ? `<div class="shop-spv-diagnostics-results">${rows}</div>` : ''}</section>`;
+    return `<section class="shop-spv-diagnostics"><header><div><small>TEST IZOLAT · FĂRĂ EFECT FISCAL</small><h2>Verifică fluxul complet ANAF Test</h2><p>Generează o factură pozitivă 380 și un retur 380 cu valori negative, le validează, le încarcă în sandbox ca UBL și citește statusul. Facturile reale, numerotarea, stocul și încasările nu sunt modificate.</p></div><button type="button" id="shop-spv-diagnostics" ${state.spvBusy ? 'disabled' : ''}>${state.spvBusy === 'diagnostics' ? '<i class="shop-spv-spinner"></i> Se testează…' : 'Rulează testul complet'}</button></header>${rows ? `<div class="shop-spv-diagnostics-results">${rows}</div>` : ''}</section>`;
   }
   function renderSpv() {
     const root = $('shop-spv-content');
@@ -2288,13 +2288,25 @@
     const term = normalizeSemanticSearch(state.invoiceQuery);
     const filtered = state.invoices.filter(invoice => {
       if (state.invoiceStatusFilter !== 'all' && invoice.status !== state.invoiceStatusFilter) return false;
-      return !term || normalizeSemanticSearch([invoice.display_number, invoice.order_number, invoice.buyer_name, invoice.buyer_cui, invoice.customer_email, invoice.total, invoice.currency].join(' ')).includes(term);
+      return !term || normalizeSemanticSearch([
+        invoice.display_number,
+        invoice.order_number,
+        invoice.buyer_name,
+        invoice.buyer_cui,
+        invoice.customer_email,
+        invoice.total,
+        invoice.currency,
+        invoice.spv_reference,
+        invoice.spv_submission_id,
+        invoice.spv_job?.upload_index,
+        invoice.spv_job?.download_id,
+      ].join(' ')).includes(term);
     });
     const page = pageData(filtered, 'invoices');
     const paid = state.invoices.filter(invoice => invoice.status === 'paid').reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
     const unpaid = state.invoices.filter(invoice => invoice.status === 'unpaid').reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
     const metrics = `<section class="shop-invoice-metrics"><article class="paid"><span>✓</span><div><small>ÎNCASAT</small><strong>${invoiceMoney(paid)}</strong><em>${state.invoices.filter(invoice => invoice.status === 'paid').length} facturi plătite</em></div></article><article class="unpaid"><span>◷</span><div><small>DE ÎNCASAT</small><strong>${invoiceMoney(unpaid)}</strong><em>${state.invoices.filter(invoice => invoice.status === 'unpaid').length} facturi neplătite</em></div></article><article><span>▤</span><div><small>DOCUMENTE EMISE</small><strong>${state.invoices.length}</strong><em>Numerotate și cu temă fixată</em></div></article></section>`;
-    const toolbar = `<section class="shop-invoice-toolbar"><label><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><input id="shop-invoices-search" type="search" value="${esc(state.invoiceQuery)}" placeholder="Număr factură, comandă, client, CUI sau e-mail"></label><div>${[['all', `Toate · ${state.invoices.length}`], ['paid', 'Plătite'], ['unpaid', 'Neplătite']].map(([value, label]) => `<button type="button" data-invoice-status="${value}" class="${state.invoiceStatusFilter === value ? 'active' : ''}">${label}</button>`).join('')}</div></section>`;
+    const toolbar = `<section class="shop-invoice-toolbar"><label><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><input id="shop-invoices-search" type="search" value="${esc(state.invoiceQuery)}" placeholder="Număr factură, comandă, client, CUI, e-mail sau referință ANAF"></label><div>${[['all', `Toate · ${state.invoices.length}`], ['paid', 'Plătite'], ['unpaid', 'Neplătite']].map(([value, label]) => `<button type="button" data-invoice-status="${value}" class="${state.invoiceStatusFilter === value ? 'active' : ''}">${label}</button>`).join('')}</div></section>`;
     const cards = page.items.map(invoice => {
       const accent = invoiceThemeColors[invoice.theme] || invoiceThemeColors.orange;
       const sent = Boolean(invoice.email_sent_at);
@@ -2303,7 +2315,9 @@
       const spvReferenceLabel = invoiceSpvReferenceLabel(invoice);
       return `<article class="shop-issued-invoice" data-invoice-open="${esc(invoice.id)}" tabindex="0" role="button" aria-label="Deschide fișa facturii ${esc(invoice.display_number)}" style="--invoice-accent:${accent}"><span class="shop-issued-invoice-icon"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></span><div class="shop-issued-invoice-copy"><header><strong>${esc(invoice.display_number)}</strong><b class="${invoice.status}">${invoice.status === 'return' ? 'RETUR' : invoice.status === 'paid' ? 'PLĂTITĂ' : 'NEPLĂTITĂ'}</b><b class="shop-invoice-spv ${spvClass}">SPV ${spvLabel}</b>${spvReferenceLabel ? `<b class="shop-invoice-reference">${esc(spvReferenceLabel)}</b>` : ''}${spvScheduledLabel ? `<b class="shop-invoice-scheduled">${esc(spvScheduledLabel)}</b>` : ''}${invoice.return_receipt_pending ? '<b class="shop-invoice-nir-pending">NIR RETUR LIPSĂ</b>' : ''}</header><h3>${esc(invoice.buyer_name)}</h3><p>${invoice.status === 'return' ? 'Factură de retur pentru ' : 'Comanda '}${esc(invoice.order_number)} · ${esc(invoice.issue_date)} · tema ${esc(invoice.theme)}</p><span class="${sent ? 'sent' : ''}"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/></svg>${sent ? `Trimisă la ${esc(invoice.customer_email)}` : esc(invoice.customer_email || 'Fără e-mail')}</span></div><aside><small>${invoice.status === 'return' ? 'TOTAL RETUR' : 'TOTAL FACTURĂ'}</small><strong>${invoiceMoney(invoice.total, invoice.currency)}</strong><button type="button" class="shop-issued-invoice-open" data-invoice-detail="${esc(invoice.id)}"><span>Deschide fișa</span><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button></aside></article>`;
     }).join('');
-    root.innerHTML = `${metrics}${toolbar}${cards ? `<section class="shop-issued-invoice-list">${cards}</section>${pagination('invoices', filtered.length, page.page, page.pageCount, page.pageSize)}` : empty('Nu există facturi emise', state.invoices.length ? 'Schimbă filtrul sau căutarea.' : 'Emite prima factură din pagina unei comenzi.')}`;
+    const topPager = pagination('invoices', filtered.length, page.page, page.pageCount, page.pageSize, PAGE_SIZE_OPTIONS, 'top');
+    const bottomPager = pagination('invoices', filtered.length, page.page, page.pageCount, page.pageSize, PAGE_SIZE_OPTIONS, 'bottom');
+    root.innerHTML = `${metrics}${toolbar}${cards ? `${topPager}<section class="shop-issued-invoice-list">${cards}</section>${bottomPager}` : empty('Nu există facturi emise', state.invoices.length ? 'Schimbă filtrul sau căutarea.' : 'Emite prima factură din pagina unei comenzi.')}`;
     $('shop-invoices-search')?.addEventListener('input', event => { state.invoiceQuery = event.target.value; state.pages.invoices = 1; renderInvoices(); $('shop-invoices-search')?.focus({ preventScroll: true }); });
     const invoiceToolbar = root.querySelector('.shop-invoice-toolbar');
     const exportButton = document.createElement('button'); exportButton.type = 'button'; exportButton.className = 'shop-product-export-trigger';
@@ -4751,11 +4765,16 @@
     const emptyRegistry = `<div class="shop-nir-empty-modern"><span class="shop-nir-empty-orb"><i></i>${nirUiIcon('document')}</span><div><small>REGISTRU NIR</small><strong>Niciun NIR pentru filtrul ales</strong><p>${state.nirSearch ? 'Nu am gasit un document care sa corespunda cautarii.' : 'Adauga prima receptie sau alege un alt filtru.'}</p></div>${nirCan('NIR_CREATE') ? '<button type="button" data-nir-empty-create><b>+</b> NIR nou</button>' : ''}</div>`;
     const summary = `<div><span class="shop-nir-summary-icon">${nirUiIcon('document')}</span><small>TOTAL DOCUMENTE</small><strong>${Number(registry.total || 0)}</strong><span>in registrul central</span></div><div class="draft"><span class="shop-nir-summary-icon">${nirUiIcon('calendar')}</span><small>CIORNE IN PAGINA</small><strong>${state.nirs.filter(item => item.status === 'draft').length}</strong><span>fara impact in stoc</span></div><div class="confirmed"><span class="shop-nir-summary-icon">${nirUiIcon('check')}</span><small>CONFIRMATE IN PAGINA</small><strong>${state.nirs.filter(item => !isNirReversalDocument(item) && (item.status === 'confirmed' || item.status === 'reversed')).length}</strong><span>cu evaluare contabila</span></div>`;
     const filters = [['', 'Toate'], ['draft', 'Ciorne'], ['confirmed', 'Confirmate'], ['storno', 'Stornate']].map(([value, label]) => `<button type="button" data-nir-filter="${value}" class="${state.nirStatus === value ? 'active' : ''}">${label}</button>`).join('');
-    const pagination = `<button type="button" data-nir-page="${Number(registry.page) - 1}" ${Number(registry.page) <= 1 ? 'disabled' : ''}>‹</button><span>Pagina <b>${Number(registry.page)}</b> din <b>${Number(registry.total_pages || 1)}</b></span><button type="button" data-nir-page="${Number(registry.page) + 1}" ${Number(registry.page) >= Number(registry.total_pages || 1) ? 'disabled' : ''}>›</button>`;
+    const registryPage = Number(registry.page || 1);
+    const registryTotal = Number(registry.total || 0);
+    const registryPageCount = Number(registry.total_pages || 1);
+    const registryPageSize = Number(registry.page_size || state.pageSizes.nirs);
+    const paginationTop = pagination('nirs', registryTotal, registryPage, registryPageCount, registryPageSize, PAGE_SIZE_OPTIONS, 'top');
+    const paginationBottom = pagination('nirs', registryTotal, registryPage, registryPageCount, registryPageSize, PAGE_SIZE_OPTIONS, 'bottom');
     const root = $('shop-nirs-content');
     const firstRender = !$('shop-nir-search');
     if (firstRender) {
-      root.innerHTML = `<section class="shop-nir-onboarding"><div><span>FLUX GHIDAT</span><strong>De la factura furnizorului la stoc, in 5 pasi simpli</strong><small>Nimic nu se salveaza pana nu apesi butonul Salveaza.</small></div><ol><li><i>${nirUiIcon('supplier')}</i><b>1</b><span>Furnizor</span></li><li><i>${nirUiIcon('calendar')}</i><b>2</b><span>Receptie</span></li><li><i>${nirUiIcon('currency')}</i><b>3</b><span>Moneda</span></li><li><i>${nirUiIcon('product')}</i><b>4</b><span>Produse</span></li><li><i>${nirUiIcon('check')}</i><b>5</b><span>Confirmare</span></li></ol></section><section class="shop-nir-summary" id="shop-nir-summary">${summary}</section><div class="shop-nir-toolbar-row"><section class="shop-nir-toolbar"><label><span class="shop-nir-search-icon">${nirUiIcon('search')}</span><input id="shop-nir-search" type="search" value="${esc(state.nirSearch)}" placeholder="Cauta dupa NIR, factura, furnizor sau CUI" autocomplete="off" /></label><div id="shop-nir-filters">${filters}</div></section><button type="button" class="shop-nir-registry-download-open" id="shop-nir-registry-download-open"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg><span>Export</span></button></div><section class="shop-nir-registry" id="shop-nir-registry">${cards || emptyRegistry}</section><nav class="shop-nir-pagination" id="shop-nir-pagination">${pagination}</nav>`;
+      root.innerHTML = `<section class="shop-nir-onboarding"><div><span>FLUX GHIDAT</span><strong>De la factura furnizorului la stoc, in 5 pasi simpli</strong><small>Nimic nu se salveaza pana nu apesi butonul Salveaza.</small></div><ol><li><i>${nirUiIcon('supplier')}</i><b>1</b><span>Furnizor</span></li><li><i>${nirUiIcon('calendar')}</i><b>2</b><span>Receptie</span></li><li><i>${nirUiIcon('currency')}</i><b>3</b><span>Moneda</span></li><li><i>${nirUiIcon('product')}</i><b>4</b><span>Produse</span></li><li><i>${nirUiIcon('check')}</i><b>5</b><span>Confirmare</span></li></ol></section><section class="shop-nir-summary" id="shop-nir-summary">${summary}</section><div class="shop-nir-toolbar-row"><section class="shop-nir-toolbar"><label><span class="shop-nir-search-icon">${nirUiIcon('search')}</span><input id="shop-nir-search" type="search" value="${esc(state.nirSearch)}" placeholder="Cauta dupa NIR, factura, furnizor sau CUI" autocomplete="off" /></label><div id="shop-nir-filters">${filters}</div></section><button type="button" class="shop-nir-registry-download-open" id="shop-nir-registry-download-open"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg><span>Export</span></button></div><div id="shop-nir-pagination-top">${paginationTop}</div><section class="shop-nir-registry" id="shop-nir-registry">${cards || emptyRegistry}</section><div id="shop-nir-pagination-bottom">${paginationBottom}</div>`;
       const search = $('shop-nir-search');
       $('shop-nir-registry-download-open')?.addEventListener('click', openNirRegistryDownloadDialog);
       search?.addEventListener('input', event => {
@@ -4771,10 +4790,28 @@
       $('shop-nir-summary').innerHTML = summary;
       $('shop-nir-filters').innerHTML = filters;
       $('shop-nir-registry').innerHTML = cards || emptyRegistry;
-      $('shop-nir-pagination').innerHTML = pagination;
+      $('shop-nir-pagination-top').innerHTML = paginationTop;
+      $('shop-nir-pagination-bottom').innerHTML = paginationBottom;
     }
     root.querySelectorAll('[data-nir-filter]').forEach(button => button.addEventListener('click', () => { state.nirStatus = button.dataset.nirFilter || ''; state.pages.nirs = 1; void loadNirs(1); }));
-    root.querySelectorAll('[data-nir-page]').forEach(button => button.addEventListener('click', () => void loadNirs(Number(button.dataset.nirPage || 1))));
+    root.querySelectorAll('[data-page-key="nirs"]').forEach(button => button.addEventListener('click', () => void loadNirs(Number(button.dataset.page || 1))));
+    root.querySelectorAll('[data-page-input-key="nirs"]').forEach(input => {
+      const submitPage = () => {
+        const pageCount = Math.max(1, Number(input.dataset.pageCount) || 1);
+        const requestedPage = Number.parseInt(input.value, 10);
+        const nextPage = Number.isFinite(requestedPage) ? Math.min(Math.max(1, requestedPage), pageCount) : state.pages.nirs;
+        void loadNirs(nextPage);
+      };
+      input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); submitPage(); } });
+      input.addEventListener('change', submitPage);
+    });
+    root.querySelectorAll('[data-page-size-key="nirs"]').forEach(select => select.addEventListener('change', event => {
+      const nextSize = Number(event.target.value);
+      if (!PAGE_SIZE_OPTIONS.includes(nextSize)) return;
+      state.pageSizes.nirs = nextSize;
+      state.pages.nirs = 1;
+      void loadNirs(1);
+    }));
     root.querySelectorAll('[data-nir-bundle-download]').forEach(button => button.addEventListener('click', event => {
       event.stopPropagation();
       void downloadNirBundle(button.dataset.nirBundleDownload, button);

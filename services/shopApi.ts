@@ -1014,7 +1014,7 @@ export type ShopSpvConnection = {
   token_policy: { access_days: number; refresh_days: number; automatic_refresh: boolean };
 };
 export type ShopSpvDiagnosticDocument = {
-  kind: 'invoice_380' | 'credit_note_381';
+  kind: 'invoice_380' | 'return_invoice_380';
   document_id: string;
   ubl_valid: boolean;
   validator_state: string;

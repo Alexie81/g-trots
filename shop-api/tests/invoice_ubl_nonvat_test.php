@@ -104,15 +104,18 @@ $creditNote['items'] = [[
 $creditNote['related_invoice'] = ['series' => 'GT', 'number' => '900001', 'date' => '2026-09-06'];
 $creditXml = GtrotsInvoiceUbl::render($creditNote);
 $creditXpath = nonVatUblXpath($creditXml);
-nonVatUblAssert((string)$creditXpath->evaluate('string(/*/cbc:CreditNoteTypeCode)') === '381', 'Factura de corecție trebuie să folosească tipul 381.');
-nonVatUblAssert((string)$creditXpath->evaluate('string(//cac:AllowanceCharge[cbc:ChargeIndicator="false"]/cbc:Amount)') === '20.00', 'Costul direct al returului trebuie declarat separat.');
-nonVatUblAssert((string)$creditXpath->evaluate('string(//cac:LegalMonetaryTotal/cbc:PayableAmount)') === '70.00', 'Totalul de rambursat trebuie să includă exact costul returului.');
+nonVatUblAssert($creditXpath->document->documentElement?->localName === 'Invoice', 'Factura de retur trebuie să folosească sintaxa UBL Invoice.');
+nonVatUblAssert((string)$creditXpath->evaluate('string(/*/cbc:InvoiceTypeCode)') === '380', 'Factura de retur trebuie să folosească tipul 380.');
+nonVatUblAssert((string)$creditXpath->evaluate('string(//cac:InvoiceLine/cbc:InvoicedQuantity)') === '-1', 'Cantitatea returnată trebuie înscrisă cu minus.');
+nonVatUblAssert((string)$creditXpath->evaluate('string(//cac:InvoiceLine/cbc:LineExtensionAmount)') === '-90.00', 'Valoarea poziției returnate trebuie înscrisă cu minus.');
+nonVatUblAssert((string)$creditXpath->evaluate('string(/*/cac:AllowanceCharge[cbc:ChargeIndicator="true"]/cbc:Amount)') === '20.00', 'Costul direct al returului trebuie declarat separat ca majorare pozitivă.');
+nonVatUblAssert((string)$creditXpath->evaluate('string(//cac:LegalMonetaryTotal/cbc:PayableAmount)') === '-70.00', 'Totalul facturii de retur trebuie să fie suma negativă efectiv rambursată.');
 nonVatUblAssert((string)$creditXpath->evaluate('string(//cac:BillingReference//cbc:ID)') === 'GT 900001', 'Factura de corecție trebuie să refere documentul original.');
 
 if ((string)getenv('GTROTS_LIVE_ANAF_VALIDATE') === '1') {
     nonVatUblAssert((GtrotsInvoiceUbl::validateWithAnaf($xml)['stare'] ?? '') === 'ok', 'Validatorul oficial ANAF trebuie să accepte factura 380 neplătitoare de TVA.');
-    nonVatUblAssert((GtrotsInvoiceUbl::validateWithAnaf($creditXml)['stare'] ?? '') === 'ok', 'Validatorul oficial ANAF trebuie să accepte factura de corecție 381 neplătitoare de TVA.');
-    echo "Validatorul oficial ANAF a acceptat Invoice 380 și CreditNote 381 pentru firma neplătitoare de TVA.\n";
+    nonVatUblAssert((GtrotsInvoiceUbl::validateWithAnaf($creditXml)['stare'] ?? '') === 'ok', 'Validatorul oficial ANAF trebuie să accepte factura de retur 380 cu minus, neplătitoare de TVA.');
+    echo "Validatorul oficial ANAF a acceptat factura pozitivă și factura de retur Invoice 380 pentru firma neplătitoare de TVA.\n";
 }
 
 echo "invoice_ubl_nonvat_test: OK\n";

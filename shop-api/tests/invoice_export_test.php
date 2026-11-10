@@ -55,7 +55,10 @@ registryZip(base64_decode($archive['content_base64']), static function (ZipArchi
         }
         $xml = $zip->getFromName("GT-$number/GT-$number - RO_e-Factura.xml");
         $doc = new DOMDocument(); registryAssert($doc->loadXML($xml), 'e-Factura XML must parse.');
-        registryAssert($doc->documentElement->localName === ($number==='001' ? 'Invoice' : 'CreditNote'), 'Return must use CreditNote XML.');
+        registryAssert($doc->documentElement->localName === 'Invoice', 'Both positive and return documents must use Invoice XML.');
+        $xp = new DOMXPath($doc);
+        $xp->registerNamespace('cbc', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2');
+        registryAssert((string)$xp->evaluate('string(/*/cbc:InvoiceTypeCode)') === '380', 'Both positive and return documents must use BT-3=380.');
     }
 });
 registryAssert(GtrotsInvoiceExport::download($db,[])['item_count']===3, 'All-period export must include all dates.');

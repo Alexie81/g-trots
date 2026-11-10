@@ -109,16 +109,33 @@ $creditNote['items'] = [['name' => 'Produs returnat', 'sku' => 'VAT-RET', 'quant
 $creditNote['related_invoice'] = ['series' => 'GT', 'number' => '910001', 'date' => '2026-09-06'];
 $creditXml = GtrotsInvoiceUbl::render($creditNote);
 $creditXpath = vatUblXpath($creditXml);
-vatUblAssert((string)$creditXpath->evaluate('string(/*/cbc:CreditNoteTypeCode)') === '381', 'Corecția trebuie să folosească tipul 381.');
+vatUblAssert($creditXpath->document->documentElement?->localName === 'Invoice', 'Corecția trebuie să folosească sintaxa UBL Invoice.');
+vatUblAssert((string)$creditXpath->evaluate('string(/*/cbc:InvoiceTypeCode)') === '380', 'Corecția trebuie să folosească tipul 380.');
 vatUblAssert(abs((float)$creditXpath->evaluate('string(//cac:TaxSubtotal/cac:TaxCategory/cbc:Percent)') - 21.0) < 0.001, 'Factura de corecție trebuie să păstreze cota configurată.');
-vatUblAssert((string)$creditXpath->evaluate('string(//cac:TaxTotal/cbc:TaxAmount)') === '16.80', 'TVA-ul corecției trebuie redus proporțional cu taxa costului de retur.');
-vatUblAssert((string)$creditXpath->evaluate('string(//cac:AllowanceCharge[cbc:ChargeIndicator="false"]/cbc:Amount)') === '20.00', 'Costul brut de retur de 24,20 RON trebuie separat în baza netă de 20 RON.');
-vatUblAssert((string)$creditXpath->evaluate('string(//cac:LegalMonetaryTotal/cbc:PayableAmount)') === '96.80', 'Totalul corecției cu cost de retur trebuie să fie exact.');
+vatUblAssert((string)$creditXpath->evaluate('string(//cac:InvoiceLine/cbc:InvoicedQuantity)') === '-1', 'Cantitatea returnată trebuie înscrisă cu minus.');
+vatUblAssert((string)$creditXpath->evaluate('string(//cac:TaxTotal/cbc:TaxAmount)') === '-16.80', 'TVA-ul corecției trebuie să fie negativ și redus proporțional cu taxa costului de retur.');
+vatUblAssert((string)$creditXpath->evaluate('string(/*/cac:AllowanceCharge[cbc:ChargeIndicator="true"]/cbc:Amount)') === '20.00', 'Costul brut de retur de 24,20 RON trebuie separat ca majorare în baza netă de 20 RON.');
+vatUblAssert((string)$creditXpath->evaluate('string(//cac:LegalMonetaryTotal/cbc:PayableAmount)') === '-96.80', 'Totalul corecției cu cost de retur trebuie să fie negativ și exact.');
+
+// Reducerea de pe factura inițială trebuie inversată fără preț unitar negativ:
+// cantitate -1 × preț 100 + reversare reducere 10 = valoare linie -90.
+$discountedReturn = $creditNote;
+$discountedReturn['number'] = '910003';
+$discountedReturn['total'] = 84.70;
+$discountedReturn['items'][0]['discount_percent'] = 10;
+$discountedXml = GtrotsInvoiceUbl::render($discountedReturn);
+$discountedXpath = vatUblXpath($discountedXml);
+vatUblAssert((string)$discountedXpath->evaluate('string(//cac:InvoiceLine/cbc:LineExtensionAmount)') === '-90.00', 'Returul trebuie să inverseze valoarea netă după reducerea comercială.');
+vatUblAssert((string)$discountedXpath->evaluate('string(//cac:InvoiceLine/cac:AllowanceCharge/cbc:ChargeIndicator)') === 'true', 'Reducerea din vânzare trebuie reversată ca majorare pe linia negativă.');
+vatUblAssert((string)$discountedXpath->evaluate('string(//cac:InvoiceLine/cac:AllowanceCharge/cbc:Amount)') === '10.00', 'Valoarea reducerii reversate trebuie să fie exactă.');
+vatUblAssert((string)$discountedXpath->evaluate('string(//cac:TaxTotal/cbc:TaxAmount)') === '-14.70', 'TVA-ul returului cu reducere și cost direct trebuie să fie exact.');
+vatUblAssert((string)$discountedXpath->evaluate('string(//cac:LegalMonetaryTotal/cbc:PayableAmount)') === '-84.70', 'Totalul returului cu reducere trebuie să fie exact.');
 
 if ((string)getenv('GTROTS_LIVE_ANAF_VALIDATE') === '1') {
     vatUblAssert((GtrotsInvoiceUbl::validateWithAnaf($xml)['stare'] ?? '') === 'ok', 'Validatorul oficial ANAF trebuie să accepte factura 380 cu TVA configurabil.');
-    vatUblAssert((GtrotsInvoiceUbl::validateWithAnaf($creditXml)['stare'] ?? '') === 'ok', 'Validatorul oficial ANAF trebuie să accepte factura 381 cu TVA configurabil.');
-    echo "Validatorul oficial ANAF a acceptat Invoice 380 și CreditNote 381 cu TVA 21%.\n";
+    vatUblAssert((GtrotsInvoiceUbl::validateWithAnaf($creditXml)['stare'] ?? '') === 'ok', 'Validatorul oficial ANAF trebuie să accepte factura de retur 380 cu minus și TVA configurabil.');
+    vatUblAssert((GtrotsInvoiceUbl::validateWithAnaf($discountedXml)['stare'] ?? '') === 'ok', 'Validatorul oficial ANAF trebuie să accepte returul 380 cu reducere, TVA și cost direct.');
+    echo "Validatorul oficial ANAF a acceptat factura pozitivă și facturile de retur Invoice 380 cu TVA 21%, inclusiv reducere.\n";
 }
 
 echo "invoice_ubl_vat_test: OK\n";

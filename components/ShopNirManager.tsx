@@ -36,7 +36,6 @@ import {
   CalendarDays,
   Check,
   CheckCircle2,
-  ChevronLeft,
   ChevronRight,
   CircleDollarSign,
   Clock3,
@@ -59,6 +58,7 @@ import {
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import KeyboardAwareScrollView from '@/components/KeyboardAwareScrollView';
+import ShopPagination from '@/components/ShopPagination';
 import {
   isUnknownShopAction,
   legacyNirAttachmentUrl,
@@ -341,6 +341,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
   useAndroidSearchBack(search, useCallback(() => setSearch(''), []));
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [registryEpoch, setRegistryEpoch] = useState(0);
   const [editor, setEditor] = useState<ShopNirDocument | null>(null);
   const [correctionOriginal, setCorrectionOriginal] = useState<ShopNirDocument | null>(null);
@@ -410,7 +411,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     const requestId = ++registryRequestId.current;
     if (!registryLoaded.current) setLoading(true);
     try {
-      const result = await shopApi.listNirs(token, { page: requestedPage, page_size: 12, search: search.trim(), status });
+      const result = await shopApi.listNirs(token, { page: requestedPage, page_size: pageSize, search: search.trim(), status });
       if (requestId !== registryRequestId.current) return;
       registryLoaded.current = true;
       setRegistry(result);
@@ -421,7 +422,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     } finally {
       if (requestId === registryRequestId.current) setLoading(false);
     }
-  }, [page, search, status, token]);
+  }, [page, pageSize, search, status, token]);
 
   const loadLookups = useCallback(async () => {
     if (!token) return;
@@ -444,7 +445,7 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
     }
     const timer = setTimeout(() => { void loadRegistry(1); }, 300);
     return () => clearTimeout(timer);
-  }, [search, status]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pageSize, search, status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -1499,8 +1500,9 @@ export default function ShopNirManager({ initialNirId = null, onInitialNirHandle
           <View style={styles.loadingBox}><ActivityIndicator color={Colors.orange} /><Text style={styles.loadingText}>Se încarcă registrul NIR...</Text></View>
         ) : (
           <View style={styles.registryList}>
+            {registry?.total ? <View style={styles.topPagination}><ShopPagination page={registry.page} pageSize={pageSize} total={registry.total} onPageChange={(nextPage) => void loadRegistry(nextPage)} onPageSizeChange={(nextSize) => { setPage(1); setPageSize(nextSize); }} /></View> : null}
             {registry?.items.length ? registry.items.map((document) => <NirRegistryCard key={document.id} document={document} onPress={() => void openDocument(document.id)} canViewCosts={can('NIR_VIEW_COSTS')} />) : <View style={styles.emptyBox}><RegistryDocumentIcon color="#F97316" /><View style={{ flex: 1 }}><Text style={styles.emptyEyebrow}>REGISTRU NIR</Text><Text style={styles.emptyTitle}>Nu există NIR-uri pentru filtrul ales</Text><Text style={styles.emptyText}>{search ? 'Nu am găsit un document pentru această căutare.' : 'Adaugă prima recepție sau schimbă filtrul.'}</Text></View>{can('NIR_CREATE') && <TouchableOpacity style={styles.emptyAction} onPress={createDraft}><Plus size={16} color="#081311" /><Text style={styles.emptyActionText}>NIR nou</Text></TouchableOpacity>}</View>}
-            <View style={styles.pagination}><TouchableOpacity style={styles.pageButton} disabled={(registry?.page || 1) <= 1} onPress={() => void loadRegistry(page - 1)}><ChevronLeft size={18} color={Colors.textPrimary} /></TouchableOpacity><Text style={styles.pageText}>Pagina {registry?.page || 1} din {registry?.total_pages || 1}</Text><TouchableOpacity style={styles.pageButton} disabled={(registry?.page || 1) >= (registry?.total_pages || 1)} onPress={() => void loadRegistry(page + 1)}><ChevronRight size={18} color={Colors.textPrimary} /></TouchableOpacity></View>
+            <ShopPagination page={registry?.page || 1} pageSize={pageSize} total={registry?.total || 0} onPageChange={(nextPage) => void loadRegistry(nextPage)} onPageSizeChange={(nextSize) => { setPage(1); setPageSize(nextSize); }} />
           </View>
         )}
       </KeyboardAwareScrollView>
@@ -1759,7 +1761,7 @@ const styles = StyleSheet.create({
   registryHeroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 }, heroBrand: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'center', gap: 11 }, heroIcon: { width: 52, height: 52, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: '#5EEAD418', borderWidth: 1, borderColor: '#5EEAD444' }, iconButton: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF0A', borderWidth: 1, borderColor: Colors.cardBorder },
   heroEyebrow: { color: '#5EEAD4', fontSize: 8, fontWeight: '900', letterSpacing: 1 }, heroTitle: { marginTop: 2, color: Colors.textPrimary, fontSize: 25, lineHeight: 30, fontWeight: '900' }, heroMessage: { marginTop: 14, padding: 12, borderRadius: 16, backgroundColor: '#FFFFFF06', borderWidth: 1, borderColor: '#FFFFFF09' }, heroMessageBadge: { alignSelf: 'flex-start', marginBottom: 6, paddingHorizontal: 7, paddingVertical: 4, borderRadius: 999, color: '#5EEAD4', backgroundColor: '#5EEAD410', fontSize: 7, fontWeight: '900', letterSpacing: 0.8 }, heroText: { color: Colors.textSecondary, fontSize: 11, lineHeight: 17 }, heroStats: { marginTop: 14, flexDirection: 'row', gap: 30 }, heroStatValue: { color: Colors.textPrimary, fontSize: 19, fontWeight: '900' }, heroStatLabel: { color: Colors.textMuted, fontSize: 8, fontWeight: '900', letterSpacing: 1 },
   registryToolbarSticky: { zIndex: 20, elevation: 10, backgroundColor: Colors.bg, borderBottomWidth: 1, borderBottomColor: Colors.cardBorder }, registryToolbar: { paddingTop: 2, paddingHorizontal: 14 }, registryToolbarRow: { flexDirection: 'row', alignItems: 'center', gap: 10 }, registryToolbarSearch: { flex: 1, minWidth: 0 }, registryCreateButtonTouch: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' }, registryCreateButton: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: '#5EEAD4', borderWidth: 1, borderColor: '#99F6E4', shadowColor: '#2DD4BF', shadowOpacity: 0.28, shadowRadius: 11, shadowOffset: { width: 0, height: 5 }, elevation: 5 }, registryCreateButtonPressed: { opacity: 0.72 }, registryCreateButtonDisabled: { opacity: 0.45 }, searchBox: { minHeight: 52, paddingHorizontal: 16, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder }, searchInput: { flex: 1, color: Colors.textPrimary, fontSize: 14, paddingVertical: 12 }, statusFilters: { gap: 8, paddingTop: 10, paddingBottom: 12 }, filterChip: { paddingHorizontal: 15, paddingVertical: 9, borderRadius: 999, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder }, filterChipActive: { backgroundColor: Colors.orangeDim, borderColor: Colors.orangeMid }, filterText: { color: Colors.textSecondary, fontSize: 12, fontWeight: '800' }, filterTextActive: { color: Colors.orange },
-  loadingBox: { padding: 50, alignItems: 'center', gap: 12 }, loadingText: { color: Colors.textSecondary }, registryList: { paddingTop: 2, paddingHorizontal: 14, gap: 10 }, registryCard: { minHeight: 112, padding: 13, paddingLeft: 18, borderRadius: 22, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder, flexDirection: 'row', alignItems: 'center', gap: 11, overflow: 'hidden' }, registryAccent: { position: 'absolute', left: 0, top: 16, bottom: 16, width: 4, borderRadius: 4 }, registryDocumentIcon: { width: 45, height: 45, borderRadius: 15, alignItems: 'center', justifyContent: 'center', borderWidth: 1 }, registryCardMain: { flex: 1, gap: 9 }, registryCardTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }, registryNumber: { color: Colors.textPrimary, fontSize: 15, fontWeight: '900' }, registrySupplier: { marginTop: 3, color: Colors.textSecondary, fontSize: 12 }, statusChip: { paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 5 }, statusChipText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.7 }, registryMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, registryMetaText: { color: Colors.textMuted, fontSize: 10 }, registryTotal: { color: Colors.orangeLight, fontSize: 14, fontWeight: '900' },
+  loadingBox: { padding: 50, alignItems: 'center', gap: 12 }, loadingText: { color: Colors.textSecondary }, registryList: { paddingTop: 2, paddingHorizontal: 14, gap: 10 }, topPagination: { marginBottom: 2 }, registryCard: { minHeight: 112, padding: 13, paddingLeft: 18, borderRadius: 22, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder, flexDirection: 'row', alignItems: 'center', gap: 11, overflow: 'hidden' }, registryAccent: { position: 'absolute', left: 0, top: 16, bottom: 16, width: 4, borderRadius: 4 }, registryDocumentIcon: { width: 45, height: 45, borderRadius: 15, alignItems: 'center', justifyContent: 'center', borderWidth: 1 }, registryCardMain: { flex: 1, gap: 9 }, registryCardTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }, registryNumber: { color: Colors.textPrimary, fontSize: 15, fontWeight: '900' }, registrySupplier: { marginTop: 3, color: Colors.textSecondary, fontSize: 12 }, statusChip: { paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 5 }, statusChipText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.7 }, registryMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, registryMetaText: { color: Colors.textMuted, fontSize: 10 }, registryTotal: { color: Colors.orangeLight, fontSize: 14, fontWeight: '900' },
   emptyBox: { minHeight: 130, padding: 18, alignItems: 'center', gap: 13, borderWidth: 1, borderColor: '#F9731630', backgroundColor: '#F9731608', borderRadius: 24, flexDirection: 'row' }, emptyEyebrow: { color: Colors.orange, fontSize: 8, fontWeight: '900', letterSpacing: 1 }, emptyTitle: { marginTop: 4, color: Colors.textPrimary, fontSize: 15, fontWeight: '900' }, emptyText: { marginTop: 4, color: Colors.textSecondary, fontSize: 11, lineHeight: 16 }, emptyAction: { minHeight: 42, paddingHorizontal: 13, borderRadius: 14, backgroundColor: '#5EEAD4', flexDirection: 'row', alignItems: 'center', gap: 6 }, emptyActionText: { color: '#081311', fontSize: 11, fontWeight: '900' }, pagination: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 18, marginTop: 12 }, pageButton: { width: 44, height: 44, borderRadius: 15, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder, alignItems: 'center', justifyContent: 'center' }, pageText: { color: Colors.textSecondary, fontSize: 12, fontWeight: '800' }, fab: { position: 'absolute', right: 18, height: 54, paddingHorizontal: 21, borderRadius: 19, flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: Colors.orange, shadowColor: Colors.orange, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8 }, fabText: { color: Colors.white, fontWeight: '900' },
   editorHeader: { minHeight: 72, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 11, borderBottomWidth: 1, borderBottomColor: Colors.cardBorder, backgroundColor: Colors.surface }, editorHeaderCopy: { flex: 1 }, editorEyebrow: { color: Colors.orange, fontSize: 8, fontWeight: '900', letterSpacing: 1 }, editorTitle: { marginTop: 3, color: Colors.textPrimary, fontSize: 16, fontWeight: '900' }, editorContent: { padding: 14, gap: 12 },
   sectionTitle: { marginBottom: 3, flexDirection: 'row', alignItems: 'center', gap: 12 }, sectionIndex: { width: 48, height: 48, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF08', borderWidth: 1, borderColor: Colors.cardBorder }, sectionIndexText: { position: 'absolute', right: 4, bottom: 3, color: Colors.textMuted, fontSize: 7, fontWeight: '900' }, sectionHeading: { color: Colors.textPrimary, fontSize: 17, fontWeight: '900' }, sectionSubtitle: { marginTop: 3, color: Colors.textMuted, fontSize: 11, lineHeight: 16 },

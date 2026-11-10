@@ -347,7 +347,7 @@ final class GtrotsSpvService
             'status' => 'unpaid',
             'order_reference' => 'TEST-' . $stamp,
         ];
-        $creditNote = $base + [
+        $returnInvoice = $base + [
             'number' => $stamp . '2',
             'status' => 'return',
             'order_reference' => 'TEST-RET-' . $stamp,
@@ -355,7 +355,7 @@ final class GtrotsSpvService
         ];
 
         $documents = [];
-        foreach ([['invoice_380', $invoice], ['credit_note_381', $creditNote]] as [$kind, $payload]) {
+        foreach ([['invoice_380', $invoice], ['return_invoice_380', $returnInvoice]] as [$kind, $payload]) {
             $xml = GtrotsInvoiceUbl::render($payload);
             try {
                 $validation = GtrotsInvoiceUbl::validateWithAnaf($xml, $config);
@@ -422,10 +422,10 @@ final class GtrotsSpvService
     {
         $invoiceId = trim($invoiceId);
         if ($invoiceId === '') return;
-        $kind = $kind === 'credit_note' ? 'credit_note' : 'invoice';
+        $kind = in_array($kind, ['return_invoice', 'credit_note'], true) ? 'return_invoice' : 'invoice';
         $settings = self::settings($db);
-        $mode = $kind === 'credit_note' ? (string)$settings['return_mode'] : (string)$settings['invoice_mode'];
-        $delay = $kind === 'credit_note' ? (int)$settings['return_delay_days'] : (int)$settings['invoice_delay_days'];
+        $mode = $kind === 'return_invoice' ? (string)$settings['return_mode'] : (string)$settings['invoice_mode'];
+        $delay = $kind === 'return_invoice' ? (int)$settings['return_delay_days'] : (int)$settings['invoice_delay_days'];
         $issue = $db->prepare('SELECT issue_date, issued_at, spv_status FROM shop_invoices WHERE id = ? LIMIT 1');
         $issue->execute([$invoiceId]);
         $invoice = $issue->fetch();
@@ -461,7 +461,7 @@ final class GtrotsSpvService
         $settings = self::settings($db);
         $rows = $db->query("SELECT id, invoice_type, issue_date, issued_at FROM shop_invoices WHERE spv_status <> 'sent' ORDER BY issued_at ASC")->fetchAll();
         foreach ($rows as $invoice) {
-            self::enqueue($db, (string)$invoice['id'], in_array((string)($invoice['invoice_type'] ?? 'invoice'), ['return', 'correction_return'], true) ? 'credit_note' : 'invoice');
+            self::enqueue($db, (string)$invoice['id'], in_array((string)($invoice['invoice_type'] ?? 'invoice'), ['return', 'correction_return'], true) ? 'return_invoice' : 'invoice');
         }
         // Repair legacy processing jobs whose next status check was pushed to
         // the original delayed-send date. New jobs already fall inside this
@@ -492,7 +492,7 @@ final class GtrotsSpvService
         if ($invoiceId === '') throw new InvalidArgumentException('Factura nu a fost selectată.');
         $invoice = self::invoice($db, $invoiceId);
         if ((string)$invoice['spv_status'] === 'sent') return ['invoice' => GtrotsInvoiceService::get($db, $invoiceId, $config), 'job' => self::invoiceState($db, $invoiceId), 'already_sent' => true];
-        self::enqueue($db, $invoiceId, in_array((string)$invoice['invoice_type'], ['return', 'correction_return'], true) ? 'credit_note' : 'invoice');
+        self::enqueue($db, $invoiceId, in_array((string)$invoice['invoice_type'], ['return', 'correction_return'], true) ? 'return_invoice' : 'invoice');
         if (!self::isSqlite($db)) {
             $db->prepare("UPDATE shop_spv_outbox SET status='queued', scheduled_at=CURRENT_TIMESTAMP, next_attempt_at=CURRENT_TIMESTAMP, last_error=NULL WHERE invoice_id=? AND status <> 'processing'")->execute([$invoiceId]);
         }
@@ -876,7 +876,7 @@ final class GtrotsSpvService
 
     private static function uploadDiagnosticXml(PDO $db, array $config, string $xml, string $cif, string $kind, string $documentId, array $validation): array
     {
-        $standard = $kind === 'credit_note_381' ? 'CN' : 'UBL';
+        $standard = self::uploadStandardForXml($xml);
         $url = self::apiBase($config, 'test') . '/upload?standard=' . $standard . '&cif=' . rawurlencode($cif);
         $token = self::accessToken($db, $config);
         $response = self::http('POST', $url, [
@@ -906,6 +906,30 @@ final class GtrotsSpvService
             'validator_message' => trim(implode(' | ', array_slice((array)($validation['messages'] ?? []), 0, 3))) ?: null,
             'upload_index' => $index,
         ] + $status;
+    }
+
+    private static function uploadStandardForXml(string $xml): string
+    {
+        $document = new DOMDocument();
+        $loaded = false;
+        $previous = libxml_use_internal_errors(true);
+        try {
+            $loaded = $document->loadXML($xml, LIBXML_NONET);
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+        }
+        if (!$loaded || !$document->documentElement) {
+            throw new RuntimeException('XML-ul e-Factura este invalid și nu poate fi trimis în SPV.');
+        }
+
+        return match ($document->documentElement->localName) {
+            'Invoice' => 'UBL',
+            // Compatibilitate strictă pentru documentele 381 deja emise și
+            // stocate înainte de migrarea retururilor noi la Invoice 380.
+            'CreditNote' => 'CN',
+            default => throw new RuntimeException('Tipul XML e-Factura nu este acceptat pentru transmiterea în SPV.'),
+        };
     }
 
     private static function diagnosticStatus(PDO $db, array $config, string $index): array
@@ -971,7 +995,10 @@ final class GtrotsSpvService
             $token = self::accessToken($db, $config);
             $environment = self::environment((string)($job['environment'] ?? self::settings($db)['environment']));
             $base = self::apiBase($config, $environment);
-            $standard = (string)($job['document_kind'] ?? '') === 'credit_note' || in_array((string)($invoice['invoice_type'] ?? ''), ['return', 'correction_return'], true) ? 'CN' : 'UBL';
+            // Documentele noi sunt UBL Invoice 380. Standardul este detectat
+            // din XML pentru ca un CreditNote 381 istoric, deja emis și stocat,
+            // să nu fie retrimis accidental prin endpointul UBL/FACT1.
+            $standard = self::uploadStandardForXml($xml);
             $url = $base . '/upload?standard=' . $standard . '&cif=' . rawurlencode($cif);
             $response = self::http('POST', $url, ['Authorization: Bearer ' . $token, 'Content-Type: text/plain; charset=UTF-8', 'Accept: application/xml, application/json'], $xml, 55);
             if ($response['status'] === 401 || $response['status'] === 403) {

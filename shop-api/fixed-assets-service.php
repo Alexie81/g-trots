@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/fixed-assets-search.php';
+
 final class GtrotsFixedAssets
 {
     private const DOCUMENT_TYPES = ['factura', 'bon', 'pv'];
@@ -304,12 +306,6 @@ final class GtrotsFixedAssets
     private static function filters(array $filters, array &$params): string
     {
         $parts = [];
-        $search = mb_substr(trim((string)($filters['search'] ?? '')), 0, 160);
-        if ($search !== '') {
-            $like = '%' . $search . '%';
-            $parts[] = '(a.product_name LIKE ? OR d.series LIKE ? OR d.document_number LIKE ?)';
-            array_push($params, $like, $like, $like);
-        }
         $type = strtolower(trim((string)($filters['type'] ?? '')));
         if (in_array($type, self::DOCUMENT_TYPES, true)) { $parts[] = 'd.document_type = ?'; $params[] = $type; }
         foreach ([['from', '>='], ['to', '<=']] as [$key, $operator]) {
@@ -318,26 +314,64 @@ final class GtrotsFixedAssets
         return $parts ? ' WHERE ' . implode(' AND ', $parts) : '';
     }
 
+    /** Rank the complete filtered registry, before pagination, using only lightweight columns. */
+    private static function searchMatches(PDO $db, array $filters): array
+    {
+        $query = GtrotsFixedAssetSearch::query((string)($filters['search'] ?? ''));
+        if ($query['text'] === '') return [];
+        $params = [];
+        $where = self::filters($filters, $params);
+        $stmt = $db->prepare('SELECT a.id, a.product_name, d.series, d.document_number, d.document_type
+            FROM shop_fixed_assets a INNER JOIN shop_fixed_asset_documents d ON d.id = a.document_id' . $where .
+            ' ORDER BY d.document_date DESC, d.created_at DESC, d.id ASC, a.line_number ASC, a.id ASC');
+        $stmt->execute($params);
+        $matches = [];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $score = GtrotsFixedAssetSearch::score($row, $query);
+            if ($score > 0) $matches[$row['id']] = $score;
+        }
+        // PHP's stable sort preserves chronology/line order for equal relevance.
+        arsort($matches, SORT_NUMERIC);
+        return array_keys($matches);
+    }
+
     public static function list(PDO $db, array $filters): array
     {
         $page = max(1, (int)($filters['page'] ?? 1));
         $pageSize = max(10, min(100, (int)($filters['page_size'] ?? 25)));
         $params = [];
         $where = self::filters($filters, $params);
-        $count = $db->prepare('SELECT COUNT(*) FROM shop_fixed_assets a INNER JOIN shop_fixed_asset_documents d ON d.id = a.document_id' . $where);
-        $count->execute($params);
-        $total = (int)$count->fetchColumn();
+        $matches = null;
+        if (trim((string)($filters['search'] ?? '')) !== '') {
+            $matches = self::searchMatches($db, $filters);
+            $total = count($matches);
+        } else {
+            $count = $db->prepare('SELECT COUNT(*) FROM shop_fixed_assets a INNER JOIN shop_fixed_asset_documents d ON d.id = a.document_id' . $where);
+            $count->execute($params);
+            $total = (int)$count->fetchColumn();
+        }
         $pages = max(1, (int)ceil($total / $pageSize));
         $page = min($page, $pages);
         $offset = ($page - 1) * $pageSize;
+        $pageIds = [];
+        if ($matches !== null) {
+            $pageIds = array_slice($matches, $offset, $pageSize);
+            $where = $pageIds ? ' WHERE a.id IN (' . implode(',', array_fill(0, count($pageIds), '?')) . ')' : ' WHERE 1 = 0';
+            $params = $pageIds;
+            $offset = 0;
+        }
         $sql = 'SELECT a.*, d.document_date, d.document_type, d.series, d.document_number, d.original_name, d.mime_type,
                 COALESCE((SELECT SUM(x.quantity) FROM shop_fixed_asset_disposals x WHERE x.fixed_asset_id = a.id), 0) AS disposal_quantity,
                 (SELECT COUNT(*) FROM shop_fixed_asset_disposals x WHERE x.fixed_asset_id = a.id) AS disposal_count
             FROM shop_fixed_assets a INNER JOIN shop_fixed_asset_documents d ON d.id = a.document_id' . $where .
-            ' ORDER BY d.document_date DESC, d.created_at DESC, a.line_number ASC LIMIT ' . $pageSize . ' OFFSET ' . $offset;
+            ' ORDER BY d.document_date DESC, d.created_at DESC, d.id ASC, a.line_number ASC, a.id ASC LIMIT ' . $pageSize . ' OFFSET ' . $offset;
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         $items = $stmt->fetchAll();
+        if ($pageIds) {
+            $order = array_flip($pageIds);
+            usort($items, static fn(array $a, array $b): int => $order[$a['id']] <=> $order[$b['id']]);
+        }
         foreach ($items as &$item) $item['remaining_quantity'] = round((float)$item['quantity'] + (float)$item['disposal_quantity'], 4);
         unset($item);
         return ['items' => $items, 'page' => $page, 'page_size' => $pageSize, 'total' => $total, 'total_pages' => $pages];
@@ -548,6 +582,8 @@ final class GtrotsFixedAssets
 
     private static function exportRows(PDO $db, array $filters): array
     {
+        $matches = trim((string)($filters['search'] ?? '')) !== '' ? array_fill_keys(self::searchMatches($db, $filters), true) : null;
+        if ($matches === []) return [];
         $params = [];
         $where = self::filters($filters, $params);
         $stmt = $db->prepare('SELECT a.id AS asset_id, d.document_date, d.document_type, d.series, d.document_number, a.product_name, a.quantity, a.unit_price, a.net_value, a.vat_rate, a.vat_value, a.total_value,
@@ -556,6 +592,8 @@ final class GtrotsFixedAssets
             LEFT JOIN shop_fixed_asset_disposals x ON x.fixed_asset_id = a.id' . $where . ' ORDER BY d.document_date ASC, d.created_at ASC, d.id ASC, a.line_number ASC, a.id ASC, x.disposal_date ASC, x.id ASC');
         $stmt->execute($params);
         $rows = $stmt->fetchAll();
+        // Exports retain document chronology and every disposal for matching assets.
+        if ($matches !== null) $rows = array_values(array_filter($rows, static fn(array $row): bool => isset($matches[$row['asset_id']])));
         $seen = [];
         foreach ($rows as &$row) {
             $row['continuation'] = isset($seen[$row['asset_id']]);

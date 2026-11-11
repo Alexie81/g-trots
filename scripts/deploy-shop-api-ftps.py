@@ -61,6 +61,7 @@ FILES = (
     "nir-pdf.php",
     "nir-xlsx.php",
     "fixed-assets-service.php",
+    "fixed-assets-search.php",
     "fixed-assets-export.php",
 )
 

@@ -21,7 +21,7 @@ $expect(str_contains($desktop, 'Cantitate casată *') && str_contains($desktop, 
 $expect(str_contains($desktop, 'Vizualizează documentul') && str_contains($desktop, 'Descarcă documentul'), 'Fișa nu oferă vizualizarea și descărcarea documentului.');
 $expect(str_contains($desktop, 'Export PDF / Excel') && str_contains($desktop, 'data-fixed-asset-export="pdf"') && str_contains($desktop, 'data-fixed-asset-export="xlsx"'), 'Exporturile pe perioadă nu sunt disponibile în ambele formate.');
 
-foreach (['listFixedAssets', 'getFixedAsset', 'createFixedAssetDocument', 'disposeFixedAsset', 'downloadFixedAssetDocument', 'exportFixedAssets'] as $action) {
+foreach (['listFixedAssets', 'getFixedAsset', 'getFixedAssetDocument', 'createFixedAssetDocument', 'updateFixedAssetDocument', 'deleteFixedAssetDocument', 'deleteFixedAsset', 'disposeFixedAsset', 'updateFixedAssetDisposal', 'deleteFixedAssetDisposal', 'addFixedAssetFiles', 'deleteFixedAssetFile', 'downloadFixedAssetDocument', 'exportFixedAssets'] as $action) {
     $expect(str_contains($api, "\$action === '{$action}'"), "Ruta {$action} lipsește din API.");
     $expect(str_contains($client, $action . ':'), "Clientul desktop nu expune {$action}.");
 }

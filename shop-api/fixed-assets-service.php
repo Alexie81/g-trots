@@ -357,6 +357,7 @@ final class GtrotsFixedAssets
         $asset['has_document'] = trim((string)($asset['original_name'] ?? '')) !== '';
         $asset['files'] = self::files($db, (string)$asset['document_id']);
         $asset['has_document'] = count($asset['files']) > 0;
+        foreach (['original_name','mime_type','file_size'] as $field) $asset[$field] = $asset['files'][0][$field] ?? null;
         $asset['revision'] = self::revision($asset);
         return $asset;
     }

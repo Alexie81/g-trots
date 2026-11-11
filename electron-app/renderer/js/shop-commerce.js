@@ -6,7 +6,7 @@
   const DASHBOARD_GRANULARITY_VALUES = new Set(['hour', 'day', 'week', 'month']);
   const dashboardPreferences = readDashboardPreferences();
   const state = {
-    products: [], orders: [], invoices: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], newsletterSubscribers: [], promotions: [], companies: [], receiptLocations: [], nirs: [], fixedAssetRegistry: null, fixedAssetQuery: '', fixedAssetType: '', fixedAssetSearchTimer: null, fixedAssetLines: [], fixedAssetFile: null, fixedAssetSelected: null, fixedAssetDisposalTarget: null, fixedAssetPreviewUrl: '', nirPermissions: [], nirWarehouses: [], nirReceiptLocations: [], invoiceThemeSettings: null, invoiceAutomationSettings: null, invoiceAutomationSaving: false, selectedInvoiceTheme: 'orange', invoiceSettingsDraft: { invoice_series: 'GT', next_number: 1, due_days: 7, default_notes: '' }, invoiceThemeSaving: false, invoiceQuery: '', invoiceStatusFilter: 'all', invoiceBusy: '', spvConnection: null, spvDraft: null, spvBusy: '', spvWaitingForOAuth: false, spvDiagnostics: null,
+    products: [], orders: [], invoices: [], inventory: [], inventoryMovements: [], sources: [], suppliers: [], categories: [], brands: [], manufacturers: [], shipping: [], customers: [], newsletterSubscribers: [], promotions: [], companies: [], receiptLocations: [], nirs: [], fixedAssetRegistry: null, fixedAssetQuery: '', fixedAssetType: '', fixedAssetSearchTimer: null, fixedAssetLines: [], fixedAssetFile: null, fixedAssetFiles: [], fixedAssetEditing: null, fixedAssetEditingDisposal: null, fixedAssetDeleteTask: null, fixedAssetSelected: null, fixedAssetDisposalTarget: null, fixedAssetPreviewUrl: '', nirPermissions: [], nirWarehouses: [], nirReceiptLocations: [], invoiceThemeSettings: null, invoiceAutomationSettings: null, invoiceAutomationSaving: false, selectedInvoiceTheme: 'orange', invoiceSettingsDraft: { invoice_series: 'GT', next_number: 1, due_days: 7, default_notes: '' }, invoiceThemeSaving: false, invoiceQuery: '', invoiceStatusFilter: 'all', invoiceBusy: '', spvConnection: null, spvDraft: null, spvBusy: '', spvWaitingForOAuth: false, spvDiagnostics: null,
     editingProduct: null, editingOrder: null, orderItemDrafts: [], orderProductPickerTimer: null, orderReplacementTransportConfirmed: false, orderReplacementShippingCost: 0, orderReplacementReturnPayer: '', orderReplacementReturnCost: 0, invoiceIssueOrder: null, invoiceDetail: null, shippingNoteOrder: null, shippingNoteBusy: '', editingStock: null, editingSource: null, editingSupplier: null, editingShipping: null, editingPromotion: null, editingCompany: null, editingReceiptLocation: null, customerDetail: null, companyStampBase64: null, companyStampRemove: false, promotionSelectedProductIds: new Set(), promotionAllProductIds: null, promotionSelectingAll: false, promotionProductQuery: '', promotionProductsLoading: false, promotionProductSearchTimer: null, promotionSelectedCustomerIds: new Set(), promotionCustomerQuery: '', promotionCustomersLoading: false,
     productImages: [], productSpecifications: [], productQuestions: [], productDetail: null, productTotal: 0, productSearchTimer: null, productLoadRequestId: 0, productSkuCheckTimer: null, productSkuCheckRequestId: 0, productSkuAvailability: 'available', slugTouched: false, productQuery: '', orderQuery: '', orderSearchTimer: null, orderStatusFilter: 'all', orderPaymentMethodFilter: 'all', orderPaymentStatusFilter: 'all', richRange: null, richImage: null, richDragging: null, richResize: null,
     customerQuery: '', newsletterQuery: '', newsletterStatus: 'all', productSaveProgressTimer: null, inventoryQuery: '', inventoryMovementsLoading: false, supplierProductsBySupplier: {}, supplierProductPages: {}, nirEditor: null, nirCorrectionOriginal: null, nirStornoDocument: null, nirSupplierReturnContext: null, nirSearch: '', nirStatus: '', nirSupplierQuery: '', nirProductQuery: '', nirProductLineIndex: -1, nirSavePromise: null, nirEditRevision: 0, nirRegistryRequestId: 0, nirBootstrapped: false, nirCreateInFlight: false, nirResolveTimers: new Map(), nirResolveRequestIds: new Map(), nirPendingFiles: [], nirPendingAttachmentDeletes: [], nirDocumentsSaving: false, nirStornoPendingFiles: [], nirRateLoading: '', nirReversing: false, nirBundleDownloading: '', nirRegistryDownloadPeriod: 'current_month', nirRegistryDownloadContent: 'complete', nirRegistryDownloading: false, nirExportProgressTimer: null,
@@ -383,20 +383,21 @@
     <div class="shop-commerce-overlay shop-nir-export-progress-overlay" id="shop-nir-export-progress-dialog" hidden><section class="shop-nir-export-progress" role="dialog" aria-modal="true" aria-labelledby="shop-nir-export-progress-title"><div class="shop-nir-export-progress-orb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7zM14 3v5h5M12 10v7m0 0 3-3m-3 3-3-3"/></svg><i></i></div><small>EXPORT ÎN CURS</small><h2 id="shop-nir-export-progress-title">Pregătim exportul</h2><p id="shop-nir-export-progress-detail">Calculăm volumul de date…</p><div class="shop-nir-export-progress-stats"><span><b id="shop-nir-export-progress-docs">—</b><small>NIR-URI</small></span><span><b id="shop-nir-export-progress-lines">—</b><small>POZIȚII</small></span><span><b id="shop-nir-export-progress-files">—</b><small>FIȘIERE</small></span></div><div class="shop-nir-export-progress-meta"><strong id="shop-nir-export-progress-percent">2%</strong><span id="shop-nir-export-progress-eta">Calculăm timpul rămas…</span></div><div class="shop-nir-export-progress-track"><i id="shop-nir-export-progress-fill"></i></div><footer>Poți lăsa această fereastră deschisă. Descărcarea pornește automat când arhiva este gata.</footer></section></div>`;
   }
   function fixedAssetModals() {
-    return `<div class="shop-commerce-overlay shop-fixed-asset-overlay" id="shop-fixed-asset-create-modal" hidden><form class="shop-commerce-modal shop-fixed-asset-create" id="shop-fixed-asset-create-form"><header class="shop-fixed-asset-create-head"><span class="shop-fixed-asset-create-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.5 3.5h7l4 4v13h-11zM13.5 3.5v4h4M9.5 12h5m-5 3h5"/></svg></span><div class="shop-fixed-asset-create-title"><small>REGISTRU PATRIMONIAL</small><h2>Înregistrează un document</h2><p>Adaugă documentul justificativ și bunurile din aceeași operațiune.</p></div><div class="shop-fixed-asset-create-progress" aria-label="Progres formular"><span class="active"><b>1</b>Document</span><i></i><span><b>2</b>Poziții</span></div><button type="button" aria-label="Închide" data-commerce-close="shop-fixed-asset-create-modal">×</button></header><div class="shop-commerce-modal-scroll shop-fixed-asset-create-body">
+    return `<div class="shop-commerce-overlay shop-fixed-asset-overlay" id="shop-fixed-asset-create-modal" hidden><form class="shop-commerce-modal shop-fixed-asset-create" id="shop-fixed-asset-create-form"><header class="shop-fixed-asset-create-head"><span class="shop-fixed-asset-create-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.5 3.5h7l4 4v13h-11zM13.5 3.5v4h4M9.5 12h5m-5 3h5"/></svg></span><div class="shop-fixed-asset-create-title"><small>REGISTRU PATRIMONIAL</small><h2 id="shop-fixed-asset-editor-title">Înregistrează un document</h2><p>Adaugă documentul justificativ și bunurile din aceeași operațiune.</p></div><div class="shop-fixed-asset-create-progress" aria-label="Progres formular"><span class="active"><b>1</b>Document</span><i></i><span><b>2</b>Poziții</span></div><button type="button" aria-label="Închide" data-commerce-close="shop-fixed-asset-create-modal">×</button></header><div class="shop-commerce-modal-scroll shop-fixed-asset-create-body">
       <section class="shop-fixed-asset-form-card document">
         ${section('01', 'Document justificativ', 'Completează datele documentului și păstrează fișierul original în aceeași fișă.')}
         <div class="shop-commerce-columns three shop-fixed-asset-document-fields"><label>Data documentului *<input id="shop-fixed-asset-document-date" type="date" required /></label><label>Tip document *<select id="shop-fixed-asset-document-type" required><option value="factura">Factură</option><option value="bon">Bon</option><option value="pv">Proces-verbal</option></select></label><label>Serie / număr *<span class="shop-fixed-asset-series-number"><input id="shop-fixed-asset-series" maxlength="80" placeholder="Serie" /><input id="shop-fixed-asset-number" maxlength="120" placeholder="Număr" required /></span></label></div>
         <label class="shop-fixed-asset-notes">Observații <em>opțional</em><textarea id="shop-fixed-asset-notes" rows="2" maxlength="2000" placeholder="Adaugă detalii utile pentru identificarea documentului"></textarea></label>
-        <button type="button" class="shop-fixed-asset-file" id="shop-fixed-asset-file-pick"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V5m0 0L8 9m4-4 4 4M5 15v4h14v-4"/></svg></span><b id="shop-fixed-asset-file-name">Atașează documentul original</b><small>Selectează PDF, imagine, Excel, Word ori XML · maximum 15 MB</small><i>Alege fișier</i></button><input id="shop-fixed-asset-file-input" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xls,.xlsx,.doc,.docx,.xml" hidden />
+        <button type="button" class="shop-fixed-asset-file" id="shop-fixed-asset-file-pick"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V5m0 0L8 9m4-4 4 4M5 15v4h14v-4"/></svg></span><b id="shop-fixed-asset-file-name">Atașează documentul original</b><small>Selectează PDF, imagine, Excel, Word ori XML · maximum 15 MB / fișier</small><i>Alege fișiere</i></button><input id="shop-fixed-asset-file-input" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.xls,.xlsx,.doc,.docx,.xml" hidden /><div id="shop-fixed-asset-pending-files" class="shop-fixed-asset-file-list"></div>
       </section>
       <section class="shop-fixed-asset-form-card positions">
         <div class="shop-fixed-asset-position-intro">${section('02', 'Pozițiile documentului', 'Adaugă fiecare mijloc fix; valorile și TVA-ul se calculează automat.')}
         <div class="shop-fixed-asset-lines-head"><strong>MIJLOACE FIXE</strong><button type="button" id="shop-fixed-asset-add-line"><span>＋</span> Adaugă poziție</button></div></div><div id="shop-fixed-asset-lines" class="shop-fixed-asset-lines"></div>
       </section>
-    </div><footer class="shop-fixed-asset-create-footer"><p><span>✓</span>Datele rămân în registru și pot fi exportate oricând.</p><div><button type="button" class="btn-ghost" data-commerce-close="shop-fixed-asset-create-modal">Renunță</button><button type="submit" class="btn-primary" id="shop-fixed-asset-save"><span>Înregistrează documentul</span><b>→</b></button></div></footer></form></div>
+    </div><footer class="shop-fixed-asset-create-footer"><p><span>✓</span>Datele rămân în registru și pot fi exportate oricând.</p><div><button type="button" class="shop-fixed-asset-danger" id="shop-fixed-asset-delete-document" hidden>Șterge documentul</button><button type="button" class="btn-ghost" data-commerce-close="shop-fixed-asset-create-modal">Renunță</button><button type="submit" class="btn-primary" id="shop-fixed-asset-save"><span>Înregistrează documentul</span><b>→</b></button></div></footer></form></div>
     <div class="shop-commerce-overlay shop-fixed-asset-overlay" id="shop-fixed-asset-disposal-modal" hidden><form class="shop-commerce-modal mini shop-fixed-asset-disposal" id="shop-fixed-asset-disposal-form"><header><span class="shop-fixed-asset-modal-symbol disposal">${fixedAssetIcon('archive')}</span><div><small>CASARE MIJLOC FIX</small><h2 id="shop-fixed-asset-disposal-title">Înregistrează casarea</h2></div><button type="button" data-commerce-close="shop-fixed-asset-disposal-modal">×</button></header><div class="shop-commerce-modal-scroll"><aside id="shop-fixed-asset-disposal-summary"></aside><div class="shop-commerce-columns"><label>Data casării *<input id="shop-fixed-asset-disposal-date" type="date" required /></label><label>Cantitate casată *<input id="shop-fixed-asset-disposal-quantity" type="number" max="-0.0001" step="0.0001" required placeholder="-1" /><small>Se introduce obligatoriu cu minus.</small></label></div><label>Motivul casării *<textarea id="shop-fixed-asset-disposal-reason" rows="4" maxlength="1000" required placeholder="Descrie motivul și documentele justificative"></textarea></label></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-fixed-asset-disposal-modal">Renunță</button><button type="submit" class="btn-primary" id="shop-fixed-asset-disposal-save">Înregistrează casarea</button></footer></form></div>
-    <div class="shop-commerce-overlay shop-fixed-asset-overlay" id="shop-fixed-asset-detail-modal" hidden><section class="shop-commerce-modal shop-fixed-asset-detail"><header><span class="shop-fixed-asset-modal-symbol">${fixedAssetIcon('box')}</span><div><small>FIȘĂ MIJLOC FIX</small><h2 id="shop-fixed-asset-detail-title">Mijloc fix</h2></div><button type="button" data-commerce-close="shop-fixed-asset-detail-modal">×</button></header><div class="shop-commerce-modal-scroll" id="shop-fixed-asset-detail-content"></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-fixed-asset-detail-modal">Închide</button><button type="button" class="shop-fixed-asset-document-action" id="shop-fixed-asset-view-document">Vizualizează documentul</button><button type="button" class="btn-primary" id="shop-fixed-asset-download-document">Descarcă documentul</button></footer></section></div>
+    <div class="shop-commerce-overlay shop-fixed-asset-overlay" id="shop-fixed-asset-detail-modal" hidden><section class="shop-commerce-modal shop-fixed-asset-detail"><header><span class="shop-fixed-asset-modal-symbol">${fixedAssetIcon('box')}</span><div><small>FIȘĂ MIJLOC FIX</small><h2 id="shop-fixed-asset-detail-title">Mijloc fix</h2></div><button type="button" data-commerce-close="shop-fixed-asset-detail-modal">×</button></header><div class="shop-commerce-modal-scroll" id="shop-fixed-asset-detail-content"></div><footer><button type="button" class="shop-fixed-asset-danger" id="shop-fixed-asset-delete">Șterge mijlocul fix</button><button type="button" class="btn-primary" id="shop-fixed-asset-edit">Editează documentul</button><button type="button" class="btn-ghost" data-commerce-close="shop-fixed-asset-detail-modal">Închide</button><button type="button" class="shop-fixed-asset-document-action" id="shop-fixed-asset-view-document">Vizualizează documentul</button><button type="button" class="btn-primary" id="shop-fixed-asset-download-document">Descarcă documentul</button></footer></section></div>
+    <div class="shop-commerce-overlay shop-fixed-asset-overlay" id="shop-fixed-asset-confirm-modal" hidden><section class="shop-commerce-modal mini shop-fixed-asset-confirm"><header><span class="shop-fixed-asset-modal-symbol disposal">${fixedAssetIcon('archive')}</span><div><small>CONFIRMARE ȘTERGERE</small><h2 id="shop-fixed-asset-confirm-title"></h2></div><button type="button" data-commerce-close="shop-fixed-asset-confirm-modal" aria-label="Închide">×</button></header><div class="shop-commerce-modal-scroll"><p id="shop-fixed-asset-confirm-text"></p><p class="shop-fixed-asset-confirm-error" id="shop-fixed-asset-confirm-error" role="alert" hidden></p></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-fixed-asset-confirm-modal">Renunță</button><button type="button" class="shop-fixed-asset-danger" id="shop-fixed-asset-confirm-submit">Șterge</button></footer></section></div>
     ${fixedAssetExportModal()}`;
   }
   function fixedAssetExportModal() {
@@ -595,7 +596,11 @@
     $('shop-fixed-asset-create-form')?.addEventListener('submit', saveFixedAssetDocument);
     $('shop-fixed-asset-add-line')?.addEventListener('click', () => { state.fixedAssetLines.push(newFixedAssetLine()); renderFixedAssetLines(); });
     $('shop-fixed-asset-file-pick')?.addEventListener('click', () => $('shop-fixed-asset-file-input')?.click());
-    $('shop-fixed-asset-file-input')?.addEventListener('change', event => selectFixedAssetFile(event.target.files?.[0]));
+    $('shop-fixed-asset-file-input')?.addEventListener('change', event => selectFixedAssetFile(event.target.files));
+    $('shop-fixed-asset-edit')?.addEventListener('click', () => void openFixedAssetEdit(state.fixedAssetSelected?.id));
+    $('shop-fixed-asset-delete')?.addEventListener('click', () => void deleteFixedAsset(state.fixedAssetSelected?.id));
+    $('shop-fixed-asset-delete-document')?.addEventListener('click', deleteFixedAssetDocument);
+    $('shop-fixed-asset-confirm-submit')?.addEventListener('click', confirmFixedAssetDelete);
     $('shop-fixed-asset-disposal-form')?.addEventListener('submit', saveFixedAssetDisposal);
     $('shop-fixed-asset-download-document')?.addEventListener('click', () => void downloadFixedAssetDocument(false));
     $('shop-fixed-asset-view-document')?.addEventListener('click', () => void downloadFixedAssetDocument(true));
@@ -1053,6 +1058,7 @@
     requestAnimationFrame(() => modal.classList.add('visible'));
   }
   function closeModal(id) {
+    if (id === 'shop-fixed-asset-confirm-modal' && $('shop-fixed-asset-confirm-submit')?.disabled) return;
     if (id === 'shop-nir-reverse-dialog') {
       if (state.nirReversing) return;
       if ($('shop-nir-reverse-reason')) $('shop-nir-reverse-reason').value = '';
@@ -4740,7 +4746,7 @@
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
     return now.toISOString().slice(0, 10);
   };
-  const newFixedAssetLine = () => ({ product_name: '', quantity: 1, unit_price: 0, vat_rate: 21 });
+  const newFixedAssetLine = () => ({ product_name: '', quantity: 1, unit_price: 0, vat_rate: 21, vat_value: 0, vat_manual: false });
 
   function fixedAssetDocumentNumber(asset) {
     return [asset?.series, asset?.document_number].map(value => String(value || '').trim()).filter(Boolean).join(' ') || '—';
@@ -4766,7 +4772,7 @@
     const rows = items.map((asset, index) => {
       const disposed = Number(asset.disposal_quantity || 0);
       const remaining = Number(asset.remaining_quantity || 0);
-      return `<tr data-fixed-asset-row="${esc(asset.id)}"><td>${(Number(registry.page || 1) - 1) * Number(registry.page_size || 25) + index + 1}</td><td>${esc(String(asset.document_date || '').split('-').reverse().join('.'))}</td><td><span class="shop-fixed-asset-type ${esc(asset.document_type)}">${esc(fixedAssetTypeLabel(asset.document_type))}</span></td><td><strong>${esc(fixedAssetDocumentNumber(asset))}</strong></td><td class="shop-fixed-asset-name">${esc(asset.product_name)}</td><td>${quantity(asset.quantity)}</td><td>${money(asset.unit_price)}</td><td>${money(asset.net_value)}</td><td>${quantity(asset.vat_rate)}%<small>${money(asset.vat_value)}</small></td><td><strong>${money(asset.total_value)}</strong></td><td><button type="button" class="shop-fixed-asset-dispose ${disposed < 0 ? 'has-disposals' : ''}" data-fixed-asset-dispose="${esc(asset.id)}" ${remaining <= 0 ? 'disabled' : ''}><b>${disposed < 0 ? quantity(disposed) : '—'}</b><small>${remaining <= 0 ? 'Casat integral' : 'Înregistrează casare'}</small></button></td><td><button type="button" class="shop-fixed-asset-open" data-fixed-asset-open="${esc(asset.id)}" aria-label="Deschide fișa">Fișă <span>→</span></button></td></tr>`;
+      return `<tr data-fixed-asset-row="${esc(asset.id)}"><td>${(Number(registry.page || 1) - 1) * Number(registry.page_size || 25) + index + 1}</td><td>${esc(String(asset.document_date || '').split('-').reverse().join('.'))}</td><td><span class="shop-fixed-asset-type ${esc(asset.document_type)}">${esc(fixedAssetTypeLabel(asset.document_type))}</span></td><td><strong>${esc(fixedAssetDocumentNumber(asset))}</strong></td><td class="shop-fixed-asset-name">${esc(asset.product_name)}</td><td>${quantity(asset.quantity)}</td><td>${money(asset.unit_price)}</td><td>${money(asset.net_value)}</td><td>${quantity(asset.vat_rate)}%<small>${money(asset.vat_value)}</small></td><td><strong>${money(asset.total_value)}</strong></td><td><button type="button" class="shop-fixed-asset-dispose ${disposed < 0 ? 'has-disposals' : ''}" data-fixed-asset-dispose="${esc(asset.id)}" ${remaining <= 0 ? 'disabled' : ''}><b>${disposed < 0 ? quantity(disposed) : '—'}</b><small>${remaining <= 0 ? 'Casat integral' : 'Înregistrează casare'}</small></button></td><td><div class="shop-fixed-asset-row-actions"><button type="button" class="shop-fixed-asset-open" data-fixed-asset-open="${esc(asset.id)}" aria-label="Deschide fișa">Fișă <span>→</span></button><button type="button" data-fixed-asset-edit="${esc(asset.id)}">Editează</button><button type="button" class="shop-fixed-asset-danger" data-fixed-asset-delete="${esc(asset.id)}">Șterge</button></div></td></tr>`;
     }).join('');
     const totalValue = items.reduce((sum, item) => sum + Number(item.total_value || 0), 0);
     const disposedCount = items.filter(item => Number(item.disposal_count || 0) > 0).length;
@@ -4783,49 +4789,68 @@
     $('shop-fixed-assets-export')?.addEventListener('click', openFixedAssetExport);
     $('shop-fixed-assets-empty-add')?.addEventListener('click', openFixedAssetCreate);
     root.querySelectorAll('[data-fixed-asset-open]').forEach(button => button.addEventListener('click', () => void openFixedAssetDetail(button.dataset.fixedAssetOpen)));
+    root.querySelectorAll('[data-fixed-asset-edit]').forEach(button => button.addEventListener('click', () => void openFixedAssetEdit(button.dataset.fixedAssetEdit)));
+    root.querySelectorAll('[data-fixed-asset-delete]').forEach(button => button.addEventListener('click', () => void deleteFixedAsset(button.dataset.fixedAssetDelete)));
     root.querySelectorAll('[data-fixed-asset-dispose]').forEach(button => button.addEventListener('click', () => void openFixedAssetDisposal(button.dataset.fixedAssetDispose)));
     bindPagination('shop-fixed-assets-content', 'fixedAssets', () => void loadFixedAssets(state.pages.fixedAssets));
   }
 
   function openFixedAssetCreate() {
+    state.fixedAssetEditing = null;
+    state.fixedAssetFiles = [];
+    $('shop-fixed-asset-editor-title').textContent = 'Înregistrează un document';
+    $('shop-fixed-asset-save').querySelector('span').textContent = 'Înregistrează documentul';
+    $('shop-fixed-asset-delete-document').hidden = true;
     state.fixedAssetLines = [newFixedAssetLine()];
     state.fixedAssetFile = null;
     $('shop-fixed-asset-create-form')?.reset();
     $('shop-fixed-asset-document-date').value = fixedAssetToday();
     $('shop-fixed-asset-file-name').textContent = 'Atașează documentul';
     renderFixedAssetLines();
+    renderFixedAssetFiles();
     openModal('shop-fixed-asset-create-modal');
     $('shop-fixed-asset-create-modal').querySelector('.shop-commerce-modal-scroll').scrollTop = 0;
   }
 
+  const fixedAssetRound = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+  function fixedAssetLineAmounts(line) {
+    const net = fixedAssetRound(Number(line.quantity || 0) * Number(line.unit_price || 0));
+    const vat = line.vat_manual ? fixedAssetRound(line.vat_value || 0) : fixedAssetRound(net * Number(line.vat_rate || 0) / 100);
+    return { net, vat, total: fixedAssetRound(net + vat) };
+  }
   function renderFixedAssetLines() {
     const root = $('shop-fixed-asset-lines');
     if (!root) return;
     root.innerHTML = state.fixedAssetLines.map((line, index) => {
-      const net = Number(line.quantity || 0) * Number(line.unit_price || 0);
-      const vat = net * Number(line.vat_rate || 0) / 100;
-      return `<article data-fixed-asset-line="${index}"><header><b>${String(index + 1).padStart(2, '0')}</b><strong>Poziție document</strong><button type="button" data-fixed-asset-line-remove="${index}" ${state.fixedAssetLines.length === 1 ? 'disabled' : ''}>×</button></header><div class="shop-fixed-asset-line-fields"><label>Denumire produs *<input data-fixed-asset-line-field="product_name" value="${esc(line.product_name)}" maxlength="500" required /></label><label>Cantitate *<input data-fixed-asset-line-field="quantity" type="number" min="0.0001" step="0.0001" value="${esc(line.quantity)}" required /></label><label>Preț unitar *<input data-fixed-asset-line-field="unit_price" type="number" min="0" step="0.01" value="${esc(line.unit_price)}" required /></label><label>TVA % *<input data-fixed-asset-line-field="vat_rate" type="number" min="0" max="100" step="0.01" value="${esc(line.vat_rate)}" required /></label></div><footer><span><small>VALOARE</small><b>${money(net)}</b></span><span><small>TVA</small><b>${money(vat)}</b></span><span class="total"><small>TOTAL</small><b>${money(net + vat)}</b></span></footer></article>`;
+      const {net,vat,total} = fixedAssetLineAmounts(line);
+      const hasDisposals = Boolean(line.disposals?.length);
+      return `<article data-fixed-asset-line="${index}"><header><b>${String(index + 1).padStart(2, '0')}</b><strong>Poziție document</strong><button type="button" data-fixed-asset-line-remove="${index}" aria-label="Elimină poziția ${index+1}" title="${hasDisposals ? 'Poziția are casări; ștergerea se face din fișa mijlocului fix.' : 'Elimină poziția'}" ${state.fixedAssetLines.length === 1 || hasDisposals ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header><div class="shop-fixed-asset-line-fields"><label>Denumire produs *<input data-fixed-asset-line-field="product_name" value="${esc(line.product_name)}" maxlength="500" required /></label><label>Cantitate *<input data-fixed-asset-line-field="quantity" type="number" min="${Math.max(0.0001,Math.abs(Number(line.disposal_quantity || 0)))}" step="0.0001" value="${esc(line.quantity)}" required /></label><label>Preț unitar *<input data-fixed-asset-line-field="unit_price" type="number" min="0" step="0.01" value="${esc(line.unit_price)}" required /></label><label>Cotă TVA % *<input data-fixed-asset-line-field="vat_rate" type="number" min="0" max="100" step="0.01" value="${esc(line.vat_rate)}" required /></label><label>Valoare TVA (lei) *<input data-fixed-asset-line-field="vat_value" type="number" min="0" step="0.01" value="${vat.toFixed(2)}" required /><span class="shop-fixed-asset-vat-mode"><small>${line.vat_manual ? 'Valoare manuală' : 'Calcul automat'}</small><button type="button" data-fixed-asset-vat-auto="${index}" ${line.vat_manual ? '' : 'hidden'}>Recalculează</button></span></label></div><footer><span><small>VALOARE</small><b>${money(net)}</b></span><span><small>TVA</small><b>${money(vat)}</b></span><span class="total"><small>TOTAL</small><b>${money(total)}</b></span></footer></article>`;
     }).join('');
     root.querySelectorAll('[data-fixed-asset-line-field]').forEach(input => input.addEventListener('input', () => {
       const card = input.closest('[data-fixed-asset-line]');
-      const index = Number(card.dataset.fixedAssetLine);
-      state.fixedAssetLines[index][input.dataset.fixedAssetLineField] = input.type === 'number' ? Number(input.value) : input.value;
-      if (input.type === 'number') {
-        const line = state.fixedAssetLines[index];
-        const net = Number(line.quantity || 0) * Number(line.unit_price || 0);
-        const vat = net * Number(line.vat_rate || 0) / 100;
-        const values = card.querySelectorAll('footer b');
-        if (values[0]) values[0].textContent = money(net);
-        if (values[1]) values[1].textContent = money(vat);
-        if (values[2]) values[2].textContent = money(net + vat);
-      }
+      const line = state.fixedAssetLines[Number(card.dataset.fixedAssetLine)];
+      const field = input.dataset.fixedAssetLineField;
+      line[field] = input.type === 'number' ? Number(input.value) : input.value;
+      if (field === 'vat_value') line.vat_manual = true;
+      const {net,vat,total} = fixedAssetLineAmounts(line);
+      if (!line.vat_manual) card.querySelector('[data-fixed-asset-line-field="vat_value"]').value = vat.toFixed(2);
+      card.querySelector('.shop-fixed-asset-vat-mode small').textContent = line.vat_manual ? 'Valoare manuală' : 'Calcul automat';
+      card.querySelector('[data-fixed-asset-vat-auto]').hidden = !line.vat_manual;
+      card.querySelectorAll('footer b').forEach((el,index)=>el.textContent=money([net,vat,total][index]));
     }));
+    root.querySelectorAll('[data-fixed-asset-vat-auto]').forEach(button=>button.addEventListener('click',()=>{state.fixedAssetLines[Number(button.dataset.fixedAssetVatAuto)].vat_manual=false;renderFixedAssetLines();}));
     root.querySelectorAll('[data-fixed-asset-line-remove]').forEach(button => button.addEventListener('click', () => { state.fixedAssetLines.splice(Number(button.dataset.fixedAssetLineRemove), 1); renderFixedAssetLines(); }));
   }
 
-  function selectFixedAssetFile(file) {
-    state.fixedAssetFile = file || null;
-    $('shop-fixed-asset-file-name').textContent = file ? `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB` : 'Atașează documentul';
+  function selectFixedAssetFile(files) {
+    state.fixedAssetFiles.push(...Array.from(files || []));
+    $('shop-fixed-asset-file-input').value = '';
+    renderFixedAssetFiles();
+  }
+  function renderFixedAssetFiles() {
+    $('shop-fixed-asset-file-name').textContent = 'Adaugă fișiere justificative';
+    $('shop-fixed-asset-pending-files').innerHTML = (state.fixedAssetEditing?.files || []).map(file=>`<div><span>${fixedAssetIcon('document')}</span><strong>${esc(file.original_name)}<small>Fișier deja salvat · ${(Number(file.file_size)/1024).toFixed(0)} KB</small></strong></div>`).join('') + state.fixedAssetFiles.map((file,index)=>`<div><span>${fixedAssetIcon('document')}</span><strong>${esc(file.name)}<small>Pregătit pentru încărcare · ${(file.size/1024).toFixed(0)} KB</small></strong><button type="button" data-fixed-asset-pending-remove="${index}" aria-label="Elimină ${esc(file.name)}">×</button></div>`).join('');
+    $('shop-fixed-asset-pending-files').querySelectorAll('[data-fixed-asset-pending-remove]').forEach(button=>button.addEventListener('click',()=>{state.fixedAssetFiles.splice(Number(button.dataset.fixedAssetPendingRemove),1);renderFixedAssetFiles();}));
   }
 
   function filePayload(file) {
@@ -4845,19 +4870,129 @@
     if (button?.disabled) return;
     button.disabled = true;
     try {
-      const attachment = await filePayload(state.fixedAssetFile);
-      await window.SHOP_API.createFixedAssetDocument({
+      const attachments = await Promise.all(state.fixedAssetFiles.map(filePayload));
+      const payload = {
         document: { document_date: $('shop-fixed-asset-document-date').value, document_type: $('shop-fixed-asset-document-type').value, series: $('shop-fixed-asset-series').value, document_number: $('shop-fixed-asset-number').value, notes: $('shop-fixed-asset-notes').value },
-        lines: state.fixedAssetLines,
-        attachment,
-      });
+        lines: state.fixedAssetLines.map(line=>({...line,vat_value:line.vat_manual ? line.vat_value : null})),
+        attachments,
+        revision: state.fixedAssetEditing?.revision,
+      };
+      const saved = state.fixedAssetEditing ? await window.SHOP_API.updateFixedAssetDocument(state.fixedAssetEditing.id,payload) : await window.SHOP_API.createFixedAssetDocument(payload);
       closeModal('shop-fixed-asset-create-modal');
       state.pages.fixedAssets = 1;
       await loadFixedAssets(1);
-      toast('Documentul și mijloacele fixe au fost înregistrate.');
+      if ($('shop-fixed-asset-detail-modal').classList.contains('visible')) await openFixedAssetDetail(saved.lines.find(line=>line.id===state.fixedAssetSelected?.id)?.id || saved.lines[0].id);
+      toast(state.fixedAssetEditing ? 'Modificările documentului au fost salvate.' : 'Documentul și mijloacele fixe au fost înregistrate.');
     } catch (error) {
       toast(error.message || 'Documentul nu a putut fi înregistrat.', 'error');
     } finally { button.disabled = false; }
+  }
+
+  async function openFixedAssetEdit(id) {
+    try {
+      const asset = await window.SHOP_API.getFixedAsset(id);
+      const document = await window.SHOP_API.getFixedAssetDocument(asset.document_id);
+      openFixedAssetCreate();
+      state.fixedAssetEditing = document;
+      state.fixedAssetLines = document.lines.map(line=>({...line,vat_manual:Boolean(Number(line.vat_manual))}));
+      $('shop-fixed-asset-editor-title').textContent = `Editează documentul ${fixedAssetDocumentNumber(document)}`;
+      $('shop-fixed-asset-save').querySelector('span').textContent = 'Salvează modificările';
+      $('shop-fixed-asset-delete-document').hidden = false;
+      for (const [field,key] of [['date','document_date'],['type','document_type']]) $('shop-fixed-asset-document-'+field).value = document[key];
+      $('shop-fixed-asset-series').value = document.series || '';
+      $('shop-fixed-asset-number').value = document.document_number;
+      $('shop-fixed-asset-notes').value = document.notes || '';
+      renderFixedAssetLines();
+      renderFixedAssetFiles();
+    } catch (error) { toast(error.message || 'Documentul nu a putut fi deschis pentru editare.','error'); }
+  }
+
+  function fixedAssetConfirm(title, message, task) {
+    state.fixedAssetDeleteTask = task;
+    $('shop-fixed-asset-confirm-title').textContent = title;
+    $('shop-fixed-asset-confirm-text').textContent = message;
+    $('shop-fixed-asset-confirm-error').hidden = true;
+    openModal('shop-fixed-asset-confirm-modal');
+  }
+  async function confirmFixedAssetDelete() {
+    const button = $('shop-fixed-asset-confirm-submit');
+    if (button.disabled || !state.fixedAssetDeleteTask) return;
+    button.disabled = true;
+    const task = state.fixedAssetDeleteTask;
+    try {
+      await task();
+      button.disabled = false;
+      closeModal('shop-fixed-asset-confirm-modal');
+      state.fixedAssetDeleteTask = null;
+    } catch (error) {
+      $('shop-fixed-asset-confirm-error').textContent = error.message || 'Ștergerea nu a putut fi efectuată.';
+      $('shop-fixed-asset-confirm-error').hidden = false;
+    } finally { button.disabled = false; }
+  }
+  async function deleteFixedAsset(id) {
+    try {
+      const asset = await window.SHOP_API.getFixedAsset(id);
+      const document = await window.SHOP_API.getFixedAssetDocument(asset.document_id);
+      fixedAssetConfirm('Șterge mijlocul fix', `Ștergi „${asset.product_name}”${asset.disposals.length ? ` și cele ${asset.disposals.length} casări asociate` : ''}? ${document.lines.length === 1 ? `Acesta este singurul produs rămas pe documentul ${fixedAssetDocumentNumber(document)}. Se va șterge și documentul${document.files.length ? `, împreună cu cele ${document.files.length} fișiere atașate` : ''}.` : 'Celelalte poziții și fișierele documentului se păstrează.'} Numerele „Nr. crt.” se recalculează automat. Operațiunea nu poate fi anulată.`, async()=>{
+        await window.SHOP_API.deleteFixedAsset(id,asset.revision,document.revision);
+        closeModal('shop-fixed-asset-detail-modal');
+        await loadFixedAssets();
+        toast('Mijlocul fix a fost șters din registru.');
+      });
+    } catch (error) { toast(error.message,'error'); }
+  }
+  function deleteFixedAssetDocument() {
+    const document = state.fixedAssetEditing;
+    if (!document) return;
+    const disposals = document.lines.reduce((total,line)=>total+line.disposals.length,0);
+    fixedAssetConfirm('Șterge întregul document', `Ștergi documentul ${fixedAssetDocumentNumber(document)}, cu ${document.lines.length} poziții, ${disposals} casări și ${document.files.length} fișiere? Operațiunea nu poate fi anulată.`,async()=>{
+      await window.SHOP_API.deleteFixedAssetDocument(document.id,document.revision);
+      closeModal('shop-fixed-asset-create-modal');
+      closeModal('shop-fixed-asset-detail-modal');
+      await loadFixedAssets();
+      toast('Documentul, pozițiile, casările și fișierele sale au fost șterse.');
+    });
+  }
+  function fixedAssetDocumentsMarkup(asset) {
+    const files = asset.files || [];
+    return `<section class="shop-fixed-asset-documents"><header><div><small>DOCUMENTE JUSTIFICATIVE</small><strong>${files.length} fișiere atașate</strong></div><button type="button" id="shop-fixed-asset-files-add">+ Adaugă fișiere</button><input type="file" id="shop-fixed-asset-files-input" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.xls,.xlsx,.doc,.docx,.xml" hidden /></header><div class="shop-fixed-asset-file-list">${files.map(file=>`<div><span>${fixedAssetIcon('document')}</span><strong>${esc(file.original_name)}<small>${esc(file.extension.toUpperCase())} · ${Math.max(1,Math.round(Number(file.file_size)/1024))} KB</small></strong><div class="shop-fixed-asset-file-actions"><button type="button" data-fixed-asset-file-view="${esc(file.id)}">Vezi</button><button type="button" data-fixed-asset-file-download="${esc(file.id)}">Descarcă</button><button type="button" class="shop-fixed-asset-danger" data-fixed-asset-file-delete="${esc(file.id)}">Șterge</button></div></div>`).join('') || '<p>Atașează factura, bonul, procesul-verbal sau alte fișiere necesare.</p>'}</div></section>`;
+  }
+  function wireFixedAssetDetail(asset) {
+    const root = $('shop-fixed-asset-detail-content');
+    root.querySelectorAll('[data-fixed-asset-disposal-edit]').forEach(button=>button.addEventListener('click',()=>void openFixedAssetDisposal(asset.id,button.dataset.fixedAssetDisposalEdit)));
+    root.querySelectorAll('[data-fixed-asset-disposal-delete]').forEach(button=>button.addEventListener('click',()=>{
+      const disposal = asset.disposals.find(item=>item.id===button.dataset.fixedAssetDisposalDelete);
+      fixedAssetConfirm('Șterge casarea', `Ștergi casarea din ${disposal.disposal_date.split('-').reverse().join('.')} (${quantity(disposal.quantity)} buc.)? Cantitatea disponibilă va crește cu ${quantity(Math.abs(Number(disposal.quantity)))} buc.`,async()=>{
+        await window.SHOP_API.deleteFixedAssetDisposal(asset.id,{disposal_id:disposal.id,revision:asset.revision});
+        await loadFixedAssets();
+        await openFixedAssetDetail(asset.id);
+        toast('Casarea a fost ștearsă și cantitatea rămasă a fost recalculată.');
+      });
+    }));
+    $('shop-fixed-asset-files-add')?.addEventListener('click',()=>$('shop-fixed-asset-files-input').click());
+    $('shop-fixed-asset-files-input')?.addEventListener('change',async event=>{
+      const files = Array.from(event.target.files || []);
+      if (!files.length) return;
+      const button = $('shop-fixed-asset-files-add');
+      button.disabled = true;
+      try {
+        const attachments = await Promise.all(files.map(filePayload));
+        await window.SHOP_API.addFixedAssetFiles(asset.document_id,attachments);
+        await openFixedAssetDetail(asset.id);
+        toast('Fișierele au fost adăugate documentului.');
+      } catch (error) { toast(error.message,'error'); }
+      finally { button.disabled=false;event.target.value=''; }
+    });
+    root.querySelectorAll('[data-fixed-asset-file-view]').forEach(button=>button.addEventListener('click',()=>void downloadFixedAssetDocument(true,button.dataset.fixedAssetFileView)));
+    root.querySelectorAll('[data-fixed-asset-file-download]').forEach(button=>button.addEventListener('click',()=>void downloadFixedAssetDocument(false,button.dataset.fixedAssetFileDownload)));
+    root.querySelectorAll('[data-fixed-asset-file-delete]').forEach(button=>button.addEventListener('click',()=>{
+      const file = asset.files.find(item=>item.id===button.dataset.fixedAssetFileDelete);
+      fixedAssetConfirm('Șterge fișierul', `Ștergi „${file.original_name}” din documentul ${fixedAssetDocumentNumber(asset)}? Fișierul este comun pozițiilor acestui document. Datele produselor și casările se păstrează.`,async()=>{
+        await window.SHOP_API.deleteFixedAssetFile(asset.document_id,file.id);
+        await openFixedAssetDetail(asset.id);
+        toast('Fișierul a fost șters.');
+      });
+    }));
   }
 
   async function openFixedAssetDetail(id) {
@@ -4869,10 +5004,11 @@
       if (state.fixedAssetPreviewUrl) URL.revokeObjectURL(state.fixedAssetPreviewUrl);
       state.fixedAssetPreviewUrl = '';
       $('shop-fixed-asset-detail-title').textContent = asset.product_name;
-      const disposalRows = (asset.disposals || []).map(item => `<tr><td>${esc(String(item.disposal_date || '').split('-').reverse().join('.'))}</td><td><b>${quantity(item.quantity)}</b></td><td>${esc(item.reason)}</td><td>${esc(item.created_by || '—')}</td></tr>`).join('');
-      $('shop-fixed-asset-detail-content').innerHTML = `<section class="shop-fixed-asset-detail-hero"><span>${fixedAssetIcon('box')}</span><div><small>${esc(fixedAssetTypeLabel(asset.document_type))} · ${esc(fixedAssetDocumentNumber(asset))}</small><h3>${esc(asset.product_name)}</h3><p>Document din ${esc(String(asset.document_date || '').split('-').reverse().join('.'))}</p></div><b>${quantity(asset.remaining_quantity)}<small>RĂMASE</small></b></section><section class="shop-fixed-asset-detail-grid"><article><small>CANTITATE INIȚIALĂ</small><strong>${quantity(asset.quantity)}</strong></article><article><small>PREȚ UNITAR</small><strong>${money(asset.unit_price)}</strong></article><article><small>VALOARE</small><strong>${money(asset.net_value)}</strong></article><article><small>TVA ${quantity(asset.vat_rate)}%</small><strong>${money(asset.vat_value)}</strong></article><article class="total"><small>VALOARE TOTALĂ</small><strong>${money(asset.total_value)}</strong></article></section><section class="shop-fixed-asset-document-card"><span class="shop-fixed-asset-document-symbol">${fixedAssetIcon('document')}</span><div><small>DOCUMENT JUSTIFICATIV</small><strong>${esc(asset.original_name || 'Nu a fost atașat un fișier')}</strong><span>${asset.has_document ? `${esc((asset.original_name || '').split('.').pop()?.toUpperCase() || 'Document')} · ${Math.max(1, Math.round(Number(asset.file_size || 0) / 1024))} KB` : 'Datele documentului rămân disponibile în registru.'}</span></div></section><section class="shop-fixed-asset-disposal-history"><header><div><small>ISTORIC CASĂRI</small><strong>${Number(asset.disposals?.length || 0)} înregistrări</strong></div>${Number(asset.remaining_quantity || 0) > 0 ? `<button type="button" data-fixed-asset-detail-dispose="${esc(asset.id)}">+ Casare</button>` : '<em>CASAT INTEGRAL</em>'}</header>${disposalRows ? `<table><thead><tr><th>Data</th><th>Cantitate</th><th>Motiv</th><th>Înregistrat de</th></tr></thead><tbody>${disposalRows}</tbody></table>` : '<p>Nu există casări pentru acest mijloc fix.</p>'}</section><section class="shop-fixed-asset-preview" id="shop-fixed-asset-preview" hidden></section>`;
-      $('shop-fixed-asset-view-document').hidden = !asset.has_document;
-      $('shop-fixed-asset-download-document').hidden = !asset.has_document;
+      const disposalRows = (asset.disposals || []).map(item => `<tr><td>${esc(String(item.disposal_date || '').split('-').reverse().join('.'))}</td><td><b>${quantity(item.quantity)}</b></td><td>${esc(item.reason)}</td><td>${esc(item.created_by || '—')}</td><td><div class="shop-fixed-asset-history-actions"><button type="button" data-fixed-asset-disposal-edit="${esc(item.id)}">Editează</button><button type="button" class="shop-fixed-asset-danger" data-fixed-asset-disposal-delete="${esc(item.id)}">Șterge</button></div></td></tr>`).join('');
+      $('shop-fixed-asset-detail-content').innerHTML = `<section class="shop-fixed-asset-detail-hero"><span>${fixedAssetIcon('box')}</span><div><small>${esc(fixedAssetTypeLabel(asset.document_type))} · ${esc(fixedAssetDocumentNumber(asset))}</small><h3>${esc(asset.product_name)}</h3><p>Document din ${esc(String(asset.document_date || '').split('-').reverse().join('.'))}</p></div><b>${quantity(asset.remaining_quantity)}<small>RĂMASE</small></b></section><section class="shop-fixed-asset-detail-grid"><article><small>CANTITATE INIȚIALĂ</small><strong>${quantity(asset.quantity)}</strong></article><article><small>PREȚ UNITAR</small><strong>${money(asset.unit_price)}</strong></article><article><small>VALOARE</small><strong>${money(asset.net_value)}</strong></article><article><small>TVA ${quantity(asset.vat_rate)}%</small><strong>${money(asset.vat_value)}</strong></article><article class="total"><small>VALOARE TOTALĂ</small><strong>${money(asset.total_value)}</strong></article></section>${fixedAssetDocumentsMarkup(asset)}<section class="shop-fixed-asset-disposal-history"><header><div><small>ISTORIC CASĂRI</small><strong>${Number(asset.disposals?.length || 0)} înregistrări</strong></div>${Number(asset.remaining_quantity || 0) > 0 ? `<button type="button" data-fixed-asset-detail-dispose="${esc(asset.id)}">+ Casare</button>` : '<em>CASAT INTEGRAL</em>'}</header>${disposalRows ? `<table><thead><tr><th>Data</th><th>Cantitate</th><th>Motiv</th><th>Înregistrat de</th><th>Acțiuni</th></tr></thead><tbody>${disposalRows}</tbody></table>` : '<p>Nu există casări pentru acest mijloc fix.</p>'}</section><section class="shop-fixed-asset-preview" id="shop-fixed-asset-preview" hidden></section>`;
+      $('shop-fixed-asset-view-document').hidden = true;
+      $('shop-fixed-asset-download-document').hidden = true;
+      wireFixedAssetDetail(asset);
       $('shop-fixed-asset-detail-content').scrollTop = 0;
       $('shop-fixed-asset-detail-content').querySelector('[data-fixed-asset-detail-dispose]')?.addEventListener('click', () => void openFixedAssetDisposal(asset.id));
     } catch (error) {
@@ -4880,17 +5016,22 @@
     }
   }
 
-  async function openFixedAssetDisposal(id) {
+  async function openFixedAssetDisposal(id, disposalId = null) {
     try {
       const asset = await window.SHOP_API.getFixedAsset(id);
-      if (Number(asset.remaining_quantity || 0) <= 0) return toast('Mijlocul fix este deja casat integral.', 'error');
+      const disposal = disposalId ? asset.disposals.find(item=>item.id===disposalId) : null;
+      state.fixedAssetEditingDisposal = disposal;
+      const available = Number(asset.remaining_quantity || 0) - Number(disposal?.quantity || 0);
+      if (available <= 0) return toast('Mijlocul fix este deja casat integral.', 'error');
       state.fixedAssetDisposalTarget = asset;
       $('shop-fixed-asset-disposal-form').reset();
-      $('shop-fixed-asset-disposal-date').value = fixedAssetToday();
-      $('shop-fixed-asset-disposal-quantity').value = -Number(asset.remaining_quantity || 0);
-      $('shop-fixed-asset-disposal-quantity').min = -Number(asset.remaining_quantity || 0);
+      $('shop-fixed-asset-disposal-date').value = disposal?.disposal_date || fixedAssetToday();
+      $('shop-fixed-asset-disposal-reason').value = disposal?.reason || '';
+      $('shop-fixed-asset-disposal-save').textContent = disposal ? 'Salvează modificările' : 'Înregistrează casarea';
+      $('shop-fixed-asset-disposal-quantity').value = disposal?.quantity ?? -available;
+      $('shop-fixed-asset-disposal-quantity').min = -available;
       $('shop-fixed-asset-disposal-title').textContent = asset.product_name;
-      $('shop-fixed-asset-disposal-summary').innerHTML = `<small>DISPONIBIL PENTRU CASARE</small><strong>${quantity(asset.remaining_quantity)}</strong><span>din cantitatea inițială ${quantity(asset.quantity)}</span>`;
+      $('shop-fixed-asset-disposal-summary').innerHTML = `<small>DISPONIBIL PENTRU CASARE</small><strong>${quantity(available)}</strong><span>din cantitatea inițială ${quantity(asset.quantity)}</span>`;
       openModal('shop-fixed-asset-disposal-modal');
     } catch (error) { toast(error.message || 'Datele casării nu au putut fi pregătite.', 'error'); }
   }
@@ -4902,20 +5043,22 @@
     if (!asset || button.disabled) return;
     button.disabled = true;
     try {
-      await window.SHOP_API.disposeFixedAsset(asset.id, { disposal_date: $('shop-fixed-asset-disposal-date').value, quantity: $('shop-fixed-asset-disposal-quantity').value, reason: $('shop-fixed-asset-disposal-reason').value });
+      const payload = { disposal_date: $('shop-fixed-asset-disposal-date').value, quantity: $('shop-fixed-asset-disposal-quantity').value, reason: $('shop-fixed-asset-disposal-reason').value, disposal_id:state.fixedAssetEditingDisposal?.id, revision:asset.revision };
+      if (state.fixedAssetEditingDisposal) await window.SHOP_API.updateFixedAssetDisposal(asset.id,payload);
+      else await window.SHOP_API.disposeFixedAsset(asset.id,payload);
       closeModal('shop-fixed-asset-disposal-modal');
       await loadFixedAssets(state.pages.fixedAssets);
       if ($('shop-fixed-asset-detail-modal')?.classList.contains('visible')) await openFixedAssetDetail(asset.id);
-      toast('Casarea a fost înregistrată și cantitatea disponibilă a fost actualizată.');
+      toast('Casarea a fost salvată și cantitatea disponibilă a fost actualizată.');
     } catch (error) { toast(error.message || 'Casarea nu a putut fi înregistrată.', 'error'); }
     finally { button.disabled = false; }
   }
 
-  async function downloadFixedAssetDocument(preview) {
+  async function downloadFixedAssetDocument(preview, fileId = '') {
     const asset = state.fixedAssetSelected;
     if (!asset?.document_id || !asset.has_document) return;
     try {
-      const file = await window.SHOP_API.downloadFixedAssetDocument(asset.document_id);
+      const file = await window.SHOP_API.downloadFixedAssetDocument(asset.document_id, fileId);
       if (!preview) { saveNirDownload(file); toast('Documentul justificativ a fost descărcat.'); return; }
       const bytes = Uint8Array.from(atob(file.content_base64), char => char.charCodeAt(0));
       const blob = new Blob([bytes], { type: file.mime_type });

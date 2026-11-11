@@ -19,7 +19,8 @@ $expect(str_contains($desktop, 'Data documentului *') && str_contains($desktop, 
 $expect(str_contains($desktop, 'data-fixed-asset-line-field="product_name"') && str_contains($desktop, 'data-fixed-asset-line-field="vat_rate"'), 'Pozițiile documentului nu includ toate valorile cerute.');
 $expect(str_contains($desktop, 'Cantitate casată *') && str_contains($desktop, 'Motivul casării *'), 'Modalul de casare este incomplet.');
 $expect(str_contains($desktop, 'Vizualizează documentul') && str_contains($desktop, 'Descarcă documentul'), 'Fișa nu oferă vizualizarea și descărcarea documentului.');
-$expect(str_contains($desktop, 'Export PDF / Excel') && str_contains($desktop, 'data-fixed-asset-export="pdf"') && str_contains($desktop, 'data-fixed-asset-export="xlsx"'), 'Exporturile pe perioadă nu sunt disponibile în ambele formate.');
+$expect(str_contains($desktop, 'Exportă registrul') && str_contains($desktop, 'data-fixed-asset-export="pdf"') && str_contains($desktop, 'data-fixed-asset-export="xlsx"') && str_contains($desktop, 'data-fixed-asset-export="zip"'), 'Exporturile complete PDF, Excel și ZIP nu sunt disponibile.');
+$expect(!str_contains($desktop, 'data-fixed-asset-period') && !str_contains($desktop, 'shop-fixed-asset-export-from'), 'Exportul mijloacelor fixe nu trebuie să mai solicite o perioadă.');
 
 foreach (['listFixedAssets', 'getFixedAsset', 'getFixedAssetDocument', 'createFixedAssetDocument', 'updateFixedAssetDocument', 'deleteFixedAssetDocument', 'deleteFixedAsset', 'disposeFixedAsset', 'updateFixedAssetDisposal', 'deleteFixedAssetDisposal', 'addFixedAssetFiles', 'deleteFixedAssetFile', 'downloadFixedAssetDocument', 'exportFixedAssets'] as $action) {
     $expect(str_contains($api, "\$action === '{$action}'"), "Ruta {$action} lipsește din API.");

@@ -402,8 +402,21 @@
     ${fixedAssetExportModal()}`;
   }
   function fixedAssetExportModal() {
-    const periods = [['all', 'Toată perioada', 'Registrul complet'], ['year', 'Tot anul', 'De la 1 ianuarie'], ['six_months', '6 luni', 'Ultimele șase luni'], ['three_months', '3 luni', 'Ultimele trei luni'], ['last_month', 'Luna trecută', 'Luna calendaristică'], ['current_month', 'Luna curentă', 'Până astăzi'], ['custom', 'Interval ales', 'Alegi exact datele']];
-    return `<div class="shop-commerce-overlay shop-nir-registry-download-overlay" id="shop-fixed-asset-export-modal" hidden><form class="shop-nir-registry-download-dialog shop-fixed-asset-export" id="shop-fixed-asset-export-form" role="dialog" aria-modal="true" aria-labelledby="shop-fixed-asset-export-title"><header><span class="shop-nir-registry-download-orb">${fixedAssetIcon('download')}</span><div><small>REGISTRU PATRIMONIAL · EXPORT</small><h2 id="shop-fixed-asset-export-title">Un registru, toate detaliile.</h2><p>Alege formatul și perioada documentelor pe care vrei să le exporți.</p></div><button type="button" data-commerce-close="shop-fixed-asset-export-modal" aria-label="Închide">×</button></header><div class="shop-nir-registry-download-body"><section><div class="shop-nir-registry-section-title"><span>01</span><div><strong>Cum vrei să descarci registrul?</strong><small>Ambele formate includ valorile documentelor și istoricul casărilor.</small></div></div><div class="shop-nir-registry-content-options"><button type="button" data-fixed-asset-export="pdf">${fixedAssetIcon('document')}<span><strong>Document PDF</strong><small>Antet G-Trots · pregătit de tipărire</small></span><i></i></button><button type="button" data-fixed-asset-export="xlsx" class="active">${fixedAssetIcon('table')}<span><strong>Registru Excel</strong><small>Coloane filtrabile · totaluri calculate</small></span><i></i></button></div></section><section><div class="shop-nir-registry-section-title"><span>02</span><div><strong>Pentru ce perioadă?</strong><small>Documentele sunt selectate după data emiterii.</small></div></div><div class="shop-nir-registry-periods">${periods.map(([value,label,hint]) => `<button type="button" data-fixed-asset-period="${value}"><span class="shop-nir-period-icon">${fixedAssetIcon('calendar')}</span><strong>${label}</strong><small>${hint}</small><i></i></button>`).join('')}</div><div class="shop-nir-registry-custom" id="shop-fixed-asset-export-custom" hidden><label>De la<input id="shop-fixed-asset-export-from" type="date"></label><span>—</span><label>Până la<input id="shop-fixed-asset-export-to" type="date"></label></div></section><aside class="shop-nir-registry-download-summary"><span>${fixedAssetIcon('check')}</span><div><small>EXPORTUL TĂU</small><strong id="shop-fixed-asset-export-summary"></strong><p id="shop-fixed-asset-export-range"></p><p>Include toate casările bunurilor selectate.</p></div></aside></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-fixed-asset-export-modal">Renunță</button><button type="submit" class="shop-nir-registry-download-confirm" id="shop-fixed-asset-export-confirm">${fixedAssetIcon('download')}<span>Descarcă registrul</span></button></footer></form></div>`;
+    return `<div class="shop-commerce-overlay shop-nir-registry-download-overlay" id="shop-fixed-asset-export-modal" hidden>
+      <form class="shop-nir-registry-download-dialog shop-fixed-asset-export" id="shop-fixed-asset-export-form" role="dialog" aria-modal="true" aria-labelledby="shop-fixed-asset-export-title">
+        <header><span class="shop-nir-registry-download-orb">${fixedAssetIcon('download')}</span><div><small>REGISTRU PATRIMONIAL</small><h2 id="shop-fixed-asset-export-title">Exportă registrul complet</h2><p>Toate documentele, valorile și casările. Alege doar formatul.</p></div><button type="button" data-commerce-close="shop-fixed-asset-export-modal" aria-label="Închide">×</button></header>
+        <div class="shop-nir-registry-download-body">
+          <div class="shop-nir-registry-content-options" role="group" aria-label="Formatul exportului">
+            <button type="button" data-fixed-asset-export="pdf" aria-pressed="false">${fixedAssetIcon('document')}<span><strong>PDF</strong><small>Registru pregătit de tipărire</small></span><i aria-hidden="true"></i></button>
+            <button type="button" data-fixed-asset-export="xlsx" class="active" aria-pressed="true">${fixedAssetIcon('table')}<span><strong>Excel</strong><small>Valori, totaluri și filtre</small></span><i aria-hidden="true"></i></button>
+            <button type="button" data-fixed-asset-export="zip" class="shop-fixed-asset-export-bundle" aria-pressed="false">${fixedAssetIcon('archive')}<span><strong>Arhivă ZIP completă</strong><small>PDF + Excel + toate fișierele încărcate, organizate pe documente</small><span class="shop-fixed-asset-export-tags"><b>PDF</b><b>XLSX</b><b>Documente atașate</b></span></span><i aria-hidden="true"></i></button>
+          </div>
+          <aside class="shop-nir-registry-download-summary" aria-live="polite"><span>${fixedAssetIcon('check')}</span><div><small>ÎNTREGUL REGISTRU</small><strong id="shop-fixed-asset-export-summary"></strong><p>Toate paginile și toate valorile, inclusiv istoricul complet al casărilor.</p><p>Căutarea și filtrul din tabel nu limitează exportul.</p></div></aside>
+          <div class="shop-fixed-asset-export-folders" id="shop-fixed-asset-export-folders" hidden><span>${fixedAssetIcon('archive')}</span><div><strong>Câte un folder pentru fiecare document</strong><p>Factură, bon sau PV · tip-serie-număr</p><small>Fiecare folder conține toate fișierele încărcate pentru documentul respectiv.</small></div></div>
+        </div>
+        <footer><button type="button" class="btn-ghost" data-commerce-close="shop-fixed-asset-export-modal">Renunță</button><button type="submit" class="shop-nir-registry-download-confirm" id="shop-fixed-asset-export-confirm">${fixedAssetIcon('download')}<span>Descarcă Excel</span></button></footer>
+      </form>
+    </div>`;
   }
 
   function shippingModal() {
@@ -606,9 +619,7 @@
     $('shop-fixed-asset-download-document')?.addEventListener('click', () => void downloadFixedAssetDocument(false));
     $('shop-fixed-asset-view-document')?.addEventListener('click', () => void downloadFixedAssetDocument(true));
     $('shop-fixed-asset-export-form')?.addEventListener('submit', exportFixedAssets);
-    document.querySelectorAll('[data-fixed-asset-period]').forEach(button => button.addEventListener('click', () => { state.fixedAssetExportPeriod = button.dataset.fixedAssetPeriod; updateFixedAssetExport(); }));
     document.querySelectorAll('[data-fixed-asset-export]').forEach(button => button.addEventListener('click', () => { state.fixedAssetExportFormat = button.dataset.fixedAssetExport; updateFixedAssetExport(); }));
-    ['shop-fixed-asset-export-from', 'shop-fixed-asset-export-to'].forEach(id => $(id)?.addEventListener('change', updateFixedAssetExport));
     $('shop-nir-registry-download-confirm')?.addEventListener('click', () => void downloadNirRegistry());
     document.querySelectorAll('[data-nir-registry-content]').forEach(button => button.addEventListener('click', () => {
       state.nirRegistryDownloadContent = button.dataset.nirRegistryContent || 'complete';
@@ -4774,7 +4785,7 @@
     const pageSize = Number(registry.page_size || state.pageSizes.fixedAssets);
     const first = total ? (page-1)*pageSize+1 : 0;
     const last = Math.min(total,page*pageSize);
-    return `<section class="shop-fixed-assets-toolbar" aria-label="Căutare, filtrare și export"><div class="shop-fixed-assets-controls"><label class="shop-fixed-assets-search-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><input id="shop-fixed-assets-search" type="search" aria-label="Caută mijloace fixe după produs, serie sau număr document" value="${esc(state.fixedAssetQuery)}" placeholder="Caută un produs, o serie sau un număr de document…" autocomplete="off" /></label><label class="shop-fixed-assets-filter-field"><span class="shop-fixed-assets-filter-symbol" aria-hidden="true">${fixedAssetIcon('document')}</span><span class="shop-fixed-assets-filter-caption">Tip document</span><select id="shop-fixed-assets-type" aria-label="Filtrează după tipul documentului"><option value="">Toate documentele</option><option value="factura" ${state.fixedAssetType === 'factura' ? 'selected' : ''}>Facturi</option><option value="bon" ${state.fixedAssetType === 'bon' ? 'selected' : ''}>Bonuri</option><option value="pv" ${state.fixedAssetType === 'pv' ? 'selected' : ''}>Procese-verbale</option></select><svg class="shop-fixed-assets-filter-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></label><button type="button" id="shop-fixed-assets-export"><span class="shop-fixed-assets-export-symbol" aria-hidden="true">${fixedAssetIcon('download')}</span><span class="shop-fixed-assets-export-copy"><strong>Export PDF / Excel</strong><small>Alege formatul și perioada</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button></div><div class="shop-fixed-assets-toolbar-footer"><div class="shop-fixed-assets-result-count" role="status">${fixedAssetIcon('table')}<strong>${total ? `${total} ${total===1 ? 'poziție' : 'poziții'}` : 'Niciun rezultat'}</strong>${total ? `<span class="shop-fixed-assets-result-divider" aria-hidden="true"></span><span>Se afișează ${first}–${last}</span>` : ''}</div>${topPagination}</div></section>`;
+    return `<section class="shop-fixed-assets-toolbar" aria-label="Căutare, filtrare și export"><div class="shop-fixed-assets-controls"><label class="shop-fixed-assets-search-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><input id="shop-fixed-assets-search" type="search" aria-label="Caută mijloace fixe după produs, serie sau număr document" value="${esc(state.fixedAssetQuery)}" placeholder="Caută un produs, o serie sau un număr de document…" autocomplete="off" /></label><label class="shop-fixed-assets-filter-field"><span class="shop-fixed-assets-filter-symbol" aria-hidden="true">${fixedAssetIcon('document')}</span><span class="shop-fixed-assets-filter-caption">Tip document</span><select id="shop-fixed-assets-type" aria-label="Filtrează după tipul documentului"><option value="">Toate documentele</option><option value="factura" ${state.fixedAssetType === 'factura' ? 'selected' : ''}>Facturi</option><option value="bon" ${state.fixedAssetType === 'bon' ? 'selected' : ''}>Bonuri</option><option value="pv" ${state.fixedAssetType === 'pv' ? 'selected' : ''}>Procese-verbale</option></select><svg class="shop-fixed-assets-filter-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></label><button type="button" id="shop-fixed-assets-export"><span class="shop-fixed-assets-export-symbol" aria-hidden="true">${fixedAssetIcon('download')}</span><span class="shop-fixed-assets-export-copy"><strong>Exportă registrul</strong><small>PDF · Excel · ZIP complet</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button></div><div class="shop-fixed-assets-toolbar-footer"><div class="shop-fixed-assets-result-count" role="status">${fixedAssetIcon('table')}<strong>${total ? `${total} ${total===1 ? 'poziție' : 'poziții'}` : 'Niciun rezultat'}</strong>${total ? `<span class="shop-fixed-assets-result-divider" aria-hidden="true"></span><span>Se afișează ${first}–${last}</span>` : ''}</div>${topPagination}</div></section>`;
   }
 
   const fixedAssetTypeLabel = value => ({ factura: 'Factură', bon: 'Bon', pv: 'Proces-verbal' }[value] || value || '—');
@@ -5120,28 +5131,25 @@
     } catch (error) { toast(error.message || 'Documentul nu a putut fi deschis.', 'error'); }
   }
 
-  function fixedAssetExportRange() {
-    if (state.fixedAssetExportPeriod === 'custom') return { from: $('shop-fixed-asset-export-from').value, to: $('shop-fixed-asset-export-to').value, label: 'intervalul ales' };
-    return nirRegistryPeriodRange(state.fixedAssetExportPeriod || 'current_month');
-  }
-
   function updateFixedAssetExport() {
-    const range = fixedAssetExportRange();
-    const custom = state.fixedAssetExportPeriod === 'custom';
-    $('shop-fixed-asset-export-custom').hidden = !custom;
-    ['shop-fixed-asset-export-from', 'shop-fixed-asset-export-to'].forEach(id => { $(id).required = custom; });
-    document.querySelectorAll('[data-fixed-asset-period]').forEach(b => { const active = b.dataset.fixedAssetPeriod === state.fixedAssetExportPeriod; b.classList.toggle('active', active); b.setAttribute('aria-pressed', String(active)); });
-    document.querySelectorAll('[data-fixed-asset-export]').forEach(b => { const active = b.dataset.fixedAssetExport === state.fixedAssetExportFormat; b.classList.toggle('active', active); b.setAttribute('aria-pressed', String(active)); });
-    $('shop-fixed-asset-export-summary').textContent = `Registru ${state.fixedAssetExportFormat === 'pdf' ? 'PDF' : 'Excel'} · ${range.label}`;
-    $('shop-fixed-asset-export-range').textContent = range.from && range.to ? `${range.from.split('-').reverse().join('.')} — ${range.to.split('-').reverse().join('.')}` : custom ? 'Completează ambele date.' : 'Toate documentele înregistrate.';
+    const format = state.fixedAssetExportFormat || 'xlsx';
+    const label = { pdf: 'PDF', xlsx: 'Excel', zip: 'ZIP' }[format];
+    document.querySelectorAll('[data-fixed-asset-export]').forEach(button => {
+      const active = button.dataset.fixedAssetExport === format;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+      button.disabled = Boolean(state.fixedAssetExportBusy);
+    });
+    $('shop-fixed-asset-export-summary').textContent = format === 'zip' ? 'PDF, Excel și documentele justificative' : `Registru complet în format ${label}`;
+    $('shop-fixed-asset-export-folders').hidden = format !== 'zip';
+    $('shop-fixed-asset-export-form').setAttribute('aria-busy', String(Boolean(state.fixedAssetExportBusy)));
+    const button = $('shop-fixed-asset-export-confirm');
+    button.disabled = Boolean(state.fixedAssetExportBusy);
+    button.querySelector('span').textContent = state.fixedAssetExportBusy ? (format === 'zip' ? 'Se pregătește arhiva…' : 'Se pregătește registrul…') : `Descarcă ${label}`;
   }
 
   function openFixedAssetExport() {
-    state.fixedAssetExportPeriod = 'current_month';
-    state.fixedAssetExportFormat = 'xlsx';
-    const range = nirRegistryPeriodRange('current_month');
-    $('shop-fixed-asset-export-from').value = range.from;
-    $('shop-fixed-asset-export-to').value = range.to;
+    if (!state.fixedAssetExportBusy) state.fixedAssetExportFormat = 'xlsx';
     updateFixedAssetExport();
     openModal('shop-fixed-asset-export-modal');
     $('shop-fixed-asset-export-modal').querySelector('.shop-nir-registry-download-body').scrollTop = 0;
@@ -5150,24 +5158,16 @@
   async function exportFixedAssets(event) {
     event.preventDefault();
     if (state.fixedAssetExportBusy) return;
-    const range = fixedAssetExportRange();
-    if (state.fixedAssetExportPeriod === 'custom' && (!range.from || !range.to || range.from > range.to)) {
-      toast('Alege un interval valid: data de început trebuie să fie înaintea datei de sfârșit.', 'error');
-      $('shop-fixed-asset-export-from').focus();
-      return;
-    }
     const format = state.fixedAssetExportFormat || 'xlsx';
-    const button = $('shop-fixed-asset-export-confirm');
     state.fixedAssetExportBusy = true;
-    button.disabled = true;
-    button.querySelector('span').textContent = 'Se pregătește registrul…';
+    updateFixedAssetExport();
     try {
-      const file = await window.SHOP_API.exportFixedAssets(range.from, range.to, format);
+      const file = await window.SHOP_API.exportFixedAssets(format);
       await saveNirDownload(file);
       closeModal('shop-fixed-asset-export-modal');
-      toast(`Registrul ${format === 'pdf' ? 'PDF' : 'Excel'} a fost generat.`);
+      toast(format === 'zip' ? 'Arhiva completă a fost generată.' : `Registrul ${format === 'pdf' ? 'PDF' : 'Excel'} a fost generat.`);
     } catch (error) { toast(error.message || 'Exportul nu a putut fi generat.', 'error'); }
-    finally { state.fixedAssetExportBusy = false; button.disabled = false; button.querySelector('span').textContent = 'Descarcă registrul'; }
+    finally { state.fixedAssetExportBusy = false; updateFixedAssetExport(); }
   }
 
   const nirCan = permission => state.nirPermissions.includes(permission);

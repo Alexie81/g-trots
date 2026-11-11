@@ -307,16 +307,56 @@
 .shop-fixed-asset-disposal-history > p { padding: 25px 20px; font-size: 12px; color: #b3a0bd; }
 
 /* Same period-selector layout as the NIR register, with format selection. */
-.shop-fixed-asset-export .shop-nir-registry-content-options button { grid-template-columns: 44px minmax(0,1fr) 20px; gap: 12px; }
+.shop-fixed-asset-export { width:min(760px,calc(100vw - 32px)); display:flex; flex-direction:column; border-color:#5f4636; background:linear-gradient(145deg,#29242a,#1d1b21 70%); }
+.shop-fixed-asset-export > header { flex-shrink:0; padding:24px; grid-template-columns:54px minmax(0,1fr) 38px; gap:16px; }
+.shop-fixed-asset-export > header .shop-nir-registry-download-orb { width:54px; height:54px; border-radius:17px; border-color:#765037; background:#ff8c1714; color:#ffbc83; }
+.shop-fixed-asset-export > header .shop-nir-registry-download-orb svg { animation:none; }
+.shop-fixed-asset-export > header small { color:#ffb47c; }
+.shop-fixed-asset-export > header h2 { font-size:26px !important; line-height:1.2; }
+.shop-fixed-asset-export > header p { color:#b9b0bb; }
+.shop-fixed-asset-export .shop-nir-registry-download-body { min-height:0; max-height:none; padding:24px; gap:18px; }
+.shop-fixed-asset-export .shop-nir-registry-content-options { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.shop-fixed-asset-export .shop-nir-registry-content-options button { grid-template-columns:44px minmax(0,1fr) 20px; gap:12px; min-height:94px; padding:16px; border-color:#4b414e; background:#211e25; }
 .shop-fixed-asset-export .shop-nir-registry-content-options button > svg { width: 44px; height: 44px; padding: 10px; color: #ffb47c; }
 .shop-fixed-asset-export .shop-nir-registry-content-options button > span { display: grid; gap: 6px; }
-.shop-fixed-asset-export .shop-nir-registry-content-options button strong { font-size: 14px; }
-.shop-fixed-asset-export .shop-nir-registry-content-options button small { font-size: 11px; }
-.shop-fixed-asset-export .shop-nir-registry-periods button strong { font-size: 12px; }
-.shop-fixed-asset-export .shop-nir-registry-periods button small { font-size: 11px; }
-.shop-fixed-asset-export .shop-nir-registry-custom[hidden] { display: none; }
-.shop-fixed-asset-export input[type="date"] { font-size: 14px; }
+.shop-fixed-asset-export .shop-nir-registry-content-options button strong { font-size:15px; color:#f1e9ef; }
+.shop-fixed-asset-export .shop-nir-registry-content-options button small { font-size:12px; color:#b8aebc; line-height:1.6; }
+.shop-fixed-asset-export .shop-nir-registry-content-options button:hover { border-color:#a37451; transform:none; background:#30262a; }
+.shop-fixed-asset-export .shop-nir-registry-content-options button.active { border-color:#ce8a50; background:linear-gradient(115deg,#f38e2520,#f38e2507); box-shadow:0 0 0 1px #f38e2514; }
+.shop-fixed-asset-export .shop-nir-registry-content-options button.active > i { border-color:#ffb47c; background:#33251d; }
+.shop-fixed-asset-export .shop-fixed-asset-export-bundle { grid-column:1 / -1; }
+.shop-fixed-asset-export-tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+.shop-fixed-asset-export-tags b { padding:4px 8px; border:1px solid #69513f; border-radius:6px; color:#f0c8a8; background:#2e261f; font-size:10px; font-weight:600; }
+.shop-fixed-asset-export .shop-nir-registry-download-summary { border-color:#40534c; background:#8ee3b307; align-items:flex-start; }
+.shop-fixed-asset-export .shop-nir-registry-download-summary > span { flex:0 0 32px; width:32px; height:32px; border-radius:10px; background:#8ee3b312; color:#a1d9b9; }
+.shop-fixed-asset-export .shop-nir-registry-download-summary small { font-size:9px; color:#a1cbb4; letter-spacing:.09em; }
+.shop-fixed-asset-export .shop-nir-registry-download-summary strong { font-size:14px; color:#e2eee6; margin:3px 0; }
+.shop-fixed-asset-export .shop-nir-registry-download-summary p { font-size:12px; color:#adc1b5; line-height:1.6; }
+.shop-fixed-asset-export-folders { display:flex; gap:12px; padding:0 4px; color:#bba9c4; }
+.shop-fixed-asset-export-folders[hidden] { display:none; }
+.shop-fixed-asset-export-folders > span { flex:0 0 24px; }
+.shop-fixed-asset-export-folders svg { width:23px; height:23px; }
+.shop-fixed-asset-export-folders strong { font-size:12px; color:#d7c7df; }
+.shop-fixed-asset-export-folders p { margin:5px 0; font-size:12px; color:#d9bba4; }
+.shop-fixed-asset-export-folders small { font-size:11px; line-height:1.6; }
+.shop-fixed-asset-export > footer { flex-shrink:0; padding:18px 24px; }
+.shop-fixed-asset-export > footer button { font-size:12px; }
+.shop-fixed-asset-export .shop-nir-registry-download-confirm { background:linear-gradient(130deg,#d75b08,#ed7c0d); border-color:#f7953a; box-shadow:0 6px 20px #cb57081f; }
+.shop-fixed-asset-export .shop-nir-registry-download-confirm:hover { background:linear-gradient(130deg,#ec6b12,#f68c22); }
 .shop-fixed-asset-export .shop-nir-registry-download-confirm:disabled { opacity: .55; cursor: wait; }
+.shop-fixed-asset-export .shop-nir-registry-content-options button:disabled { cursor:wait; }
+@media(max-width:560px) {
+  #shop-fixed-asset-export-modal { padding:12px !important; }
+  .shop-fixed-asset-export { width:calc(100vw - 24px); max-height:calc(100dvh - 24px); border-radius:22px; }
+  .shop-fixed-asset-export > header { padding:18px; grid-template-columns:minmax(0,1fr) 34px; gap:12px; }
+  .shop-fixed-asset-export > header .shop-nir-registry-download-orb { display:none; }
+  .shop-fixed-asset-export > header h2 { font-size:21px !important; }
+  .shop-fixed-asset-export .shop-nir-registry-download-body { padding:16px; gap:15px; }
+  .shop-fixed-asset-export .shop-nir-registry-content-options { grid-template-columns:1fr; gap:9px; }
+  .shop-fixed-asset-export .shop-nir-registry-content-options button { min-height:76px; padding:12px; gap:10px; }
+  .shop-fixed-asset-export > footer { padding:14px 16px; }
+  .shop-fixed-asset-export > footer button { padding:0 12px; }
+}
 
 .shop-fixed-asset-lines article > header { display:flex; align-items:center; min-height:52px; gap:12px; }
 .shop-fixed-asset-lines article > header > button { display:grid; place-items:center; flex:0 0 32px; width:32px; height:32px; min-height:32px; padding:0; margin:0 0 0 auto; line-height:1; align-self:center; border-radius:9px; }

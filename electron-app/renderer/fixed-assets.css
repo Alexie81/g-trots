@@ -99,10 +99,11 @@
 .shop-fixed-assets-search-field:focus-within,.shop-fixed-assets-filter-field:focus-within { border-color:#d89b65; box-shadow:0 0 0 3px #ffa45c12; }
 .shop-fixed-assets-search-field input::-webkit-search-cancel-button { cursor:pointer; filter:grayscale(1) brightness(2); }
 .shop-fixed-assets-filter-field { position:relative; display:grid; grid-template-columns:25px minmax(0,1fr) 15px; grid-template-rows:15px 21px; column-gap:10px; align-content:center; min-width:0; margin:0; height:54px; padding:7px 12px; border:1px solid #514453; border-radius:12px; background:#29232d; }
-.shop-fixed-assets-filter-symbol { grid-column:1; grid-row:1/3; display:grid; place-items:center; color:#c4aaca; }
+.shop-fixed-assets-filter-symbol { grid-column:1; grid-row:1/3; display:grid; place-items:center; color:#c4aaca; pointer-events:none; }
 .shop-fixed-assets-filter-symbol svg { width:20px; height:20px; }
 .shop-fixed-assets-filter-caption { grid-column:2; grid-row:1; font-size:9px; color:#ac96b4; line-height:15px; pointer-events:none; }
-.shop-fixed-assets-filter-field select#shop-fixed-assets-type { grid-column:2; grid-row:2; min-width:0; width:100%; height:21px; border:0; outline:0; appearance:none; color-scheme:dark; padding:0; margin:0; border-radius:0; background:transparent; color:#f0e3f5; font:inherit; font-size:12px; line-height:21px; cursor:pointer; }
+/* Keep the native select over the whole control, including its icon and caption. */
+.shop-fixed-assets-filter-field select#shop-fixed-assets-type { position:absolute; inset:0; min-width:0; width:100%; height:100%; border:0; outline:0; appearance:none; color-scheme:dark; padding:18px 32px 0 47px; margin:0; border-radius:12px; background:transparent; color:#f0e3f5; font:inherit; font-size:12px; line-height:21px; cursor:pointer; }
 .shop-fixed-assets-filter-field select option { color:#f0e3f5; background:#29232d; }
 .shop-fixed-assets-filter-chevron { grid-column:3; grid-row:1/3; align-self:center; width:15px; height:15px; color:#bda6c5; pointer-events:none; }
 .shop-fixed-assets-controls > #shop-fixed-assets-export { display:flex; align-items:center; gap:11px; min-width:0; height:54px; padding:0 14px 0 11px; border:1px solid #9b673b; border-radius:12px; background:linear-gradient(110deg,#56381f,#35271f); color:#ffc28d; cursor:pointer; box-shadow:0 1px 0 #ffd3aa0d inset; transition:background .15s,border-color .15s; }

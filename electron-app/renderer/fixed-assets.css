@@ -5,7 +5,7 @@
   --mf-muted: #aca5af;
 }
 #tab-shop-fixed-assets svg,.shop-fixed-asset-overlay svg,.shop-fixed-asset-export svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-/* A single overview surface: introduction above, three quiet metric panels below. */
+/* A single overview surface: introduction above, financial summary below. */
 #tab-shop-fixed-assets .shop-fixed-assets-breadcrumb { display:flex; align-items:center; gap:12px; margin:0 0 22px; color:#716975; font-size:11px; }
 #tab-shop-fixed-assets .shop-fixed-assets-breadcrumb button { display:flex; align-items:center; gap:7px; padding:0; background:none; border:0; color:#bcb1c0; font:inherit; cursor:pointer; }
 #tab-shop-fixed-assets .shop-fixed-assets-breadcrumb button:hover { color:#ffc28b; }
@@ -34,31 +34,28 @@
 #tab-shop-fixed-assets .shop-fixed-assets-add-symbol { display:grid; place-items:center; width:29px; height:29px; background:#ffffff16; border:1px solid #ffffff25; border-radius:8px; }
 #tab-shop-fixed-assets .shop-fixed-assets-add-symbol svg { width:16px; height:16px; stroke-width:2; }
 #tab-shop-fixed-assets .shop-fixed-assets-add-arrow { width:16px; height:16px; margin-left:6px; opacity:.8; }
-.shop-fixed-assets-summary { display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:0; padding:20px 8px; margin:0 0 26px; border:1px solid #48404a; border-top:0; border-radius:0 0 22px 22px; background:linear-gradient(110deg,#30251f50,transparent 45%),#201d22; box-shadow:0 18px 35px -28px #000b; }
-.shop-fixed-assets-summary article { position:relative; display:flex; flex-direction:column; min-width:0; min-height:135px; padding:0 26px; margin:0; border:0; border-right:1px solid #423641; border-radius:0; background:none; box-shadow:none; overflow:visible; }
-.shop-fixed-assets-summary article:last-child { border-right:0; }
-.shop-fixed-assets-summary article::before,.shop-fixed-assets-summary article::after { display:none; }
-.shop-fixed-assets-summary span { margin-top:0; }
-.shop-fixed-assets-metric-label { display:flex; justify-content:space-between; align-items:center; gap:12px; }
-.shop-fixed-assets-metric-label > span { color:#d7cbd5; font-size:13px; font-weight:550; letter-spacing:.01em; }
-.shop-fixed-assets-metric-label i { display:grid; place-items:center; width:30px; height:30px; border:1px solid #524552; border-radius:9px; color:#b9a9c1; background:#ffffff03; }
-.shop-fixed-assets-value .shop-fixed-assets-metric-label i { color:#e7af79; border-color:#85624050; background:#ffa35109; }
-.shop-fixed-assets-metric-label svg { width:16px; height:16px; }
-.shop-fixed-assets-metric-value { display:flex; align-items:baseline; gap:10px; margin:6px 0 4px; min-width:0; flex-wrap:wrap; }
-.shop-fixed-assets-metric-value > strong { display:block; margin:0; padding:0; color:#f8edf7; font-size:34px; line-height:1.15; font-weight:600; letter-spacing:-.045em; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
-.shop-fixed-assets-value .shop-fixed-assets-metric-value > strong { color:#ffca9b; font-size:38px; }
-.shop-fixed-assets-metric-value > span { color:#aa99ac; font-size:12px; font-weight:450; }
-.shop-fixed-assets-summary article > p { margin:0 0 12px; color:#aa9cad; font-size:12px; line-height:1.5; }
-.shop-fixed-assets-value-breakdown { display:flex; gap:28px; margin-top:auto; padding-top:8px; }
-.shop-fixed-assets-value-breakdown > span { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
-.shop-fixed-assets-value-breakdown small { padding:0; color:#a699a8; font-size:10px; letter-spacing:0; font-weight:400; }
-.shop-fixed-assets-value-breakdown b { font-size:11px; color:#d1b7a2; font-weight:550; font-variant-numeric:tabular-nums; }
-.shop-fixed-assets-metric-foot { display:flex; align-items:center; gap:7px; min-height:25px; padding-top:8px; margin-top:auto; }
-.shop-fixed-assets-metric-foot > svg { width:13px; height:13px; color:#a994b4; flex-shrink:0; }
-.shop-fixed-assets-metric-foot > span { font-size:11px; color:#b7a8bd; line-height:1.5; }
-.shop-fixed-assets-status-dot { width:5px; height:5px; flex:0 0 5px; border-radius:50%; background:#c89a70; }
-.no-disposals .shop-fixed-assets-status-dot { background:#71aa94; }
-.no-disposals > span:last-child { color:#9fbbaf; }
+/* Two-level summary: a financial block and a compact register ledger. */
+.shop-fixed-assets-overview { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr); gap:18px; padding:22px 32px 26px; margin:0 0 26px; border:1px solid #48404a; border-top:0; border-radius:0 0 22px 22px; background:#211e23; box-shadow:0 18px 35px -28px #000b; }
+.shop-fixed-assets-overview-value { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(150px,1fr); align-items:center; gap:24px; min-width:0; padding:21px 24px; border:1px solid #75543d66; border-radius:15px; background:linear-gradient(115deg,#4631238c,#2b2528 90%); box-shadow:0 1px 0 #ffca9810 inset; }
+.shop-fixed-assets-overview-total { min-width:0; }
+.shop-fixed-assets-overview-label { display:flex; align-items:center; gap:8px; color:#d7b89e; font-size:12px; font-weight:500; }
+.shop-fixed-assets-overview-label svg { width:16px; height:16px; color:#e8aa72; flex:0 0 16px; }
+.shop-fixed-assets-overview-total p { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:12px 0 0; }
+.shop-fixed-assets-overview-total strong { min-width:0; color:#ffe1c5; font-size:clamp(30px,2.55vw,42px); font-weight:600; line-height:1.05; letter-spacing:-.045em; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.shop-fixed-assets-overview-total p > span { display:grid; gap:4px; color:#f2d0b2; font-size:13px; line-height:1.15; }
+.shop-fixed-assets-overview-total small { color:#b59b88; font-size:9px; font-weight:400; }
+.shop-fixed-assets-overview-breakdown { display:grid; gap:17px; align-content:center; min-width:0; margin:0; padding:4px 0 4px 24px; border-left:1px solid #ad82542b; }
+.shop-fixed-assets-overview-breakdown > div { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:5px 14px; }
+.shop-fixed-assets-overview-breakdown dt { color:#bca998; font-size:11px; }
+.shop-fixed-assets-overview-breakdown dd { margin:0; color:#e9d7c9; font-size:13px; font-weight:550; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.shop-fixed-assets-overview-counts { display:grid; grid-template-rows:1fr 1fr; min-width:0; margin:0; padding:0 22px; border:1px solid #453b49; border-radius:15px; background:linear-gradient(110deg,#2c2630,#252128); }
+.shop-fixed-assets-overview-counts > div { display:flex; align-items:center; justify-content:space-between; gap:24px; min-width:0; min-height:55px; padding:11px 0; }
+.shop-fixed-assets-overview-counts > div + div { border-top:1px solid #4b3e514f; }
+.shop-fixed-assets-overview-counts dt { color:#d8ccde; font-size:12px; font-weight:500; line-height:1.4; }
+.shop-fixed-assets-overview-counts dt small { display:block; margin-top:3px; color:#a192aa; font-size:10px; font-weight:400; }
+.shop-fixed-assets-overview-counts dd { flex-shrink:0; min-width:40px; margin:0; color:#ece0f1; font-size:28px; font-weight:550; line-height:1; text-align:right; letter-spacing:-.035em; font-variant-numeric:tabular-nums; }
+.shop-fixed-assets-overview-counts dd.no-disposals { color:#a99eb0; }
+.shop-fixed-assets-overview-counts dd.has-disposals { color:#edbd91; }
 @media(max-width:1200px) {
   #tab-shop-fixed-assets .shop-commerce-head[data-commerce-kind="fixed-assets"] { padding:24px; }
   #tab-shop-fixed-assets .shop-fixed-assets-heading { gap:14px; }
@@ -66,28 +63,30 @@
   #tab-shop-fixed-assets .shop-commerce-title h1 { font-size:26px; }
   #tab-shop-fixed-assets .shop-commerce-add { font-size:11px; gap:8px; }
   #tab-shop-fixed-assets .shop-fixed-assets-add-arrow { display:none; }
-  .shop-fixed-assets-summary article { padding:0 20px; }
-  .shop-fixed-assets-value-breakdown { gap:12px; }
-  .shop-fixed-assets-value-breakdown > span { display:grid; gap:4px; }
+  .shop-fixed-assets-overview { grid-template-columns:minmax(0,1.5fr) minmax(225px,1fr); gap:14px; padding:20px 24px 24px; }
+  .shop-fixed-assets-overview-value { gap:18px; padding:20px; }
+  .shop-fixed-assets-overview-breakdown { padding-left:18px; }
+}
+@media(max-width:1000px) {
+  .shop-fixed-assets-overview { grid-template-columns:minmax(0,1fr); }
+  .shop-fixed-assets-overview-counts { grid-template-columns:1fr 1fr; grid-template-rows:auto; gap:24px; }
+  .shop-fixed-assets-overview-counts > div + div { border-top:0; border-left:1px solid #4b3e514f; padding-left:24px; }
 }
 @media(max-width:950px) {
   #tab-shop-fixed-assets .shop-commerce-head[data-commerce-kind="fixed-assets"] { flex-wrap:wrap; gap:20px; }
   #tab-shop-fixed-assets .shop-commerce-head-actions { margin-left:auto; }
-  .shop-fixed-assets-summary { grid-template-columns:1fr 1fr; padding:20px 6px; row-gap:22px; }
-  .shop-fixed-assets-summary article { min-height:144px; }
-  .shop-fixed-assets-summary article:first-child { grid-column:1 / -1; border-right:0; border-bottom:1px solid #423641; padding-bottom:20px; }
-  .shop-fixed-assets-value-breakdown > span { display:flex; gap:8px; }
 }
 @media(max-width:580px) {
   #tab-shop-fixed-assets .shop-commerce-head[data-commerce-kind="fixed-assets"] { padding:20px; }
   #tab-shop-fixed-assets .shop-fixed-assets-heading-icon { display:none; }
   #tab-shop-fixed-assets .shop-commerce-head-actions { width:100%; }
   #tab-shop-fixed-assets .shop-commerce-add { flex:1; }
-  .shop-fixed-assets-summary article { padding-left:14px; padding-right:14px; }
-  .shop-fixed-assets-metric-label { gap:6px; }
-  .shop-fixed-assets-metric-label > span { font-size:11px; }
-  .shop-fixed-assets-metric-label i { display:none; }
-  .shop-fixed-assets-metric-value > strong { font-size:30px; }
+  .shop-fixed-assets-overview { padding:16px 20px 20px; }
+  .shop-fixed-assets-overview-value { grid-template-columns:minmax(0,1fr); gap:18px; }
+  .shop-fixed-assets-overview-breakdown { grid-template-columns:1fr 1fr; padding:16px 0 0; border-left:0; border-top:1px solid #ad82542b; gap:16px; }
+  .shop-fixed-assets-overview-breakdown > div { display:grid; gap:6px; }
+  .shop-fixed-assets-overview-counts { display:block; padding:0 18px; }
+  .shop-fixed-assets-overview-counts > div + div { border-left:0; border-top:1px solid #4b3e514f; padding-left:0; }
 }
 /* Search and export share a compact control surface with a pagination footer. */
 .shop-fixed-assets-toolbar { display:block; padding:14px 16px 0; margin:0 0 22px; border:1px solid #493e4a; border-radius:17px; background:linear-gradient(115deg,#29232b,#211e25); box-shadow:0 1px 0 #ffffff04 inset; }

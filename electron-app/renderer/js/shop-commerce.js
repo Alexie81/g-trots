@@ -4750,7 +4750,22 @@
     const disposedCount = items.filter(item=>Number(item.disposal_count || 0)>0).length;
     const count = Number(registry.total || 0);
     const value = new Intl.NumberFormat('ro-RO',{minimumFractionDigits:2,maximumFractionDigits:2}).format(sum('total_value'));
-    return `<section class="shop-fixed-assets-summary" aria-label="Sumarul mijloacelor fixe"><article class="shop-fixed-assets-value"><div class="shop-fixed-assets-metric-label"><span>Valoare înregistrată</span><i aria-hidden="true">${fixedAssetIcon('chart')}</i></div><div class="shop-fixed-assets-metric-value"><strong>${value}</strong><span>lei</span></div><p>Total cu TVA · pagina curentă</p><div class="shop-fixed-assets-value-breakdown"><span><small>Fără TVA</small><b>${money(sum('net_value'))}</b></span><span><small>TVA</small><b>${money(sum('vat_value'))}</b></span></div></article><article class="shop-fixed-assets-count"><div class="shop-fixed-assets-metric-label"><span>Mijloace fixe</span><i aria-hidden="true">${fixedAssetIcon('box')}</i></div><div class="shop-fixed-assets-metric-value"><strong>${quantity(count)}</strong><span>${count===1 ? 'poziție' : 'poziții'}</span></div><p>În registrul ${state.fixedAssetQuery || state.fixedAssetType ? 'filtrat' : 'complet'}</p><div class="shop-fixed-assets-metric-foot">${fixedAssetIcon('document')}<span>Facturi · Bonuri · Procese-verbale</span></div></article><article class="shop-fixed-assets-disposals"><div class="shop-fixed-assets-metric-label"><span>Poziții cu casări</span><i aria-hidden="true">${fixedAssetIcon('archive')}</i></div><div class="shop-fixed-assets-metric-value"><strong>${quantity(disposedCount)}</strong><span>din ${items.length} afișate</span></div><p>Cu cel puțin o casare înregistrată</p><div class="shop-fixed-assets-metric-foot ${disposedCount ? 'with-disposals' : 'no-disposals'}"><span class="shop-fixed-assets-status-dot" aria-hidden="true"></span><span>${disposedCount ? 'Istoric disponibil în fișa fiecărui bun' : 'Fără casări pe această pagină'}</span></div></article></section>`;
+    return `<section class="shop-fixed-assets-overview" aria-label="Sumarul mijloacelor fixe">
+      <div class="shop-fixed-assets-overview-value">
+        <div class="shop-fixed-assets-overview-total">
+          <span class="shop-fixed-assets-overview-label">${fixedAssetIcon('chart')}Valoarea paginii</span>
+          <p><strong>${value}</strong><span>lei<small>TVA inclus</small></span></p>
+        </div>
+        <dl class="shop-fixed-assets-overview-breakdown">
+          <div><dt>Fără TVA</dt><dd>${money(sum('net_value'))}</dd></div>
+          <div><dt>TVA</dt><dd>${money(sum('vat_value'))}</dd></div>
+        </dl>
+      </div>
+      <dl class="shop-fixed-assets-overview-counts">
+        <div><dt>${state.fixedAssetQuery || state.fixedAssetType ? 'Poziții găsite' : 'Poziții în registru'}</dt><dd>${quantity(count)}</dd></div>
+        <div><dt>Poziții cu casări<small>Pe pagina curentă</small></dt><dd class="${disposedCount ? 'has-disposals' : 'no-disposals'}">${quantity(disposedCount)}</dd></div>
+      </dl>
+    </section>`;
   }
 
   function fixedAssetToolbar(registry, topPagination) {

@@ -49,6 +49,7 @@ def main() -> None:
     temporary: dict[str, str] = {}
     latest_backup = f"latest.yml.bak-codex-desktop-{timestamp}"
     latest_was_backed_up = False
+    latest_was_activated = False
     try:
         for name, path in files.items():
             remote_temp = f"{name}.codex-upload-{timestamp}.tmp"
@@ -77,6 +78,7 @@ def main() -> None:
             ftp.rename(temporary[name], name)
             print(f"Publicat: {name}", flush=True)
         ftp.rename(temporary["latest.yml"], "latest.yml")
+        latest_was_activated = True
         print("Publicat: latest.yml", flush=True)
 
         check = BytesIO()
@@ -84,10 +86,11 @@ def main() -> None:
         if check.getvalue() != files["latest.yml"].read_bytes():
             raise RuntimeError("latest.yml publicat nu corespunde build-ului local.")
     except Exception:
-        try:
-            ftp.delete("latest.yml")
-        except Exception:
-            pass
+        if latest_was_activated:
+            try:
+                ftp.delete("latest.yml")
+            except Exception:
+                pass
         if latest_was_backed_up:
             try:
                 ftp.rename(latest_backup, "latest.yml")

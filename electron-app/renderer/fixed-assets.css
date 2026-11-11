@@ -89,16 +89,54 @@
   .shop-fixed-assets-metric-label i { display:none; }
   .shop-fixed-assets-metric-value > strong { font-size:30px; }
 }
-.shop-fixed-assets-toolbar { display: grid; grid-template-columns: minmax(220px,1fr) 180px auto; align-items: center; gap: 10px; margin-bottom: 20px; }
-.shop-fixed-assets-toolbar > .shop-order-table-top-pagination { grid-column: 1 / -1; justify-self: end; }
-.shop-fixed-assets-toolbar > select { width: 100%; }
-.shop-fixed-assets-toolbar > label { max-width: none; flex: 1 1 250px; min-width: 200px; border-radius: 12px; background: #211f24; }
-.shop-fixed-assets-toolbar > label > span { font-size: 24px; }
-.shop-fixed-assets-toolbar input,.shop-fixed-assets-toolbar > select { height: 46px; font-size: 13px; }
-.shop-fixed-assets-toolbar > select { border-radius: 12px; color-scheme: dark; }
-.shop-fixed-assets-toolbar > button#shop-fixed-assets-export { flex-basis: auto; border-radius: 12px; font-size: 12px; padding: 0 18px; background: #f9731618; }
-.shop-fixed-assets-toolbar > button > span { font-size: 19px; margin-right: 7px; }
-.shop-fixed-assets-toolbar > label:focus-within { border-color: #f99b52; box-shadow: 0 0 0 3px #f973161a; }
+/* Search and export share a compact control surface with a pagination footer. */
+.shop-fixed-assets-toolbar { display:block; padding:14px 16px 0; margin:0 0 22px; border:1px solid #493e4a; border-radius:17px; background:linear-gradient(115deg,#29232b,#211e25); box-shadow:0 1px 0 #ffffff04 inset; }
+.shop-fixed-assets-controls { display:grid; grid-template-columns:minmax(0,1fr) 226px 237px; gap:12px; align-items:stretch; }
+.shop-fixed-assets-search-field { display:flex; align-items:center; gap:12px; min-width:0; margin:0; padding:0 16px; height:54px; border:1px solid #4b414f; border-radius:12px; background:#19171d; transition:border-color .15s,box-shadow .15s; }
+.shop-fixed-assets-search-field > svg { flex:0 0 19px; width:19px; height:19px; color:#cbb5d0; }
+.shop-fixed-assets-search-field input { min-width:0; width:100%; height:52px; border:0; padding:0; outline:0; background:transparent; color:#f6edf9; font:inherit; font-size:13px; }
+.shop-fixed-assets-search-field input::placeholder { color:#a69aab; opacity:1; }
+.shop-fixed-assets-search-field:focus-within,.shop-fixed-assets-filter-field:focus-within { border-color:#d89b65; box-shadow:0 0 0 3px #ffa45c12; }
+.shop-fixed-assets-search-field input::-webkit-search-cancel-button { cursor:pointer; filter:grayscale(1) brightness(2); }
+.shop-fixed-assets-filter-field { position:relative; display:grid; grid-template-columns:25px minmax(0,1fr) 15px; grid-template-rows:15px 21px; column-gap:10px; align-content:center; min-width:0; margin:0; height:54px; padding:7px 12px; border:1px solid #514453; border-radius:12px; background:#29232d; }
+.shop-fixed-assets-filter-symbol { grid-column:1; grid-row:1/3; display:grid; place-items:center; color:#c4aaca; }
+.shop-fixed-assets-filter-symbol svg { width:20px; height:20px; }
+.shop-fixed-assets-filter-caption { grid-column:2; grid-row:1; font-size:9px; color:#ac96b4; line-height:15px; pointer-events:none; }
+.shop-fixed-assets-filter-field select#shop-fixed-assets-type { grid-column:2; grid-row:2; min-width:0; width:100%; height:21px; border:0; outline:0; appearance:none; color-scheme:dark; padding:0; margin:0; border-radius:0; background:transparent; color:#f0e3f5; font:inherit; font-size:12px; line-height:21px; cursor:pointer; }
+.shop-fixed-assets-filter-field select option { color:#f0e3f5; background:#29232d; }
+.shop-fixed-assets-filter-chevron { grid-column:3; grid-row:1/3; align-self:center; width:15px; height:15px; color:#bda6c5; pointer-events:none; }
+.shop-fixed-assets-controls > #shop-fixed-assets-export { display:flex; align-items:center; gap:11px; min-width:0; height:54px; padding:0 14px 0 11px; border:1px solid #9b673b; border-radius:12px; background:linear-gradient(110deg,#56381f,#35271f); color:#ffc28d; cursor:pointer; box-shadow:0 1px 0 #ffd3aa0d inset; transition:background .15s,border-color .15s; }
+.shop-fixed-assets-controls > #shop-fixed-assets-export:hover { border-color:#d69b61; background:linear-gradient(110deg,#684426,#49301e); }
+.shop-fixed-assets-export-symbol { display:grid; place-items:center; flex:0 0 32px; width:32px; height:32px; border:1px solid #c28a4f40; border-radius:9px; background:#ffba7710; }
+.shop-fixed-assets-export-symbol svg { width:18px; height:18px; }
+.shop-fixed-assets-export-copy { display:grid; gap:4px; text-align:left; flex:1; }
+.shop-fixed-assets-export-copy strong { font-size:12px; font-weight:650; color:#ffd0a3; white-space:nowrap; }
+.shop-fixed-assets-export-copy small { font-size:9px; font-weight:400; color:#c0a085; white-space:nowrap; }
+.shop-fixed-assets-controls > #shop-fixed-assets-export > svg { width:15px; height:15px; flex:0 0 15px; color:#d2a37c; }
+.shop-fixed-assets-toolbar-footer { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:55px; margin-top:12px; padding:10px 0; border-top:1px solid #47394c; }
+.shop-fixed-assets-result-count { display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; color:#afa0b9; font-size:11px; }
+.shop-fixed-assets-result-count > svg { width:15px; height:15px; color:#a490b0; }
+.shop-fixed-assets-result-count strong { color:#e0cee8; font-weight:550; }
+.shop-fixed-assets-result-divider { width:1px; height:12px; margin:0 4px; background:#5c4b65; }
+.shop-fixed-assets-toolbar .shop-order-table-top-pagination { flex-shrink:0; gap:6px; margin:0; }
+.shop-fixed-assets-toolbar .shop-order-table-top-pagination > label { gap:9px; margin-right:5px; font-size:11px; font-weight:500; color:#b7a8c0; }
+.shop-fixed-assets-toolbar .shop-order-table-top-pagination input { width:38px; height:32px; padding:0 3px; border:1px solid #65546e; border-radius:8px; background:#312936; color:#f7eafa; font-size:12px; font-weight:600; }
+.shop-fixed-assets-toolbar .shop-order-table-top-pagination input:focus { outline:0; border-color:#d3a06d; box-shadow:0 0 0 2px #ffb46a20; }
+.shop-fixed-assets-toolbar .shop-order-table-top-pagination label em { font-size:11px; color:#b9a9c3; }
+.shop-fixed-assets-toolbar .shop-order-table-top-pagination button { width:32px; height:32px; border:1px solid #65546e; border-radius:9px; background:#312936; color:#e0cae9; }
+.shop-fixed-assets-toolbar .shop-order-table-top-pagination button:disabled { opacity:1; color:#75677d; border-color:#44394b; background:#28222e; cursor:default; }
+.shop-fixed-assets-toolbar .shop-order-table-top-pagination button:hover:not(:disabled) { background:#523722; border-color:#b9824d; color:#ffca98; transform:none; }
+@media(max-width:1150px) {
+  .shop-fixed-assets-controls { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  .shop-fixed-assets-search-field { grid-column:1 / -1; }
+}
+@media(max-width:620px) {
+  .shop-fixed-assets-toolbar { padding:12px 12px 0; }
+  .shop-fixed-assets-controls { grid-template-columns:minmax(0,1fr); gap:9px; }
+  .shop-fixed-assets-toolbar-footer { flex-wrap:wrap; gap:12px; }
+  .shop-fixed-assets-toolbar .shop-order-table-top-pagination { margin-left:auto; }
+  .shop-fixed-assets-search-field input { font-size:12px; }
+}
 .shop-fixed-assets-register-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 24px; border: 1px solid #3e3942; border-bottom: 0; border-radius: 18px 18px 0 0; background: #26232a; }
 .shop-fixed-assets-register-title small { font-size: 10px; color: #baabbf; font-weight: 700; letter-spacing: .13em; }
 .shop-fixed-assets-register-title h2 { font-size: 19px; color: #faf5fc; margin: 7px 0 0; }
@@ -272,8 +310,6 @@
   .shop-fixed-asset-create-footer > p { max-width: 260px; line-height: 1.5; }
 }
 @media(max-width:800px) {
-  .shop-fixed-assets-toolbar { grid-template-columns: 1fr 1fr; }
-  .shop-fixed-assets-toolbar > label { grid-column: 1 / -1; }
   .shop-fixed-asset-create > .shop-fixed-asset-create-body { grid-template-columns: 1fr; }
   .shop-fixed-asset-create .shop-fixed-asset-document-fields { grid-template-columns: 1fr 1fr; }
   .shop-fixed-asset-document-fields > label:last-child { grid-column: 1 / -1; }

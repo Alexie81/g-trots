@@ -19,6 +19,9 @@ $continued = array_merge($base, ['continuation' => true, 'disposal_date' => '202
 $rows = [$base, $continued];
 $totals = GtrotsFixedAssetExport::totals($rows);
 checkAssetExport($totals['count'] === 1 && $totals['total'] === 2421.21, 'Casările multiple nu trebuie să dubleze valorile bunului.');
+$rows[] = array_merge($base, ['product_name' => 'Bun fără casări', 'quantity' => 3.25, 'unit_price' => 100,
+    'net_value' => 325, 'vat_value' => 68.25, 'total_value' => 393.25,
+    'disposal_date' => null, 'disposed_quantity' => null, 'disposal_reason' => null]);
 $range = ['from' => '2026-11-01', 'to' => '2026-11-30'];
 $xlsx = GtrotsFixedAssetExport::xlsx($rows, $range, $company);
 $tmp = tempnam(sys_get_temp_dir(), 'mf-xlsx-');
@@ -33,17 +36,32 @@ $sheet = simplexml_load_string($zip->getFromName('xl/worksheets/sheet1.xml'));
 $sheet->registerXPathNamespace('s', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main');
 checkAssetExport((float)$sheet->xpath('//s:c[@r="K10"]/s:v')[0] === 2421.21, 'Valoarea inițială lipsește.');
 checkAssetExport(count($sheet->xpath('//s:c[@r="K11"]/s:v')) === 0, 'Rândul unei casări suplimentare trebuie să lase totalul gol.');
-checkAssetExport((string)$sheet->xpath('//s:c[@r="K12"]/s:f')[0] === 'SUM(K10:K11)', 'Formula totalului este incorectă.');
+checkAssetExport((string)$sheet->xpath('//s:c[@r="K13"]/s:f')[0] === 'SUM(K10:K12)', 'Formula totalului este incorectă.');
 checkAssetExport((float)$sheet->xpath('//s:c[@r="M11"]/s:v')[0] === -1.0, 'Cantitatea casată trebuie să rămână numerică și negativă.');
+checkAssetExport((string)$sheet->xpath('//s:c[@r="N9"]/s:is/s:t')[0] === 'Cantitate actuală', 'Cantitatea actuală trebuie să fie imediat după cantitatea casată.');
+checkAssetExport((float)$sheet->xpath('//s:c[@r="N10"]/s:v')[0] === 1.0, 'Prima casare trebuie să arate cantitatea rămasă atunci, nu soldul final.');
+checkAssetExport((float)$sheet->xpath('//s:c[@r="N11"]/s:v')[0] === 0.0, 'A doua casare trebuie să scadă din cantitatea rămasă anterior.');
+checkAssetExport((float)$sheet->xpath('//s:c[@r="N12"]/s:v')[0] === 3.25, 'Fără casări, cantitatea actuală trebuie să fie cantitatea inițială, inclusiv fracții.');
+checkAssetExport((string)$sheet->xpath('//s:c[@r="O9"]/s:is/s:t')[0] === 'Motivul casării', 'Motivul casării trebuie păstrat după noua coloană.');
 checkAssetExport((string)$sheet->xpath('//s:pane')[0]['ySplit'] === '9', 'Antetul Excel nu este fixat.');
-checkAssetExport((string)$sheet->xpath('//s:autoFilter')[0]['ref'] === 'A9:N11', 'Filtrele Excel nu acoperă datele.');
+checkAssetExport((string)$sheet->xpath('//s:autoFilter')[0]['ref'] === 'A9:O12', 'Filtrele Excel nu acoperă toate cele 15 coloane.');
 checkAssetExport(str_contains($zip->getFromName('xl/workbook.xml'), '_xlnm.Print_Titles'), 'Antetul nu se repetă la tipărire.');
+checkAssetExport(str_contains($zip->getFromName('xl/workbook.xml'), '$A$1:$O$'), 'Zona de tipărire nu include ultima coloană.');
 $zip->close();
 unlink($tmp);
 
 $html = GtrotsFixedAssetExport::html($rows, $range, $company);
 checkAssetExport(str_contains($html, 'Calculator diagnoză &amp; echipamente atelier'), 'Textele HTML trebuie escapate.');
 checkAssetExport(str_contains($html, '01.12.2026'), 'Istoricul complet trebuie să includă și casarea ulterioară.');
+$dom = new DOMDocument();
+@$dom->loadHTML($html);
+$xpath = new DOMXPath($dom);
+checkAssetExport($xpath->query('//table[@class="items"]/thead/tr/th')->length === 15, 'PDF-ul trebuie să aibă 15 coloane.');
+checkAssetExport($xpath->query('//table[@class="items"]/thead/tr/th[14]')->item(0)->textContent === 'Cantitate actuală', 'Ordinea coloanelor PDF nu corespunde Excel-ului.');
+foreach (['1', '0', '3,25'] as $index => $expected) {
+    $actual = $xpath->query('//table[@class="items"]/tbody/tr[' . ($index + 1) . ']/td[14]')->item(0)->textContent;
+    checkAssetExport($actual === $expected, 'PDF-ul trebuie să păstreze cantitatea rămasă după fiecare casare și pentru bunurile fără casări.');
+}
 $pdf = GtrotsFixedAssetExport::pdf($rows, $range, $company);
 checkAssetExport(str_starts_with($pdf, '%PDF-'), 'PDF invalid.');
 

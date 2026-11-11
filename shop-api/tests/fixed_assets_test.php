@@ -91,11 +91,11 @@ expectFixedAsset(count($rows) === 3, 'Se păstrează toate casările, inclusiv c
 $totals = GtrotsFixedAssetExport::totals($rows);
 expectFixedAsset($totals['count'] === 2 && $totals['total'] === 5355.0, 'Valorile bunurilor nu se dublează pentru casări multiple.');
 $all = GtrotsFixedAssets::export($db, [], 'xlsx');
-expectFixedAsset(str_contains($all['file_name'], 'registru-complet'), 'Exportul trebuie să permită toată perioada.');
+expectFixedAsset(str_contains($all['file_name'], 'registru-complet'), 'Exportul trebuie să includă întregul registru.');
 foreach ([['from' => '2026-11-01'], ['from' => '2026-11-30', 'to' => '2026-11-01'], ['from' => '2026-02-30', 'to' => '2026-03-01']] as $invalid) {
-    $rejected = false;
-    try { GtrotsFixedAssets::export($db, $invalid, 'xlsx'); } catch (InvalidArgumentException $error) { $rejected = true; }
-    expectFixedAsset($rejected, 'Perioada incompletă sau invalidă trebuie respinsă.');
+    $complete = GtrotsFixedAssets::export($db, $invalid, 'xlsx');
+    expectFixedAsset($complete['file_name'] === $all['file_name'], 'Parametrii vechi de perioadă nu trebuie să limiteze exportul complet.');
+    expectFixedAsset(str_contains(base64_decode($complete['content_base64'], true), 'A doua casare'), 'Exportul complet trebuie să păstreze tot istoricul casărilor.');
 }
 
 $storageName = (string)$document['storage_name'];

@@ -586,7 +586,7 @@ final class GtrotsFixedAssets
         if ($matches === []) return [];
         $params = [];
         $where = self::filters($filters, $params);
-        $stmt = $db->prepare('SELECT a.id AS asset_id, d.document_date, d.document_type, d.series, d.document_number, a.product_name, a.quantity, a.unit_price, a.net_value, a.vat_rate, a.vat_value, a.total_value,
+        $stmt = $db->prepare('SELECT a.id AS asset_id, d.id AS document_id, d.document_date, d.document_type, d.series, d.document_number, a.product_name, a.quantity, a.unit_price, a.net_value, a.vat_rate, a.vat_value, a.total_value,
                 x.disposal_date, x.quantity AS disposed_quantity, x.reason AS disposal_reason
             FROM shop_fixed_assets a INNER JOIN shop_fixed_asset_documents d ON d.id = a.document_id
             LEFT JOIN shop_fixed_asset_disposals x ON x.fixed_asset_id = a.id' . $where . ' ORDER BY d.document_date ASC, d.created_at ASC, d.id ASC, a.line_number ASC, a.id ASC, x.disposal_date ASC, x.id ASC');
@@ -615,17 +615,80 @@ final class GtrotsFixedAssets
         return GtrotsFixedAssetExport::pdf($rows, $filters, $company);
     }
 
+    /** A single ZIP path component, safe to extract on Windows as well as Unix. */
+    private static function archiveName(string $value, string $fallback, bool $file = false): string
+    {
+        $name = preg_replace('/[\x00-\x1F\x7F\\\\\/:*?"<>|]+/u', '-', trim($value)) ?? '';
+        $name = preg_replace('/\s+/u', ' ', $name) ?? '';
+        $name = rtrim($name, '. -');
+        $extension = $file ? pathinfo($name, PATHINFO_EXTENSION) : '';
+        $suffix = $extension !== '' ? '.' . mb_strcut($extension, 0, 16, 'UTF-8') : '';
+        $stem = trim($suffix !== '' ? pathinfo($name, PATHINFO_FILENAME) : $name, '. -');
+        if ($stem === '') $stem = $fallback;
+        // Windows treats these names as devices even when they have an extension.
+        if (preg_match('/^(?:CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.|$)/iu', $stem)) $stem = '_' . $stem;
+        $stem = rtrim(mb_strcut($stem, 0, ($file ? 160 : 120) - strlen($suffix), 'UTF-8'), '. ');
+        return ($stem !== '' ? $stem : $fallback) . $suffix;
+    }
+
+    private static function uniqueArchiveName(string $name, array &$used, bool $file = false): string
+    {
+        $extension = $file ? pathinfo($name, PATHINFO_EXTENSION) : '';
+        $suffix = $extension !== '' ? '.' . $extension : '';
+        $stem = $suffix !== '' ? pathinfo($name, PATHINFO_FILENAME) : $name;
+        $candidate = $name;
+        $number = 2;
+        while (isset($used[mb_strtolower($candidate, 'UTF-8')])) $candidate = $stem . '-' . $number++ . $suffix;
+        $used[mb_strtolower($candidate, 'UTF-8')] = true;
+        return $candidate;
+    }
+
+    private static function zip(PDO $db, array $rows, array $company, string $base): string
+    {
+        if (!class_exists('ZipArchive')) throw new RuntimeException('Arhivarea documentelor nu este disponibilă pe server.');
+        $temporaryPath = tempnam(sys_get_temp_dir(), 'gt_fixed_assets_');
+        if ($temporaryPath === false) throw new RuntimeException('Arhiva temporară nu a putut fi creată.');
+        $zip = new ZipArchive();
+        $opened = false;
+        try {
+            if ($zip->open($temporaryPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) throw new RuntimeException('Arhiva registrului nu a putut fi deschisă.');
+            $opened = true;
+            if (!shopNirZipAddStoredString($zip, $base . '.pdf', self::pdf($rows, [], $company))) throw new RuntimeException('Registrul PDF nu a putut fi adăugat în arhivă.');
+            if (!shopNirZipAddStoredString($zip, $base . '.xlsx', self::xlsx($rows, [], $company))) throw new RuntimeException('Registrul Excel nu a putut fi adăugat în arhivă.');
+            $documents = [];
+            foreach ($rows as $row) $documents[(string)$row['document_id']] ??= $row;
+            $usedFolders = [];
+            foreach ($documents as $documentId => $document) {
+                $type = ['factura' => 'Factura', 'bon' => 'Bon', 'pv' => 'PV'][$document['document_type']] ?? 'Document';
+                $parts = [$type, trim((string)$document['series']), trim((string)$document['document_number'])];
+                $folder = self::uniqueArchiveName(self::archiveName(implode('-', array_filter($parts, static fn(string $part): bool => $part !== '')), 'Document'), $usedFolders);
+                if (!$zip->addEmptyDir($folder)) throw new RuntimeException('Dosarul documentului nu a putut fi creat în arhivă.');
+                $usedFiles = [];
+                foreach (self::files($db, (string)$documentId) as $index => $file) {
+                    $name = self::uniqueArchiveName(self::archiveName((string)$file['original_name'], 'document-' . ($index + 1), true), $usedFiles, true);
+                    $path = self::storedPath((string)$file['storage_name']);
+                    if (!is_readable($path) || !shopNirZipAddStoredFile($zip, $path, $folder . '/' . $name)) throw new RuntimeException('Fișierul „' . $file['original_name'] . '” nu a putut fi adăugat în arhivă.');
+                }
+            }
+            if (!$zip->close()) throw new RuntimeException('Arhiva registrului nu a putut fi finalizată.');
+            $opened = false;
+            $bytes = file_get_contents($temporaryPath);
+            if ($bytes === false) throw new RuntimeException('Arhiva registrului nu a putut fi citită.');
+            return $bytes;
+        } finally {
+            if ($opened) {
+                try { @$zip->close(); } catch (Throwable $ignored) { /* Preserve the original export error and still remove the temporary file. */ }
+            }
+            if (is_file($temporaryPath)) @unlink($temporaryPath);
+        }
+    }
+
     public static function export(PDO $db, array $filters, string $format): array
     {
-        $from = trim((string)($filters['from'] ?? ''));
-        $to = trim((string)($filters['to'] ?? ''));
-        if (($from === '') !== ($to === '')) throw new InvalidArgumentException('Completează ambele date ale perioadei.');
-        if ($from !== '') {
-            self::date($from, 'Data de început');
-            self::date($to, 'Data de sfârșit');
-            if ($from > $to) throw new InvalidArgumentException('Data de început nu poate fi după data de sfârșit.');
-        }
-        $filters = array_merge($filters, ['from' => $from, 'to' => $to]);
+        if (!in_array($format, ['pdf', 'xlsx', 'zip'], true)) throw new InvalidArgumentException('Formatul de export trebuie să fie PDF, Excel sau ZIP.');
+        // Accounting exports always contain the entire registry, including when
+        // an older client still sends dates or the table has active filters.
+        $filters = [];
         $company = [];
         try {
             $company = $db->query('SELECT * FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -636,10 +699,10 @@ final class GtrotsFixedAssets
             if (!$missingTable) throw $error;
         }
         $rows = self::exportRows($db, $filters);
-        if (!$rows) throw new ShopNirHttpException('Nu există mijloace fixe în perioada aleasă.', 404);
-        $base = 'Gestiune-mijloace-fixe-' . ($from === '' ? 'registru-complet' : $from . '-' . $to);
+        if (!$rows) throw new ShopNirHttpException('Nu există mijloace fixe în registru.', 404);
+        $base = 'Gestiune-mijloace-fixe-registru-complet';
         if ($format === 'xlsx') return ['file_name' => $base . '.xlsx', 'mime_type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'content_base64' => base64_encode(self::xlsx($rows, $filters, $company))];
         if ($format === 'pdf') return ['file_name' => $base . '.pdf', 'mime_type' => 'application/pdf', 'content_base64' => base64_encode(self::pdf($rows, $filters, $company))];
-        throw new InvalidArgumentException('Formatul de export trebuie să fie PDF sau Excel.');
+        return ['file_name' => $base . '.zip', 'mime_type' => 'application/zip', 'content_base64' => base64_encode(self::zip($db, $rows, $company, $base))];
     }
 }

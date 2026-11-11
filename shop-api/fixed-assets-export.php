@@ -4,7 +4,7 @@ declare(strict_types=1);
 /** Fixed-assets reports use the same navy/orange identity and OOXML primitives as NIR. */
 final class GtrotsFixedAssetExport
 {
-    private const HEADERS = ['Nr. crt.', 'Data doc.', 'Tip doc.', 'Serie/nr. doc.', 'Denumire produs', 'Cantitate', 'Preț unitar', 'Valoare fără TVA', 'TVA %', 'Valoare TVA', 'Valoare totală', 'Data casării', 'Cantitatea casată', 'Motivul casării'];
+    private const HEADERS = ['Nr. crt.', 'Data doc.', 'Tip doc.', 'Serie/nr. doc.', 'Denumire produs', 'Cantitate', 'Preț unitar', 'Valoare fără TVA', 'TVA %', 'Valoare TVA', 'Valoare totală', 'Data casării', 'Cantitatea casată', 'Cantitate actuală', 'Motivul casării'];
 
     private static function date($value): string
     {
@@ -38,6 +38,19 @@ final class GtrotsFixedAssetExport
         return $result;
     }
 
+    /** Service rows are chronological within each asset; a continuation is its next disposal. */
+    private static function withCurrentQuantities(array $rows): array
+    {
+        $remaining = 0.0;
+        foreach ($rows as &$row) {
+            if (empty($row['continuation'])) $remaining = (float)$row['quantity'];
+            $remaining = round($remaining + (float)($row['disposed_quantity'] ?? 0), 4);
+            $row['current_quantity'] = $remaining;
+        }
+        unset($row);
+        return $rows;
+    }
+
     private static function cells(array $row, int $number): array
     {
         $continued = !empty($row['continuation']);
@@ -47,12 +60,13 @@ final class GtrotsFixedAssetExport
             $continued ? null : $row['quantity'], $continued ? null : $row['unit_price'],
             $continued ? null : $row['net_value'], $continued ? null : $row['vat_rate'],
             $continued ? null : $row['vat_value'], $continued ? null : $row['total_value'],
-            self::date($row['disposal_date'] ?? ''), $row['disposed_quantity'] ?? null, $row['disposal_reason'] ?? ''];
+            self::date($row['disposal_date'] ?? ''), $row['disposed_quantity'] ?? null, $row['current_quantity'], $row['disposal_reason'] ?? ''];
     }
 
     public static function xlsx(array $data, array $filters = [], array $company = []): string
     {
         require_once __DIR__ . '/nir-xlsx.php';
+        $data = self::withCurrentQuantities($data);
         $cell = static fn($value, string $type = 'string', int $style = 10, ?string $formula = null): array => shopNirPremiumXlsxCellSpec($value, $type, $style, $formula);
         $totals = self::totals($data);
         $rows = shopNirPremiumXlsxRow(1, [3 => $cell('G-TROTS', 'string', 30), 6 => $cell('REGISTRUL MIJLOACELOR FIXE', 'string', 1)], 34);
@@ -71,12 +85,12 @@ final class GtrotsFixedAssetExport
             if (empty($entry['continuation'])) $number++;
             $values = self::cells($entry, $number);
             // Excel limits a row to 409 points: continue long notes on another row.
-            foreach (mb_str_split((string)$values[13], 600) ?: [''] as $part => $reason) {
-            $partValues = $part === 0 ? $values : array_fill(0, 14, null);
-            $partValues[13] = $reason;
+            foreach (mb_str_split((string)$values[14], 600) ?: [''] as $part => $reason) {
+            $partValues = $part === 0 ? $values : array_fill(0, 15, null);
+            $partValues[14] = $reason;
             $cells = [];
             foreach ($partValues as $index => $value) {
-                $numeric = in_array($index, [0, 5, 6, 7, 8, 9, 10, 12], true);
+                $numeric = in_array($index, [0, 5, 6, 7, 8, 9, 10, 12, 13], true);
                 $money = in_array($index, [6, 7, 9, 10], true);
                 $style = $money ? 13 : ($index === 12 ? 39 : ($numeric ? 11 : 10));
                 $cells[$index + 1] = $cell($value, $numeric ? 'number' : 'string', $style);
@@ -88,10 +102,11 @@ final class GtrotsFixedAssetExport
         }
         $lastData = $r - 1;
         $rows .= shopNirPremiumXlsxRow($r, [1 => $cell('TOTAL REGISTRU', 'string', 6), 8 => $cell($totals['net'], 'number', 17, 'SUM(H10:H' . $lastData . ')'), 10 => $cell($totals['vat'], 'number', 17, 'SUM(J10:J' . $lastData . ')'), 11 => $cell($totals['total'], 'number', 36, 'SUM(K10:K' . $lastData . ')')], 34);
-        $merges = ['A1:B3', 'C1:E1', 'F1:N1', 'C2:E2', 'F2:N2', 'C3:N3', 'A5:E5', 'F5:H5', 'I5:N5', 'A6:E6', 'F6:H6', 'I6:N6', 'A7:N7', 'A8:D8', 'E8:K8', 'L8:N8', 'A' . $r . ':G' . $r];
+        $merges = ['A1:B3', 'C1:E1', 'F1:O1', 'C2:E2', 'F2:O2', 'C3:O3', 'A5:E5', 'F5:H5', 'I5:O5', 'A6:E6', 'F6:H6', 'I6:O6', 'A7:O7', 'A8:D8', 'E8:K8', 'L8:O8', 'A' . $r . ':G' . $r];
         $r += 2;
-        $rows .= shopNirPremiumXlsxRow($r, [1 => $cell('Selecție după data documentului. Istoricul casărilor include toate casările bunurilor selectate. Generat: ' . date('d.m.Y H:i'), 'string', 32)], 26);
-        $merges[] = 'A' . $r . ':N' . $r;
+        $scope = empty($filters['from']) ? 'Registru complet.' : 'Selecție după data documentului.';
+        $rows .= shopNirPremiumXlsxRow($r, [1 => $cell($scope . ' Cantitatea actuală arată cantitatea rămasă după fiecare casare. Generat: ' . date('d.m.Y H:i'), 'string', 32)], 26);
+        $merges[] = 'A' . $r . ':O' . $r;
         $files = []; $media = []; $mediaIndex = []; $pictures = [];
         $logo = shopNirPremiumXlsxLogoImage(120, 120);
         if ($logo !== null) {
@@ -107,9 +122,9 @@ final class GtrotsFixedAssetExport
         $files['[Content_Types].xml'] = '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' . ($pictures ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : '') . '</Types>';
         $files['_rels/.rels'] = self::relationships(['officeDocument' => 'xl/workbook.xml']);
         $files['xl/_rels/workbook.xml.rels'] = self::relationships(['worksheet' => 'worksheets/sheet1.xml', 'styles' => 'styles.xml']);
-        $files['xl/workbook.xml'] = '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Mijloace fixe" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">\'Mijloace fixe\'!$A$1:$N$' . $r . '</definedName><definedName name="_xlnm.Print_Titles" localSheetId="0">\'Mijloace fixe\'!$8:$9</definedName></definedNames><calcPr calcMode="auto" fullCalcOnLoad="1"/></workbook>';
+        $files['xl/workbook.xml'] = '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Mijloace fixe" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">\'Mijloace fixe\'!$A$1:$O$' . $r . '</definedName><definedName name="_xlnm.Print_Titles" localSheetId="0">\'Mijloace fixe\'!$8:$9</definedName></definedNames><calcPr calcMode="auto" fullCalcOnLoad="1"/></workbook>';
         $files['xl/styles.xml'] = shopNirReferenceXlsxStyles();
-        $files['xl/worksheets/sheet1.xml'] = shopNirPremiumXlsxSheet($rows, [7, 13, 15, 18, 32, 11, 15, 16, 9, 15, 18, 13, 13, 32], $r, 14, ['merges' => $merges, 'drawing' => (bool)$pictures, 'freeze_rows' => 9, 'freeze_columns' => 4, 'auto_filter' => 'A9:N' . $lastData, 'fit_to_height' => 0, 'header' => '', 'footer' => '&LG-Trots | Registrul mijloacelor fixe&RPagina &P / &N']);
+        $files['xl/worksheets/sheet1.xml'] = shopNirPremiumXlsxSheet($rows, [7, 13, 15, 18, 32, 11, 15, 16, 9, 15, 18, 13, 13, 14, 32], $r, 15, ['merges' => $merges, 'drawing' => (bool)$pictures, 'freeze_rows' => 9, 'freeze_columns' => 4, 'auto_filter' => 'A9:O' . $lastData, 'fit_to_height' => 0, 'header' => '', 'footer' => '&LG-Trots | Registrul mijloacelor fixe&RPagina &P / &N']);
         return shopNirBuildZip($files);
     }
 
@@ -124,14 +139,16 @@ final class GtrotsFixedAssetExport
     public static function html(array $data, array $filters, array $company): string
     {
         require_once __DIR__ . '/nir-pdf.php';
+        $data = self::withCurrentQuantities($data);
         $e = static fn($v): string => shopNirPdfEscape($v);
         $totals = self::totals($data);
         $logo = shopNirPdfLogoDataUri();
         $html = '<!doctype html><html lang="ro"><head><meta charset="UTF-8"><style>' . self::css() . '</style></head><body>';
         $html .= '<table class="masthead"><tr><td class="brand">' . ($logo ? '<img src="' . $e($logo) . '">' : '') . '<b>G-TROTS</b><div>' . $e($company['legal_name'] ?? 'G-Trots România') . '</div></td><td class="title">REGISTRUL<br>MIJLOACELOR FIXE<small>Documente justificative și evidența casărilor</small></td><td class="report">REGISTRU<br><b>MF</b><small>Sume exprimate în lei</small></td></tr></table>';
         $html .= '<div class="identity">' . $e(self::identity($company)) . '</div><table class="ribbon"><tr><td><small>PERIOADA DOCUMENTELOR</small><b>' . $e(self::period($filters)) . '</b></td><td><small>POZIȚII ÎN REGISTRU</small><b>' . $totals['count'] . '</b></td><td class="grand"><small>VALOARE TOTALĂ CU TVA</small><b>' . shopNirPdfMoney($totals['total']) . '</b></td></tr></table>';
-        $html .= '<p class="hint">Selecție după data documentului. Sunt incluse toate casările bunurilor selectate; valorile fiecărui bun sunt înscrise o singură dată.</p><table class="items"><colgroup>';
-        $widths = [3, 6.5, 6, 7, 16, 4.5, 7, 7, 4, 7, 8, 6.5, 5, 12.5];
+        $scope = empty($filters['from']) ? 'Registru complet, cu toate casările.' : 'Selecție după data documentului, cu toate casările bunurilor selectate.';
+        $html .= '<p class="hint">' . $scope . ' Cantitatea actuală arată cantitatea rămasă după fiecare casare; valorile fiecărui bun sunt înscrise o singură dată.</p><table class="items"><colgroup>';
+        $widths = [2.5, 6, 6, 6.5, 14.5, 4.5, 6.5, 7, 3.5, 6.5, 7, 6, 5.5, 5.5, 12.5];
         foreach ($widths as $width) $html .= '<col style="width:' . $width . '%">';
         // Dompdf needs widths on the cells; colgroup alone is ignored.
         $html .= '</colgroup><thead><tr>';
@@ -142,15 +159,15 @@ final class GtrotsFixedAssetExport
             if (empty($row['continuation'])) $number++;
             $cells = self::cells($row, $number);
             // Split long reasons into continuation rows so Dompdf can paginate them safely.
-            $reason = (string)$cells[13];
+            $reason = (string)$cells[14];
             $chunks = mb_str_split($reason, 300) ?: [''];
             foreach ($chunks as $chunkIndex => $chunk) {
                 $html .= '<tr class="' . ($number % 2 ? 'odd' : 'even') . '">';
                 foreach ($cells as $i => $value) {
-                    if ($chunkIndex > 0 && $i !== 13) $value = '';
-                    if ($i === 13) $value = $chunk;
-                    $numeric = in_array($i, [5, 6, 7, 8, 9, 10, 12], true);
-                    if ($value !== null && $value !== '' && $numeric) $value = in_array($i, [5, 8, 12], true) ? shopNirPdfDecimal($value, 4) : number_format((float)$value, 2, ',', '.');
+                    if ($chunkIndex > 0 && $i !== 14) $value = '';
+                    if ($i === 14) $value = $chunk;
+                    $numeric = in_array($i, [5, 6, 7, 8, 9, 10, 12, 13], true);
+                    if ($value !== null && $value !== '' && $numeric) $value = in_array($i, [5, 8, 12, 13], true) ? shopNirPdfDecimal($value, 4) : number_format((float)$value, 2, ',', '.');
                     $html .= '<td class="' . ($numeric ? 'num ' : '') . ($i === 0 ? 'index ' : '') . ($i === 12 ? 'negative' : '') . '">' . $e($value) . '</td>';
                 }
                 $html .= '</tr>';

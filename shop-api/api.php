@@ -6970,6 +6970,7 @@ try {
     }
 
     if ($action === 'exportFixedAssets' && $method === 'GET') {
+        @set_time_limit(0);
         jsonResponse(GtrotsFixedAssets::export($db, $_GET, strtolower(trim((string)($_GET['format'] ?? 'xlsx')))));
     }
     // Pe LiteSpeed/PHP-FPM, răspunsul ajunge întâi la aplicație, iar coada SPV

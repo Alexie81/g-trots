@@ -25,6 +25,7 @@ final class GtrotsFixedAssets
             )');
             $db->exec('CREATE INDEX IF NOT EXISTS idx_fixed_assets_document ON shop_fixed_assets(document_id, line_number)');
             $db->exec('CREATE INDEX IF NOT EXISTS idx_fixed_asset_disposals_asset ON shop_fixed_asset_disposals(fixed_asset_id, disposal_date)');
+            self::ensureEditingSchema($db);
             return;
         }
 
@@ -45,6 +46,99 @@ final class GtrotsFixedAssets
             created_by VARCHAR(160) NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_fixed_asset_disposals_asset (fixed_asset_id, disposal_date, id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        self::ensureEditingSchema($db);
+    }
+
+    private static function ensureEditingSchema(PDO $db): void
+    {
+        $sqlite = $db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+        $columns = $sqlite ? $db->query('PRAGMA table_info(shop_fixed_assets)')->fetchAll(PDO::FETCH_COLUMN, 1) : $db->query('SHOW COLUMNS FROM shop_fixed_assets')->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('vat_manual', $columns, true)) $db->exec('ALTER TABLE shop_fixed_assets ADD COLUMN vat_manual INTEGER NOT NULL DEFAULT 0');
+        $db->exec($sqlite ? 'CREATE TABLE IF NOT EXISTS shop_fixed_asset_files (
+            id TEXT PRIMARY KEY, document_id TEXT NOT NULL, original_name TEXT NOT NULL, storage_name TEXT NOT NULL,
+            mime_type TEXT NOT NULL, extension TEXT NOT NULL, file_size INTEGER NOT NULL, sha256 TEXT NOT NULL,
+            created_by TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )' : 'CREATE TABLE IF NOT EXISTS shop_fixed_asset_files (
+            id CHAR(36) PRIMARY KEY, document_id CHAR(36) NOT NULL, original_name VARCHAR(255) NOT NULL, storage_name VARCHAR(500) NOT NULL,
+            mime_type VARCHAR(120) NOT NULL, extension VARCHAR(12) NOT NULL, file_size BIGINT UNSIGNED NOT NULL, sha256 CHAR(64) NOT NULL,
+            created_by VARCHAR(160) NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, INDEX idx_fixed_asset_file_document (document_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+        // Preserve existing single attachments when upgrading to multiple files.
+        $db->exec('INSERT INTO shop_fixed_asset_files (id,document_id,original_name,storage_name,mime_type,extension,file_size,sha256,created_by)
+            SELECT d.id,d.id,d.original_name,d.storage_name,d.mime_type,d.extension,d.file_size,d.sha256,d.created_by
+            FROM shop_fixed_asset_documents d WHERE d.storage_name IS NOT NULL AND d.storage_name <> \'\'
+            AND NOT EXISTS (SELECT 1 FROM shop_fixed_asset_files f WHERE f.id = d.id)');
+        $db->exec('UPDATE shop_fixed_asset_documents SET original_name=NULL,storage_name=NULL,mime_type=NULL,extension=NULL,file_size=NULL,sha256=NULL WHERE storage_name IS NOT NULL');
+    }
+
+    private static function files(PDO $db, string $documentId): array
+    {
+        $stmt = $db->prepare('SELECT * FROM shop_fixed_asset_files WHERE document_id = ? ORDER BY created_at,id');
+        $stmt->execute([$documentId]);
+        return $stmt->fetchAll();
+    }
+
+    private static function revision(array $data): string
+    {
+        return hash('sha256', json_encode($data, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
+    }
+
+    private static function checkRevision(array $current, array $body): void
+    {
+        if (!isset($body['revision']) || !hash_equals($current['revision'], (string)$body['revision'])) {
+            throw new ShopNirHttpException('Datele au fost modificate între timp. Redeschide fișa și încearcă din nou.', 409);
+        }
+    }
+
+    private static function lockDocument(PDO $db, string $id): void
+    {
+        $stmt = $db->prepare('SELECT id FROM shop_fixed_asset_documents WHERE id = ?' . ($db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : ''));
+        $stmt->execute([$id]);
+        if (!$stmt->fetchColumn()) throw new ShopNirHttpException('Documentul mijlocului fix nu există.', 404);
+    }
+
+    private static function lockAssetDocument(PDO $db, string $id): void
+    {
+        $stmt = $db->prepare('SELECT document_id FROM shop_fixed_assets WHERE id = ?');
+        $stmt->execute([$id]);
+        $documentId = $stmt->fetchColumn();
+        if (!$documentId) throw new ShopNirHttpException('Mijlocul fix nu există.', 404);
+        self::lockDocument($db, (string)$documentId);
+    }
+
+    private static function prepareFiles(array $body): array
+    {
+        $attachments = $body['attachments'] ?? (empty($body['attachment']) ? [] : [$body['attachment']]);
+        if (!is_array($attachments) || count($attachments) > 20) throw new InvalidArgumentException('Poți încărca maximum 20 de fișiere într-o singură operațiune.');
+        $files = []; $size = 0;
+        foreach ($attachments as $attachment) {
+            if (!is_array($attachment)) throw new InvalidArgumentException('Fișier invalid.');
+            $file = self::prepareAttachment($attachment);
+            if (!$file) continue;
+            $size += strlen($file['bytes']);
+            if ($size > 60 * 1024 * 1024) throw new InvalidArgumentException('Fișierele selectate depășesc 60 MB. Încarcă-le în mai multe operațiuni.');
+            $files[] = $file;
+        }
+        return $files;
+    }
+
+    private static function insertFiles(PDO $db, string $documentId, array $files, array $user, array &$saved): void
+    {
+        $insert = $db->prepare('INSERT INTO shop_fixed_asset_files (id,document_id,original_name,storage_name,mime_type,extension,file_size,sha256,created_by) VALUES (?,?,?,?,?,?,?,?,?)');
+        foreach ($files as $file) {
+            $id = self::uuid();
+            $path = self::saveAttachment($id, $file);
+            $saved[] = $path['relative'];
+            $insert->execute([$id,$documentId,$file['name'],$path['relative'],$file['mime'],$file['extension'],strlen($file['bytes']),$file['sha256'],self::actor($user)]);
+        }
+    }
+
+    private static function removeFiles(array $paths): void
+    {
+        foreach ($paths as $path) {
+            try { $resolved = self::storedPath((string)$path); if (!unlink($resolved)) error_log('Fixed asset attachment cleanup failed.'); }
+            catch (ShopNirHttpException $error) { /* Already absent; no path outside the storage root is removed. */ }
+        }
     }
 
     private static function uuid(): string
@@ -117,6 +211,23 @@ final class GtrotsFixedAssets
 
     public static function create(PDO $db, array $body, array $user): array
     {
+        return self::saveDocument($db, null, $body, $user);
+    }
+
+    public static function updateDocument(PDO $db, string $id, array $body, array $user): array
+    {
+        return self::saveDocument($db, $id, $body, $user);
+    }
+
+    private static function begin(PDO $db): void
+    {
+        // Child mutations acquire the document lock before reading current totals.
+        if ($db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') $db->exec('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+        $db->beginTransaction();
+    }
+
+    private static function saveDocument(PDO $db, ?string $documentId, array $body, array $user): array
+    {
         $document = (array)($body['document'] ?? $body);
         $type = strtolower(trim((string)($document['document_type'] ?? '')));
         if (!in_array($type, self::DOCUMENT_TYPES, true)) throw new InvalidArgumentException('Tipul documentului trebuie să fie factură, bon sau proces-verbal.');
@@ -136,28 +247,55 @@ final class GtrotsFixedAssets
             $vatRate = self::decimal($line['vat_rate'] ?? 0, 'TVA-ul de la poziția ' . ($index + 1));
             if ($vatRate > 100) throw new InvalidArgumentException('TVA-ul nu poate depăși 100%.');
             $net = round($quantity * $unitPrice, 2);
-            $vat = round($net * $vatRate / 100, 2);
-            $prepared[] = compact('name', 'quantity', 'unitPrice', 'net', 'vatRate', 'vat') + ['total' => round($net + $vat, 2)];
+            $manual = isset($line['vat_value']) && $line['vat_value'] !== '';
+            $vat = $manual ? round(self::decimal($line['vat_value'], 'Valoarea TVA'), 2) : round($net * $vatRate / 100, 2);
+            $prepared[] = compact('name', 'quantity', 'unitPrice', 'net', 'vatRate', 'vat', 'manual') + ['id' => (string)($line['id'] ?? ''), 'total' => round($net + $vat, 2)];
         }
-        $file = self::prepareAttachment((array)($body['attachment'] ?? []));
-        $id = self::uuid();
-        $saved = null;
-        if ($file) $saved = self::saveAttachment($id, $file);
+        $files = self::prepareFiles($body);
+        $id = $documentId ?? self::uuid();
+        $saved = [];
         $actor = self::actor($user);
-        $db->beginTransaction();
+        self::begin($db);
         try {
-            $stmt = $db->prepare('INSERT INTO shop_fixed_asset_documents
-                (id, document_date, document_type, series, document_number, notes, original_name, storage_name, mime_type, extension, file_size, sha256, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-            $stmt->execute([$id, $date, $type, $series, $number, mb_substr(trim((string)($document['notes'] ?? '')), 0, 2000), $file['name'] ?? null, $saved['relative'] ?? null, $file['mime'] ?? null, $file['extension'] ?? null, isset($file['bytes']) ? strlen($file['bytes']) : null, $file['sha256'] ?? null, $actor]);
-            $lineStmt = $db->prepare('INSERT INTO shop_fixed_assets (id, document_id, line_number, product_name, quantity, unit_price, net_value, vat_rate, vat_value, total_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-            foreach ($prepared as $index => $line) {
-                $lineStmt->execute([self::uuid(), $id, $index + 1, $line['name'], $line['quantity'], $line['unitPrice'], $line['net'], $line['vatRate'], $line['vat'], $line['total']]);
+            $existing = [];
+            $notes = mb_substr(trim((string)($document['notes'] ?? '')), 0, 2000);
+            if ($documentId !== null) {
+                self::lockDocument($db, $id);
+                $current = self::getDocument($db, $id);
+                self::checkRevision($current, $body);
+                foreach ($current['lines'] as $line) $existing[$line['id']] = $line;
+                $stmt = $db->prepare('UPDATE shop_fixed_asset_documents SET document_date=?,document_type=?,series=?,document_number=?,notes=?,updated_at=CURRENT_TIMESTAMP WHERE id=?');
+                $stmt->execute([$date,$type,$series,$number,$notes,$id]);
+                // Temporarily move line numbers out of the final range to permit reordering.
+                $db->prepare('UPDATE shop_fixed_assets SET line_number=line_number+1000000 WHERE document_id=?')->execute([$id]);
+            } else {
+                $stmt = $db->prepare('INSERT INTO shop_fixed_asset_documents (id,document_date,document_type,series,document_number,notes,created_by) VALUES (?,?,?,?,?,?,?)');
+                $stmt->execute([$id,$date,$type,$series,$number,$notes,$actor]);
             }
+            $seen = [];
+            $lineStmt = $db->prepare('INSERT INTO shop_fixed_assets (id, document_id, line_number, product_name, quantity, unit_price, net_value, vat_rate, vat_value, total_value, vat_manual) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $update = $db->prepare('UPDATE shop_fixed_assets SET line_number=?,product_name=?,quantity=?,unit_price=?,net_value=?,vat_rate=?,vat_value=?,total_value=?,vat_manual=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND document_id=?');
+            foreach ($prepared as $index => $line) {
+                $lineId = $line['id'];
+                if ($lineId !== '') {
+                    if (!isset($existing[$lineId]) || isset($seen[$lineId])) throw new InvalidArgumentException('Poziție invalidă sau duplicată în document.');
+                    if ($line['quantity'] + (float)$existing[$lineId]['disposal_quantity'] < -0.00005) throw new ShopNirHttpException('Cantitatea inițială nu poate fi mai mică decât cantitatea deja casată.', 409);
+                    $update->execute([$index+1,$line['name'],$line['quantity'],$line['unitPrice'],$line['net'],$line['vatRate'],$line['vat'],$line['total'],(int)$line['manual'],$lineId,$id]);
+                    $seen[$lineId] = true;
+                } else {
+                    $lineStmt->execute([self::uuid(),$id,$index+1,$line['name'],$line['quantity'],$line['unitPrice'],$line['net'],$line['vatRate'],$line['vat'],$line['total'],(int)$line['manual']]);
+                }
+            }
+            foreach ($existing as $lineId=>$line) {
+                if (isset($seen[$lineId])) continue;
+                if ($line['disposals']) throw new ShopNirHttpException('Poziția are casări. Folosește acțiunea de ștergere din fișa mijlocului fix.', 409);
+                $db->prepare('DELETE FROM shop_fixed_assets WHERE id=?')->execute([$lineId]);
+            }
+            self::insertFiles($db,$id,$files,$user,$saved);
             $db->commit();
         } catch (Throwable $error) {
             if ($db->inTransaction()) $db->rollBack();
-            if ($saved && is_file($saved['absolute'])) @unlink($saved['absolute']);
+            self::removeFiles($saved);
             throw $error;
         }
         return self::getDocument($db, $id);
@@ -217,6 +355,9 @@ final class GtrotsFixedAssets
         $asset['disposal_quantity'] = array_sum(array_map(static fn(array $row): float => (float)$row['quantity'], $asset['disposals']));
         $asset['remaining_quantity'] = round((float)$asset['quantity'] + (float)$asset['disposal_quantity'], 4);
         $asset['has_document'] = trim((string)($asset['original_name'] ?? '')) !== '';
+        $asset['files'] = self::files($db, (string)$asset['document_id']);
+        $asset['has_document'] = count($asset['files']) > 0;
+        $asset['revision'] = self::revision($asset);
         return $asset;
     }
 
@@ -229,6 +370,10 @@ final class GtrotsFixedAssets
         $lines = $db->prepare('SELECT * FROM shop_fixed_assets WHERE document_id = ? ORDER BY line_number ASC');
         $lines->execute([$documentId]);
         $document['lines'] = array_map(static fn(array $line): array => self::get($db, (string)$line['id']), $lines->fetchAll());
+        $document['files'] = self::files($db, $documentId);
+        // Keep the original download contract usable by older clients.
+        foreach (['storage_name','original_name','mime_type','file_size'] as $field) $document[$field] = $document['files'][0][$field] ?? null;
+        $document['revision'] = self::revision($document);
         return $document;
     }
 
@@ -238,10 +383,11 @@ final class GtrotsFixedAssets
         $reason = mb_substr(trim((string)($body['reason'] ?? '')), 0, 1000);
         if ($reason === '') throw new InvalidArgumentException('Motivul casării este obligatoriu.');
         $normal = str_replace([' ', ','], ['', '.'], trim((string)($body['quantity'] ?? '')));
-        if (!is_numeric($normal) || (float)$normal >= 0) throw new InvalidArgumentException('Cantitatea casată trebuie introdusă cu minus.');
+        if (!is_numeric($normal) || !is_finite((float)$normal) || round((float)$normal, 4) >= 0) throw new InvalidArgumentException('Cantitatea casată trebuie introdusă cu minus.');
         $quantity = round((float)$normal, 4);
-        $db->beginTransaction();
+        self::begin($db);
         try {
+            self::lockAssetDocument($db, $assetId);
             $suffix = $db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '';
             $stmt = $db->prepare('SELECT quantity FROM shop_fixed_assets WHERE id = ?' . $suffix);
             $stmt->execute([$assetId]);
@@ -270,10 +416,128 @@ final class GtrotsFixedAssets
         return $path;
     }
 
-    public static function download(PDO $db, string $documentId): array
+    public static function addFiles(PDO $db, string $documentId, array $body, array $user): array
     {
-        $stmt = $db->prepare('SELECT original_name, storage_name, mime_type FROM shop_fixed_asset_documents WHERE id = ? LIMIT 1');
-        $stmt->execute([$documentId]);
+        $files = self::prepareFiles($body);
+        if (!$files) throw new InvalidArgumentException('Selectează cel puțin un fișier.');
+        $saved = [];
+        self::begin($db);
+        try {
+            self::lockDocument($db, $documentId);
+            self::insertFiles($db,$documentId,$files,$user,$saved);
+            $db->commit();
+        } catch (Throwable $error) {
+            if ($db->inTransaction()) $db->rollBack();
+            self::removeFiles($saved);
+            throw $error;
+        }
+        return self::getDocument($db,$documentId);
+    }
+
+    public static function deleteFile(PDO $db, string $documentId, array $body): array
+    {
+        self::begin($db);
+        try {
+            self::lockDocument($db,$documentId);
+            $stmt = $db->prepare('SELECT storage_name FROM shop_fixed_asset_files WHERE id=? AND document_id=?');
+            $stmt->execute([(string)($body['file_id'] ?? ''),$documentId]);
+            $path = $stmt->fetchColumn();
+            if (!$path) throw new ShopNirHttpException('Fișierul nu există.',404);
+            $db->prepare('DELETE FROM shop_fixed_asset_files WHERE id=? AND document_id=?')->execute([(string)$body['file_id'],$documentId]);
+            $db->commit();
+        } catch (Throwable $error) { if ($db->inTransaction()) $db->rollBack(); throw $error; }
+        self::removeFiles([(string)$path]);
+        return self::getDocument($db,$documentId);
+    }
+
+    public static function updateDisposal(PDO $db, string $assetId, array $body): array
+    {
+        $date = self::date($body['disposal_date'] ?? '', 'Data casării');
+        $reason = mb_substr(trim((string)($body['reason'] ?? '')),0,1000);
+        if ($reason === '') throw new InvalidArgumentException('Motivul casării este obligatoriu.');
+        $normal = str_replace([' ', ','], ['', '.'], trim((string)($body['quantity'] ?? '')));
+        if (!is_numeric($normal) || !is_finite((float)$normal) || round((float)$normal,4) >= 0) throw new InvalidArgumentException('Cantitatea casată trebuie introdusă cu minus.');
+        $quantity = round((float)$normal,4);
+        self::begin($db);
+        try {
+            self::lockAssetDocument($db,$assetId);
+            $asset = self::get($db,$assetId);
+            self::checkRevision($asset,$body);
+            $disposal = self::findDisposal($asset,(string)($body['disposal_id'] ?? ''));
+            $available = round((float)$asset['remaining_quantity'] - (float)$disposal['quantity'],4);
+            if (abs($quantity) - $available > 0.00005) throw new ShopNirHttpException('Cantitatea casată depășește cantitatea disponibilă.',409);
+            $db->prepare('UPDATE shop_fixed_asset_disposals SET disposal_date=?,quantity=?,reason=? WHERE id=? AND fixed_asset_id=?')->execute([$date,$quantity,$reason,$disposal['id'],$assetId]);
+            $db->commit();
+        } catch (Throwable $error) { if ($db->inTransaction()) $db->rollBack(); throw $error; }
+        return self::get($db,$assetId);
+    }
+
+    private static function findDisposal(array $asset, string $id): array
+    {
+        foreach ($asset['disposals'] as $disposal) if ($disposal['id'] === $id) return $disposal;
+        throw new ShopNirHttpException('Casarea nu există pentru acest mijloc fix.',404);
+    }
+
+    public static function deleteDisposal(PDO $db, string $assetId, array $body): array
+    {
+        self::begin($db);
+        try {
+            self::lockAssetDocument($db,$assetId);
+            $asset = self::get($db,$assetId);
+            self::checkRevision($asset,$body);
+            $disposal = self::findDisposal($asset,(string)($body['disposal_id'] ?? ''));
+            $db->prepare('DELETE FROM shop_fixed_asset_disposals WHERE id=? AND fixed_asset_id=?')->execute([$disposal['id'],$assetId]);
+            $db->commit();
+        } catch (Throwable $error) { if ($db->inTransaction()) $db->rollBack(); throw $error; }
+        return self::get($db,$assetId);
+    }
+
+    public static function deleteAsset(PDO $db, string $assetId, array $body): array
+    {
+        $paths = [];
+        self::begin($db);
+        try {
+            self::lockAssetDocument($db,$assetId);
+            $asset = self::get($db,$assetId);
+            self::checkRevision($asset,$body);
+            self::checkRevision(self::getDocument($db,$asset['document_id']), ['revision'=>$body['document_revision'] ?? '']);
+            $db->prepare('DELETE FROM shop_fixed_asset_disposals WHERE fixed_asset_id=?')->execute([$assetId]);
+            $db->prepare('DELETE FROM shop_fixed_assets WHERE id=?')->execute([$assetId]);
+            $count = $db->prepare('SELECT COUNT(*) FROM shop_fixed_assets WHERE document_id=?');
+            $count->execute([$asset['document_id']]);
+            $documentDeleted = (int)$count->fetchColumn() === 0;
+            if ($documentDeleted) {
+                $paths = array_column(self::files($db,$asset['document_id']),'storage_name');
+                $db->prepare('DELETE FROM shop_fixed_asset_files WHERE document_id=?')->execute([$asset['document_id']]);
+                $db->prepare('DELETE FROM shop_fixed_asset_documents WHERE id=?')->execute([$asset['document_id']]);
+            }
+            $db->commit();
+        } catch (Throwable $error) { if ($db->inTransaction()) $db->rollBack(); throw $error; }
+        self::removeFiles($paths);
+        return ['success'=>true,'deleted_id'=>$assetId,'document_deleted'=>$documentDeleted];
+    }
+
+    public static function deleteDocument(PDO $db, string $id, array $body): array
+    {
+        self::begin($db);
+        try {
+            self::lockDocument($db,$id);
+            $document = self::getDocument($db,$id);
+            self::checkRevision($document,$body);
+            foreach ($document['lines'] as $line) $db->prepare('DELETE FROM shop_fixed_asset_disposals WHERE fixed_asset_id=?')->execute([$line['id']]);
+            $db->prepare('DELETE FROM shop_fixed_assets WHERE document_id=?')->execute([$id]);
+            $db->prepare('DELETE FROM shop_fixed_asset_files WHERE document_id=?')->execute([$id]);
+            $db->prepare('DELETE FROM shop_fixed_asset_documents WHERE id=?')->execute([$id]);
+            $db->commit();
+        } catch (Throwable $error) { if ($db->inTransaction()) $db->rollBack(); throw $error; }
+        self::removeFiles(array_column($document['files'],'storage_name'));
+        return ['success'=>true,'deleted_id'=>$id];
+    }
+
+    public static function download(PDO $db, string $documentId, string $fileId = ''): array
+    {
+        $stmt = $db->prepare('SELECT original_name, storage_name, mime_type FROM shop_fixed_asset_files WHERE document_id = ?' . ($fileId !== '' ? ' AND id = ?' : '') . ' ORDER BY created_at,id LIMIT 1');
+        $stmt->execute($fileId !== '' ? [$documentId,$fileId] : [$documentId]);
         $file = $stmt->fetch();
         if (!$file || trim((string)$file['storage_name']) === '') throw new ShopNirHttpException('Acest document nu are fișier atașat.', 404);
         $bytes = file_get_contents(self::storedPath((string)$file['storage_name']));

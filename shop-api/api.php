@@ -272,7 +272,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026111001;
+    $schemaVersion = 2026111101;
     // Ruta normala face doar SELECT-ul indexat. Un CREATE TABLE IF NOT EXISTS la
     // fiecare request tot cere verificari de metadata si poate astepta lock-uri.
     try {
@@ -6925,6 +6925,38 @@ try {
         jsonResponse(GtrotsFixedAssets::get($db, trim((string)($_GET['id'] ?? ''))));
     }
 
+    if ($action === 'getFixedAssetDocument' && $method === 'GET') {
+        jsonResponse(GtrotsFixedAssets::getDocument($db, trim((string)($_GET['id'] ?? ''))));
+    }
+
+    if ($action === 'updateFixedAssetDocument' && $method === 'PUT') {
+        jsonResponse(GtrotsFixedAssets::updateDocument($db, trim((string)($_GET['id'] ?? '')), $body, (array)$currentUser));
+    }
+
+    if ($action === 'deleteFixedAssetDocument' && $method === 'DELETE') {
+        jsonResponse(GtrotsFixedAssets::deleteDocument($db, trim((string)($_GET['id'] ?? '')), $body));
+    }
+
+    if ($action === 'deleteFixedAsset' && $method === 'DELETE') {
+        jsonResponse(GtrotsFixedAssets::deleteAsset($db, trim((string)($_GET['id'] ?? '')), $body));
+    }
+
+    if ($action === 'updateFixedAssetDisposal' && $method === 'PUT') {
+        jsonResponse(GtrotsFixedAssets::updateDisposal($db, trim((string)($_GET['id'] ?? '')), $body));
+    }
+
+    if ($action === 'deleteFixedAssetDisposal' && $method === 'DELETE') {
+        jsonResponse(GtrotsFixedAssets::deleteDisposal($db, trim((string)($_GET['id'] ?? '')), $body));
+    }
+
+    if ($action === 'addFixedAssetFiles' && $method === 'POST') {
+        jsonResponse(GtrotsFixedAssets::addFiles($db, trim((string)($_GET['id'] ?? '')), $body, (array)$currentUser), 201);
+    }
+
+    if ($action === 'deleteFixedAssetFile' && $method === 'DELETE') {
+        jsonResponse(GtrotsFixedAssets::deleteFile($db, trim((string)($_GET['id'] ?? '')), $body));
+    }
+
     if ($action === 'createFixedAssetDocument' && $method === 'POST') {
         jsonResponse(GtrotsFixedAssets::create($db, $body, (array)$currentUser), 201);
     }
@@ -6934,7 +6966,7 @@ try {
     }
 
     if ($action === 'downloadFixedAssetDocument' && $method === 'GET') {
-        jsonResponse(GtrotsFixedAssets::download($db, trim((string)($_GET['id'] ?? ''))));
+        jsonResponse(GtrotsFixedAssets::download($db, trim((string)($_GET['id'] ?? '')), trim((string)($_GET['file_id'] ?? ''))));
     }
 
     if ($action === 'exportFixedAssets' && $method === 'GET') {

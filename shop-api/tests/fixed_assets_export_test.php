@@ -47,12 +47,16 @@ checkAssetExport((string)$sheet->xpath('//s:pane')[0]['ySplit'] === '9', 'Antetu
 checkAssetExport((string)$sheet->xpath('//s:autoFilter')[0]['ref'] === 'A9:O12', 'Filtrele Excel nu acoperă toate cele 15 coloane.');
 checkAssetExport(str_contains($zip->getFromName('xl/workbook.xml'), '_xlnm.Print_Titles'), 'Antetul nu se repetă la tipărire.');
 checkAssetExport(str_contains($zip->getFromName('xl/workbook.xml'), '$A$1:$O$'), 'Zona de tipărire nu include ultima coloană.');
+checkAssetExport(count($sheet->xpath('//s:t[.="PERIOADA DOCUMENTELOR"]')) === 0, 'Registrul complet nu trebuie să afișeze un card de perioadă.');
+checkAssetExport((string)$sheet->xpath('//s:c[@r="A5"]/s:is/s:t')[0] === 'POZIȚII ÎN REGISTRU', 'Sumarul Excel trebuie să înceapă cu numărul pozițiilor.');
+checkAssetExport(count($sheet->xpath('//s:mergeCell[@ref="A5:H5"]')) === 1 && count($sheet->xpath('//s:mergeCell[@ref="I5:O5"]')) === 1, 'Cele două carduri Excel trebuie să aibă dimensiuni coerente.');
 $zip->close();
 unlink($tmp);
 
 $html = GtrotsFixedAssetExport::html($rows, $range, $company);
 checkAssetExport(str_contains($html, 'Calculator diagnoză &amp; echipamente atelier'), 'Textele HTML trebuie escapate.');
 checkAssetExport(str_contains($html, '01.12.2026'), 'Istoricul complet trebuie să includă și casarea ulterioară.');
+checkAssetExport(!str_contains($html, 'PERIOADA DOCUMENTELOR') && str_contains($html, 'Registru complet, cu toate casările.'), 'PDF-ul trebuie să descrie registrul complet, fără card de perioadă.');
 $dom = new DOMDocument();
 @$dom->loadHTML($html);
 $xpath = new DOMXPath($dom);

@@ -39,8 +39,8 @@ define('DEFAULT_ADMIN_NAME', 'Administrator');
 define('WHATSAPP_GRAPH_VERSION', getenv('WHATSAPP_GRAPH_VERSION') ?: 'v23.0');
 define('WHATSAPP_PHONE_NUMBER_ID', getenv('WHATSAPP_PHONE_NUMBER_ID') ?: '');
 define('WHATSAPP_ACCESS_TOKEN', getenv('WHATSAPP_ACCESS_TOKEN') ?: '');
-define('MOBILE_APP_FALLBACK_VERSION', '1.2.5');
-define('MOBILE_APP_FALLBACK_DOWNLOAD_URL', 'https://g-trots.ro/download-app/gTrots.apk');
+define('MOBILE_APP_FALLBACK_VERSION', '1.2.23');
+define('MOBILE_APP_CANONICAL_DOWNLOAD_URL', 'https://g-trots.ro/download-app/GTrotsApp.apk');
 
 // â”€â”€â”€ CORS + Headers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -795,7 +795,12 @@ function mobileAppUpdateInfo(string $currentVersion): array {
         (string)($manifest['version'] ?? $manifest['available_version'] ?? MOBILE_APP_FALLBACK_VERSION)
     );
     $currentVersion = normalizeVersionString($currentVersion !== '' ? $currentVersion : MOBILE_APP_FALLBACK_VERSION);
-    $downloadUrl = trim((string)($manifest['download_url'] ?? $manifest['url'] ?? MOBILE_APP_FALLBACK_DOWNLOAD_URL));
+    // APK releases are mirrored under one permanent first-party URL. Never
+    // expose the short-lived Expo/EAS artifact URL stored by an older
+    // manifest: those signed CDN links expire and make installed versions
+    // unable to update later.
+    $downloadUrl = MOBILE_APP_CANONICAL_DOWNLOAD_URL
+        . '?v=' . rawurlencode($latestVersion);
     $releaseNotesValue = $manifest['release_notes'] ?? $manifest['notes'] ?? '';
     $releaseNotes = is_array($releaseNotesValue)
         ? implode("\n", array_map('strval', $releaseNotesValue))

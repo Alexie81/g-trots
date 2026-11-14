@@ -157,6 +157,23 @@ def read_previous_files(ftp: FTP_TLS) -> set[str]:
     return {str(item) for item in data.get("files", []) if isinstance(item, str)}
 
 
+def list_remote_files(
+    ftp: FTP_TLS,
+    directory: PurePosixPath,
+    relative_root: PurePosixPath = PurePosixPath(),
+) -> set[str]:
+    files: set[str] = set()
+    for name, facts in ftp.mlsd(str(directory)):
+        if name in {".", ".."}:
+            continue
+        relative = relative_root / name
+        if facts.get("type") == "dir":
+            files.update(list_remote_files(ftp, directory / name, relative))
+        elif facts.get("type") == "file":
+            files.add(relative.as_posix())
+    return files
+
+
 def safe_relative_path(value: str) -> PurePosixPath | None:
     path = PurePosixPath(value)
     if path.is_absolute() or not path.parts or any(part in {"", ".", ".."} for part in path.parts):
@@ -203,7 +220,13 @@ def main() -> None:
         finally:
             temporary_manifest.unlink(missing_ok=True)
 
-        for stale in sorted(previous_files - relative_files, reverse=True):
+        # Include files that predate the deploy manifest as well. The remote
+        # directory is dedicated to this PWA, so anything outside the current
+        # build is an obsolete application asset and must not remain public.
+        actual_remote_files = list_remote_files(ftp, REMOTE_ROOT)
+        stale_files = (previous_files | actual_remote_files) - relative_files
+        stale_files.discard(DEPLOY_MANIFEST)
+        for stale in sorted(stale_files, reverse=True):
             relative = safe_relative_path(stale)
             if relative is None:
                 continue

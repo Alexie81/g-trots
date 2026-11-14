@@ -6,12 +6,15 @@ from getpass import getpass
 from pathlib import Path
 from io import BytesIO
 import os
+import re
 import ssl
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RELEASE_ROOT = PROJECT_ROOT / "electron-app" / "release"
 REMOTE_ROOT = "/g-trots.ro/download-app/updates/windows"
+REMOTE_DOWNLOAD_ROOT = "/g-trots.ro/download-app"
+CANONICAL_INSTALLER = "GTrotsSetup.exe"
 
 
 def connect() -> FTP_TLS:
@@ -85,6 +88,59 @@ def main() -> None:
         ftp.retrbinary("RETR latest.yml", check.write)
         if check.getvalue() != files["latest.yml"].read_bytes():
             raise RuntimeError("latest.yml publicat nu corespunde build-ului local.")
+
+        # The updater needs the current versioned installer referenced by
+        # latest.yml. The public download page uses one stable canonical name.
+        current_installer = files[names[0]]
+        ftp.cwd(REMOTE_DOWNLOAD_ROOT)
+        canonical_temporary = f".{CANONICAL_INSTALLER}.codex-{timestamp}.tmp"
+        canonical_backup = f".{CANONICAL_INSTALLER}.codex-{timestamp}.bak"
+        with current_installer.open("rb") as handle:
+            ftp.storbinary(
+                f"STOR {canonical_temporary}",
+                handle,
+                blocksize=1024 * 1024,
+            )
+        if ftp.size(canonical_temporary) != current_installer.stat().st_size:
+            raise RuntimeError("Transfer incomplet pentru installerul desktop canonic.")
+        canonical_had_original = True
+        try:
+            ftp.rename(CANONICAL_INSTALLER, canonical_backup)
+        except error_perm as error:
+            if str(error).startswith("550"):
+                canonical_had_original = False
+            else:
+                raise
+        try:
+            ftp.rename(canonical_temporary, CANONICAL_INSTALLER)
+        except Exception:
+            if canonical_had_original:
+                ftp.rename(canonical_backup, CANONICAL_INSTALLER)
+            raise
+        if canonical_had_original:
+            try:
+                ftp.delete(canonical_backup)
+            except error_perm as error:
+                if not str(error).startswith("550"):
+                    raise
+        print(f"Publicat: {CANONICAL_INSTALLER}", flush=True)
+
+        # Keep only the current electron-updater payload. latest.yml and the
+        # matching blockmap remain available; all older installers and deploy
+        # backups are removed after the new release has been verified.
+        ftp.cwd(REMOTE_ROOT)
+        current_names = set(names)
+        release_pattern = re.compile(
+            r"^GTrotsSetup-\d+\.\d+\.\d+\.exe(?:\.blockmap)?$",
+            re.IGNORECASE,
+        )
+        for remote_name in ftp.nlst():
+            basename = remote_name.rsplit("/", 1)[-1]
+            is_old_release = bool(release_pattern.match(basename)) and basename not in current_names
+            is_old_metadata_backup = basename.startswith("latest.yml.bak-")
+            if is_old_release or is_old_metadata_backup:
+                ftp.delete(basename)
+                print(f"Eliminat release desktop vechi: {basename}", flush=True)
     except Exception:
         if latest_was_activated:
             try:
@@ -108,7 +164,7 @@ def main() -> None:
         except Exception:
             ftp.close()
 
-    print(f"Actualizarea desktop {version} este activă.", flush=True)
+    print(f"Actualizarea desktop {version} este activa.", flush=True)
 
 
 if __name__ == "__main__":

@@ -92,10 +92,10 @@ final class GtrotsFixedAssetExport
             return '<xf' . $attrs . '><alignment vertical="center"' . $align . '/></xf>';
         };
         $styles = [
-            $xf(9, 9, 0),                                                        // 43 brand
-            $xf(10, 9, 0, ' horizontal="center" wrapText="1"'),               // 44 title
-            $xf(11, 9, 0, ' horizontal="center" wrapText="1"'),               // 45 subtitle
-            $xf(12, 12, 0, ' wrapText="1"'),                                    // 46 identity
+            $xf(9, 0, 0),                                                        // 43 brand on white
+            $xf(2, 0, 0, ' horizontal="center" wrapText="1"'),                 // 44 title on white
+            $xf(12, 0, 0, ' horizontal="center" wrapText="1"'),                // 45 subtitle on white
+            $xf(12, 0, 0, ' wrapText="1"'),                                     // 46 identity on white
             $xf(11, 13, 0, ' wrapText="1"'),                                    // 47 metric label
             $xf(13, 13, 0, ' wrapText="1"'),                                    // 48 metric value
             $xf(15, 6, 0, ' horizontal="right" wrapText="1"'),                // 49 orange metric label
@@ -240,17 +240,17 @@ final class GtrotsFixedAssetExport
         return '@page{size:A4 landscape;margin:7mm 7mm 12mm}'
             . 'body{font-family:DejaVu Sans,sans-serif;font-size:7pt;color:#132b47;margin:0}'
             . 'table{border-collapse:collapse;width:100%}'
-            . '.hero{background:#0a213d;border-radius:5mm;padding:4mm 5mm 3mm;margin-bottom:3mm;color:#fff}'
-            . '.masthead td{vertical-align:middle}.brand{width:30%;font-size:7.5pt}.brand img{width:14mm;float:left;margin-right:3mm}.brand b{font-size:18pt;display:block;color:#ff8a1f;letter-spacing:.5pt}.brand div{margin-top:1.5mm;color:#cad5e5}'
-            . '.title{font-size:16pt;font-weight:bold;text-align:center;width:50%;line-height:1.15}.title small{display:block;font-size:7pt;color:#cad5e5;margin-top:2mm;font-weight:normal}'
-            . '.report{width:20%;text-align:center;background:#143556;padding:2.5mm;border-radius:4mm;font-size:7pt}.report span{color:#cad5e5}.report b{display:block;color:#ff8a1f;font-size:17pt;line-height:1.15}.report small{display:block;font-size:5.8pt;color:#cad5e5}'
-            . '.identity{color:#aebed0;font-size:6.5pt;border-top:1px solid #294866;margin-top:3mm;padding-top:2.5mm}'
+            . '.hero{background:#fff;border:1px solid #dce5ef;border-radius:5mm;padding:4mm 5mm 3mm;margin-bottom:3mm;color:#0a213d}'
+            . '.masthead td{vertical-align:middle}.brand{width:30%;font-size:7.5pt}.brand img{width:14mm;float:left;margin-right:3mm}.brand b{font-size:18pt;display:block;color:#ff8a1f;letter-spacing:.5pt}.brand div{margin-top:1.5mm;color:#64748b}'
+            . '.title{font-size:16pt;font-weight:bold;text-align:center;width:50%;line-height:1.15;color:#0a213d}.title small{display:block;font-size:7pt;color:#64748b;margin-top:2mm;font-weight:normal}'
+            . '.report{width:20%;text-align:center;background:#fff7ef;border:1px solid #ffe1c2;padding:2.5mm;border-radius:4mm;font-size:7pt}.report span{color:#64748b}.report b{display:block;color:#ff7900;font-size:17pt;line-height:1.15}.report small{display:block;font-size:5.8pt;color:#64748b}'
+            . '.identity{color:#64748b;font-size:6.5pt;border-top:1px solid #e2e8f0;margin-top:3mm;padding-top:2.5mm}'
             . '.ribbon{border-collapse:separate;border-spacing:2.5mm 0;margin:0 -2.5mm 3mm;width:calc(100% + 5mm);color:#fff}.ribbon td{background:#143556;padding:3mm 4mm;border-radius:4mm}.ribbon td:first-child{width:46%}'
             . '.ribbon small,.totals small{display:block;font-size:6.2pt;margin-bottom:1.5mm;letter-spacing:.15pt;color:#cad5e5}.ribbon b{font-size:11pt}.grand{background:#ff7900!important;color:#fff!important}.grand small{color:#fff!important}'
             . '.hint{background:#f5f8fc;border-left:1.4mm solid #ff7900;border-radius:2.8mm;padding:2.4mm 3mm;margin:0 0 3mm;color:#5c6f86;font-size:6.3pt;line-height:1.45}.hint b{color:#0a213d;margin-right:2.5mm;font-size:6pt}.hint span{display:inline}'
             . '.table-card{border:1px solid #dce5ef;border-radius:3.5mm;overflow:hidden}.items{table-layout:fixed;border-collapse:separate;border-spacing:0}.items thead{display:table-header-group}.items th{background:#0a213d;color:#fff;border-right:1px solid #294866;border-bottom:1px solid #294866;padding:2.2mm .8mm;font-size:5.9pt;line-height:1.25}.items th:first-child{border-top-left-radius:3mm}.items th:last-child{border-top-right-radius:3mm;border-right:0}'
             . '.items td{border-right:1px solid #e5ebf2;border-bottom:1px solid #e5ebf2;padding:2mm 1mm;font-size:6.2pt;vertical-align:middle;overflow-wrap:break-word}.items td:last-child{border-right:0}.items tbody tr:last-child td{border-bottom:0}.items tr{page-break-inside:avoid}.even td{background:#f7f9fc}.num{text-align:right}.index{color:#f47712;text-align:center;font-weight:bold}.negative{color:#b33b4c;font-weight:bold}'
-            . '.totals{page-break-inside:avoid;border-collapse:separate;border-spacing:2.5mm 0;margin:4mm -2.5mm 0;width:calc(100% + 5mm)}.totals td{padding:3mm 4mm;width:33%;background:#f3f6fa;border:1px solid #dce5ef;border-radius:3.5mm}.totals small{color:#63768d}.totals b{font-size:11.5pt;color:#0a213d}.generated{font-size:6pt;color:#7b8ba0;text-align:right;margin:2.5mm 0 0}';
+            . '.totals{page-break-inside:avoid;border-collapse:separate;border-spacing:2.5mm 0;margin:4mm -2.5mm 0;width:calc(100% + 5mm)}.totals td{padding:3mm 4mm;width:33%;background:#f3f6fa;border:1px solid #dce5ef;border-radius:3.5mm}.totals small{color:#63768d}.totals b{font-size:11.5pt;color:#0a213d}.totals .grand b{color:#fff!important}.generated{font-size:6pt;color:#7b8ba0;text-align:right;margin:2.5mm 0 0}';
     }
 
     public static function pdf(array $rows, array $filters, array $company = []): string

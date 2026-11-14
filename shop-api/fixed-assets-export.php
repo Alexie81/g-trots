@@ -63,22 +63,80 @@ final class GtrotsFixedAssetExport
             self::date($row['disposal_date'] ?? ''), $row['disposed_quantity'] ?? null, $row['current_quantity'], $row['disposal_reason'] ?? ''];
     }
 
+    /**
+     * Adds a small, report-specific design layer over the shared NIR workbook styles.
+     * Existing style ids remain untouched so the shared XLSX engine keeps its contract.
+     */
+    private static function xlsxStyles(): string
+    {
+        $xml = shopNirReferenceXlsxStyles();
+        $fonts = '<font><b/><sz val="9"/><color rgb="FFFF7900"/><name val="Aptos"/></font>'
+            . '<font><b/><sz val="18"/><color rgb="FFFFFFFF"/><name val="Aptos Display"/></font>'
+            . '<font><sz val="8"/><color rgb="FFCAD5E5"/><name val="Aptos"/></font>'
+            . '<font><sz val="8"/><color rgb="FF64748B"/><name val="Aptos"/></font>'
+            . '<font><b/><sz val="14"/><color rgb="FFFFFFFF"/><name val="Aptos Display"/></font>'
+            . '<font><b/><sz val="8"/><color rgb="FFFFFFFF"/><name val="Aptos"/></font>'
+            . '<font><sz val="9"/><color rgb="FF18324F"/><name val="Aptos"/></font>'
+            . '<font><b/><sz val="9"/><color rgb="FF0B2748"/><name val="Aptos"/></font>';
+        $fills = '<fill><patternFill patternType="solid"><fgColor rgb="FF0A213D"/></patternFill></fill>'
+            . '<fill><patternFill patternType="solid"><fgColor rgb="FFEAF3FF"/></patternFill></fill>'
+            . '<fill><patternFill patternType="solid"><fgColor rgb="FFFFF1E5"/></patternFill></fill>'
+            . '<fill><patternFill patternType="solid"><fgColor rgb="FFF7F9FC"/></patternFill></fill>'
+            . '<fill><patternFill patternType="solid"><fgColor rgb="FF143556"/></patternFill></fill>';
+        $borders = '<border><left/><right/><top/><bottom style="thin"><color rgb="FFE2E8F0"/></bottom><diagonal/></border>'
+            . '<border><left style="thin"><color rgb="FFD9E4F0"/></left><right style="thin"><color rgb="FFD9E4F0"/></right><top style="thin"><color rgb="FFD9E4F0"/></top><bottom style="thin"><color rgb="FFD9E4F0"/></bottom><diagonal/></border>'
+            . '<border><left style="medium"><color rgb="FFFF7900"/></left><right/><top/><bottom style="thin"><color rgb="FFE2E8F0"/></bottom><diagonal/></border>';
+        $xf = static function (int $font, int $fill, int $border, string $align = '', int $numFmt = 0): string {
+            $attrs = ' numFmtId="' . $numFmt . '" fontId="' . $font . '" fillId="' . $fill . '" borderId="' . $border . '" xfId="0" applyFont="1" applyFill="1" applyBorder="1"';
+            if ($numFmt > 0) $attrs .= ' applyNumberFormat="1"';
+            return '<xf' . $attrs . '><alignment vertical="center"' . $align . '/></xf>';
+        };
+        $styles = [
+            $xf(9, 9, 0),                                                        // 43 brand
+            $xf(10, 9, 0, ' horizontal="center" wrapText="1"'),               // 44 title
+            $xf(11, 9, 0, ' horizontal="center" wrapText="1"'),               // 45 subtitle
+            $xf(12, 12, 0, ' wrapText="1"'),                                    // 46 identity
+            $xf(11, 13, 0, ' wrapText="1"'),                                    // 47 metric label
+            $xf(13, 13, 0, ' wrapText="1"'),                                    // 48 metric value
+            $xf(15, 6, 0, ' horizontal="right" wrapText="1"'),                // 49 orange metric label
+            $xf(14, 6, 0, ' horizontal="right" shrinkToFit="1"', 166),         // 50 orange metric value
+            $xf(12, 12, 0, ' wrapText="1"'),                                    // 51 note
+            $xf(17, 10, 3, ' wrapText="1"'),                                    // 52 group
+            $xf(15, 9, 3, ' horizontal="center" wrapText="1"'),               // 53 column header
+            $xf(16, 0, 2, ' wrapText="1"'),                                     // 54 body text
+            $xf(16, 0, 2, ' horizontal="center"'),                              // 55 body number
+            $xf(16, 0, 2, ' horizontal="right" shrinkToFit="1"', 166),         // 56 body money
+            $xf(7, 8, 2, ' horizontal="center"'),                               // 57 disposal
+            $xf(17, 11, 3, ' horizontal="right" wrapText="1"'),               // 58 total label
+            $xf(14, 6, 3, ' horizontal="right" shrinkToFit="1"', 166),         // 59 grand total
+            $xf(9, 0, 2, ' horizontal="center"'),                               // 60 row index
+            $xf(8, 0, 2, ' horizontal="center"'),                               // 61 current quantity
+        ];
+        $xml = str_replace('<fonts count="9">', '<fonts count="17">', $xml);
+        $xml = str_replace('</fonts><fills count="9">', $fonts . '</fonts><fills count="14">', $xml);
+        $xml = str_replace('</fills><borders count="2">', $fills . '</fills><borders count="5">', $xml);
+        $xml = str_replace('</borders><cellStyleXfs', $borders . '</borders><cellStyleXfs', $xml);
+        $xml = str_replace('<cellXfs count="43">', '<cellXfs count="62">', $xml);
+        $xml = str_replace('</cellXfs><cellStyles', implode('', $styles) . '</cellXfs><cellStyles', $xml);
+        return $xml;
+    }
+
     public static function xlsx(array $data, array $filters = [], array $company = []): string
     {
         require_once __DIR__ . '/nir-xlsx.php';
         $data = self::withCurrentQuantities($data);
         $cell = static fn($value, string $type = 'string', int $style = 10, ?string $formula = null): array => shopNirPremiumXlsxCellSpec($value, $type, $style, $formula);
         $totals = self::totals($data);
-        $rows = shopNirPremiumXlsxRow(1, [3 => $cell('G-TROTS', 'string', 30), 6 => $cell('REGISTRUL MIJLOACELOR FIXE', 'string', 1)], 34);
-        $rows .= shopNirPremiumXlsxRow(2, [3 => $cell($company['legal_name'] ?? 'G-Trots România', 'string', 31), 6 => $cell('Documente justificative • Valori • Istoric casări', 'string', 32)], 24);
-        $rows .= shopNirPremiumXlsxRow(3, [3 => $cell(self::identity($company), 'string', 32)], 26);
-        $rows .= shopNirPremiumXlsxRow(4, [], 9);
-        $rows .= shopNirPremiumXlsxRow(5, [1 => $cell('PERIOADA DOCUMENTELOR', 'string', 34), 6 => $cell('POZIȚII ÎN REGISTRU', 'string', 35), 9 => $cell('VALOARE TOTALĂ CU TVA', 'string', 35)], 22);
-        $rows .= shopNirPremiumXlsxRow(6, [1 => $cell(self::period($filters), 'string', 34), 6 => $cell($totals['count'], 'number', 35), 9 => $cell($totals['total'], 'number', 36)], 32);
-        $rows .= shopNirPremiumXlsxRow(7, [1 => $cell('Sume în lei. Casările sunt afișate cu minus; valorile bunului sunt înscrise o singură dată.', 'string', 32)], 24);
-        $rows .= shopNirPremiumXlsxRow(8, [1 => $cell('DOCUMENT JUSTIFICATIV', 'string', 23), 5 => $cell('MIJLOC FIX / VALORI DE ÎNREGISTRARE', 'string', 23), 12 => $cell('ISTORIC CASĂRI', 'string', 23)], 25);
+        $rows = shopNirPremiumXlsxRow(1, [3 => $cell('G-TROTS', 'string', 43), 6 => $cell('REGISTRUL MIJLOACELOR FIXE', 'string', 44)], 36);
+        $rows .= shopNirPremiumXlsxRow(2, [3 => $cell($company['legal_name'] ?? 'G-Trots România', 'string', 45), 6 => $cell('Documente justificative  •  Valori  •  Istoric casări', 'string', 45)], 25);
+        $rows .= shopNirPremiumXlsxRow(3, [3 => $cell(self::identity($company), 'string', 46)], 24);
+        $rows .= shopNirPremiumXlsxRow(4, [], 11);
+        $rows .= shopNirPremiumXlsxRow(5, [1 => $cell('PERIOADA DOCUMENTELOR', 'string', 47), 6 => $cell('POZIȚII ÎN REGISTRU', 'string', 47), 9 => $cell('VALOARE TOTALĂ CU TVA', 'string', 49)], 22);
+        $rows .= shopNirPremiumXlsxRow(6, [1 => $cell(self::period($filters), 'string', 48), 6 => $cell($totals['count'], 'number', 48), 9 => $cell($totals['total'], 'number', 50)], 34);
+        $rows .= shopNirPremiumXlsxRow(7, [1 => $cell('INFORMAȚIE  •  Sume în lei. Casările sunt afișate cu minus; valorile bunului sunt înscrise o singură dată.', 'string', 51)], 25);
+        $rows .= shopNirPremiumXlsxRow(8, [1 => $cell('DOCUMENT JUSTIFICATIV', 'string', 52), 5 => $cell('MIJLOC FIX / VALORI DE ÎNREGISTRARE', 'string', 52), 12 => $cell('ISTORIC CASĂRI', 'string', 52)], 26);
         $headers = [];
-        foreach (self::HEADERS as $index => $label) $headers[$index + 1] = $cell($label, 'string', 9);
+        foreach (self::HEADERS as $index => $label) $headers[$index + 1] = $cell($label, 'string', 53);
         $rows .= shopNirPremiumXlsxRow(9, $headers, 38);
         $r = 10; $number = 0;
         foreach ($data as $entry) {
@@ -92,7 +150,7 @@ final class GtrotsFixedAssetExport
             foreach ($partValues as $index => $value) {
                 $numeric = in_array($index, [0, 5, 6, 7, 8, 9, 10, 12, 13], true);
                 $money = in_array($index, [6, 7, 9, 10], true);
-                $style = $money ? 13 : ($index === 12 ? 39 : ($numeric ? 11 : 10));
+                $style = $index === 0 ? 60 : ($money ? 56 : ($index === 12 ? 57 : ($index === 13 ? 61 : ($numeric ? 55 : 54))));
                 $cells[$index + 1] = $cell($value, $numeric ? 'number' : 'string', $style);
             }
             // Large comments must remain readable in Excel, including at print time.
@@ -101,11 +159,11 @@ final class GtrotsFixedAssetExport
             }
         }
         $lastData = $r - 1;
-        $rows .= shopNirPremiumXlsxRow($r, [1 => $cell('TOTAL REGISTRU', 'string', 6), 8 => $cell($totals['net'], 'number', 17, 'SUM(H10:H' . $lastData . ')'), 10 => $cell($totals['vat'], 'number', 17, 'SUM(J10:J' . $lastData . ')'), 11 => $cell($totals['total'], 'number', 36, 'SUM(K10:K' . $lastData . ')')], 34);
+        $rows .= shopNirPremiumXlsxRow($r, [1 => $cell('TOTAL REGISTRU', 'string', 58), 8 => $cell($totals['net'], 'number', 58, 'SUM(H10:H' . $lastData . ')'), 10 => $cell($totals['vat'], 'number', 58, 'SUM(J10:J' . $lastData . ')'), 11 => $cell($totals['total'], 'number', 59, 'SUM(K10:K' . $lastData . ')')], 36);
         $merges = ['A1:B3', 'C1:E1', 'F1:O1', 'C2:E2', 'F2:O2', 'C3:O3', 'A5:E5', 'F5:H5', 'I5:O5', 'A6:E6', 'F6:H6', 'I6:O6', 'A7:O7', 'A8:D8', 'E8:K8', 'L8:O8', 'A' . $r . ':G' . $r];
         $r += 2;
         $scope = empty($filters['from']) ? 'Registru complet.' : 'Selecție după data documentului.';
-        $rows .= shopNirPremiumXlsxRow($r, [1 => $cell($scope . ' Cantitatea actuală arată cantitatea rămasă după fiecare casare. Generat: ' . date('d.m.Y H:i'), 'string', 32)], 26);
+        $rows .= shopNirPremiumXlsxRow($r, [1 => $cell($scope . ' Cantitatea actuală arată cantitatea rămasă după fiecare casare. Generat: ' . date('d.m.Y H:i'), 'string', 51)], 27);
         $merges[] = 'A' . $r . ':O' . $r;
         $files = []; $media = []; $mediaIndex = []; $pictures = [];
         $logo = shopNirPremiumXlsxLogoImage(120, 120);
@@ -123,7 +181,7 @@ final class GtrotsFixedAssetExport
         $files['_rels/.rels'] = self::relationships(['officeDocument' => 'xl/workbook.xml']);
         $files['xl/_rels/workbook.xml.rels'] = self::relationships(['worksheet' => 'worksheets/sheet1.xml', 'styles' => 'styles.xml']);
         $files['xl/workbook.xml'] = '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Mijloace fixe" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">\'Mijloace fixe\'!$A$1:$O$' . $r . '</definedName><definedName name="_xlnm.Print_Titles" localSheetId="0">\'Mijloace fixe\'!$8:$9</definedName></definedNames><calcPr calcMode="auto" fullCalcOnLoad="1"/></workbook>';
-        $files['xl/styles.xml'] = shopNirReferenceXlsxStyles();
+        $files['xl/styles.xml'] = self::xlsxStyles();
         $files['xl/worksheets/sheet1.xml'] = shopNirPremiumXlsxSheet($rows, [7, 13, 15, 18, 32, 11, 15, 16, 9, 15, 18, 13, 13, 14, 32], $r, 15, ['merges' => $merges, 'drawing' => (bool)$pictures, 'freeze_rows' => 9, 'freeze_columns' => 4, 'auto_filter' => 'A9:O' . $lastData, 'fit_to_height' => 0, 'header' => '', 'footer' => '&LG-Trots | Registrul mijloacelor fixe&RPagina &P / &N']);
         return shopNirBuildZip($files);
     }
@@ -144,10 +202,10 @@ final class GtrotsFixedAssetExport
         $totals = self::totals($data);
         $logo = shopNirPdfLogoDataUri();
         $html = '<!doctype html><html lang="ro"><head><meta charset="UTF-8"><style>' . self::css() . '</style></head><body>';
-        $html .= '<table class="masthead"><tr><td class="brand">' . ($logo ? '<img src="' . $e($logo) . '">' : '') . '<b>G-TROTS</b><div>' . $e($company['legal_name'] ?? 'G-Trots România') . '</div></td><td class="title">REGISTRUL<br>MIJLOACELOR FIXE<small>Documente justificative și evidența casărilor</small></td><td class="report">REGISTRU<br><b>MF</b><small>Sume exprimate în lei</small></td></tr></table>';
-        $html .= '<div class="identity">' . $e(self::identity($company)) . '</div><table class="ribbon"><tr><td><small>PERIOADA DOCUMENTELOR</small><b>' . $e(self::period($filters)) . '</b></td><td><small>POZIȚII ÎN REGISTRU</small><b>' . $totals['count'] . '</b></td><td class="grand"><small>VALOARE TOTALĂ CU TVA</small><b>' . shopNirPdfMoney($totals['total']) . '</b></td></tr></table>';
+        $html .= '<div class="hero"><table class="masthead"><tr><td class="brand">' . ($logo ? '<img src="' . $e($logo) . '">' : '') . '<b>G-TROTS</b><div>' . $e($company['legal_name'] ?? 'G-Trots România') . '</div></td><td class="title">REGISTRUL MIJLOACELOR FIXE<small>Documente justificative • Valori • Istoric casări</small></td><td class="report"><span>REGISTRU</span><b>MF</b><small>Sume exprimate în lei</small></td></tr></table>';
+        $html .= '<div class="identity">' . $e(self::identity($company)) . '</div></div><table class="ribbon"><tr><td><small>PERIOADA DOCUMENTELOR</small><b>' . $e(self::period($filters)) . '</b></td><td><small>POZIȚII ÎN REGISTRU</small><b>' . $totals['count'] . '</b></td><td class="grand"><small>VALOARE TOTALĂ CU TVA</small><b>' . shopNirPdfMoney($totals['total']) . '</b></td></tr></table>';
         $scope = empty($filters['from']) ? 'Registru complet, cu toate casările.' : 'Selecție după data documentului, cu toate casările bunurilor selectate.';
-        $html .= '<p class="hint">' . $scope . ' Cantitatea actuală arată cantitatea rămasă după fiecare casare; valorile fiecărui bun sunt înscrise o singură dată.</p><table class="items"><colgroup>';
+        $html .= '<div class="hint"><b>INFORMAȚIE</b><span>' . $scope . ' Cantitatea actuală arată cantitatea rămasă după fiecare casare; valorile fiecărui bun sunt înscrise o singură dată.</span></div><div class="table-card"><table class="items"><colgroup>';
         $widths = [2.5, 6, 6, 6.5, 14.5, 4.5, 6.5, 7, 3.5, 6.5, 7, 6, 5.5, 5.5, 12.5];
         foreach ($widths as $width) $html .= '<col style="width:' . $width . '%">';
         // Dompdf needs widths on the cells; colgroup alone is ignored.
@@ -173,13 +231,26 @@ final class GtrotsFixedAssetExport
                 $html .= '</tr>';
             }
         }
-        $html .= '</tbody></table><table class="totals"><tr><td><small>TOTAL FĂRĂ TVA</small><b>' . shopNirPdfMoney($totals['net']) . '</b></td><td><small>TOTAL TVA</small><b>' . shopNirPdfMoney($totals['vat']) . '</b></td><td class="grand"><small>TOTAL CU TVA</small><b>' . shopNirPdfMoney($totals['total']) . '</b></td></tr></table><p class="hint">Generat la ' . date('d.m.Y H:i') . ' • G-Trots România</p></body></html>';
+        $html .= '</tbody></table></div><table class="totals"><tr><td><small>TOTAL FĂRĂ TVA</small><b>' . shopNirPdfMoney($totals['net']) . '</b></td><td><small>TOTAL TVA</small><b>' . shopNirPdfMoney($totals['vat']) . '</b></td><td class="grand"><small>TOTAL CU TVA</small><b>' . shopNirPdfMoney($totals['total']) . '</b></td></tr></table><p class="generated">Generat la ' . date('d.m.Y H:i') . ' • G-Trots România</p></body></html>';
         return $html;
     }
 
     private static function css(): string
     {
-        return '@page{size:A4 landscape;margin:8mm 7mm 12mm}body{font-family:DejaVu Sans,sans-serif;font-size:7pt;color:#071b3e;margin:0}table{border-collapse:collapse;width:100%}.masthead{margin-bottom:3mm}.masthead td{vertical-align:middle}.brand{width:34%;font-size:8pt}.brand img{width:15mm;float:left;margin-right:3mm}.brand b{font-size:19pt;display:block}.brand div{margin-top:2mm}.title{font-size:16pt;font-weight:bold;text-align:center;width:46%;line-height:1.15}.title small{display:block;font-size:7pt;color:#667991;margin-top:2mm;font-weight:normal}.report{width:20%;text-align:center;background:#f0f4f9;padding:3mm;border-radius:3mm;font-size:7pt}.report b{display:block;color:#ff7900;font-size:18pt}.report small{display:block;font-size:6pt}.identity{color:#607189;font-size:7pt;margin-bottom:4mm}.ribbon{background:#002654;color:#fff;margin-bottom:3mm}.ribbon td{padding:3mm 5mm;border-right:1px solid #315379}.ribbon td:first-child{width:48%}.ribbon small,.totals small{display:block;font-size:6.5pt;margin-bottom:2mm}.ribbon b{font-size:12pt}.grand{background:#ff7900!important;color:white!important}.hint{font-size:6.5pt;color:#64748b;line-height:1.5;margin:2mm 0 4mm}.items{table-layout:fixed}.items thead{display:table-header-group}.items th{background:#002654;color:#fff;border:1px solid #59738f;padding:2mm .8mm;font-size:6pt;line-height:1.25}.items .groups th{background:#e9eff7;color:#002654;text-align:left;padding:2mm;border:1px solid #ccd7e5;font-size:6.5pt}.items td{border:1px solid #dae2ec;padding:2mm 1mm;font-size:6.3pt;vertical-align:middle;overflow-wrap:break-word}.items tr{page-break-inside:avoid}.even td{background:#f3f6fa}.num{text-align:right}.index{color:#f47712;text-align:center;font-weight:bold}.negative{color:#b33b4c}.totals{page-break-inside:avoid;margin-top:4mm;background:#edf2f8}.totals td{padding:3mm 5mm;border:1px solid #d6e0ec;width:33%}.totals b{font-size:12pt}';
+        return '@page{size:A4 landscape;margin:7mm 7mm 12mm}'
+            . 'body{font-family:DejaVu Sans,sans-serif;font-size:7pt;color:#132b47;margin:0}'
+            . 'table{border-collapse:collapse;width:100%}'
+            . '.hero{background:#0a213d;border-radius:5mm;padding:4mm 5mm 3mm;margin-bottom:3mm;color:#fff}'
+            . '.masthead td{vertical-align:middle}.brand{width:30%;font-size:7.5pt}.brand img{width:14mm;float:left;margin-right:3mm}.brand b{font-size:18pt;display:block;color:#ff8a1f;letter-spacing:.5pt}.brand div{margin-top:1.5mm;color:#cad5e5}'
+            . '.title{font-size:16pt;font-weight:bold;text-align:center;width:50%;line-height:1.15}.title small{display:block;font-size:7pt;color:#cad5e5;margin-top:2mm;font-weight:normal}'
+            . '.report{width:20%;text-align:center;background:#143556;padding:2.5mm;border-radius:4mm;font-size:7pt}.report span{color:#cad5e5}.report b{display:block;color:#ff8a1f;font-size:17pt;line-height:1.15}.report small{display:block;font-size:5.8pt;color:#cad5e5}'
+            . '.identity{color:#aebed0;font-size:6.5pt;border-top:1px solid #294866;margin-top:3mm;padding-top:2.5mm}'
+            . '.ribbon{border-collapse:separate;border-spacing:2.5mm 0;margin:0 -2.5mm 3mm;width:calc(100% + 5mm);color:#fff}.ribbon td{background:#143556;padding:3mm 4mm;border-radius:4mm}.ribbon td:first-child{width:46%}'
+            . '.ribbon small,.totals small{display:block;font-size:6.2pt;margin-bottom:1.5mm;letter-spacing:.15pt;color:#cad5e5}.ribbon b{font-size:11pt}.grand{background:#ff7900!important;color:#fff!important}.grand small{color:#fff!important}'
+            . '.hint{background:#f5f8fc;border-left:1.4mm solid #ff7900;border-radius:2.8mm;padding:2.4mm 3mm;margin:0 0 3mm;color:#5c6f86;font-size:6.3pt;line-height:1.45}.hint b{color:#0a213d;margin-right:2.5mm;font-size:6pt}.hint span{display:inline}'
+            . '.table-card{border:1px solid #dce5ef;border-radius:3.5mm;overflow:hidden}.items{table-layout:fixed;border-collapse:separate;border-spacing:0}.items thead{display:table-header-group}.items th{background:#0a213d;color:#fff;border-right:1px solid #294866;border-bottom:1px solid #294866;padding:2.2mm .8mm;font-size:5.9pt;line-height:1.25}.items th:first-child{border-top-left-radius:3mm}.items th:last-child{border-top-right-radius:3mm;border-right:0}'
+            . '.items td{border-right:1px solid #e5ebf2;border-bottom:1px solid #e5ebf2;padding:2mm 1mm;font-size:6.2pt;vertical-align:middle;overflow-wrap:break-word}.items td:last-child{border-right:0}.items tbody tr:last-child td{border-bottom:0}.items tr{page-break-inside:avoid}.even td{background:#f7f9fc}.num{text-align:right}.index{color:#f47712;text-align:center;font-weight:bold}.negative{color:#b33b4c;font-weight:bold}'
+            . '.totals{page-break-inside:avoid;border-collapse:separate;border-spacing:2.5mm 0;margin:4mm -2.5mm 0;width:calc(100% + 5mm)}.totals td{padding:3mm 4mm;width:33%;background:#f3f6fa;border:1px solid #dce5ef;border-radius:3.5mm}.totals small{color:#63768d}.totals b{font-size:11.5pt;color:#0a213d}.generated{font-size:6pt;color:#7b8ba0;text-align:right;margin:2.5mm 0 0}';
     }
 
     public static function pdf(array $rows, array $filters, array $company = []): string

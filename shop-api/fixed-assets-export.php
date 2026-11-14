@@ -77,7 +77,8 @@ final class GtrotsFixedAssetExport
             . '<font><b/><sz val="14"/><color rgb="FFFFFFFF"/><name val="Aptos Display"/></font>'
             . '<font><b/><sz val="8"/><color rgb="FFFFFFFF"/><name val="Aptos"/></font>'
             . '<font><sz val="9"/><color rgb="FF18324F"/><name val="Aptos"/></font>'
-            . '<font><b/><sz val="9"/><color rgb="FF0B2748"/><name val="Aptos"/></font>';
+            . '<font><b/><sz val="9"/><color rgb="FF0B2748"/><name val="Aptos"/></font>'
+            . '<font><b/><sz val="14"/><color rgb="FFFF7900"/><name val="Aptos Display"/></font>';
         $fills = '<fill><patternFill patternType="solid"><fgColor rgb="FF0A213D"/></patternFill></fill>'
             . '<fill><patternFill patternType="solid"><fgColor rgb="FFEAF3FF"/></patternFill></fill>'
             . '<fill><patternFill patternType="solid"><fgColor rgb="FFFFF1E5"/></patternFill></fill>'
@@ -92,17 +93,17 @@ final class GtrotsFixedAssetExport
             return '<xf' . $attrs . '><alignment vertical="center"' . $align . '/></xf>';
         };
         $styles = [
-            $xf(9, 0, 0),                                                        // 43 brand on white
+            $xf(17, 0, 0),                                                       // 43 brand on white
             $xf(2, 0, 0, ' horizontal="center" wrapText="1"'),                 // 44 title on white
-            $xf(12, 0, 0, ' horizontal="center" wrapText="1"'),                // 45 subtitle on white
-            $xf(12, 0, 0, ' wrapText="1"'),                                     // 46 identity on white
+            $xf(0, 0, 0, ' horizontal="center" wrapText="1"'),                 // 45 subtitle on white
+            $xf(0, 0, 2, ' wrapText="1"'),                                      // 46 identity on white
             $xf(11, 13, 0, ' wrapText="1"'),                                    // 47 metric label
             $xf(13, 13, 0, ' wrapText="1"'),                                    // 48 metric value
-            $xf(15, 6, 0, ' horizontal="right" wrapText="1"'),                // 49 orange metric label
+            $xf(14, 6, 0, ' horizontal="right" wrapText="1"'),                // 49 orange metric label
             $xf(14, 6, 0, ' horizontal="right" shrinkToFit="1"', 166),         // 50 orange metric value
             $xf(12, 12, 0, ' wrapText="1"'),                                    // 51 note
             $xf(17, 10, 3, ' wrapText="1"'),                                    // 52 group
-            $xf(15, 9, 3, ' horizontal="center" wrapText="1"'),               // 53 column header
+            $xf(14, 9, 3, ' horizontal="center" wrapText="1"'),               // 53 column header
             $xf(16, 0, 2, ' wrapText="1"'),                                     // 54 body text
             $xf(16, 0, 2, ' horizontal="center"'),                              // 55 body number
             $xf(16, 0, 2, ' horizontal="right" shrinkToFit="1"', 166),         // 56 body money
@@ -112,7 +113,7 @@ final class GtrotsFixedAssetExport
             $xf(9, 0, 2, ' horizontal="center"'),                               // 60 row index
             $xf(8, 0, 2, ' horizontal="center"'),                               // 61 current quantity
         ];
-        $xml = str_replace('<fonts count="9">', '<fonts count="17">', $xml);
+        $xml = str_replace('<fonts count="9">', '<fonts count="18">', $xml);
         $xml = str_replace('</fonts><fills count="9">', $fonts . '</fonts><fills count="14">', $xml);
         $xml = str_replace('</fills><borders count="2">', $fills . '</fills><borders count="5">', $xml);
         $xml = str_replace('</borders><cellStyleXfs', $borders . '</borders><cellStyleXfs', $xml);
@@ -127,9 +128,9 @@ final class GtrotsFixedAssetExport
         $data = self::withCurrentQuantities($data);
         $cell = static fn($value, string $type = 'string', int $style = 10, ?string $formula = null): array => shopNirPremiumXlsxCellSpec($value, $type, $style, $formula);
         $totals = self::totals($data);
-        $rows = shopNirPremiumXlsxRow(1, [3 => $cell('G-TROTS', 'string', 43), 6 => $cell('REGISTRUL MIJLOACELOR FIXE', 'string', 44)], 36);
-        $rows .= shopNirPremiumXlsxRow(2, [3 => $cell($company['legal_name'] ?? 'G-Trots România', 'string', 45), 6 => $cell('Documente justificative  •  Valori  •  Istoric casări', 'string', 45)], 25);
-        $rows .= shopNirPremiumXlsxRow(3, [3 => $cell(self::identity($company), 'string', 46)], 24);
+        $rows = shopNirPremiumXlsxRow(1, [3 => $cell('G-TROTS', 'string', 43), 6 => $cell('REGISTRUL MIJLOACELOR FIXE', 'string', 44)], 40);
+        $rows .= shopNirPremiumXlsxRow(2, [3 => $cell($company['legal_name'] ?? 'G-Trots România', 'string', 45), 6 => $cell('Documente justificative  •  Valori  •  Istoric casări', 'string', 45)], 28);
+        $rows .= shopNirPremiumXlsxRow(3, [3 => $cell(self::identity($company), 'string', 46)], 27);
         $rows .= shopNirPremiumXlsxRow(4, [], 11);
         $rows .= shopNirPremiumXlsxRow(5, [1 => $cell('PERIOADA DOCUMENTELOR', 'string', 47), 6 => $cell('POZIȚII ÎN REGISTRU', 'string', 47), 9 => $cell('VALOARE TOTALĂ CU TVA', 'string', 49)], 22);
         $rows .= shopNirPremiumXlsxRow(6, [1 => $cell(self::period($filters), 'string', 48), 6 => $cell($totals['count'], 'number', 48), 9 => $cell($totals['total'], 'number', 50)], 34);

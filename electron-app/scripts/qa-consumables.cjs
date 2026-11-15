@@ -11,6 +11,11 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 app.whenReady().then(async () => {
   ipcMain.handle('app-update:get-state', () => ({ status: 'idle' }));
+  ipcMain.handle('prepare-pdf-preview', (_event, { defaultName, buffer }) => {
+    const filePath = path.join(output, `qa-preview-${String(defaultName).replace(/[^a-z0-9.-]+/gi, '-')}`);
+    fs.writeFileSync(filePath, Buffer.from(buffer));
+    return { success: true, fileName: path.basename(filePath), url: pathToFileURL(filePath).href };
+  });
   const win = new BrowserWindow({
     show: false,
     width: 1700,
@@ -155,7 +160,7 @@ app.whenReady().then(async () => {
   await check(`document.getElementById('shop-consumption-legacy-fields').hidden && document.getElementById('shop-consumption-total').textContent.includes('6,75')`, 'Bonul nou trebuie să preia costul, fără un al doilea discount.');
   await click('#shop-consumption-voucher-preview');
   await wait(`document.getElementById('shop-consumption-preview-modal').classList.contains('visible')`);
-  await check(`window.qaPreviews.length===1 && !window.qaSavedVoucher && window.qaPreviews[0].discount_value==='0' && !window.qaPreviews[0].voucher_id && document.getElementById('shop-consumption-preview-frame').src.startsWith('blob:')`, 'Previzualizarea nouă trebuie să folosească formularul fără a salva.');
+  await check(`window.qaPreviews.length===1 && !window.qaSavedVoucher && window.qaPreviews[0].discount_value==='0' && !window.qaPreviews[0].voucher_id && document.getElementById('shop-consumption-preview-frame').src.startsWith('file:')`, 'Previzualizarea nouă trebuie să folosească formularul fără a salva și un PDF local valid.');
   if(process.env.GT_CONSUMABLES_PREVIEW_PDF){await pause(1700);await capture('05-previzualizare-bon.png');}
   await click('[data-consumables-close="shop-consumption-preview-modal"]');
   await check(`document.getElementById('shop-consumption-preview-frame').src==='about:blank'`, 'Previzualizarea trebuie eliberată la închidere.');
@@ -186,21 +191,28 @@ app.whenReady().then(async () => {
   await click('[data-consumables-close="shop-consumable-create-modal"]');
   await pause(220);
   await click('[data-consumption-export-id="v1"][data-consumption-export-format="pdf"]');
+  await wait(`document.getElementById('shop-consumption-preview-modal').classList.contains('visible')`);
+  await check(`window.qaDownloads.length===0&&document.getElementById('shop-consumption-preview-frame').src.startsWith('file:')`, 'Butonul PDF trebuie să deschidă documentul sigur în aplicație.');
+  await click('[data-consumables-close="shop-consumption-preview-modal"]');
+  await pause(220);
   await click('[data-consumption-export-id="v1"][data-consumption-export-format="xlsx"]');
-  await wait(`window.qaDownloads.length===2`);
+  await wait(`window.qaDownloads.length===1`);
   await check(`window.qaExports.every(call=>call.id==='v1') && window.qaExports.map(call=>call.format).join(',')==='pdf,xlsx'`, 'Descărcările din istoric trebuie să folosească bonul și formatul selectate.');
-  await check(`window.qaDownloads[0].name==='Bon-de-consum-BC-1.pdf'&&window.qaDownloads[0].kind==='pdf'&&String.fromCharCode(...window.qaDownloads[0].bytes.slice(0,5))==='%PDF-'&&window.qaDownloads[1].name==='Bon-de-consum-BC-1.xlsx'&&window.qaDownloads[1].kind==='xlsx'&&String.fromCharCode(...window.qaDownloads[1].bytes.slice(0,2))==='PK'`, 'PDF-ul și Excel-ul trebuie salvate nativ, cu numele bonului și conținut valid.');
+  await check(`window.qaDownloads[0].name==='Bon-de-consum-BC-1.xlsx'&&window.qaDownloads[0].kind==='xlsx'&&String.fromCharCode(...window.qaDownloads[0].bytes.slice(0,2))==='PK'`, 'Excel-ul trebuie salvat nativ, cu numele bonului și conținut valid.');
   await click('[data-consumption-voucher-edit="v1"]');
   await wait(`document.getElementById('shop-consumption-voucher-modal').classList.contains('visible')`);
   await check(`!document.getElementById('shop-consumption-export-actions').hidden`, 'Bonul salvat trebuie să aibă descărcări individuale.');
   await check(`document.getElementById('shop-consumption-work-reference').value==='Revizie atelier' && document.getElementById('shop-consumption-order-reference').value==='COM-104'`, 'Referințele nu sunt precompletate la editare.');
   await check(`document.querySelector('[data-voucher-field="quantity"]').value==='12' && document.getElementById('shop-consumption-discount-value').value==='10' && document.getElementById('shop-consumption-total').textContent.includes('48,60')`, 'Editarea bonului nu normalizează zecimalele sau nu încarcă discountul.');
   await click('#shop-consumption-export-actions [data-consumption-export-format="pdf"]');
-  await wait(`window.qaDownloads.length===3`);
+  await wait(`document.getElementById('shop-consumption-preview-modal').classList.contains('visible')`);
+  await check(`window.qaDownloads.length===1&&document.getElementById('shop-consumption-preview-frame').src.startsWith('file:')`, 'PDF-ul bonului salvat trebuie previzualizat local, fără salvare coruptă.');
   await capture('04-bon-individual-descarcari.png');
+  await click('[data-consumables-close="shop-consumption-preview-modal"]');
+  await pause(220);
   await fill('#shop-consumption-voucher-notes', 'Modificare nesalvată');
   await click('#shop-consumption-export-actions [data-consumption-export-format="xlsx"]');
-  await check(`window.qaDownloads.length===3 && window.qaToasts.at(-1).includes('Salvează modificările')`, 'Modificările nesalvate trebuie semnalate înainte de export.');
+  await check(`window.qaDownloads.length===1 && window.qaToasts.at(-1).includes('Salvează modificările')`, 'Modificările nesalvate trebuie semnalate înainte de export.');
   await fill('#shop-consumption-work-reference','Lucrare revizuită');
   await fill('#shop-consumption-order-reference','');
   await fill('#shop-consumption-discount-value','25');

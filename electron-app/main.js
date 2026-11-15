@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { pathToFileURL } = require('url');
 const log = require('electron-log');
 const { autoUpdater } = require('electron-updater');
 const { clampWindowBounds } = require('./window-bounds');
@@ -373,13 +374,42 @@ ipcMain.handle('save-pdf', async (_event, { defaultName, buffer }) => {
     filters: [{ name: 'PDF', extensions: ['pdf'] }],
   });
   if (canceled || !filePath) return { success: false };
-  fs.writeFileSync(filePath, Buffer.from(buffer));
+  const bytes = Buffer.from(buffer);
+  if (bytes.subarray(0, 5).toString('ascii') !== '%PDF-') throw new Error('Conținutul primit nu este un PDF valid.');
+  const descriptor = fs.openSync(filePath, 'w');
+  try {
+    fs.writeFileSync(descriptor, bytes);
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  const saved = fs.readFileSync(filePath);
+  if (saved.length !== bytes.length || !saved.equals(bytes)) throw new Error('PDF-ul nu a fost scris integral pe disc.');
   return { success: true, filePath };
 });
 
 function safeDownloadedName(value, fallback = 'document') {
   return String(value || fallback).replace(/[<>:"/\\|?*\x00-\x1F]/g, '-').replace(/\s+/g, ' ').trim() || fallback;
 }
+
+ipcMain.handle('prepare-pdf-preview', async (_event, { defaultName, buffer }) => {
+  const bytes = Buffer.from(buffer);
+  if (bytes.subarray(0, 5).toString('ascii') !== '%PDF-') throw new Error('Conținutul primit nu este un PDF valid.');
+  const directory = path.join(app.getPath('temp'), 'g-trots-pdf-preview');
+  fs.mkdirSync(directory, { recursive: true });
+  const fileName = safeDownloadedName(defaultName, 'Bon-de-consum.pdf').replace(/\.pdf$/i, '') + '.pdf';
+  const filePath = path.join(directory, fileName);
+  const descriptor = fs.openSync(filePath, 'w');
+  try {
+    fs.writeFileSync(descriptor, bytes);
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  const saved = fs.readFileSync(filePath);
+  if (saved.length !== bytes.length || !saved.equals(bytes)) throw new Error('Previzualizarea PDF nu a fost pregătită integral.');
+  return { success: true, fileName, url: pathToFileURL(filePath).href };
+});
 
 async function fetchLegacyNirAttachment(url) {
   const parsed = new URL(String(url || ''));

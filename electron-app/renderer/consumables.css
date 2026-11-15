@@ -229,9 +229,14 @@
 .shop-consumption-preview{width:min(1250px,96vw);height:92vh;display:flex;flex-direction:column}
 .shop-consumption-preview>header p{font-size:12px;color:#b3a8bc;margin:5px 0 0}
 .shop-consumption-preview iframe{width:100%;flex:1;min-height:240px;border:0;background:#373737}
-.shop-consumption-preview>footer{padding:14px 22px}
+.shop-consumption-preview>footer{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:14px 22px}
+#shop-consumption-preview-download{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:auto;min-width:164px;min-height:44px;padding:10px 17px;border:1px solid #a96c35;border-radius:11px;background:linear-gradient(135deg,#3a291f,#2b2224);color:#ffd3ad;font-size:12px;font-weight:700;box-shadow:0 8px 20px #00000022;cursor:pointer}
+#shop-consumption-preview-download:hover{border-color:#f18a32;background:linear-gradient(135deg,#4a3020,#352526);color:#fff}
+#shop-consumption-preview-download:disabled{opacity:.58;cursor:wait}
+#shop-consumption-preview-download svg{display:block;flex:0 0 18px;width:18px!important;height:18px!important;stroke:currentColor;stroke-width:1.8;fill:none}
+#shop-consumption-preview-close{min-height:44px;padding:10px 18px;border-radius:11px}
 .shop-consumption-voucher>footer{flex-wrap:wrap}
-@media(max-width:720px){.shop-consumption-discount-layout{grid-template-columns:1fr;gap:18px}}
+@media(max-width:720px){.shop-consumption-discount-layout{grid-template-columns:1fr;gap:18px}.shop-consumption-preview>footer{flex-wrap:wrap}.shop-consumption-preview>footer button{flex:1;min-width:0}}
 
 /* The discount follows document line totals, using the existing voucher styling. */
 .shop-purchase-discount { margin-top: 20px; }

@@ -34,7 +34,7 @@ $body=['voucher_date'=>'2026-11-15','series'=>'BC','voucher_number'=>'1','giver_
 $before=snapshotConsumables($db);
 $preview=GtrotsConsumables::previewVoucher($db,$body,[]);
 expectDiscount(str_starts_with(base64_decode($preview['content_base64'],true),'%PDF-'),'Preview PDF missing');
-expectDiscount($preview['file_name']==='Bon-de-consum-BC-1 - fact. KOT_65577 din 28.09.2026.pdf','Source filename');
+expectDiscount($preview['file_name']==='BC-1 - fact. KOT_65577 din 28.09.2026.pdf','Source filename');
 expectDiscount($before===snapshotConsumables($db) && GtrotsConsumables::voucherMeta($db,'BC')['next_number']==='1','Preview must not write or reserve a number');
 $voucher=GtrotsConsumables::createVoucher($db,$body,[]);
 expectDiscount($voucher['subtotal']==='35.14' && $voucher['discount_amount']==='1.00' && $voucher['total']==='34.14','Half-cent rounding and fixed discount');

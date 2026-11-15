@@ -34,10 +34,8 @@
   };
   const saveDownload = async file => {
     const {bytes,extension}=decodeDownload(file);
-    if(extension==='pdf'&&typeof window.savePdf==='function')return Boolean((await window.savePdf(file.file_name,Array.from(bytes)))?.success);
-    if(extension==='xlsx'&&typeof window.saveExcel==='function')return Boolean((await window.saveExcel(file.file_name,Array.from(bytes)))?.success);
     const url=URL.createObjectURL(new Blob([bytes],{type:file.mime_type||'application/octet-stream'})),link=document.createElement('a');
-    link.href=url;link.download=file.file_name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return true;
+    link.href=url;link.download=file.file_name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return true;
   };
   const filePayload = file => new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=()=>reject(new Error(`Fișierul ${file.name} nu a putut fi citit.`));reader.onload=()=>resolve({file_name:file.name,mime_type:file.type||'application/octet-stream',content_base64:String(reader.result).split(',').pop()});reader.readAsDataURL(file);});
 

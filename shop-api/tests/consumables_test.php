@@ -108,7 +108,7 @@ $zip->close(); unlink($tmp);
 // Downloading a saved voucher must not mutate stock or export other vouchers.
 $beforeDownload = GtrotsConsumables::get($db, (string)$spray['id']);
 $individual = GtrotsConsumables::exportVoucher($db, (string)$voucher['id'], 'xlsx');
-checkConsumables($individual['file_name'] === 'Bon-de-consum-BC-1 - fact. FC_101 din 02.11.2026.xlsx', 'Numele fișierului individual trebuie să identifice bonul și documentul de intrare.');
+checkConsumables($individual['file_name'] === 'BC-1 - fact. FC_101 din 02.11.2026.xlsx', 'Numele fișierului individual trebuie să identifice bonul și documentul de intrare.');
 $tmp = tempnam(sys_get_temp_dir(), 'voucher-xlsx-');
 file_put_contents($tmp, base64_decode($individual['content_base64'], true));
 $zip = new ZipArchive(); checkConsumables($zip->open($tmp) === true, 'XLSX-ul individual trebuie să fie valid.');

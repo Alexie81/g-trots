@@ -75,7 +75,7 @@ app.whenReady().then(async () => {
         createConsumptionVoucher: async value => {window.qaSavedVoucher=value;return value;}, updateConsumptionVoucher: async (_id,value) => {window.qaSavedVoucher=value;return value;},
         deleteConsumptionVoucher: async () => ({success:true}),
         exportConsumables: async format => ({file_name:'qa.'+format,mime_type:'application/octet-stream',content_base64:format==='pdf'?btoa('%PDF-1.4'):btoa('PK\\x03\\x04qa')}),
-        exportConsumptionVoucher: async (id,format) => {window.qaExports.push({id,format});if(window.qaExportFails)throw new Error('Export indisponibil');return {file_name:'Bon-de-consum-BC-1.'+format,mime_type:format==='pdf'?'application/pdf':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',content_base64:format==='pdf'?${JSON.stringify(process.env.GT_CONSUMABLES_PREVIEW_PDF ? fs.readFileSync(process.env.GT_CONSUMABLES_PREVIEW_PDF).toString('base64') : Buffer.from('%PDF-1.4').toString('base64'))}:btoa('PK\\x03\\x04qa')};},
+        exportConsumptionVoucher: async (id,format) => {window.qaExports.push({id,format});if(window.qaExportFails)throw new Error('Export indisponibil');return {file_name:format==='pdf'?'BC-1 - fact. ZUZ_1121 din 28.09.2026.pdf':'BC-1 - fact. ZUZ_1121 din 28.09.2026.xlsx',mime_type:format==='pdf'?'application/pdf':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',content_base64:format==='pdf'?${JSON.stringify(process.env.GT_CONSUMABLES_PREVIEW_PDF ? fs.readFileSync(process.env.GT_CONSUMABLES_PREVIEW_PDF).toString('base64') : Buffer.from('%PDF-1.4').toString('base64'))}:btoa('PK\\x03\\x04qa')};},
       };
       if (window.selectAppModule) window.selectAppModule('shop');
       window.switchTab('shop-consumables');
@@ -101,7 +101,7 @@ app.whenReady().then(async () => {
   await check(`window.qaExports.at(-1).id==='v2'&&window.qaExports.at(-1).format==='pdf'&&window.qaDownloads.length===0&&!window.qaSavedVoucher&&document.getElementById('shop-consumption-preview-title').textContent==='Bon de consum BC 2'`, 'Vezi trebuie să deschidă PDF-ul bonului ales, fără descărcare sau salvare.');
   await click('#shop-consumption-preview-download');
   await wait(`window.qaDownloads.length===1`);
-  await check(`window.qaDownloads[0].name==='Bon-de-consum-BC-1.pdf'&&window.qaDownloads[0].kind==='pdf'&&String.fromCharCode(...window.qaDownloads[0].bytes.slice(0,5))==='%PDF-'`, 'Descărcarea din previzualizare trebuie să salveze PDF-ul valid cu numele bonului.');
+  await check(`window.qaDownloads[0].name==='BC-1 - fact. ZUZ_1121 din 28.09.2026.pdf'&&window.qaDownloads[0].kind==='anchor'`, 'Descărcarea din previzualizare trebuie să păstreze numele complet al bonului și traseul standard al aplicației.');
   await run('window.qaDownloads=[]');
   if(process.env.GT_CONSUMABLES_PREVIEW_PDF){await pause(1700);await capture('08-vezi-bon-salvat.png');}
   await click('[data-consumables-close="shop-consumption-preview-modal"]');
@@ -189,7 +189,7 @@ app.whenReady().then(async () => {
   await click('[data-consumption-export-id="v1"][data-consumption-export-format="xlsx"]');
   await wait(`window.qaDownloads.length===2`);
   await check(`window.qaExports.every(call=>call.id==='v1') && window.qaExports.map(call=>call.format).join(',')==='pdf,xlsx'`, 'Descărcările din istoric trebuie să folosească bonul și formatul selectate.');
-  await check(`window.qaDownloads[0].name==='Bon-de-consum-BC-1.pdf'&&window.qaDownloads[0].kind==='pdf'&&String.fromCharCode(...window.qaDownloads[0].bytes.slice(0,5))==='%PDF-'&&window.qaDownloads[1].name==='Bon-de-consum-BC-1.xlsx'&&window.qaDownloads[1].kind==='xlsx'&&String.fromCharCode(...window.qaDownloads[1].bytes.slice(0,2))==='PK'`, 'PDF-ul și Excel-ul trebuie salvate nativ, cu numele bonului și conținut valid.');
+  await check(`window.qaDownloads[0].name==='BC-1 - fact. ZUZ_1121 din 28.09.2026.pdf'&&window.qaDownloads[0].kind==='anchor'&&window.qaDownloads[1].name==='BC-1 - fact. ZUZ_1121 din 28.09.2026.xlsx'&&window.qaDownloads[1].kind==='anchor'`, 'PDF-ul și Excel-ul trebuie descărcate prin traseul standard, cu numele corecte.');
   await click('[data-consumption-voucher-edit="v1"]');
   await wait(`document.getElementById('shop-consumption-voucher-modal').classList.contains('visible')`);
   await check(`!document.getElementById('shop-consumption-export-actions').hidden`, 'Bonul salvat trebuie să aibă descărcări individuale.');

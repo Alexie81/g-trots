@@ -601,7 +601,7 @@ final class GtrotsConsumables
         $bytes=$format==='pdf'?GtrotsConsumablesExport::voucherPdf($voucher,$company):GtrotsConsumablesExport::voucherXlsx($voucher,$company);
         $safe=static fn($value)=>trim(mb_strcut(preg_replace('~[\x00-\x1F\x7F<>:"/|?*]+~u','-',str_replace(chr(92),'-',trim((string)$value)))??'',0,70,'UTF-8'),'. -');
         $number=implode('-',array_filter([$safe($voucher['series']),$safe($voucher['voucher_number'])],fn($v)=>$v!==''));
-        $base='Bon-de-consum-'.$number;
+        $base=$number;
         $sources=[];
         foreach($voucher['lines'] as $line){
             $identity=implode('_',array_filter([$safe($line['document_series']??''),$safe($line['document_number']??'')],fn($v)=>$v!==''));

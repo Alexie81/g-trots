@@ -2940,10 +2940,10 @@ function shopNirDownloadAttachment(PDO $db, string $documentId, string $attachme
 
 function shopNirDownloadAllAttachments(PDO $db, string $documentId): array {
     if ($documentId === '') throw new InvalidArgumentException('NIR-ul este obligatoriu.');
-    $documentStmt = $db->prepare('SELECT COALESCE(nir_number, temporary_number) AS document_number FROM shop_nir_documents WHERE id = ? LIMIT 1');
+    $documentStmt = $db->prepare('SELECT nir_number, temporary_number, supplier_invoice_series, supplier_invoice_number, supplier_invoice_date FROM shop_nir_documents WHERE id = ? LIMIT 1');
     $documentStmt->execute([$documentId]);
-    $documentNumber = $documentStmt->fetchColumn();
-    if ($documentNumber === false) throw new ShopNirHttpException('NIR-ul nu există.', 404);
+    $document = $documentStmt->fetch();
+    if (!$document) throw new ShopNirHttpException('NIR-ul nu există.', 404);
     $stmt = $db->prepare('SELECT original_name, storage_name FROM shop_nir_attachments WHERE nir_document_id = ? ORDER BY created_at ASC');
     $stmt->execute([$documentId]);
     $attachments = $stmt->fetchAll();
@@ -2980,8 +2980,7 @@ function shopNirDownloadAllAttachments(PDO $db, string $documentId): array {
     } finally {
         if (is_file($temporaryPath)) @unlink($temporaryPath);
     }
-    $safeNumber = preg_replace('/[^A-Za-z0-9._-]+/', '-', (string)$documentNumber) ?: 'NIR';
-    return ['file_name' => $safeNumber . '-documente.zip', 'mime_type' => 'application/zip', 'content_base64' => base64_encode($bytes)];
+    return ['file_name' => shopNirExportFileBase($document) . ' - documente.zip', 'mime_type' => 'application/zip', 'content_base64' => base64_encode($bytes)];
 }
 
 function shopNirSpreadsheetColumnIndex(string $letters): int {
@@ -3535,29 +3534,37 @@ function shopNirBuildPdf(array $document): string {
     return shopNirRenderPremiumPdf($document);
 }
 
-/** Build the audit-friendly filename requested by accounting exports. */
-function shopNirXlsxFileName(array $document): string {
-    $documentNumber = trim((string)($document['nir_number'] ?? $document['temporary_number'] ?? 'NIR'));
-    $series = trim((string)($document['nir_series'] ?? ''));
-    $number = trim((string)($document['nir_sequence_number'] ?? ''));
-    if ($series === '' || $number === '') {
-        $parts = array_values(array_filter(explode('-', $documentNumber), static fn($part) => $part !== ''));
-        if ($number === '' && count($parts) > 1) $number = (string)array_pop($parts);
-        if ($series === '') $series = $parts ? implode('-', $parts) : $documentNumber;
-    }
-    $date = trim((string)($document['nir_date'] ?? $document['confirmed_at'] ?? $document['created_at'] ?? date('Y-m-d')));
-    $date = substr($date, 0, 10);
-    $safe = static function (string $value, string $fallback): string {
-        $value = preg_replace('/[^A-Za-z0-9_-]+/u', '-', trim($value)) ?? '';
-        $value = trim($value, '-_');
-        return $value !== '' ? $value : $fallback;
+/** Same readable identity for standalone exports and documents inside ZIP archives. */
+function shopNirExportFileBase(array $document): string {
+    $safe = static function ($value, int $limit = 90): string {
+        $value = preg_replace('~[\x00-\x1F\x7F<>:"/\\\\|?*]+~u', '-', trim((string)$value)) ?? '';
+        $value = preg_replace('/\s+/u', ' ', $value) ?? '';
+        return trim(mb_strcut($value, 0, $limit, 'UTF-8'), '. -');
     };
-    return 'NIR_G-Trots_' . $safe($series, 'NIR') . '_' . $safe($number, 'document') . '_' . $safe($date, date('Y-m-d')) . '.xlsx';
+    $documentNumber = trim((string)($document['nir_number'] ?? $document['temporary_number'] ?? 'NIR'));
+    $number = trim((string)($document['nir_sequence_number'] ?? ''));
+    if ($number === '' && preg_match('/^(?:NIR[ -]*)?(?:\d{4}-)?(\d+)$/i', $documentNumber, $match)) $number = $match[1];
+    $base = ctype_digit($number) ? 'NIR ' . (ltrim($number, '0') ?: '0') : ($safe($documentNumber, 60) ?: 'NIR');
+    $invoice = implode('_', array_values(array_filter([
+        $safe($document['supplier_invoice_series'] ?? '', 40),
+        $safe($document['supplier_invoice_number'] ?? '', 80),
+    ], static fn(string $part): bool => $part !== '')));
+    if ($invoice !== '') {
+        $base .= ' - fact. ' . $invoice;
+        $date = substr(trim((string)($document['supplier_invoice_date'] ?? '')), 0, 10);
+        $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+        if ($parsed && $parsed->format('Y-m-d') === $date) $base .= ' din ' . $parsed->format('d.m.Y');
+    }
+    return $base;
+}
+
+function shopNirXlsxFileName(array $document): string {
+    return shopNirExportFileBase($document) . '.xlsx';
 }
 
 function shopNirExport(PDO $db, string $id, string $format, array $user): array {
     $document = shopNirExportRows($db, $id, $user);
-    $base = preg_replace('/[^A-Za-z0-9_-]+/', '-', (string)($document['nir_number'] ?? $document['temporary_number'])) ?: 'NIR';
+    $base = shopNirExportFileBase($document);
     if ($format === 'pdf') {
         $bytes = shopNirBuildPdf($document);
         return ['file_name' => $base . '.pdf', 'mime_type' => 'application/pdf', 'content_base64' => base64_encode($bytes)];
@@ -3592,9 +3599,8 @@ function shopNirDownloadBundle(PDO $db, string $id, array $user): array {
     if (!class_exists('ZipArchive')) throw new RuntimeException('Arhivarea documentelor nu este disponibilă pe server.');
 
     $document = shopNirExportRows($db, $id, $user);
-    $documentNumber = trim((string)($document['nir_number'] ?? $document['temporary_number'] ?? 'NIR'));
-    $safeNumber = preg_replace('/[^A-Za-z0-9._-]+/u', '-', $documentNumber) ?: 'NIR';
-    $pdfName = $safeNumber . '.pdf';
+    $fileBase = shopNirExportFileBase($document);
+    $pdfName = $fileBase . '.pdf';
     $xlsxName = shopNirXlsxFileName($document);
 
     $attachmentStmt = $db->prepare('SELECT original_name, storage_name FROM shop_nir_attachments WHERE nir_document_id = ? ORDER BY created_at ASC, id ASC');
@@ -3646,7 +3652,7 @@ function shopNirDownloadBundle(PDO $db, string $id, array $user): array {
     }
 
     return [
-        'file_name' => $safeNumber . '-complet.zip',
+        'file_name' => $fileBase . '.zip',
         'mime_type' => 'application/zip',
         'content_base64' => base64_encode($bytes),
     ];

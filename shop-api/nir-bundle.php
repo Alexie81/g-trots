@@ -326,13 +326,18 @@ function shopNirDownloadRegistryBundle(PDO $db, string $from, string $to, bool $
     $closed = false;
     try {
         if (!shopNirZipAddStoredString($zip, $registryName, $registryBytes)) throw new RuntimeException('Registrul Excel nu a putut fi adăugat în arhivă.');
+        $usedFolders = [];
         foreach ($documents as $row) {
             $document = shopNirExportRows($db, (string)$row['id'], $user);
-            $safeNumber = shopNirBundleSafeName((string)($document['nir_number'] ?? $document['temporary_number'] ?? 'NIR'));
+            $fileBase = shopNirExportFileBase($document);
+            $safeNumber = $fileBase;
+            $suffix = 2;
+            while (isset($usedFolders[mb_strtolower($safeNumber)])) $safeNumber = $fileBase . ' (' . $suffix++ . ')';
+            $usedFolders[mb_strtolower($safeNumber)] = true;
             $folder = $safeNumber . '/';
             $zip->addEmptyDir($safeNumber);
             $zip->addEmptyDir($safeNumber . '/documente');
-            if (!shopNirZipAddStoredString($zip, $folder . $safeNumber . '.pdf', shopNirBuildPdf($document))) throw new RuntimeException('Un PDF NIR nu a putut fi adăugat în arhivă.');
+            if (!shopNirZipAddStoredString($zip, $folder . $fileBase . '.pdf', shopNirBuildPdf($document))) throw new RuntimeException('Un PDF NIR nu a putut fi adăugat în arhivă.');
             if (!shopNirZipAddStoredString($zip, $folder . shopNirXlsxFileName($document), shopNirBuildXlsx($document))) throw new RuntimeException('Un Excel NIR nu a putut fi adăugat în arhivă.');
             shopNirBundleAddAttachments($zip, $db, (string)$row['id'], $folder);
         }

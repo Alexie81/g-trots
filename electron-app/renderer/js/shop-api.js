@@ -11,7 +11,7 @@
     const controller = new AbortController();
     // Stergerea arhiveaza mai intai produsul si pretul in Stripe, deci poate
     // dura mai mult decat o cerere obisnuita pe o conexiune lenta.
-    const timeoutMs = action === 'exportProducts' ? 180000 : ['exportInvoiceRegistry', 'exportInventoryLedger', 'downloadNirBundle', 'downloadNirRegistryBundle', 'exportFixedAssets', 'exportConsumables', 'exportConsumptionVoucher'].includes(action) ? 1800000 : action === 'syncStripeCatalog' ? 90000 : ['syncBoomagTaxonomy', 'syncBoomagStock'].includes(action) ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
+    const timeoutMs = action === 'exportProducts' ? 180000 : ['exportInvoiceRegistry', 'exportInventoryLedger', 'downloadNirBundle', 'downloadNirRegistryBundle', 'exportFixedAssets', 'exportConsumables', 'exportConsumptionVoucher'].includes(action) ? 1800000 : ['syncStripeCatalog', 'previewConsumptionVoucher'].includes(action) ? 90000 : ['syncBoomagTaxonomy', 'syncBoomagStock'].includes(action) ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const isGet = !options.method || options.method === 'GET';
     const cacheBuster = isGet ? `&_=${Date.now()}` : '';
@@ -221,6 +221,7 @@
     updateConsumptionVoucher: (id, payload) => call('updateConsumptionVoucher', json('PUT', payload), id),
     deleteConsumptionVoucher: (id, revision) => call('deleteConsumptionVoucher', json('DELETE', { revision }), id),
     exportConsumptionVoucher: (id, format) => call('exportConsumptionVoucher', {}, id, 0, { format }),
+    previewConsumptionVoucher: payload => call('previewConsumptionVoucher', json('POST', payload)),
     exportConsumables: (format, from = '', to = '') => call('exportConsumables', {}, '', 0, { format, from, to }),
     listProducts: () => call('listProducts'),
     listProductOptions: (options = {}) => call('listProductOptions', json('POST', options)),

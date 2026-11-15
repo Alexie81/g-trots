@@ -6922,7 +6922,7 @@ try {
         'listConsumables','getConsumable','getConsumableDocument','createConsumableDocument','updateConsumableDocument',
         'deleteConsumableDocument','deleteConsumable','addConsumableFiles','deleteConsumableFile','downloadConsumableDocument',
         'listConsumablePeople','saveConsumablePerson','deleteConsumablePerson','getConsumptionVoucherMeta',
-        'getConsumptionVoucher','createConsumptionVoucher','updateConsumptionVoucher','deleteConsumptionVoucher','exportConsumables','exportConsumptionVoucher',
+        'getConsumptionVoucher','createConsumptionVoucher','updateConsumptionVoucher','deleteConsumptionVoucher','exportConsumables','exportConsumptionVoucher','previewConsumptionVoucher',
     ];
     if (in_array($action, $consumableActions, true)) GtrotsConsumables::ensureSchema($db);
 
@@ -6998,6 +6998,7 @@ try {
     if ($action === 'deleteConsumablePerson' && $method === 'DELETE') jsonResponse(GtrotsConsumables::deletePerson($db, trim((string)($_GET['id'] ?? ''))));
     if ($action === 'getConsumptionVoucherMeta' && $method === 'GET') jsonResponse(GtrotsConsumables::voucherMeta($db, trim((string)($_GET['series'] ?? 'BC'))));
     if ($action === 'getConsumptionVoucher' && $method === 'GET') jsonResponse(GtrotsConsumables::getVoucher($db, trim((string)($_GET['id'] ?? ''))));
+    if ($action === 'previewConsumptionVoucher' && $method === 'POST') jsonResponse(GtrotsConsumables::previewVoucher($db, $body, (array)$currentUser));
     if ($action === 'createConsumptionVoucher' && $method === 'POST') jsonResponse(GtrotsConsumables::createVoucher($db, $body, (array)$currentUser), 201);
     if ($action === 'updateConsumptionVoucher' && $method === 'PUT') jsonResponse(GtrotsConsumables::updateVoucher($db, trim((string)($_GET['id'] ?? '')), $body, (array)$currentUser));
     if ($action === 'deleteConsumptionVoucher' && $method === 'DELETE') jsonResponse(GtrotsConsumables::deleteVoucher($db, trim((string)($_GET['id'] ?? '')), $body));

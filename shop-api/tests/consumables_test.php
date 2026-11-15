@@ -100,15 +100,15 @@ checkConsumables(str_contains($voucherSheet, 'Gestionar Atelier') && str_contain
 $voucherXml = simplexml_load_string($voucherSheet);
 $voucherXml->registerXPathNamespace('s', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main');
 $readCell = static fn(string $ref): string => (string)($voucherXml->xpath('//s:c[@r="'.$ref.'"]/s:is/s:t')[0] ?? '');
-checkConsumables($readCell('L6') === 'Data doc. de intrare' && $readCell('L7') === '02.11.2026', 'Data documentului de intrare trebuie exportată lângă referința documentului.');
-checkConsumables($readCell('B7') === '11.11.2026' && $readCell('K7') === 'FC 101', 'Data bonului și documentul sursă trebuie păstrate în coloanele lor.');
-checkConsumables(str_contains($voucherSheet, 'autoFilter ref="A6:M7"'), 'Filtrarea Excel trebuie să includă noua coloană.');
+checkConsumables($readCell('M6') === 'Data doc. de intrare' && $readCell('M7') === '02.11.2026', 'Data documentului de intrare trebuie exportată lângă referința documentului.');
+checkConsumables($readCell('B7') === '11.11.2026' && $readCell('L7') === 'FC 101', 'Data bonului și documentul sursă trebuie păstrate în coloanele lor.');
+checkConsumables(str_contains($voucherSheet, 'autoFilter ref="A6:N7"'), 'Filtrarea Excel trebuie să includă noua coloană.');
 $zip->close(); unlink($tmp);
 
 // Downloading a saved voucher must not mutate stock or export other vouchers.
 $beforeDownload = GtrotsConsumables::get($db, (string)$spray['id']);
 $individual = GtrotsConsumables::exportVoucher($db, (string)$voucher['id'], 'xlsx');
-checkConsumables($individual['file_name'] === 'Bon-de-consum-BC-1.xlsx', 'Numele fișierului individual trebuie să identifice bonul.');
+checkConsumables($individual['file_name'] === 'Bon-de-consum-BC-1 - fact. FC_101 din 02.11.2026.xlsx', 'Numele fișierului individual trebuie să identifice bonul și documentul de intrare.');
 $tmp = tempnam(sys_get_temp_dir(), 'voucher-xlsx-');
 file_put_contents($tmp, base64_decode($individual['content_base64'], true));
 $zip = new ZipArchive(); checkConsumables($zip->open($tmp) === true, 'XLSX-ul individual trebuie să fie valid.');

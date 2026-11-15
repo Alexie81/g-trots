@@ -47,7 +47,7 @@ app.whenReady().then(async () => {
     (() => {
       document.querySelectorAll('#startup-loader,#auth-overlay').forEach(el => { el.hidden = true; el.remove(); });
       window.AUTH = { getToken: () => 'qa', getUser: () => ({display_name:'Administrator QA',role:'admin'}), hasPermission: () => true };
-      window.qaToasts=[];window.qaDownloads=[];window.qaExports=[];
+      window.qaToasts=[];window.qaDownloads=[];window.qaExports=[];window.qaPreviews=[];
       HTMLAnchorElement.prototype.click=function(){window.qaDownloads.push(this.download);};
       window.BUSINESS_UI = { showToast: (message, type) => {window.qaToasts.push(message);console.log('TOAST', type || 'success', message);} };
       const items = [
@@ -57,7 +57,7 @@ app.whenReady().then(async () => {
       const files = [{id:'f1',document_id:'d1',original_name:'factura-demo.pdf',mime_type:'application/pdf',file_size:1234}];
       const vouchers = [{voucher_id:'v1',voucher_date:'2026-11-12',series:'BC',voucher_number:'1',quantity:12,value:54,giver_name:'Gestionar atelier',receiver_name:'Tehnician service'}];
       const detail = id => ({...items.find(item=>item.id===id),files,vouchers:id==='c1'?vouchers:[],notes:'Document demonstrativ',vat_manual:0});
-      const sourceDocument = {id:'d1',document_date:'2026-11-10',document_type:'factura',series:'DEMO',document_number:'C-001',notes:'Document demonstrativ',files,lines:[detail('c1')],revision:'r-d1'};
+      const sourceDocument = {id:'d1',document_date:'2026-11-10',document_type:'factura',series:'DEMO',document_number:'0001',notes:'Document demonstrativ',files,lines:[{...detail('c1'),quantity:'50.0000',unit_price:'4.5000',vat_rate:'19.0000',vat_value:'42.7500'}],revision:'r-d1'};
       const people = {givers:[{id:'p1',role:'giver',name:'Gestionar atelier',details:'Gestiune centrală',active:1}],receivers:[{id:'p2',role:'receiver',name:'Tehnician service',details:'Atelier',active:1}]};
       window.SHOP_API = {
         listConsumables: async filters => ({items,total:items.length,page:Number(filters.page||1),page_size:Number(filters.page_size||25),page_count:1}),
@@ -68,7 +68,8 @@ app.whenReady().then(async () => {
         downloadConsumableDocument: async () => ({file_name:'demo.txt',mime_type:'text/plain',content_base64:btoa('demo')}),
         listConsumablePeople: async () => people, saveConsumablePerson: async () => people, deleteConsumablePerson: async () => people,
         getConsumptionVoucherMeta: async series => ({series,next_number:'2',people}),
-        getConsumptionVoucher: async () => ({id:'v1',voucher_date:'2026-11-12',series:'BC',voucher_number:'1',giver_id:'p1',giver_name:'Gestionar atelier',receiver_id:'p2',receiver_name:'Tehnician service',notes:'Consum atelier',work_reference:'Revizie atelier',order_reference:'COM-104',lines:[{consumable_id:'c1',quantity:12}],revision:'r-v1'}),
+        getConsumptionVoucher: async () => ({id:'v1',voucher_date:'2026-11-12',series:'BC',voucher_number:'1',giver_id:'p1',giver_name:'Gestionar atelier',receiver_id:'p2',receiver_name:'Tehnician service',notes:'Consum atelier',work_reference:'Revizie atelier',order_reference:'COM-104',discount_type:'percent',discount_value:'10.0000',lines:[{consumable_id:'c1',quantity:'12.0000'}],revision:'r-v1'}),
+        previewConsumptionVoucher: async value => {window.qaPreviews.push(value);if(window.qaPreviewFails)throw new Error('Previzualizare indisponibilă');return {file_name:'Bon demo.pdf',mime_type:'application/pdf',content_base64:${JSON.stringify(process.env.GT_CONSUMABLES_PREVIEW_PDF ? fs.readFileSync(process.env.GT_CONSUMABLES_PREVIEW_PDF).toString('base64') : Buffer.from('%PDF-1.4').toString('base64'))}};},
         createConsumptionVoucher: async value => {window.qaSavedVoucher=value;return value;}, updateConsumptionVoucher: async (_id,value) => {window.qaSavedVoucher=value;return value;},
         deleteConsumptionVoucher: async () => ({success:true}),
         exportConsumables: async format => ({file_name:'qa.'+format,mime_type:'application/octet-stream',content_base64:btoa('qa')}),
@@ -81,6 +82,7 @@ app.whenReady().then(async () => {
 
   await wait(`Boolean(document.getElementById('shop-consumables-search'))`);
   await check(`document.querySelectorAll('.shop-consumables-table thead th').length===12`, 'Tabelul nu are cele 12 coloane cerute.');
+  await check(`document.querySelector('.shop-consumables-table th:nth-child(4)').textContent==='Bon de consum' && [...document.querySelectorAll('.shop-consumable-row-number')].map(el=>el.textContent).join(',')==='2,1'`, 'Coloana bonului sau ordinea descrescătoare este incorectă.');
   await check(`document.querySelector('[data-tab="shop-fixed-assets"]')?.nextElementSibling?.dataset.tab==='shop-consumables'`, 'Tabul Consumabile nu este imediat sub Mijloace fixe.');
   await check(`document.querySelector('.shop-consumables-table').scrollWidth>document.querySelector('.shop-consumables-table-wrap').clientWidth`, 'Tabelul nu păstrează toate coloanele cu scroll orizontal.');
   await check(`getComputedStyle(document.querySelector('.shop-consumables-table')).minWidth==='1530px'`, 'Lățimea completă a tabelului nu este păstrată.');
@@ -101,8 +103,15 @@ app.whenReady().then(async () => {
   await fill('[data-consumable-field="quantity"]', '10', 'change');
   await fill('[data-consumable-field="unit_price"]', '5', 'change');
   await fill('[data-consumable-field="vat_rate"]', '19', 'change');
-  await check(`document.querySelector('[data-consumable-field="vat_value"]').value==='9.50'`, 'TVA-ul automat din editor este incorect.');
+  await check(`document.querySelector('[data-consumable-field="vat_value"]').value==='9.5'`, 'TVA-ul automat din editor este incorect.');
   await capture('01-document-consumabile.png');
+  await click('[data-consumables-close="shop-consumable-create-modal"]');
+  await pause(220);
+
+  await click('[data-consumable-edit="c1"]');
+  await wait(`document.getElementById('shop-consumable-create-modal').classList.contains('visible')`);
+  await check(`['quantity','unit_price','vat_rate','vat_value'].map(field=>document.querySelector('[data-consumable-field="'+field+'"]').value).join(',')==='50,4.5,19,42.75'`, 'Editarea adaugă zecimale inutile sau pierde fracțiunile reale.');
+  await check(`document.getElementById('shop-consumable-number').value==='0001'`, 'Numărul documentului trebuie păstrat ca text, inclusiv zerourile inițiale.');
   await click('[data-consumables-close="shop-consumable-create-modal"]');
   await pause(220);
 
@@ -113,6 +122,19 @@ app.whenReady().then(async () => {
   await check(`['shop-consumption-work-reference','shop-consumption-order-reference'].every(id=>!document.getElementById(id).required && document.getElementById(id).value==='')`, 'Referințele unui bon nou trebuie să fie opționale.');
   await check(`document.querySelectorAll('[data-manage-consumable-people]').length===2`, 'Administrarea predătorilor și primitorilor lipsește.');
   await check(`document.getElementById('shop-consumption-voucher-series').value==='BC' && document.getElementById('shop-consumption-voucher-number').value==='2'`, 'Seria/numărul bonului nu sunt propuse.');
+  await check(`['giver','receiver'].every(role=>document.getElementById('shop-consumption-'+role).value && document.getElementById('shop-consumption-'+role+'-name').hidden && document.getElementById('shop-consumption-'+role+'-name').disabled)`, 'Prima persoană trebuie selectată automat, fără input manual vizibil.');
+  await fill('#shop-consumption-giver','','change');
+  await check(`!document.getElementById('shop-consumption-giver-name').hidden && document.getElementById('shop-consumption-giver-name').required`, 'Opțiunea manuală trebuie să arate inputul obligatoriu.');
+  await fill('#shop-consumption-giver','p1','change');
+  await fill('[data-voucher-field="quantity"]','1.5','change');
+  await fill('#shop-consumption-discount-value','1');
+  await check(`document.getElementById('shop-consumption-total').textContent.includes('5,75')`, 'Discountul fix sau cantitatea fracționară se calculează greșit.');
+  await click('#shop-consumption-voucher-preview');
+  await wait(`document.getElementById('shop-consumption-preview-modal').classList.contains('visible')`);
+  await check(`window.qaPreviews.length===1 && !window.qaSavedVoucher && window.qaPreviews[0].discount_value==='1' && !window.qaPreviews[0].voucher_id && document.getElementById('shop-consumption-preview-frame').src.startsWith('blob:')`, 'Previzualizarea nouă trebuie să folosească formularul fără a salva.');
+  if(process.env.GT_CONSUMABLES_PREVIEW_PDF){await pause(1700);await capture('05-previzualizare-bon.png');}
+  await click('[data-consumables-close="shop-consumption-preview-modal"]');
+  await check(`document.getElementById('shop-consumption-preview-frame').src==='about:blank'`, 'Previzualizarea trebuie eliberată la închidere.');
   await capture('02-bon-consum.png');
   win.setSize(1100, 780);
   await capture('02-bon-consum-compact.png');
@@ -136,6 +158,7 @@ app.whenReady().then(async () => {
   await wait(`document.getElementById('shop-consumption-voucher-modal').classList.contains('visible')`);
   await check(`!document.getElementById('shop-consumption-export-actions').hidden`, 'Bonul salvat trebuie să aibă descărcări individuale.');
   await check(`document.getElementById('shop-consumption-work-reference').value==='Revizie atelier' && document.getElementById('shop-consumption-order-reference').value==='COM-104'`, 'Referințele nu sunt precompletate la editare.');
+  await check(`document.querySelector('[data-voucher-field="quantity"]').value==='12' && document.getElementById('shop-consumption-discount-value').value==='10' && document.getElementById('shop-consumption-total').textContent.includes('48,60')`, 'Editarea bonului nu normalizează zecimalele sau nu încarcă discountul.');
   await click('#shop-consumption-export-actions [data-consumption-export-format="pdf"]');
   await wait(`window.qaDownloads.length===3`);
   await capture('04-bon-individual-descarcari.png');
@@ -144,8 +167,18 @@ app.whenReady().then(async () => {
   await check(`window.qaDownloads.length===3 && window.qaToasts.at(-1).includes('Salvează modificările')`, 'Modificările nesalvate trebuie semnalate înainte de export.');
   await fill('#shop-consumption-work-reference','Lucrare revizuită');
   await fill('#shop-consumption-order-reference','');
+  await fill('#shop-consumption-discount-value','25');
+  await click('#shop-consumption-voucher-preview');
+  await wait(`document.getElementById('shop-consumption-preview-modal').classList.contains('visible')`);
+  await check(`window.qaPreviews.at(-1).voucher_id==='v1' && window.qaPreviews.at(-1).discount_value==='25' && !window.qaSavedVoucher`, 'Previzualizarea editării trebuie să includă schimbările nesalvate.');
+  await click('[data-consumables-close="shop-consumption-preview-modal"]');
+  await run('window.qaPreviewFails=true');
+  await click('#shop-consumption-voucher-preview');
+  await wait(`window.qaToasts.at(-1)==='Previzualizare indisponibilă'`);
+  await check(`!document.getElementById('shop-consumption-voucher-preview').disabled`, 'Butonul de previzualizare trebuie reactivat la eroare.');
   await click('#shop-consumption-voucher-save');
   await wait(`window.qaSavedVoucher?.work_reference==='Lucrare revizuită' && window.qaSavedVoucher?.order_reference===''`);
+  await check(`window.qaSavedVoucher.discount_type==='percent' && window.qaSavedVoucher.discount_value==='25'`, 'Discountul nu este inclus la salvarea editării.');
   await run('window.qaExportFails=true');
   await click('[data-consumption-export-id="v1"][data-consumption-export-format="pdf"]');
   await wait(`window.qaToasts.at(-1)==='Export indisponibil'`);

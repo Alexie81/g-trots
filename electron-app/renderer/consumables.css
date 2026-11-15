@@ -47,9 +47,9 @@
 .shop-consumables-table-wrap::-webkit-scrollbar-track{background:#272126;border-radius:999px;border:4px solid #1b181b}
 .shop-consumables-table-wrap::-webkit-scrollbar-thumb{background:linear-gradient(90deg,#9d653d,#e09b61);border:3px solid #272126;border-radius:999px;min-width:70px}
 .shop-consumables-table{min-width:1530px}
-.shop-consumables-table th:nth-child(5){min-width:230px}
-.shop-consumables-table th:nth-child(11){min-width:160px}
-.shop-consumables-table td:nth-child(5) small{display:block;margin-top:5px;color:#8f8592}
+.shop-consumables-table th:nth-child(6){min-width:230px}
+.shop-consumables-table th:nth-child(4){min-width:160px}
+.shop-consumables-table td:nth-child(6) small{display:block;margin-top:5px;color:#8f8592}
 .shop-consumable-stock{color:#8ee0bd}.shop-consumable-stock.empty{color:#dd8294}
 .shop-fixed-asset-disposal-cell button:disabled,.shop-fixed-asset-disposal-history button:disabled{opacity:.45;cursor:not-allowed}
 
@@ -109,20 +109,20 @@
 #tab-shop-consumables .shop-consumables-table th:nth-child(1){width:58px}
 #tab-shop-consumables .shop-consumables-table th:nth-child(2){width:112px}
 #tab-shop-consumables .shop-consumables-table th:nth-child(3){width:106px}
-#tab-shop-consumables .shop-consumables-table th:nth-child(4){width:118px}
-#tab-shop-consumables .shop-consumables-table th:nth-child(5){width:auto;min-width:230px}
-#tab-shop-consumables .shop-consumables-table th:nth-child(6){width:86px}
-#tab-shop-consumables .shop-consumables-table th:nth-child(7){width:82px}
-#tab-shop-consumables .shop-consumables-table th:nth-child(8){width:100px}
-#tab-shop-consumables .shop-consumables-table th:nth-child(9){width:112px}
-#tab-shop-consumables .shop-consumables-table th:nth-child(10){width:120px}
-#tab-shop-consumables .shop-consumables-table th:nth-child(11){width:176px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(5){width:118px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(6){width:auto;min-width:230px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(7){width:86px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(8){width:82px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(9){width:100px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(10){width:112px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(11){width:120px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(4){width:176px}
 #tab-shop-consumables .shop-consumables-table th:nth-child(12){width:190px}
-#tab-shop-consumables .shop-consumables-table :is(th,td):is(:nth-child(1),:nth-child(6),:nth-child(7),:nth-child(8)){text-align:center}
-#tab-shop-consumables .shop-consumables-table :is(th,td):is(:nth-child(9),:nth-child(10)){text-align:right;white-space:nowrap}
-#tab-shop-consumables .shop-consumables-table td:nth-child(5) strong{font-size:13px;color:#f3eef5;line-height:1.55;font-weight:600}
-#tab-shop-consumables .shop-consumables-table td:nth-child(5) small{font-size:11px;color:#a59ba9}
-#tab-shop-consumables .shop-consumables-table td:nth-child(10) strong{color:#d4f1e3;font-weight:650}
+#tab-shop-consumables .shop-consumables-table :is(th,td):is(:nth-child(1),:nth-child(7),:nth-child(8),:nth-child(9)){text-align:center}
+#tab-shop-consumables .shop-consumables-table :is(th,td):is(:nth-child(10),:nth-child(11)){text-align:right;white-space:nowrap}
+#tab-shop-consumables .shop-consumables-table td:nth-child(6) strong{font-size:13px;color:#f3eef5;line-height:1.55;font-weight:600}
+#tab-shop-consumables .shop-consumables-table td:nth-child(6) small{font-size:11px;color:#a59ba9}
+#tab-shop-consumables .shop-consumables-table td:nth-child(11) strong{color:#d4f1e3;font-weight:650}
 .shop-consumable-row-number{color:#938799;font-size:11px}
 .shop-consumable-consumed{color:#c2b6cc}
 .shop-consumable-stock{display:inline-flex;justify-content:center;min-width:44px;padding:6px 10px;border:1px solid #68b99430;border-radius:9px;background:#64c69a0c;font-weight:650}
@@ -210,3 +210,25 @@
 .shop-consumption-references{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:16px;padding-top:16px;border-top:1px solid #ffffff0c}
 .shop-consumption-references em{font-size:10px;font-weight:400;font-style:normal;color:#a69bab;text-transform:none;letter-spacing:0;margin-left:4px}
 @media(max-width:620px){.shop-consumption-references{grid-template-columns:1fr}}
+
+/* Compact registry and voucher controls. */
+#tab-shop-consumables .shop-consumables-table{width:1530px;min-width:1530px;max-width:100%;table-layout:fixed}
+#tab-shop-consumables .shop-consumables-table :is(th,td):nth-child(6){width:220px;min-width:220px;max-width:220px;white-space:normal;overflow-wrap:anywhere}
+.shop-consumption-party input[hidden]{display:none!important}
+.shop-consumption-discount-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,1fr);gap:28px;align-items:start}
+.shop-consumption-discount-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.shop-consumption-discount-fields label{display:grid}
+.shop-consumption-totals{margin:0;padding:4px 0;display:grid;gap:12px}
+.shop-consumption-totals>div{display:flex;justify-content:space-between;gap:16px;font-size:12px;color:#b9c7bf}
+.shop-consumption-totals dd{margin:0;color:#edf8f1;font-variant-numeric:tabular-nums}
+.shop-consumption-totals .total{padding-top:14px;border-top:1px solid #739e7d40;align-items:baseline;font-weight:600}
+.shop-consumption-totals .total dd{font-size:21px;color:#a8e3be}
+.shop-consumption-preview-button{display:flex;align-items:center;gap:7px}
+.shop-consumption-preview-button svg{width:16px;height:16px}
+.shop-consumption-preview-overlay{z-index:100020!important}
+.shop-consumption-preview{width:min(1250px,96vw);height:92vh;display:flex;flex-direction:column}
+.shop-consumption-preview>header p{font-size:12px;color:#b3a8bc;margin:5px 0 0}
+.shop-consumption-preview iframe{width:100%;flex:1;min-height:240px;border:0;background:#373737}
+.shop-consumption-preview>footer{padding:14px 22px}
+.shop-consumption-voucher>footer{flex-wrap:wrap}
+@media(max-width:720px){.shop-consumption-discount-layout{grid-template-columns:1fr;gap:18px}}

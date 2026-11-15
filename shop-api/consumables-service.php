@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/fixed-assets-search.php';
+require_once __DIR__ . '/nir-domain.php';
 
 /**
  * Consumables ledger.
@@ -100,14 +101,19 @@ final class GtrotsConsumables
         $columns = $sqlite
             ? $db->query('PRAGMA table_info(shop_consumption_vouchers)')->fetchAll(PDO::FETCH_COLUMN, 1)
             : $db->query('SHOW COLUMNS FROM shop_consumption_vouchers')->fetchAll(PDO::FETCH_COLUMN);
-        foreach (['work_reference', 'order_reference'] as $column) {
+        foreach (['work_reference' => "VARCHAR(240) NOT NULL DEFAULT ''", 'order_reference' => "VARCHAR(240) NOT NULL DEFAULT ''", 'discount_type' => "VARCHAR(16) NOT NULL DEFAULT 'fixed'", 'discount_value' => 'DECIMAL(16,4) NOT NULL DEFAULT 0'] as $column => $definition) {
             if (in_array($column, $columns, true)) continue;
             try {
-                $db->exec('ALTER TABLE shop_consumption_vouchers ADD COLUMN '.$column.' VARCHAR(240) NOT NULL DEFAULT \'\'');
+                $db->exec('ALTER TABLE shop_consumption_vouchers ADD COLUMN '.$column.' '.$definition);
             } catch (PDOException $error) {
                 // Another request may have completed the same additive migration.
                 if ($sqlite || (int)($error->errorInfo[1] ?? 0) !== 1060) throw $error;
             }
+        }
+        $lineColumns = $sqlite ? $db->query('PRAGMA table_info(shop_consumption_voucher_lines)')->fetchAll(PDO::FETCH_COLUMN, 1) : $db->query('SHOW COLUMNS FROM shop_consumption_voucher_lines')->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('discount_amount', $lineColumns, true)) {
+            try { $db->exec('ALTER TABLE shop_consumption_voucher_lines ADD COLUMN discount_amount DECIMAL(16,2) NOT NULL DEFAULT 0'); }
+            catch (PDOException $error) { if ($sqlite || (int)($error->errorInfo[1] ?? 0) !== 1060) throw $error; }
         }
     }
 
@@ -352,7 +358,7 @@ final class GtrotsConsumables
     {
         $stmt=$db->prepare('SELECT c.*,d.document_date,d.document_type,d.series,d.document_number,d.notes,d.created_by,d.created_at document_created_at FROM shop_consumables c JOIN shop_consumable_documents d ON d.id=c.document_id WHERE c.id=? LIMIT 1');
         $stmt->execute([$id]);$item=$stmt->fetch(PDO::FETCH_ASSOC);if(!$item)throw new ShopNirHttpException('Consumabilul nu există.',404);
-        $v=$db->prepare('SELECT l.id line_id,l.quantity,l.unit_price,l.value,v.id voucher_id,v.voucher_date,v.series,v.voucher_number,v.giver_name,v.receiver_name,v.notes,v.created_by,v.created_at
+        $v=$db->prepare('SELECT l.id line_id,l.quantity,l.unit_price,l.value,l.discount_amount,v.id voucher_id,v.voucher_date,v.series,v.voucher_number,v.giver_name,v.receiver_name,v.notes,v.created_by,v.created_at
             FROM shop_consumption_voucher_lines l JOIN shop_consumption_vouchers v ON v.id=l.voucher_id WHERE l.consumable_id=? ORDER BY v.voucher_date DESC,v.created_at DESC,l.line_number');
         $v->execute([$id]);$item['vouchers']=$v->fetchAll(PDO::FETCH_ASSOC);$item['consumed_quantity']=array_sum(array_map(fn($r)=>(float)$r['quantity'],$item['vouchers']));
         $item['remaining_quantity']=round((float)$item['quantity']-(float)$item['consumed_quantity'],4);$item['files']=self::files($db,(string)$item['document_id']);$item['has_document']=count($item['files'])>0;$item['revision']=self::revision($item);return $item;
@@ -422,23 +428,86 @@ final class GtrotsConsumables
         $name=mb_substr(trim($typed),0,240);if($name==='')throw new InvalidArgumentException(($role==='giver'?'Predătorul':'Primitorul').' este obligatoriu.');return [null,$name];
     }
 
+    private static function prepareVoucher(PDO $db,?string $id,array $body,array $user,bool $lock): array
+    {
+        if ($lock && $id && $db->getAttribute(PDO::ATTR_DRIVER_NAME)==='mysql') {
+            $stmt=$db->prepare('SELECT id FROM shop_consumption_vouchers WHERE id=? FOR UPDATE');$stmt->execute([$id]);
+        }
+        $current=$id?self::getVoucher($db,$id):null;
+        if ($current) self::checkRevision($current,$body);
+        $voucher=[
+            'voucher_date'=>self::date($body['voucher_date']??'','Data bonului de consum'),
+            'series'=>mb_substr(trim((string)($body['series']??'BC')),0,80)?:'BC',
+            'voucher_number'=>mb_substr(trim((string)($body['voucher_number']??'')),0,120),
+            'notes'=>mb_substr(trim((string)($body['notes']??'')),0,2000),
+            'work_reference'=>mb_substr(trim((string)($body['work_reference']??$current['work_reference']??'')),0,240),
+            'order_reference'=>mb_substr(trim((string)($body['order_reference']??$current['order_reference']??'')),0,240),
+            'created_by'=>$current['created_by']??self::actor($user),
+        ];
+        if($voucher['voucher_number']==='')throw new InvalidArgumentException('Numărul bonului de consum este obligatoriu.');
+        foreach(['giver','receiver'] as $role) {
+            [$voucher[$role.'_id'],$voucher[$role.'_name']]=self::personSnapshot($db,trim((string)($body[$role.'_id']??''))?:null,(string)($body[$role.'_name']??''),$role);
+        }
+        $inputLines=array_values(array_filter((array)($body['lines']??[]),'is_array'));
+        if(!$inputLines)throw new InvalidArgumentException('Adaugă cel puțin un consumabil pe bon.');
+        if(count($inputLines)>250)throw new InvalidArgumentException('Bonul poate conține maximum 250 de poziții.');
+        $seen=[];$lines=[];$grossCents=[];$subtotal=0;
+        foreach($inputLines as $index=>$line) {
+            $itemId=trim((string)($line['consumable_id']??''));
+            if($itemId===''||isset($seen[$itemId]))throw new InvalidArgumentException('Consumabil invalid sau duplicat pe bon.');
+            $seen[$itemId]=true;
+            $quantity=self::decimal($line['quantity']??'','Cantitatea eliberată la poziția '.($index+1),false);
+            if($lock)self::lockItem($db,$itemId);
+            $stmt=$db->prepare('SELECT c.*,d.series document_series,d.document_number,d.document_date,d.document_type FROM shop_consumables c JOIN shop_consumable_documents d ON d.id=c.document_id WHERE c.id=?');
+            $stmt->execute([$itemId]);$item=$stmt->fetch(PDO::FETCH_ASSOC);
+            if(!$item)throw new ShopNirHttpException('Consumabilul nu există.',404);
+            $used=$db->prepare('SELECT COALESCE(SUM(quantity),0) FROM shop_consumption_voucher_lines WHERE consumable_id=? AND voucher_id<>?');$used->execute([$itemId,$id??'']);
+            $remaining=round((float)$item['quantity']-(float)$used->fetchColumn(),4);
+            if($quantity-$remaining>0.00005)throw new ShopNirHttpException('Cantitatea de pe bon depășește stocul disponibil pentru „'.$item['product_name'].'” (disponibil '.rtrim(rtrim(number_format($remaining,4,',','.'),'0'),',').').',409);
+            $gross=shopNirMultiplyScaled(shopNirDecimalToScaled($quantity,4),4,shopNirDecimalToScaled($item['unit_price'],4),4,2);
+            $grossCents[]=$gross;$subtotal+=$gross;
+            $lines[]=['consumable_id'=>$itemId,'line_number'=>$index+1,'quantity'=>shopNirScaledToDecimal(shopNirDecimalToScaled($quantity,4),4),'unit_price'=>$item['unit_price'],'product_name'=>$item['product_name'],'unit'=>$item['unit'],'document_id'=>$item['document_id'],'document_series'=>$item['document_series'],'document_number'=>$item['document_number'],'document_date'=>$item['document_date'],'document_type'=>$item['document_type']];
+        }
+        $type=(string)($body['discount_type']??$current['discount_type']??'fixed');
+        if(!in_array($type,['fixed','percent'],true))throw new InvalidArgumentException('Alege discount ca sumă fixă sau procent.');
+        $input=self::decimal($body['discount_value']??$current['discount_value']??0,'Discountul');
+        if($type==='percent'&&$input>100)throw new InvalidArgumentException('Discountul procentual trebuie să fie între 0 și 100%.');
+        $discount=$type==='percent'?shopNirDivideRounded($subtotal*shopNirDecimalToScaled($input,4),1000000):shopNirDecimalToScaled($input,2);
+        if($discount>$subtotal)throw new InvalidArgumentException('Discountul nu poate depăși valoarea bonului.');
+        // Allocate in whole cents; largest remainders keep line totals equal to the voucher total.
+        $allocated=[];$remainders=[];$remainingDiscount=$discount;
+        foreach($grossCents as $index=>$gross){$product=$discount*$gross;$allocated[$index]=$subtotal?intdiv($product,$subtotal):0;$remainders[$index]=$subtotal?$product%$subtotal:0;$remainingDiscount-=$allocated[$index];}
+        arsort($remainders,SORT_NUMERIC);
+        foreach($remainders as $index=>$_){if($remainingDiscount<=0)break;$allocated[$index]++;$remainingDiscount--;}
+        foreach($lines as $index=>&$line){$line['gross_value']=shopNirScaledToDecimal($grossCents[$index],2);$line['discount_amount']=shopNirScaledToDecimal($allocated[$index],2);$line['value']=shopNirScaledToDecimal($grossCents[$index]-$allocated[$index],2);}unset($line);
+        return $voucher+['lines'=>$lines,'discount_type'=>$type,'discount_value'=>shopNirScaledToDecimal(shopNirDecimalToScaled($input,$type==='fixed'?2:4),$type==='fixed'?2:4),'subtotal'=>shopNirScaledToDecimal($subtotal,2),'discount_amount'=>shopNirScaledToDecimal($discount,2),'total'=>shopNirScaledToDecimal($subtotal-$discount,2)];
+    }
+
     public static function saveVoucher(PDO $db,?string $voucherId,array $body,array $user): array
     {
-        $date=self::date($body['voucher_date']??'','Data bonului de consum');$series=mb_substr(trim((string)($body['series']??'BC')),0,80)?:'BC';$number=mb_substr(trim((string)($body['voucher_number']??'')),0,120);if($number==='')throw new InvalidArgumentException('Numărul bonului de consum este obligatoriu.');
-        $lines=array_values(array_filter((array)($body['lines']??[]),'is_array'));if(!$lines)throw new InvalidArgumentException('Adaugă cel puțin un consumabil pe bon.');if(count($lines)>250)throw new InvalidArgumentException('Bonul poate conține maximum 250 de poziții.');
-        self::begin($db);try{
-            $current=null;if($voucherId!==null){$current=self::getVoucher($db,$voucherId);self::checkRevision($current,$body);$db->prepare('DELETE FROM shop_consumption_voucher_lines WHERE voucher_id=?')->execute([$voucherId]);}else{$voucherId=self::uuid();}
-            [$giverId,$giverName]=self::personSnapshot($db,trim((string)($body['giver_id']??''))?:null,(string)($body['giver_name']??''),'giver');[$receiverId,$receiverName]=self::personSnapshot($db,trim((string)($body['receiver_id']??''))?:null,(string)($body['receiver_name']??''),'receiver');
-            $notes=mb_substr(trim((string)($body['notes']??'')),0,2000);
-            $workReference=mb_substr(trim((string)($body['work_reference']??$current['work_reference']??'')),0,240);
-            $orderReference=mb_substr(trim((string)($body['order_reference']??$current['order_reference']??'')),0,240);
-            if($current)$db->prepare('UPDATE shop_consumption_vouchers SET voucher_date=?,series=?,voucher_number=?,giver_id=?,giver_name=?,receiver_id=?,receiver_name=?,notes=?,work_reference=?,order_reference=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute([$date,$series,$number,$giverId,$giverName,$receiverId,$receiverName,$notes,$workReference,$orderReference,$voucherId]);
-            else $db->prepare('INSERT INTO shop_consumption_vouchers (id,voucher_date,series,voucher_number,giver_id,giver_name,receiver_id,receiver_name,notes,work_reference,order_reference,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')->execute([$voucherId,$date,$series,$number,$giverId,$giverName,$receiverId,$receiverName,$notes,$workReference,$orderReference,self::actor($user)]);
-            $seen=[];$insert=$db->prepare('INSERT INTO shop_consumption_voucher_lines (id,voucher_id,consumable_id,line_number,quantity,unit_price,value) VALUES (?,?,?,?,?,?,?)');
-            foreach($lines as $index=>$line){$itemId=trim((string)($line['consumable_id']??''));if($itemId===''||isset($seen[$itemId]))throw new InvalidArgumentException('Consumabil invalid sau duplicat pe bon.');$seen[$itemId]=true;$quantity=self::decimal($line['quantity']??'','Cantitatea eliberată la poziția '.($index+1),false);$item=self::lockItem($db,$itemId);$used=$db->prepare('SELECT COALESCE(SUM(quantity),0) FROM shop_consumption_voucher_lines WHERE consumable_id=?');$used->execute([$itemId]);$remaining=round((float)$item['quantity']-(float)$used->fetchColumn(),4);if($quantity-$remaining>0.00005)throw new ShopNirHttpException('Cantitatea de pe bon depășește stocul disponibil pentru „'.$item['product_name'].'” (disponibil '.number_format($remaining,4,',','.').').',409);$unitPrice=(float)$item['unit_price'];$insert->execute([self::uuid(),$voucherId,$itemId,$index+1,$quantity,$unitPrice,round($quantity*$unitPrice,2)]);}
+        self::begin($db);
+        try{
+            $voucher=self::prepareVoucher($db,$voucherId,$body,$user,true);
+            $fields=['voucher_date','series','voucher_number','giver_id','giver_name','receiver_id','receiver_name','notes','work_reference','order_reference','discount_type','discount_value'];
+            $values=array_map(fn($field)=>$voucher[$field],$fields);
+            if($voucherId!==null){
+                $db->prepare('UPDATE shop_consumption_vouchers SET '.implode(',',array_map(fn($field)=>$field.'=?',$fields)).',updated_at=CURRENT_TIMESTAMP WHERE id=?')->execute([...$values,$voucherId]);
+                $db->prepare('DELETE FROM shop_consumption_voucher_lines WHERE voucher_id=?')->execute([$voucherId]);
+            }else{
+                $voucherId=self::uuid();
+                $db->prepare('INSERT INTO shop_consumption_vouchers (id,'.implode(',',$fields).',created_by) VALUES ('.implode(',',array_fill(0,count($fields)+2,'?')).')')->execute([$voucherId,...$values,$voucher['created_by']]);
+            }
+            $insert=$db->prepare('INSERT INTO shop_consumption_voucher_lines (id,voucher_id,consumable_id,line_number,quantity,unit_price,value,discount_amount) VALUES (?,?,?,?,?,?,?,?)');
+            foreach($voucher['lines'] as $line)$insert->execute([self::uuid(),$voucherId,$line['consumable_id'],$line['line_number'],$line['quantity'],$line['unit_price'],$line['value'],$line['discount_amount']]);
             $db->commit();
         }catch(PDOException $error){if($db->inTransaction())$db->rollBack();if((string)$error->getCode()==='23000')throw new ShopNirHttpException('Există deja un bon de consum cu aceeași serie și același număr.',409);throw $error;}catch(Throwable $error){if($db->inTransaction())$db->rollBack();throw $error;}
         return self::getVoucher($db,(string)$voucherId);
+    }
+
+    public static function previewVoucher(PDO $db,array $body,array $user): array
+    {
+        $id=trim((string)($body['voucher_id']??''))?:null;
+        return self::voucherFile($db,self::prepareVoucher($db,$id,$body,$user,false),'pdf');
     }
 
     public static function createVoucher(PDO $db,array $body,array $user): array{return self::saveVoucher($db,null,$body,$user);}
@@ -446,7 +515,13 @@ final class GtrotsConsumables
 
     public static function getVoucher(PDO $db,string $id): array
     {
-        $s=$db->prepare('SELECT * FROM shop_consumption_vouchers WHERE id=? LIMIT 1');$s->execute([$id]);$voucher=$s->fetch(PDO::FETCH_ASSOC);if(!$voucher)throw new ShopNirHttpException('Bonul de consum nu există.',404);$l=$db->prepare('SELECT l.*,c.product_name,c.unit,c.quantity initial_quantity,c.document_id,d.series document_series,d.document_number,d.document_date,d.document_type FROM shop_consumption_voucher_lines l JOIN shop_consumables c ON c.id=l.consumable_id JOIN shop_consumable_documents d ON d.id=c.document_id WHERE l.voucher_id=? ORDER BY l.line_number');$l->execute([$id]);$voucher['lines']=$l->fetchAll(PDO::FETCH_ASSOC);$voucher['revision']=self::revision($voucher);return $voucher;
+        $s=$db->prepare('SELECT * FROM shop_consumption_vouchers WHERE id=? LIMIT 1');$s->execute([$id]);$voucher=$s->fetch(PDO::FETCH_ASSOC);if(!$voucher)throw new ShopNirHttpException('Bonul de consum nu există.',404);$l=$db->prepare('SELECT l.*,c.product_name,c.unit,c.quantity initial_quantity,c.document_id,d.series document_series,d.document_number,d.document_date,d.document_type FROM shop_consumption_voucher_lines l JOIN shop_consumables c ON c.id=l.consumable_id JOIN shop_consumable_documents d ON d.id=c.document_id WHERE l.voucher_id=? ORDER BY l.line_number');$l->execute([$id]);$voucher['lines']=$l->fetchAll(PDO::FETCH_ASSOC);
+        $total=0;$discount=0;
+        foreach($voucher['lines'] as &$line){$net=shopNirDecimalToScaled($line['value'],2);$reduction=shopNirDecimalToScaled($line['discount_amount']??0,2);$line['gross_value']=shopNirScaledToDecimal($net+$reduction,2);$total+=$net;$discount+=$reduction;}unset($line);
+        $voucher['subtotal']=shopNirScaledToDecimal($total+$discount,2);$voucher['discount_amount']=shopNirScaledToDecimal($discount,2);$voucher['total']=shopNirScaledToDecimal($total,2);
+        // Deleting a source position also removes its allocated reduction.
+        if(($voucher['discount_type']??'fixed')==='fixed')$voucher['discount_value']=$voucher['discount_amount'];
+        $voucher['revision']=self::revision($voucher);return $voucher;
     }
 
     public static function deleteVoucher(PDO $db,string $id,array $body): array
@@ -456,14 +531,30 @@ final class GtrotsConsumables
 
     public static function exportVoucher(PDO $db,string $id,string $format): array
     {
+        return self::voucherFile($db,self::getVoucher($db,$id),$format);
+    }
+
+    private static function voucherFile(PDO $db,array $voucher,string $format): array
+    {
         if(!in_array($format,['pdf','xlsx'],true))throw new InvalidArgumentException('Alege PDF sau Excel pentru bonul de consum.');
-        $voucher=self::getVoucher($db,$id);
         $company=[];
         try{$company=$db->query('SELECT * FROM shop_company_settings ORDER BY is_default DESC,id LIMIT 1')->fetch(PDO::FETCH_ASSOC)?:[];}catch(PDOException $ignored){}
         require_once __DIR__.'/consumables-export.php';
         $bytes=$format==='pdf'?GtrotsConsumablesExport::voucherPdf($voucher,$company):GtrotsConsumablesExport::voucherXlsx($voucher,$company);
-        $number=preg_replace('/[^\pL\pN._-]+/u','-',trim($voucher['series'].'-'.$voucher['voucher_number']));
-        return ['file_name'=>'Bon-de-consum-'.$number.'.'.$format,'mime_type'=>$format==='pdf'?'application/pdf':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content_base64'=>base64_encode($bytes)];
+        $safe=static fn($value)=>trim(mb_strcut(preg_replace('~[\x00-\x1F\x7F<>:"/|?*]+~u','-',str_replace(chr(92),'-',trim((string)$value)))??'',0,70,'UTF-8'),'. -');
+        $number=implode('-',array_filter([$safe($voucher['series']),$safe($voucher['voucher_number'])],fn($v)=>$v!==''));
+        $base='Bon-de-consum-'.$number;
+        $sources=[];
+        foreach($voucher['lines'] as $line){
+            $identity=implode('_',array_filter([$safe($line['document_series']??''),$safe($line['document_number']??'')],fn($v)=>$v!==''));
+            $date=trim((string)($line['document_date']??''));
+            $source=($identity!==''?(['factura'=>'fact.','bon'=>'bon','pv'=>'PV'][$line['document_type']??'factura']??'doc.').' '.$identity:'');
+            if($date!=='')$source.=($source!==''?' ':'').'din '.self::date($date,'Data documentului de intrare');
+            $source=preg_replace('/din (\d{4})-(\d{2})-(\d{2})$/','din $3.$2.$1',$source);
+            if($source!=='')$sources[$source]=true;
+        }
+        if($sources){$base.=' - '.array_key_first($sources);if(count($sources)>1)$base.=' + '.(count($sources)-1).' doc';}
+        return ['file_name'=>$base.'.'.$format,'mime_type'=>$format==='pdf'?'application/pdf':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content_base64'=>base64_encode($bytes)];
     }
 
     private static function period(array $filters): array
@@ -479,7 +570,7 @@ final class GtrotsConsumables
         $where=$activity?' WHERE '.implode(' AND ',$activity):'';
         $stock=$db->prepare('SELECT c.id,c.document_id,d.document_date,d.document_type,d.series,d.document_number,c.product_name,c.unit,c.quantity,c.unit_price,c.net_value,c.vat_rate,c.vat_value,c.total_value,COALESCE((SELECT SUM(xl.quantity) FROM shop_consumption_voucher_lines xl JOIN shop_consumption_vouchers xv ON xv.id=xl.voucher_id WHERE xl.consumable_id=c.id'.($to!==''?' AND xv.voucher_date<=?':'').'),0) consumed_quantity FROM shop_consumables c JOIN shop_consumable_documents d ON d.id=c.document_id'.$where.' ORDER BY d.document_date,c.line_number');
         $stockParams=[];if($to!=='')$stockParams[]=$to;$stockParams=array_merge($stockParams,$params);$stock->execute($stockParams);$stockRows=$stock->fetchAll(PDO::FETCH_ASSOC);foreach($stockRows as &$row)$row['remaining_quantity']=round((float)$row['quantity']-(float)$row['consumed_quantity'],4);unset($row);
-        $vParams=[];$vWhere=[];if($from!==''){$vWhere[]='v.voucher_date>=?';$vParams[]=$from;}if($to!==''){$vWhere[]='v.voucher_date<=?';$vParams[]=$to;}$vouchers=$db->prepare('SELECT v.id voucher_id,v.voucher_date,v.series,v.voucher_number,v.giver_name,v.receiver_name,v.notes,v.created_by,l.line_number,l.consumable_id,l.quantity,l.unit_price,l.value,c.product_name,c.unit,d.series document_series,d.document_number,d.document_date FROM shop_consumption_vouchers v JOIN shop_consumption_voucher_lines l ON l.voucher_id=v.id JOIN shop_consumables c ON c.id=l.consumable_id JOIN shop_consumable_documents d ON d.id=c.document_id'.($vWhere?' WHERE '.implode(' AND ',$vWhere):'').' ORDER BY v.voucher_date,v.created_at,v.id,l.line_number');$vouchers->execute($vParams);
+        $vParams=[];$vWhere=[];if($from!==''){$vWhere[]='v.voucher_date>=?';$vParams[]=$from;}if($to!==''){$vWhere[]='v.voucher_date<=?';$vParams[]=$to;}$vouchers=$db->prepare('SELECT v.id voucher_id,v.voucher_date,v.series,v.voucher_number,v.giver_name,v.receiver_name,v.notes,v.created_by,l.line_number,l.consumable_id,l.quantity,l.unit_price,l.value,l.discount_amount,c.product_name,c.unit,d.series document_series,d.document_number,d.document_date FROM shop_consumption_vouchers v JOIN shop_consumption_voucher_lines l ON l.voucher_id=v.id JOIN shop_consumables c ON c.id=l.consumable_id JOIN shop_consumable_documents d ON d.id=c.document_id'.($vWhere?' WHERE '.implode(' AND ',$vWhere):'').' ORDER BY v.voucher_date,v.created_at,v.id,l.line_number');$vouchers->execute($vParams);
         return ['stock'=>$stockRows,'vouchers'=>$vouchers->fetchAll(PDO::FETCH_ASSOC),'from'=>$from,'to'=>$to];
     }
 

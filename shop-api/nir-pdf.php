@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/nir-export-values.php';
+
 /**
  * Premium NIR PDF renderer shared by the desktop and mobile applications.
  *
@@ -856,11 +858,11 @@ function shopNirPdfStrictRows(array $document, ?array $pageLines = null): string
         if (!is_array($line)) continue;
         $invoiced = (float)($line['invoiced_quantity'] ?? 0);
         $received = (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0);
-        $discount = (float)($line['discount_percent'] ?? 0);
-        $unitPrice = (float)($line['unit_price'] ?? 0) * (1 - $discount / 100);
-        $net = $received * $unitPrice;
+        $amounts = shopNirExportLineAmounts($line, $currency);
+        $unitPrice = $amounts['unit_price'];
+        $net = $amounts['net'];
         $vatRate = (float)($line['vat_rate'] ?? 0);
-        $vat = $net * $vatRate / 100;
+        $vat = $amounts['vat'];
         $difference = $received - $invoiced;
         $differenceClass = $difference < -0.000001 ? ' diff-negative' : ($difference > 0.000001 ? ' diff-positive' : ' diff-zero');
         $name = shopNirPdfFirst($line, ['product_name', 'product_snapshot_name', 'supplier_product_name'], '—');
@@ -878,7 +880,7 @@ function shopNirPdfStrictRows(array $document, ?array $pageLines = null): string
             . '<td class="n">' . shopNirPdfEscape(shopNirPdfDecimal($net, 2) . ' ' . $currencyLabel) . '</td>'
             . '<td class="n">' . shopNirPdfEscape(shopNirPdfDecimal($vatRate, 2)) . '%</td>'
             . '<td class="n">' . shopNirPdfEscape(shopNirPdfDecimal($vat, 2) . ' ' . $currencyLabel) . '</td>'
-            . '<td class="n">' . shopNirPdfEscape(shopNirPdfDecimal($net + $vat, 2) . ' ' . $currencyLabel) . '</td></tr>';
+            . '<td class="n">' . shopNirPdfEscape(shopNirPdfDecimal($amounts['total'], 2) . ' ' . $currencyLabel) . '</td></tr>';
     }
     return $rows !== '' ? $rows : '<tr><td colspan="13" class="empty">Nu există poziții.</td></tr>';
 }
@@ -927,8 +929,7 @@ function shopNirStrictPdfHtml(array $document): string {
     $css .= '.meta{height:15mm}.meta-item{padding:2.5mm 4mm}.meta-icon{float:left}.meta-item span,.meta-item b{margin-left:10mm}.stamp-box{height:24mm;text-align:right;padding:1mm 9mm 1mm 1mm}.company-stamp{width:auto;max-width:72mm;height:auto;max-height:22mm}';
     $css .= '.page{height:auto;page-break-after:auto;position:static}.items{page-break-inside:auto}.items tbody{page-break-inside:auto}.items tfoot{display:table-row-group}.items tbody tr{page-break-inside:avoid}.document-header{page-break-after:avoid}.final-block{page-break-inside:avoid}.continuation{display:none}';
     $allLines = array_values(array_filter(is_array($document['lines'] ?? null) ? $document['lines'] : [], 'is_array'));
-    $netTotal = array_sum(array_map(static fn(array $line): float => (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0) * (float)($line['unit_price'] ?? 0) * (1 - (float)($line['discount_percent'] ?? 0) / 100), $allLines));
-    $vatTotal = array_sum(array_map(static fn(array $line): float => (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0) * (float)($line['unit_price'] ?? 0) * (1 - (float)($line['discount_percent'] ?? 0) / 100) * (float)($line['vat_rate'] ?? 0) / 100, $allLines));
+    $amounts = shopNirExportDocumentAmounts($document);
     $currency = strtoupper(trim((string)($document['currency'] ?? 'RON'))) ?: 'RON';
     $currencyLabel = $currency === 'RON' ? 'lei' : $currency;
     $vatRates = [];
@@ -944,9 +945,9 @@ function shopNirStrictPdfHtml(array $document): string {
         if ($length >= 11) return ' money-sm';
         return '';
     };
-    $netTotalLabel = shopNirPdfDecimal($netTotal, 2) . ' ' . $currencyLabel;
-    $vatTotalLabel = shopNirPdfDecimal($vatTotal, 2) . ' ' . $currencyLabel;
-    $grandTotalLabel = shopNirPdfDecimal($netTotal + $vatTotal, 2) . ' ' . $currencyLabel;
+    $netTotalLabel = shopNirPdfDecimal($amounts['net'], 2) . ' ' . $currencyLabel;
+    $vatTotalLabel = shopNirPdfDecimal($amounts['vat'], 2) . ' ' . $currencyLabel;
+    $grandTotalLabel = shopNirPdfDecimal($amounts['total'], 2) . ' ' . $currencyLabel;
     $rows = shopNirPdfStrictRows($document, $allLines);
     $css .= '.totals td{padding-left:.5mm;padding-right:.5mm}.totals .money-sm{font-size:7.2pt;letter-spacing:-.12pt}.totals .money-xs{font-size:6.2pt;letter-spacing:-.2pt}';
     $documentTitle = 'NOTĂ DE RECEPȚIE ȘI<br>CONSTATARE DE DIFERENȚE';

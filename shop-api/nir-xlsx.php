@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/nir-export-values.php';
+
 /**
  * Premium, dependency-free OOXML renderer for a NIR export.
  *
@@ -1332,11 +1334,11 @@ function shopNirRenderStrictXlsx(array $document): string
         if (!is_array($line)) continue;
         $invoiced = (float)($line['invoiced_quantity'] ?? 0);
         $received = (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0);
-        $discount = (float)($line['discount_percent'] ?? 0);
-        $price = (float)($line['unit_price'] ?? 0) * (1 - $discount / 100);
-        $net = $received * $price;
+        $amounts = shopNirExportLineAmounts($line, (string)($document['currency'] ?? 'RON'));
+        $price = $amounts['unit_price'];
+        $net = $amounts['net'];
         $vatRate = (float)($line['vat_rate'] ?? 0);
-        $vat = $net * $vatRate / 100;
+        $vat = $amounts['vat'];
         $name = trim((string)($line['product_name'] ?? $line['product_snapshot_name'] ?? $line['supplier_product_name'] ?? ''));
         $rows .= shopNirPremiumXlsxRow($dataRow, [
             1 => shopNirPremiumXlsxCellSpec($line['line_number'] ?? ($index + 1), 'number', 11),
@@ -1345,9 +1347,9 @@ function shopNirRenderStrictXlsx(array $document): string
             4 => shopNirPremiumXlsxCellSpec($name, 'string', 10), 5 => shopNirPremiumXlsxCellSpec($line['purchase_unit'] ?? $line['stock_unit'] ?? '', 'string', 41),
             6 => shopNirPremiumXlsxCellSpec($invoiced, 'number', 11), 7 => shopNirPremiumXlsxCellSpec($received, 'number', 11),
             8 => shopNirPremiumXlsxCellSpec($received - $invoiced, 'number', abs($received - $invoiced) < 0.000001 ? 40 : 39, 'G' . $dataRow . '-F' . $dataRow),
-            9 => shopNirPremiumXlsxCellSpec($price, 'number', 13), 10 => shopNirPremiumXlsxCellSpec($net, 'number', 13, 'G' . $dataRow . '*I' . $dataRow),
-            11 => shopNirPremiumXlsxCellSpec($vatRate, 'number', 11), 12 => shopNirPremiumXlsxCellSpec($vat, 'number', 13, 'J' . $dataRow . '*K' . $dataRow . '/100'),
-            13 => shopNirPremiumXlsxCellSpec($net + $vat, 'number', 13, 'J' . $dataRow . '+L' . $dataRow),
+            9 => shopNirPremiumXlsxCellSpec($price, 'number', 13), 10 => shopNirPremiumXlsxCellSpec($net, 'number', 13),
+            11 => shopNirPremiumXlsxCellSpec($vatRate, 'number', 11), 12 => shopNirPremiumXlsxCellSpec($vat, 'number', 13),
+            13 => shopNirPremiumXlsxCellSpec($amounts['total'], 'number', 13),
         ], 50);
         $dataRow++;
     }
@@ -1367,7 +1369,14 @@ function shopNirRenderStrictXlsx(array $document): string
         $formatted = rtrim(rtrim(number_format($rate, 4, '.', ''), '0'), '.');
         return str_replace('.', ',', $formatted) . '%';
     }, array_values($vatRates)));
-    $rows .= shopNirPremiumXlsxRow($dataRow, [1 => shopNirPremiumXlsxCellSpec('TOTAL', 'string', 6), 10 => shopNirPremiumXlsxCellSpec(array_sum(array_map(static fn(array $line): float => (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0) * (float)($line['unit_price'] ?? 0) * (1 - (float)($line['discount_percent'] ?? 0) / 100), array_filter($lines, 'is_array'))), 'number', 17, 'SUM(J' . $firstDataRow . ':J' . $lastDataRow . ')'), 11 => shopNirPremiumXlsxCellSpec($vatRateLabel, 'string', 11), 12 => shopNirPremiumXlsxCellSpec(array_sum(array_map(static fn(array $line): float => (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0) * (float)($line['unit_price'] ?? 0) * (1 - (float)($line['discount_percent'] ?? 0) / 100) * (float)($line['vat_rate'] ?? 0) / 100, array_filter($lines, 'is_array'))), 'number', 17, 'SUM(L' . $firstDataRow . ':L' . $lastDataRow . ')'), 13 => shopNirPremiumXlsxCellSpec(array_sum(array_map(static fn(array $line): float => (float)($line['received_quantity'] ?? $line['accepted_quantity'] ?? 0) * (float)($line['unit_price'] ?? 0) * (1 - (float)($line['discount_percent'] ?? 0) / 100) * (1 + (float)($line['vat_rate'] ?? 0) / 100), array_filter($lines, 'is_array'))), 'number', 36, 'SUM(M' . $firstDataRow . ':M' . $lastDataRow . ')')], 30);
+    $amounts = shopNirExportDocumentAmounts($document);
+    $rows .= shopNirPremiumXlsxRow($dataRow, [
+        1 => shopNirPremiumXlsxCellSpec('TOTAL', 'string', 6),
+        10 => shopNirPremiumXlsxCellSpec($amounts['net'], 'number', 17),
+        11 => shopNirPremiumXlsxCellSpec($vatRateLabel, 'string', 11),
+        12 => shopNirPremiumXlsxCellSpec($amounts['vat'], 'number', 17),
+        13 => shopNirPremiumXlsxCellSpec($amounts['total'], 'number', 36),
+    ], 30);
     $merges[] = 'A' . $dataRow . ':I' . $dataRow;
     $dataRow += 2;
     $rows .= shopNirPremiumXlsxRow($dataRow, [1 => shopNirPremiumXlsxCellSpec('Constatări privind recepția / diferențe calitative sau cantitative:', 'string', 4)], 24);

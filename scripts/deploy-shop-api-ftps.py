@@ -56,6 +56,7 @@ FILES = (
     "anaf-oauth-callback.php",
     ".htaccess",
     "nir-domain.php",
+    "nir-export-values.php",
     "nir-service.php",
     "nir-bundle.php",
     "nir-pdf.php",

@@ -64,9 +64,9 @@ $voucher=GtrotsConsumables::updateVoucher($db,$voucher['id'],$legacy,[]);
 expectDiscount($voucher['discount_type']==='percent' && $voucher['total']==='30.75','Older clients must preserve omitted discounts');
 
 $single=GtrotsConsumables::exportVoucher($db,$voucher['id'],'xlsx');$xml=xlsxSheet($single['content_base64']);
-expectDiscount(moneyCell($xml,'I10')===1501 && moneyCell($xml,'I11')===2013 && moneyCell($xml,'I16')===3514 && moneyCell($xml,'I17')===-439 && moneyCell($xml,'I18')===3075,'Individual XLSX gross lines, subtotal, discount and total');
+expectDiscount(moneyCell($xml,'I10')===1313 && moneyCell($xml,'I11')===1762 && moneyCell($xml,'I16')===3514 && moneyCell($xml,'I17')===-439 && moneyCell($xml,'I18')===3075,'Individual XLSX net lines, subtotal, discount and total');
 $registry=GtrotsConsumables::export($db,[],'xlsx');$xml=xlsxSheet($registry['content_base64'],2);
-expectDiscount(moneyCell($xml,'J10')===439 && moneyCell($xml,'K10')===3075,'Registry must total allocated discounts and net values');
+expectDiscount(moneyCell($xml,'I10')===439 && moneyCell($xml,'K10')===3075,'Registry must total allocated discounts and net values');
 expectDiscount((string)($xml->xpath('//s:c[@r="M7"]/s:is/s:t')[0]??'')==='28.09.2026','Registry must preserve source document date');
 require_once dirname(__DIR__).'/consumables-export.php';
 $html=GtrotsConsumablesExport::voucherHtml($voucher);

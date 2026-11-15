@@ -63,7 +63,7 @@ $export=GtrotsConsumables::export($db,['from'=>'2026-09-01','to'=>'2026-11-30'],
 $tmp=tempnam(sys_get_temp_dir(),'cost-xlsx');file_put_contents($tmp,base64_decode($export['content_base64']));$zip=new ZipArchive();$zip->open($tmp);$xml=$zip->getFromName('xl/worksheets/sheet1.xml');$zip->close();unlink($tmp);
 checkCost(str_contains($xml,'Discount')&&!str_contains($xml,'EVALUAREA COSTULUI')&&str_contains($xml,'r="O6"'),'XLSX acquisition reconciliation');
 $single=GtrotsConsumables::exportVoucher($db,$freeIssue['id'],'xlsx');$tmp=tempnam(sys_get_temp_dir(),'issue-xlsx');file_put_contents($tmp,base64_decode($single['content_base64']));$zip=new ZipArchive();$zip->open($tmp);$singleXml=simplexml_load_string($zip->getFromName('xl/worksheets/sheet1.xml'));$zip->close();unlink($tmp);$singleXml->registerXPathNamespace('s','http://schemas.openxmlformats.org/spreadsheetml/2006/main');
-checkCost(cents((string)$singleXml->xpath('//s:c[@r="H10"]/s:v')[0])===2420&&cents((string)$singleXml->xpath('//s:c[@r="I10"]/s:v')[0])===0,'Individual XLSX source discount included once');
+checkCost(cents((string)$singleXml->xpath('//s:c[@r="G10"]/s:v')[0])===2420&&cents((string)$singleXml->xpath('//s:c[@r="I10"]/s:v')[0])===0,'Individual XLSX source discount included once');
 require_once dirname(__DIR__).'/consumables-export.php';
 $voucherHtml=GtrotsConsumablesExport::voucherHtml($freeIssue);checkCost(str_contains($voucherHtml,'0,00')&&str_contains($voucherHtml,'Discount'),'Individual PDF uses acquisition value');
 echo "consumables_acquisition_test: ok (purchase reductions, fixed/percent/100%, VAT, partial/full issues, revaluation consent, 40 fractional cases, deletion, preview, exports)\n";

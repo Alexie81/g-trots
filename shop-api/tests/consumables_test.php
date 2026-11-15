@@ -121,7 +121,7 @@ $textCell = static fn(string $ref): string => (string)($singleXml->xpath('//s:c[
 $numberCell = static fn(string $ref): float => (float)($singleXml->xpath('//s:c[@r="'.$ref.'"]/s:v')[0] ?? 0);
 checkConsumables($zip->getFromName('xl/worksheets/sheet2.xml') === false, 'Bonul individual nu trebuie să conțină centralizatorul.');
 checkConsumables(str_contains($textCell('B10'), 'FC 101 / 02.11.2026') && $textCell('E5') === '11.11.2026', 'Datele sursei și bonului trebuie să fie distincte.');
-checkConsumables($numberCell('F10') === 1.0 && $numberCell('G10') === 20.0 && $numberCell('H10') === 0.0 && $numberCell('I10') === 20.0 && $numberCell('I16') === 20.0, 'Bonul individual trebuie să exporte cantitatea și valorile salvate.');
+checkConsumables($numberCell('F10') === 1.0 && $numberCell('G10') === 0.0 && $numberCell('H10') === 20.0 && $numberCell('I10') === 20.0 && $numberCell('I16') === 20.0, 'Bonul individual trebuie să exporte cantitatea și valorile salvate.');
 checkConsumables($textCell('G5')==='Revizie atelier' && $textCell('E7')==='COM-104 / SKU-1', 'Referințele introduse trebuie exportate.');
 checkConsumables(!str_contains($zip->getFromName('xl/worksheets/sheet1.xml'),'ȘEF COMPARTIMENT') && str_contains($zip->getFromName('xl/drawings/drawing1.xml'),'Ștampila firmei'), 'Excelul trebuie să includă ștampila fără șef de compartiment.');
 checkConsumables(!str_contains($zip->getFromName('xl/worksheets/sheet1.xml'), 'Lavete microfibră'), 'Poziția eliminată de pe bon nu trebuie să apară în export.');

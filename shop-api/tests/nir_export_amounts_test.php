@@ -33,14 +33,14 @@ function verifyExportAmounts(array $document, array $expected, string $label): v
     $suffix = $currency === 'RON' ? 'lei' : $currency;
     foreach ($document['lines'] as $index => $line) {
         $amounts = shopNirExportLineAmounts($line, $currency);
-        foreach (['net' => 9, 'vat' => 11, 'total' => 12] as $key => $cellIndex) {
+        foreach (['unit_price' => 8, 'net' => 9, 'vat' => 11, 'total' => 12] as $key => $cellIndex) {
             $actual = trim($rows->item($index)->getElementsByTagName('td')->item($cellIndex)->textContent);
-            checkExportAmount($actual === shopNirPdfDecimal($amounts[$key], 2) . ' ' . $suffix, "$label: PDF line $index $key");
+            checkExportAmount($actual === number_format((float)$amounts[$key], 2, ',', '.') . ' ' . $suffix, "$label: PDF line $index $key must keep two monetary decimals");
         }
     }
     $footer = $xpath->query('//tr[@class="totals"]')->item(0)->getElementsByTagName('td');
     foreach (['net' => 1, 'vat' => 3, 'total' => 4] as $key => $index) {
-        checkExportAmount(trim($footer->item($index)->textContent) === shopNirPdfDecimal($expected[$key], 2) . ' ' . $suffix, "$label: PDF total $key");
+        checkExportAmount(trim($footer->item($index)->textContent) === number_format((float)$expected[$key], 2, ',', '.') . ' ' . $suffix, "$label: PDF total $key must keep two monetary decimals");
     }
 
     $temp = tempnam(sys_get_temp_dir(), 'nir-amounts-');
@@ -103,6 +103,13 @@ $discounted['discount_percent'] = '10'; $discounted['received_quantity'] = '2';
 checkExportAmount(shopNirExportLineAmounts($discounted) === ['unit_price' => '90.000000', 'net' => '135.00', 'vat' => '28.34', 'total' => '163.34'], 'Discount and rejected quantity must not override saved amounts');
 $zero = savedExportLine('1', '100', '0', '0', '0');
 checkExportAmount(shopNirExportLineAmounts($zero)['total'] === '0.00', 'Saved zero must not trigger price recalculation');
+verifyExportAmounts(['currency' => 'RON', 'lines' => [$zero]], ['net' => '0.00', 'vat' => '0.00', 'total' => '0.00'], 'Zero saved amounts');
+foreach ([['0','0,00'],['23.1','23,10'],['609','609,00'],['-100','-100,00'],['1234.5678','1.234,57']] as [$input,$expected]) {
+    checkExportAmount(shopNirPdfMoneyValue($input) === $expected, 'Fixed money decimals: ' . $input);
+}
+checkExportAmount(shopNirPdfDecimal('2.0000',4) === '2' && shopNirPdfDecimal('1.2500',4) === '1,25', 'Quantities must remain compact');
+$precise = savedExportLine('3', '1.234567', '3.70', '0.78', '4.48');
+verifyExportAmounts(['currency' => 'RON', 'lines' => [$precise]], ['net' => '3.70', 'vat' => '0.78', 'total' => '4.48'], 'Precise price display preserves stored totals');
 $negative = savedExportLine('-1', '100', '-100', '-20.99', '-120.99');
 verifyExportAmounts(['currency' => 'RON', 'lines' => [$negative]], ['net' => '-100.00', 'vat' => '-20.99', 'total' => '-120.99'], 'Negative saved amounts');
 

@@ -232,3 +232,19 @@
 .shop-consumption-preview>footer{padding:14px 22px}
 .shop-consumption-voucher>footer{flex-wrap:wrap}
 @media(max-width:720px){.shop-consumption-discount-layout{grid-template-columns:1fr;gap:18px}}
+
+/* The discount follows document line totals, using the existing voucher styling. */
+.shop-purchase-discount { margin-top: 20px; }
+.shop-purchase-discount-hint { font-size: 12px; color: #bdb3c4; line-height: 1.6; margin: 16px 0 0; }
+.shop-purchase-discount .shop-consumption-discount-layout { grid-template-columns: minmax(0,1fr) minmax(230px,1fr); gap: 18px; }
+#shop-consumption-legacy-note { color: #e0bc96; line-height: 1.6; }
+#shop-consumption-legacy-fields[hidden] { display: none !important; }
+#tab-shop-consumables .shop-consumables-table th:nth-child(11) { width: 110px; }
+#tab-shop-consumables .shop-consumables-table th:nth-child(12) { width: 120px; }
+#tab-shop-consumables .shop-consumables-table th:nth-child(13) { width: 190px; }
+#tab-shop-consumables .shop-consumables-table :is(th,td):nth-child(12) { text-align: right; white-space: nowrap; }
+#tab-shop-consumables .shop-consumable-reduction { color: #f1b885; }
+@media(max-width:1000px) { .shop-purchase-discount .shop-consumption-discount-layout { grid-template-columns: 1fr; } }
+
+#shop-consumable-create-modal .shop-fixed-asset-line-total { grid-column: 1 / -1; flex-wrap: wrap; border-radius: 12px; }
+#shop-consumable-create-modal .shop-fixed-asset-line-total strong { white-space: nowrap; }

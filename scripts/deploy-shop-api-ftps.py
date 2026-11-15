@@ -64,6 +64,7 @@ FILES = (
     "fixed-assets-service.php",
     "fixed-assets-search.php",
     "fixed-assets-export.php",
+    "consumables-cost.php",
     "consumables-service.php",
     "consumables-export.php",
 )

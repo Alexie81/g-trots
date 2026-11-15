@@ -81,7 +81,7 @@ app.whenReady().then(async () => {
   `);
 
   await wait(`Boolean(document.getElementById('shop-consumables-search'))`);
-  await check(`document.querySelectorAll('.shop-consumables-table thead th').length===12`, 'Tabelul nu are cele 12 coloane cerute.');
+  await check(`document.querySelectorAll('.shop-consumables-table thead th').length===13`, 'Tabelul nu are cele 13 coloane, inclusiv Discount.');
   await check(`document.querySelector('.shop-consumables-table th:nth-child(4)').textContent==='Bon de consum' && [...document.querySelectorAll('.shop-consumable-row-number')].map(el=>el.textContent).join(',')==='2,1'`, 'Coloana bonului sau ordinea descrescătoare este incorectă.');
   await check(`document.querySelector('[data-tab="shop-fixed-assets"]')?.nextElementSibling?.dataset.tab==='shop-consumables'`, 'Tabul Consumabile nu este imediat sub Mijloace fixe.');
   await check(`document.querySelector('.shop-consumables-table').scrollWidth>document.querySelector('.shop-consumables-table-wrap').clientWidth`, 'Tabelul nu păstrează toate coloanele cu scroll orizontal.');
@@ -104,6 +104,13 @@ app.whenReady().then(async () => {
   await fill('[data-consumable-field="unit_price"]', '5', 'change');
   await fill('[data-consumable-field="vat_rate"]', '19', 'change');
   await check(`document.querySelector('[data-consumable-field="vat_value"]').value==='9.5'`, 'TVA-ul automat din editor este incorect.');
+  await fill('#shop-purchase-discount-type','percent','change');
+  await fill('#shop-purchase-discount-value','20','change');
+  await check(`document.querySelector('[data-consumable-field="vat_value"]').value==='9.5' && document.getElementById('shop-purchase-total').textContent.includes('47,60') && document.getElementById('shop-purchase-reduction').textContent.includes('11,90')`, 'Discountul trebuie scăzut din total, păstrând TVA introdus.');
+  await fill('#shop-purchase-discount-value','100','change');
+  await check(`!document.querySelector('[data-consumable-field="stock_cost_override"]') && document.getElementById('shop-purchase-total').textContent.includes('0,00')`, 'Discountul integral trebuie să dea total zero, fără câmpuri suplimentare.');
+  await fill('#shop-purchase-discount-value','20','change');
+  await run(`document.querySelector('.shop-purchase-discount').scrollIntoView({block:'center'})`);
   await capture('01-document-consumabile.png');
   await click('[data-consumables-close="shop-consumable-create-modal"]');
   await pause(220);
@@ -127,11 +134,10 @@ app.whenReady().then(async () => {
   await check(`!document.getElementById('shop-consumption-giver-name').hidden && document.getElementById('shop-consumption-giver-name').required`, 'Opțiunea manuală trebuie să arate inputul obligatoriu.');
   await fill('#shop-consumption-giver','p1','change');
   await fill('[data-voucher-field="quantity"]','1.5','change');
-  await fill('#shop-consumption-discount-value','1');
-  await check(`document.getElementById('shop-consumption-total').textContent.includes('5,75')`, 'Discountul fix sau cantitatea fracționară se calculează greșit.');
+  await check(`document.getElementById('shop-consumption-legacy-fields').hidden && document.getElementById('shop-consumption-total').textContent.includes('6,75')`, 'Bonul nou trebuie să preia costul, fără un al doilea discount.');
   await click('#shop-consumption-voucher-preview');
   await wait(`document.getElementById('shop-consumption-preview-modal').classList.contains('visible')`);
-  await check(`window.qaPreviews.length===1 && !window.qaSavedVoucher && window.qaPreviews[0].discount_value==='1' && !window.qaPreviews[0].voucher_id && document.getElementById('shop-consumption-preview-frame').src.startsWith('blob:')`, 'Previzualizarea nouă trebuie să folosească formularul fără a salva.');
+  await check(`window.qaPreviews.length===1 && !window.qaSavedVoucher && window.qaPreviews[0].discount_value==='0' && !window.qaPreviews[0].voucher_id && document.getElementById('shop-consumption-preview-frame').src.startsWith('blob:')`, 'Previzualizarea nouă trebuie să folosească formularul fără a salva.');
   if(process.env.GT_CONSUMABLES_PREVIEW_PDF){await pause(1700);await capture('05-previzualizare-bon.png');}
   await click('[data-consumables-close="shop-consumption-preview-modal"]');
   await check(`document.getElementById('shop-consumption-preview-frame').src==='about:blank'`, 'Previzualizarea trebuie eliberată la închidere.');
@@ -150,6 +156,12 @@ app.whenReady().then(async () => {
   await click('[data-consumable-detail="c1"]');
   await wait(`document.getElementById('shop-consumable-detail-modal').classList.contains('visible') && document.querySelectorAll('[data-consumption-voucher-edit]').length===1`);
   await check(`Boolean(document.getElementById('shop-consumable-edit')) && Boolean(document.getElementById('shop-consumable-delete')) && Boolean(document.querySelector('[data-consumption-voucher-delete]'))`, 'Editarea și ștergerea permanentă lipsesc din fișă.');
+  await click('#shop-consumable-edit');
+  await wait(`document.getElementById('shop-consumable-create-modal').classList.contains('visible')`);
+  await check(`(()=>{const edit=document.getElementById('shop-consumable-create-modal'),detail=document.getElementById('shop-consumable-detail-modal');const input=document.getElementById('shop-consumable-number'),rect=input.getBoundingClientRect();return Number(getComputedStyle(edit).zIndex)>Number(getComputedStyle(detail).zIndex)&&edit.contains(document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2));})()`, 'Editarea din fișă trebuie să fie deasupra, accesibilă fără închiderea fișei.');
+  await capture('06-editare-peste-fisa.png');
+  await click('[data-consumables-close="shop-consumable-create-modal"]');
+  await pause(220);
   await click('[data-consumption-export-id="v1"][data-consumption-export-format="pdf"]');
   await click('[data-consumption-export-id="v1"][data-consumption-export-format="xlsx"]');
   await wait(`window.qaDownloads.length===2`);

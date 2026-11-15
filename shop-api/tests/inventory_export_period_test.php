@@ -6,11 +6,13 @@ require __DIR__ . '/inventory_export_test.php';
 
 $db->exec('PRAGMA query_only=OFF');
 $db->exec("UPDATE shop_products SET accounting_stock_quantity=777, stock_quantity=888 WHERE id='p1';
+INSERT INTO shop_nir_documents (id,nir_number,reception_date) VALUES ('n-before','NIR-8','2026-08-31'),('n-first','NIR-10','2026-09-01');
+INSERT INTO shop_invoices VALUES ('i-last','GT','008','2026-09-30'),('i-after','GT','009','2026-10-01');
 INSERT INTO shop_inventory_movements VALUES
-('before','p1','w1',NULL,'n1',NULL,'NIR_IN',3,3,3,3,65,195,NULL,NULL,'allocated',0,'Opening stock','Test','2026-08-31 23:59:59'),
-('first','p1','w1',NULL,'n1',NULL,'NIR_IN',1,4,1,4,65,65,NULL,NULL,'allocated',0,'First second','Test','2026-09-01 00:00:00'),
-('last','p1','w1','o1',NULL,'i1','SALE_OUT',-2,14,-2,14,65,130,129,258,'allocated',0,'Last second','Test','2026-09-30 23:59:59'),
-('after','p1','w1','o1',NULL,'i1','SALE_OUT',-5,9,-5,9,65,325,129,645,'allocated',0,'October sale','Test','2026-10-01 00:00:00'),
+('before','p1','w1',NULL,'n-before',NULL,'NIR_IN',3,3,3,3,65,195,NULL,NULL,'allocated',0,'Opening stock','Test','2026-08-31 23:59:59'),
+('first','p1','w1',NULL,'n-first',NULL,'NIR_IN',1,4,1,4,65,65,NULL,NULL,'allocated',0,'First second','Test','2026-09-01 00:00:00'),
+('last','p1','w1','o1',NULL,'i-last','SALE_OUT',-2,14,-2,14,65,130,129,258,'allocated',0,'Last second','Test','2026-09-30 23:59:59'),
+('after','p1','w1','o1',NULL,'i-after','SALE_OUT',-5,9,-5,9,65,325,129,645,'allocated',0,'October sale','Test','2026-10-01 00:00:00'),
 ('manual','p1','w1',NULL,NULL,NULL,'MANUAL_ADJUSTMENT',100,109,100,109,65,6500,NULL,NULL,'allocated',0,'Manual adjustment','Test','2026-09-20 12:00:00');");
 $db->exec('PRAGMA query_only=ON');
 

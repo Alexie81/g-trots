@@ -14,15 +14,54 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: electron-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
 jobs:
   build-and-release:
     runs-on: windows-latest
 
     steps:
-      - name: Descarcă sursele
+      - name: Descarcă automatizarea
         uses: actions/checkout@v4
 
+      - name: Verifică dacă versiunea este deja publicată
+        id: release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const source = path.join(process.env.GITHUB_WORKSPACE, '.github/scripts/electron-release.cjs');
+            // Preserve this workflow's publisher when a manual run builds an older tag.
+            fs.copyFileSync(source, path.join(process.env.RUNNER_TEMP, 'electron-release.cjs'));
+            const { existingRelease } = require(source);
+            const release = await existingRelease(github, context.repo, process.env.RELEASE_TAG);
+            core.setOutput('build', release ? 'false' : 'true');
+            if (release) {
+              core.info('Versiunea este deja publicată complet. Nu se reconstruiește și nu se suprascrie.');
+              await core.summary.addHeading('Versiune deja publicată').addLink(process.env.RELEASE_TAG, release.html_url).write();
+            }
+
+      - name: Descarcă sursele versiunii solicitate
+        if: steps.release.outputs.build == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+
+      - name: Verifică numărul versiunii
+        if: steps.release.outputs.build == 'true'
+        shell: pwsh
+        run: |
+          $version = (Get-Content electron-app/package.json -Raw | ConvertFrom-Json).version
+          if ($env:RELEASE_TAG -ne "v$version") { throw 'Tag-ul nu corespunde versiunii aplicației.' }
+
       - name: Configurează Node.js
+        if: steps.release.outputs.build == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -30,27 +69,21 @@ jobs:
           cache-dependency-path: electron-app/package-lock.json
 
       - name: Instalează dependențele
+        if: steps.release.outputs.build == 'true'
         working-directory: electron-app
         run: npm ci
 
       - name: Construiește aplicația Windows
+        if: steps.release.outputs.build == 'true'
         working-directory: electron-app
         run: npm run dist:win:ci
 
-      - name: Creează GitHub Release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-        run: |
-          $assets = Get-ChildItem electron-app/release -File |
-            Where-Object { $_.Extension -in '.exe', '.blockmap', '.yml' } |
-            ForEach-Object { $_.FullName }
-
-          if (-not $assets) {
-            throw 'Nu au fost generate fișiere pentru publicare.'
-          }
-
-          gh release create $env:RELEASE_TAG @assets `
-            --title "G-Trots Desktop $env:RELEASE_TAG" `
-            --generate-notes
+      - name: Publică versiunea fără duplicare
+        if: steps.release.outputs.build == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const path = require('node:path');
+            const { publish } = require(path.join(process.env.RUNNER_TEMP, 'electron-release.cjs'));
+            const result = await publish({ github, repo: context.repo, tag: process.env.RELEASE_TAG, directory: 'electron-app/release' });
+            await core.summary.addHeading(result.created ? 'Versiune publicată' : 'Versiune publicată deja de alt proces').addLink(process.env.RELEASE_TAG, result.release.html_url).write();

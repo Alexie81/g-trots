@@ -81,7 +81,7 @@ final class GtrotsInventoryExport
     {
         $company = $db->query('SELECT * FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch(PDO::FETCH_ASSOC) ?: [];
         $productSql =
-            'SELECT p.id, p.name, p.sku, p.stock_mode, p.stock_quantity, p.accounting_stock_quantity,
+            'SELECT p.id, p.name, p.sku, p.stock_mode, p.stock_quantity,
                     0 AS fifo_quantity, 0 AS fifo_value
              FROM shop_products p
              WHERE p.is_accounting_stock_tracked = 1
@@ -352,20 +352,20 @@ final class GtrotsInventoryExport
             $scale=min(66/max(1,$logo['width']),66/max(1,$logo['height']));
             $anchors[]=['media'=>$name,'name'=>'G-Trots','col'=>0,'row'=>0,'colOff'=>65000,'rowOff'=>65000,'cx'=>(int)round($logo['width']*$scale*9525),'cy'=>(int)round($logo['height']*$scale*9525)];
         }
-        return ['name'=>'Rezumat','rows'=>$rows,'widths'=>[16,22,32,14,14,18,22,19,19,31],'last_row'=>$r,'last_column'=>10,'merges'=>$merges,'freeze_rows'=>16,'drawing'=>(bool)$anchors,'anchors'=>$anchors,'media'=>$media,'orientation'=>'landscape','auto_filter'=>'A16:J'.max(16,$r-2)];
+        return ['name'=>'Rezumat','rows'=>$rows,'widths'=>[16,22,32,14,14,18,22,19,19,31],'last_row'=>$r,'last_column'=>10,'merges'=>$merges,'freeze_rows'=>0,'drawing'=>(bool)$anchors,'anchors'=>$anchors,'media'=>$media,'orientation'=>'landscape','auto_filter'=>'A16:J'.max(16,$r-2)];
     }
 
     private static function stockSheet(array $data): array
     {
-        $headers=['Nr. crt.','Cod produs','Denumire produs','U.M.','Stoc inițial','Intrări','Ieșiri','Stoc final','Stoc online actual','Stoc contabil actual','Valoare inițială la cost','Valoare intrări','Valoare ieșiri','Valoare finală la cost','Nr. mișcări','Control / observații'];
+        $headers=['Nr. crt.','Cod produs','Denumire produs','U.M.','Stoc inițial','Intrări','Ieșiri','Stoc final','Stoc online actual','Valoare inițială la cost','Valoare intrări','Valoare ieșiri','Valoare finală la cost','Nr. mișcări','Control / observații'];
         [$rows,$merges,$r]=self::sheetMasthead('Situația stocului pe produse',self::periodLabel($data),count($headers));
         $headerRow=$r; $cells=[]; foreach($headers as $i=>$header)$cells[$i+1]=shopNirPremiumXlsxCellSpec($header,'string',3); $rows.=shopNirPremiumXlsxRow($r++,$cells,42);
         foreach($data['products'] as $index=>$product){
             $warning=(float)$product['fifo_pending']>0?'Fără cost asociat: '.self::decimal($product['fifo_pending']).' buc.':(abs((float)$product['reconciliation_difference'])>0.0001?'Diferență de reconciliere':'În regulă');
             $style=(float)$product['fifo_pending']>0?21:4;
-            $rows.=shopNirPremiumXlsxRow($r++,[1=>shopNirPremiumXlsxCellSpec($index+1,'number',5),2=>shopNirPremiumXlsxCellSpec($product['sku'],'string',23),3=>shopNirPremiumXlsxCellSpec($product['name'],'string',4),4=>shopNirPremiumXlsxCellSpec('buc.','string',4),5=>shopNirPremiumXlsxCellSpec($product['opening_quantity'],'number',5),6=>shopNirPremiumXlsxCellSpec($product['entry_quantity'],'number',13),7=>shopNirPremiumXlsxCellSpec($product['exit_quantity'],'number',16),8=>shopNirPremiumXlsxCellSpec($product['closing_quantity'],'number',5),9=>shopNirPremiumXlsxCellSpec($product['stock_mode']==='unlimited'?'Nelimitat':$product['stock_quantity'],is_numeric($product['stock_quantity'])?'number':'string',5),10=>shopNirPremiumXlsxCellSpec($product['accounting_stock_quantity'],'number',5),11=>shopNirPremiumXlsxCellSpec($product['opening_value'],'number',6),12=>shopNirPremiumXlsxCellSpec($product['entry_value'],'number',14),13=>shopNirPremiumXlsxCellSpec($product['exit_value'],'number',17),14=>shopNirPremiumXlsxCellSpec($product['closing_value'],'number',6),15=>shopNirPremiumXlsxCellSpec($product['movement_count'],'number',5),16=>shopNirPremiumXlsxCellSpec($warning,'string',$style)],30);
+            $rows.=shopNirPremiumXlsxRow($r++,[1=>shopNirPremiumXlsxCellSpec($index+1,'number',5),2=>shopNirPremiumXlsxCellSpec($product['sku'],'string',23),3=>shopNirPremiumXlsxCellSpec($product['name'],'string',4),4=>shopNirPremiumXlsxCellSpec('buc.','string',4),5=>shopNirPremiumXlsxCellSpec($product['opening_quantity'],'number',5),6=>shopNirPremiumXlsxCellSpec($product['entry_quantity'],'number',13),7=>shopNirPremiumXlsxCellSpec($product['exit_quantity'],'number',16),8=>shopNirPremiumXlsxCellSpec($product['closing_quantity'],'number',5),9=>shopNirPremiumXlsxCellSpec($product['stock_mode']==='unlimited'?'Nelimitat':$product['stock_quantity'],is_numeric($product['stock_quantity'])?'number':'string',5),10=>shopNirPremiumXlsxCellSpec($product['opening_value'],'number',6),11=>shopNirPremiumXlsxCellSpec($product['entry_value'],'number',14),12=>shopNirPremiumXlsxCellSpec($product['exit_value'],'number',17),13=>shopNirPremiumXlsxCellSpec($product['closing_value'],'number',6),14=>shopNirPremiumXlsxCellSpec($product['movement_count'],'number',5),15=>shopNirPremiumXlsxCellSpec($warning,'string',$style)],30);
         }
-        return ['name'=>'Stoc pe produse','rows'=>$rows,'widths'=>[10,20,32,9,15,13,13,15,18,19,20,18,18,20,14,32],'last_row'=>$r-1,'last_column'=>16,'merges'=>$merges,'freeze_rows'=>$headerRow,'orientation'=>'landscape','auto_filter'=>'A'.$headerRow.':P'.max($headerRow,$r-1)];
+        return ['name'=>'Stoc pe produse','rows'=>$rows,'widths'=>[10,20,32,9,15,13,13,15,18,20,18,18,20,14,32],'last_row'=>$r-1,'last_column'=>15,'merges'=>$merges,'freeze_rows'=>$headerRow,'orientation'=>'landscape','auto_filter'=>'A'.$headerRow.':O'.max($headerRow,$r-1)];
     }
 
     private static function cardsSheet(array $data): array
@@ -414,6 +414,7 @@ final class GtrotsInventoryExport
             ['Scopul registrului','Centralizator electronic pentru controlul stocurilor, trasabilitatea intrărilor și ieșirilor și transmiterea către contabilitate. Nu înlocuiește documentele-sursă și procedurile interne de aprobare.'],
             ['Baza datelor','Exclusiv mișcările confirmate care au document justificativ: NIR pentru intrări și factură emisă pentru ieșiri. Ajustările interne sau manuale fără document nu sunt incluse.'],
             ['Stoc inițial','Stocul documentat reconstruit imediat înaintea primei zile din perioadă, numai din NIR-uri și facturi de ieșire. Pentru „Toată perioada”, soldul inițial este zero.'],
+            ['Stoc final','Stoc inițial + intrări − ieșiri, la sfârșitul perioadei selectate. Mișcările ulterioare perioadei nu sunt incluse în acest sold. Pentru „Toată perioada”, sunt incluse toate mișcările documentate disponibile la export.'],
             ['Intrări / ieșiri','Cantitățile pozitive sunt intrări, iar cantitățile negative sunt prezentate ca ieșiri în valoare absolută. Culorile au rol vizual: verde discret pentru intrări și roșu discret pentru ieșiri.'],
             ['Valoarea stocului','Valoarea stocului este calculată din loturile și costurile de achiziție documentate în RON. Pozițiile fără cost asociat trebuie reconciliate înaintea închiderii contabile.'],
             ['Documente justificative','Fiecare operațiune inclusă este legată obligatoriu de un NIR sau de o factură emisă; sunt păstrate tipul și numărul documentului, data, partenerul, seria și numărul facturii, produsul, cantitatea, valorile și operatorul.'],

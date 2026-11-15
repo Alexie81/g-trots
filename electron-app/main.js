@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { pathToFileURL } = require('url');
+const { spawn } = require('child_process');
 const log = require('electron-log');
 const { autoUpdater } = require('electron-updater');
 const { clampWindowBounds } = require('./window-bounds');
@@ -369,8 +369,9 @@ ipcMain.handle('save-excel', async (_event, { defaultName, buffer }) => {
 });
 
 ipcMain.handle('save-pdf', async (_event, { defaultName, buffer }) => {
+  const safeName = legacyCompatiblePdfName(defaultName);
   const { filePath, canceled } = await dialog.showSaveDialog({
-    defaultPath: defaultName,
+    defaultPath: path.join(app.getPath('downloads'), safeName),
     filters: [{ name: 'PDF', extensions: ['pdf'] }],
   });
   if (canceled || !filePath) return { success: false };
@@ -385,31 +386,46 @@ ipcMain.handle('save-pdf', async (_event, { defaultName, buffer }) => {
   }
   const saved = fs.readFileSync(filePath);
   if (saved.length !== bytes.length || !saved.equals(bytes)) throw new Error('PDF-ul nu a fost scris integral pe disc.');
-  return { success: true, filePath };
+  const verifiedPath = fs.realpathSync.native(filePath);
+  const pdfViewer = findInstalledPdfViewer();
+  if (pdfViewer) {
+    spawn(pdfViewer, [verifiedPath], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
+    return { success: true, filePath: verifiedPath, opened: true, viewer: pdfViewer };
+  }
+  const openError = await shell.openPath(verifiedPath);
+  return { success: true, filePath: verifiedPath, opened: !openError, openError };
 });
 
 function safeDownloadedName(value, fallback = 'document') {
   return String(value || fallback).replace(/[<>:"/\\|?*\x00-\x1F]/g, '-').replace(/\s+/g, ' ').trim() || fallback;
 }
 
-ipcMain.handle('prepare-pdf-preview', async (_event, { defaultName, buffer }) => {
-  const bytes = Buffer.from(buffer);
-  if (bytes.subarray(0, 5).toString('ascii') !== '%PDF-') throw new Error('Conținutul primit nu este un PDF valid.');
-  const directory = path.join(app.getPath('temp'), 'g-trots-pdf-preview');
-  fs.mkdirSync(directory, { recursive: true });
-  const fileName = safeDownloadedName(defaultName, 'Bon-de-consum.pdf').replace(/\.pdf$/i, '') + '.pdf';
-  const filePath = path.join(directory, fileName);
-  const descriptor = fs.openSync(filePath, 'w');
-  try {
-    fs.writeFileSync(descriptor, bytes);
-    fs.fsyncSync(descriptor);
-  } finally {
-    fs.closeSync(descriptor);
-  }
-  const saved = fs.readFileSync(filePath);
-  if (saved.length !== bytes.length || !saved.equals(bytes)) throw new Error('Previzualizarea PDF nu a fost pregătită integral.');
-  return { success: true, fileName, url: pathToFileURL(filePath).href };
-});
+function legacyCompatiblePdfName(value) {
+  const base = safeDownloadedName(value, 'Bon-de-consum.pdf')
+    .replace(/\.pdf$/i, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9_-]+/gi, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  return `${base || 'Bon-de-consum'}.pdf`;
+}
+
+function findInstalledPdfViewer() {
+  const programFiles = process.env.ProgramFiles || 'C:\\Program Files';
+  const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+  const candidates = [
+    path.join(programFiles, 'Adobe', 'Acrobat DC', 'Acrobat', 'Acrobat.exe'),
+    path.join(programFilesX86, 'Adobe', 'Acrobat DC', 'Acrobat', 'Acrobat.exe'),
+    path.join(programFilesX86, 'Adobe', 'Acrobat Reader DC', 'Reader', 'AcroRd32.exe'),
+    path.join(programFiles, 'Adobe', 'Acrobat Reader DC', 'Reader', 'AcroRd32.exe'),
+    path.join(programFilesX86, 'Adobe', 'Acrobat 11.0', 'Acrobat', 'Acrobat.exe'),
+    path.join(programFiles, 'Adobe', 'Acrobat 11.0', 'Acrobat', 'Acrobat.exe'),
+    path.join(programFilesX86, 'Adobe', 'Reader 11.0', 'Reader', 'AcroRd32.exe'),
+    path.join(programFiles, 'Adobe', 'Reader 11.0', 'Reader', 'AcroRd32.exe'),
+  ];
+  return candidates.find(candidate => fs.existsSync(candidate)) || '';
+}
 
 async function fetchLegacyNirAttachment(url) {
   const parsed = new URL(String(url || ''));

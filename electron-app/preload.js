@@ -2,7 +2,6 @@
 const { ipcRenderer } = require('electron');
 window.saveExcel = (defaultName, buffer) => ipcRenderer.invoke('save-excel', { defaultName, buffer });
 window.savePdf = (defaultName, buffer) => ipcRenderer.invoke('save-pdf', { defaultName, buffer });
-window.preparePdfPreview = (defaultName, buffer) => ipcRenderer.invoke('prepare-pdf-preview', { defaultName, buffer });
 window.saveRemoteFiles = (files) => ipcRenderer.invoke('save-remote-files', { files });
 window.preparePdfAttachment = (defaultName, buffer) => ipcRenderer.invoke('prepare-pdf-attachment', { defaultName, buffer });
 window.sendWhatsAppDocument = (payload) => ipcRenderer.invoke('send-whatsapp-document', payload);

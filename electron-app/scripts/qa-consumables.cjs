@@ -48,7 +48,9 @@ app.whenReady().then(async () => {
       document.querySelectorAll('#startup-loader,#auth-overlay').forEach(el => { el.hidden = true; el.remove(); });
       window.AUTH = { getToken: () => 'qa', getUser: () => ({display_name:'Administrator QA',role:'admin'}), hasPermission: () => true };
       window.qaToasts=[];window.qaDownloads=[];window.qaExports=[];window.qaPreviews=[];
-      HTMLAnchorElement.prototype.click=function(){window.qaDownloads.push(this.download);};
+      HTMLAnchorElement.prototype.click=function(){window.qaDownloads.push({name:this.download,kind:'anchor'});};
+      window.savePdf=async(name,bytes)=>{window.qaDownloads.push({name,kind:'pdf',bytes});return {success:true,filePath:name};};
+      window.saveExcel=async(name,bytes)=>{window.qaDownloads.push({name,kind:'xlsx',bytes});return {success:true,filePath:name};};
       window.BUSINESS_UI = { showToast: (message, type) => {window.qaToasts.push(message);console.log('TOAST', type || 'success', message);} };
       const items = [
         {id:'c1',document_id:'d1',document_date:'2026-11-10',document_type:'factura',series:'DEMO',document_number:'C-001',product_name:'Lavete microfibră atelier',unit:'buc',quantity:50,consumed_quantity:12,remaining_quantity:38,unit_price:4.5,net_value:225,vat_rate:19,vat_value:42.75,total_value:267.75,consumption_count:2,vouchers:[{voucher_id:'v1',series:'BC',voucher_number:'1'},{voucher_id:'v2',series:'BC',voucher_number:'2'}],file_count:1,has_document:1,revision:'r-c1'},
@@ -72,8 +74,8 @@ app.whenReady().then(async () => {
         previewConsumptionVoucher: async value => {window.qaPreviews.push(value);if(window.qaPreviewFails)throw new Error('Previzualizare indisponibilă');return {file_name:'Bon demo.pdf',mime_type:'application/pdf',content_base64:${JSON.stringify(process.env.GT_CONSUMABLES_PREVIEW_PDF ? fs.readFileSync(process.env.GT_CONSUMABLES_PREVIEW_PDF).toString('base64') : Buffer.from('%PDF-1.4').toString('base64'))}};},
         createConsumptionVoucher: async value => {window.qaSavedVoucher=value;return value;}, updateConsumptionVoucher: async (_id,value) => {window.qaSavedVoucher=value;return value;},
         deleteConsumptionVoucher: async () => ({success:true}),
-        exportConsumables: async format => ({file_name:'qa.'+format,mime_type:'application/octet-stream',content_base64:btoa('qa')}),
-        exportConsumptionVoucher: async (id,format) => {window.qaExports.push({id,format});if(window.qaExportFails)throw new Error('Export indisponibil');return {file_name:'Bon-de-consum-BC-1.'+format,mime_type:format==='pdf'?'application/pdf':'application/octet-stream',content_base64:format==='pdf'?${JSON.stringify(process.env.GT_CONSUMABLES_PREVIEW_PDF ? fs.readFileSync(process.env.GT_CONSUMABLES_PREVIEW_PDF).toString('base64') : Buffer.from('%PDF-1.4').toString('base64'))}:btoa('qa')};},
+        exportConsumables: async format => ({file_name:'qa.'+format,mime_type:'application/octet-stream',content_base64:format==='pdf'?btoa('%PDF-1.4'):btoa('PK\\x03\\x04qa')}),
+        exportConsumptionVoucher: async (id,format) => {window.qaExports.push({id,format});if(window.qaExportFails)throw new Error('Export indisponibil');return {file_name:'Bon-de-consum-BC-1.'+format,mime_type:format==='pdf'?'application/pdf':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',content_base64:format==='pdf'?${JSON.stringify(process.env.GT_CONSUMABLES_PREVIEW_PDF ? fs.readFileSync(process.env.GT_CONSUMABLES_PREVIEW_PDF).toString('base64') : Buffer.from('%PDF-1.4').toString('base64'))}:btoa('PK\\x03\\x04qa')};},
       };
       if (window.selectAppModule) window.selectAppModule('shop');
       window.switchTab('shop-consumables');
@@ -97,6 +99,10 @@ app.whenReady().then(async () => {
   await click('#shop-consumables-content [data-consumption-view="v2"]');
   await wait(`document.getElementById('shop-consumption-preview-modal').classList.contains('visible')`);
   await check(`window.qaExports.at(-1).id==='v2'&&window.qaExports.at(-1).format==='pdf'&&window.qaDownloads.length===0&&!window.qaSavedVoucher&&document.getElementById('shop-consumption-preview-title').textContent==='Bon de consum BC 2'`, 'Vezi trebuie să deschidă PDF-ul bonului ales, fără descărcare sau salvare.');
+  await click('#shop-consumption-preview-download');
+  await wait(`window.qaDownloads.length===1`);
+  await check(`window.qaDownloads[0].name==='Bon-de-consum-BC-1.pdf'&&window.qaDownloads[0].kind==='pdf'&&String.fromCharCode(...window.qaDownloads[0].bytes.slice(0,5))==='%PDF-'`, 'Descărcarea din previzualizare trebuie să salveze PDF-ul valid cu numele bonului.');
+  await run('window.qaDownloads=[]');
   if(process.env.GT_CONSUMABLES_PREVIEW_PDF){await pause(1700);await capture('08-vezi-bon-salvat.png');}
   await click('[data-consumables-close="shop-consumption-preview-modal"]');
   await run('window.qaExports=[]');
@@ -183,6 +189,7 @@ app.whenReady().then(async () => {
   await click('[data-consumption-export-id="v1"][data-consumption-export-format="xlsx"]');
   await wait(`window.qaDownloads.length===2`);
   await check(`window.qaExports.every(call=>call.id==='v1') && window.qaExports.map(call=>call.format).join(',')==='pdf,xlsx'`, 'Descărcările din istoric trebuie să folosească bonul și formatul selectate.');
+  await check(`window.qaDownloads[0].name==='Bon-de-consum-BC-1.pdf'&&window.qaDownloads[0].kind==='pdf'&&String.fromCharCode(...window.qaDownloads[0].bytes.slice(0,5))==='%PDF-'&&window.qaDownloads[1].name==='Bon-de-consum-BC-1.xlsx'&&window.qaDownloads[1].kind==='xlsx'&&String.fromCharCode(...window.qaDownloads[1].bytes.slice(0,2))==='PK'`, 'PDF-ul și Excel-ul trebuie salvate nativ, cu numele bonului și conținut valid.');
   await click('[data-consumption-voucher-edit="v1"]');
   await wait(`document.getElementById('shop-consumption-voucher-modal').classList.contains('visible')`);
   await check(`!document.getElementById('shop-consumption-export-actions').hidden`, 'Bonul salvat trebuie să aibă descărcări individuale.');

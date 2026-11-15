@@ -1,0 +1,212 @@
+/* Consumables deliberately reuse the fixed-assets visual language. */
+#tab-shop-consumables{position:relative;isolation:isolate;overflow-x:hidden;background:radial-gradient(circle at 12% 2%,rgba(25,116,89,.13),transparent 32%),#130f0d}
+#tab-shop-consumables svg,.shop-consumables-export svg,.shop-consumption-voucher svg,.shop-consumable-people svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+#tab-shop-consumables .shop-fixed-assets-breadcrumb{display:flex;align-items:center;gap:12px;margin:0 0 22px;color:#716975;font-size:11px}
+#tab-shop-consumables .shop-fixed-assets-breadcrumb button{display:flex;align-items:center;gap:7px;padding:0;border:0;background:none;color:#bcb1c0;font:inherit;cursor:pointer}
+#tab-shop-consumables .shop-fixed-assets-breadcrumb button:hover{color:#9fe4c9}
+#tab-shop-consumables .shop-fixed-assets-breadcrumb svg{width:15px;height:15px}
+#tab-shop-consumables .shop-commerce-head[data-commerce-kind="consumables"]{position:relative;display:flex;align-items:center;justify-content:space-between;gap:24px;min-height:138px;padding:28px 32px;margin:0;border:1px solid #3f4844;border-radius:22px 22px 0 0;background:linear-gradient(115deg,#292523,#201e21 62%,#182722);overflow:hidden}
+#tab-shop-consumables .shop-commerce-head[data-commerce-kind="consumables"]::after{content:"";position:absolute;inset:auto -55px -90px auto;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle,#2dc99024,transparent 68%);pointer-events:none}
+#tab-shop-consumables .shop-fixed-assets-heading{position:relative;z-index:1;display:flex;align-items:center;gap:19px;min-width:0}
+#tab-shop-consumables .shop-fixed-assets-heading-icon{display:grid;place-items:center;width:62px;height:62px;flex:0 0 62px;border:1px solid #4e9b7a55;border-radius:18px;background:linear-gradient(145deg,#244b3d,#252b29);color:#8ce2bd;box-shadow:0 1px 0 #d6ffec14 inset,0 7px 18px #0002}
+#tab-shop-consumables .shop-fixed-assets-heading-icon svg{width:29px;height:29px;stroke-width:1.5}
+#tab-shop-consumables .shop-commerce-title{position:static;min-width:0;margin:0;padding:0;text-align:left}
+#tab-shop-consumables .shop-commerce-title>span{display:block;font-size:9px;font-weight:650;letter-spacing:.17em}
+#tab-shop-consumables .shop-commerce-title h1{margin:9px 0 8px;color:#fcf6fa;font-size:clamp(24px,2.1vw,34px);font-weight:650;line-height:1.15;letter-spacing:-.04em}
+#tab-shop-consumables .shop-commerce-title p{margin:0;color:#b8adb9;font-size:12px;line-height:1.5}
+#tab-shop-consumables .shop-commerce-head-actions{position:relative;z-index:1;display:flex;align-self:center;gap:10px;flex:0 0 auto;margin:0}
+#tab-shop-consumables .shop-commerce-refresh{display:grid;place-items:center;width:44px;height:46px;padding:0;border:1px solid #45514c;border-radius:12px;background:#ffffff05;color:#c4d8cf}
+#tab-shop-consumables .shop-commerce-refresh:hover{border-color:#559a7d;background:#54c99a12;color:#aaf0d2}
+#tab-shop-consumables .shop-commerce-refresh svg{width:18px;height:18px}
+#tab-shop-consumables .shop-commerce-add{display:flex;align-items:center;justify-content:center;gap:11px;min-height:46px;padding:7px 16px 7px 9px;border-radius:12px;color:#fff;font-size:12px;font-weight:650}
+#tab-shop-consumables .shop-fixed-assets-add-symbol{display:grid;place-items:center;width:29px;height:29px;border:1px solid #ffffff25;border-radius:8px;background:#ffffff16}
+#tab-shop-consumables .shop-fixed-assets-add-symbol svg{width:16px;height:16px;stroke-width:2}
+#tab-shop-consumables .shop-fixed-assets-add-arrow{width:16px;height:16px;margin-left:6px;opacity:.8}
+#tab-shop-consumables .shop-commerce-title>span{color:#8ecbb2}
+#tab-shop-consumables .shop-commerce-add{border-color:#39b984;background:linear-gradient(110deg,#16855d,#0d6e4b);box-shadow:0 4px 18px #0a5b3a33,0 1px 0 #ffffff24 inset}
+#tab-shop-consumables .shop-commerce-add:hover{background:linear-gradient(110deg,#1b9a6c,#108059)}
+#tab-shop-consumables .shop-fixed-assets-overview{border-color:#3c4743;background:linear-gradient(115deg,#211f22,#1b2421)}
+#tab-shop-consumables .shop-fixed-assets-overview-value{border-color:#3f80645e;background:linear-gradient(115deg,#2542388c,#282628 90%)}
+#tab-shop-consumables .shop-fixed-assets-overview-label,#tab-shop-consumables .shop-fixed-assets-overview-total p>span{color:#a9d8c4}
+#tab-shop-consumables .shop-fixed-assets-overview-total strong{color:#d8ffec}
+#tab-shop-consumables .shop-fixed-assets-overview-breakdown{border-left-color:#63b99435}
+#tab-shop-consumables .shop-fixed-assets-overview-counts{border-color:#3c4944;background:linear-gradient(110deg,#25302c,#242326)}
+#tab-shop-consumables .shop-fixed-assets-filter-field select#shop-consumables-type{position:absolute;inset:0;min-width:0;width:100%;height:100%;margin:0;padding:18px 32px 0 47px;border:0;border-radius:12px;outline:0;appearance:none;background:transparent;color:#f0eaf3;color-scheme:dark;font:inherit;font-size:12px;line-height:21px;cursor:pointer}
+#tab-shop-consumables .shop-fixed-assets-controls>#shop-consumables-export{display:flex;align-items:center;gap:11px;min-width:0;height:54px;padding:0 14px 0 11px;border:1px solid #45866c;border-radius:12px;background:linear-gradient(110deg,#284a3d,#21352e);color:#9de2c5;cursor:pointer;box-shadow:0 1px 0 #d5ffed0d inset;transition:background .15s,border-color .15s}
+#tab-shop-consumables .shop-fixed-assets-controls>#shop-consumables-export:hover{border-color:#64b891;background:linear-gradient(110deg,#315d4b,#274237)}
+#tab-shop-consumables #shop-consumables-export .shop-fixed-assets-export-symbol{border-color:#68b28e55;background:#6bd3a515;color:#9ce7c8}
+#tab-shop-consumables #shop-consumables-export .shop-fixed-assets-export-copy strong{color:#b2efd5}
+#tab-shop-consumables #shop-consumables-export .shop-fixed-assets-export-copy small{color:#90bba9}
+#tab-shop-consumables .shop-fixed-assets-controls>#shop-consumables-export>svg{width:15px;height:15px;flex:0 0 15px;color:#88c9ad}
+.shop-consumables-nav{position:relative;padding-left:29px!important}
+.shop-consumables-nav::before{content:"";position:absolute;left:16px;top:-7px;width:1px;height:28px;background:#4d4a4a}
+.shop-consumables-nav svg{width:16px!important;height:16px!important;color:#6ad5a8!important}
+
+.shop-consumables-table-wrap{scrollbar-width:auto;scrollbar-color:#b77a49 #272126}
+.shop-consumables-table-wrap::-webkit-scrollbar{height:15px}
+.shop-consumables-table-wrap::-webkit-scrollbar-track{background:#272126;border-radius:999px;border:4px solid #1b181b}
+.shop-consumables-table-wrap::-webkit-scrollbar-thumb{background:linear-gradient(90deg,#9d653d,#e09b61);border:3px solid #272126;border-radius:999px;min-width:70px}
+.shop-consumables-table{min-width:1530px}
+.shop-consumables-table th:nth-child(5){min-width:230px}
+.shop-consumables-table th:nth-child(11){min-width:160px}
+.shop-consumables-table td:nth-child(5) small{display:block;margin-top:5px;color:#8f8592}
+.shop-consumable-stock{color:#8ee0bd}.shop-consumable-stock.empty{color:#dd8294}
+.shop-fixed-asset-disposal-cell button:disabled,.shop-fixed-asset-disposal-history button:disabled{opacity:.45;cursor:not-allowed}
+
+.shop-consumption-voucher{width:min(1060px,calc(100vw - 36px));max-height:calc(100vh - 38px)}
+.shop-consumption-voucher>header p{margin:5px 0 0;color:#aa9cac;font-size:11px}
+.shop-consumption-voucher .shop-commerce-modal-scroll{display:grid;gap:16px;padding:22px 26px;background:linear-gradient(145deg,#211e22,#19171b)}
+.shop-consumption-voucher-card{padding:18px;border:1px solid #463d47;border-radius:16px;background:#262127}
+.shop-consumption-parties{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start}
+.shop-consumption-parties label{display:grid;gap:7px;min-width:0}
+.shop-consumption-parties label input{margin-top:6px}
+.shop-consumption-parties>button{min-height:43px;padding:0 13px;border:1px solid #587e6d;border-radius:10px;background:#203c31;color:#a7e5ca;font-weight:650;cursor:pointer}
+.shop-consumption-parties>button:hover{background:#28503f}
+.shop-consumption-voucher-lines{display:grid;gap:10px;margin-top:12px}
+.shop-consumption-voucher-line{display:grid;grid-template-columns:38px minmax(260px,1.8fr) minmax(175px,.7fr) 38px;gap:12px;align-items:center;padding:12px;border:1px solid #4a404a;border-radius:13px;background:#1c191d}
+.shop-consumption-voucher-line>span{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:#1e4938;color:#8ee2bc;font-weight:750}
+.shop-consumption-voucher-line label{display:grid;gap:6px;color:#bbafbe;font-size:10px;font-weight:650;text-transform:uppercase;letter-spacing:.04em}
+.shop-consumption-voucher-line label small{color:#958b98;font-size:9px;text-transform:none;letter-spacing:0}
+.shop-consumption-voucher-line select,.shop-consumption-voucher-line input{min-width:0;width:100%;height:42px;border:1px solid #544956;border-radius:9px;background:#252126;color:#f5edf5;padding:0 11px}
+.shop-consumption-voucher-line>button{width:36px;height:36px;border:1px solid #74434f;border-radius:10px;background:#452733;color:#ff9aac;font-size:20px;cursor:pointer}
+.shop-fixed-assets-add-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:12px}
+.shop-fixed-assets-add-row strong{font-size:10px;letter-spacing:.1em;color:#a99cab}
+.shop-fixed-assets-add-row button{padding:9px 13px;border:1px solid #4b8b70;border-radius:10px;background:#234437;color:#9ae2c2;font-weight:650;cursor:pointer}
+
+.shop-consumable-people{width:min(920px,calc(100vw - 36px));max-height:calc(100vh - 42px)}
+.shop-consumable-people-tabs{display:flex;gap:8px;padding:4px;border:1px solid #473d48;border-radius:12px;background:#1d191e}
+.shop-consumable-people-tabs button{flex:1;min-height:42px;border:0;border-radius:9px;background:transparent;color:#aa9cac;font-weight:650;cursor:pointer}
+.shop-consumable-people-tabs button.active{background:#305344;color:#b7ecd4;box-shadow:0 0 0 1px #5aa58355 inset}
+.shop-consumable-people-layout{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(280px,.7fr);gap:16px;margin-top:16px}
+#shop-consumable-people-list{display:grid;gap:8px;align-content:start;max-height:420px;overflow:auto;padding-right:4px}
+#shop-consumable-people-list article{display:grid;grid-template-columns:38px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:11px;border:1px solid #463e47;border-radius:12px;background:#242025}
+#shop-consumable-people-list article.inactive{opacity:.58}
+#shop-consumable-people-list article>span{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:#203d33;color:#8bd7b6}
+#shop-consumable-people-list article svg{width:18px;height:18px}
+#shop-consumable-people-list article div{min-width:0}#shop-consumable-people-list strong,#shop-consumable-people-list small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#shop-consumable-people-list small{margin-top:4px;color:#968c99;font-size:9px}
+#shop-consumable-people-list button{padding:8px 9px;border:1px solid #55495a;border-radius:8px;background:#302a32;color:#d8c9dc;cursor:pointer}
+#shop-consumable-person-form{display:grid;gap:13px;align-content:start;padding:16px;border:1px solid #4c414e;border-radius:14px;background:#272229}
+#shop-consumable-person-form label{display:grid;gap:7px;color:#c1b3c4;font-size:11px;font-weight:650}#shop-consumable-person-form input[type="text"],#shop-consumable-person-form input:not([type]){height:43px;border:1px solid #574a59;border-radius:10px;background:#1c191e;color:#f5edf6;padding:0 11px}
+.shop-consumable-person-active{display:flex!important;align-items:center;grid-template-columns:auto 1fr}.shop-consumable-person-active input{width:17px;height:17px}
+#shop-consumable-person-form>div{display:flex;justify-content:flex-end;gap:9px;margin-top:5px}
+
+.shop-consumables-export .shop-nir-registry-content-options{grid-template-columns:repeat(3,minmax(0,1fr))}
+.shop-consumables-export .shop-nir-registry-content-options>button{min-height:105px}
+
+@media(max-width:1100px){.shop-consumption-voucher-line{grid-template-columns:34px minmax(0,1fr) 170px 36px}}
+@media(max-width:760px){#tab-shop-consumables .shop-commerce-head[data-commerce-kind="consumables"]{padding:20px;flex-wrap:wrap}.shop-consumption-parties{grid-template-columns:1fr}.shop-consumption-parties>button{width:100%}.shop-consumption-voucher-line{grid-template-columns:34px minmax(0,1fr) 36px}.shop-consumption-voucher-line label:nth-of-type(2){grid-column:2/4}.shop-consumable-people-layout{grid-template-columns:1fr}.shop-consumables-table{min-width:1420px}}
+
+/* The ledger remains a complete table; actions are always usable at the right edge. */
+#tab-shop-consumables .shop-fixed-assets-register-title{padding:22px 26px;background:#242127;border-color:#464049}
+#tab-shop-consumables .shop-fixed-assets-register-title small{color:#98b6a9;font-size:10px;letter-spacing:.13em}
+#tab-shop-consumables .shop-fixed-assets-register-title h2{font-size:19px;margin-top:7px}
+#tab-shop-consumables .shop-fixed-assets-register-title>span{background:#ffffff05;color:#c8d6cf;border-color:#4a5850;padding:7px 12px}
+#tab-shop-consumables .shop-consumables-table{table-layout:fixed;width:100%;min-width:1530px;font-variant-numeric:tabular-nums}
+#tab-shop-consumables .shop-consumables-table th{height:52px;padding:12px 14px;background:#2a272d;color:#c2b9c7;font-size:11px;line-height:1.5;font-weight:600}
+#tab-shop-consumables .shop-consumables-table td{height:110px;padding:18px 14px;font-size:12px;line-height:1.5;background:#201e23;border-bottom:1px solid #3d3641}
+#tab-shop-consumables .shop-consumables-table tr:nth-child(even) td{background:#242126}
+#tab-shop-consumables .shop-consumables-table tr:hover td{background:#29272c}
+#tab-shop-consumables .shop-consumables-table th:nth-child(1){width:58px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(2){width:112px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(3){width:106px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(4){width:118px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(5){width:auto;min-width:230px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(6){width:86px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(7){width:82px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(8){width:100px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(9){width:112px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(10){width:120px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(11){width:176px}
+#tab-shop-consumables .shop-consumables-table th:nth-child(12){width:190px}
+#tab-shop-consumables .shop-consumables-table :is(th,td):is(:nth-child(1),:nth-child(6),:nth-child(7),:nth-child(8)){text-align:center}
+#tab-shop-consumables .shop-consumables-table :is(th,td):is(:nth-child(9),:nth-child(10)){text-align:right;white-space:nowrap}
+#tab-shop-consumables .shop-consumables-table td:nth-child(5) strong{font-size:13px;color:#f3eef5;line-height:1.55;font-weight:600}
+#tab-shop-consumables .shop-consumables-table td:nth-child(5) small{font-size:11px;color:#a59ba9}
+#tab-shop-consumables .shop-consumables-table td:nth-child(10) strong{color:#d4f1e3;font-weight:650}
+.shop-consumable-row-number{color:#938799;font-size:11px}
+.shop-consumable-consumed{color:#c2b6cc}
+.shop-consumable-stock{display:inline-flex;justify-content:center;min-width:44px;padding:6px 10px;border:1px solid #68b99430;border-radius:9px;background:#64c69a0c;font-weight:650}
+.shop-consumable-stock.empty{border-color:#bb768c35;background:#d17b940c}
+.shop-consumable-consumption{display:grid;gap:9px;justify-items:start}
+.shop-consumable-consumption>span{font-size:10px;color:#b2a6b8}
+.shop-consumable-consumption>button{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:8px 7px;border:1px solid #57836d;border-radius:9px;background:#284034;color:#b1e7cb;font:inherit;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
+.shop-consumable-consumption>button svg{width:14px;height:14px;flex-shrink:0}
+.shop-consumable-consumption>button:hover{background:#31523f;border-color:#7eae93}
+.shop-consumable-consumption>button:disabled{background:#ffffff04;color:#998e9f;border-color:#49414f;cursor:not-allowed}
+.shop-consumable-row-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;min-width:0}
+.shop-consumable-row-actions button{display:flex;align-items:center;justify-content:center;gap:7px;min-height:33px;padding:6px 8px;border:1px solid #594c60;border-radius:8px;background:#322c38;color:#dfd3e5;font:inherit;font-size:11px;font-weight:600;cursor:pointer;transition:background .15s,border-color .15s}
+.shop-consumable-row-actions button:hover{background:#42364b;border-color:#807087}
+.shop-consumable-row-actions button:first-child{grid-column:1/-1;min-height:36px;justify-content:flex-start;background:#ffffff04}
+.shop-consumable-row-actions button:first-child span:last-child{margin-left:auto;color:#a994b3}
+.shop-consumable-row-actions svg{width:15px;height:15px;color:#baa8c8}
+.shop-consumable-row-actions button.shop-fixed-asset-danger{background:#b4506d0b;border-color:#805062;color:#eca3b6}
+.shop-consumable-row-actions button.shop-fixed-asset-danger:hover{background:#b4506d24;border-color:#c2768d}
+#tab-shop-consumables .shop-consumables-table-wrap+.shop-order-table-top-pagination{padding:17px 22px;margin-top:0;border:1px solid #403844;border-top:0;border-radius:0 0 18px 18px;background:#221e25}
+
+/* Clear, consistent forms with a compact footer and visible native date controls. */
+:is(#shop-consumable-create-modal,#shop-consumption-voucher-modal,#shop-consumable-people-modal,#shop-consumable-detail-modal) .shop-commerce-modal{box-shadow:0 28px 100px #0008}
+.shop-consumption-voucher>header{padding:22px 26px;background:linear-gradient(120deg,#25332c,#252129 68%);border-bottom:1px solid #47434b}
+.shop-consumption-voucher>header .shop-fixed-asset-modal-symbol{background:#254637;border-color:#4e8d6b66;color:#9fe4be}
+.shop-consumption-voucher>header>div>small{color:#9ac9b0;font-size:10px;letter-spacing:.12em}
+.shop-consumption-voucher>header h2{font-size:23px;font-weight:650;letter-spacing:-.02em;margin:5px 0}
+.shop-consumption-voucher>header p{color:#b8adbe;font-size:12px;line-height:1.5}
+.shop-consumption-voucher .shop-commerce-modal-scroll{padding:22px 26px;gap:18px}
+.shop-consumption-voucher-card{padding:20px;border-color:#443d49;background:#242127;border-radius:15px}
+.shop-consumption-voucher .shop-editor-section{margin-bottom:18px;gap:12px}
+.shop-consumption-voucher .shop-editor-section>b{width:32px;height:32px;min-width:32px;border:1px solid #78bc9430;border-radius:10px;background:#31503d55;color:#9bd5b2;font-size:11px}
+.shop-consumption-voucher .shop-editor-section strong{color:#ece5f0;font-size:13px;font-weight:600}
+.shop-consumption-voucher .shop-editor-section small{color:#aaa0b0;font-size:11px;line-height:1.5;margin-top:4px}
+.shop-consumption-voucher :is(input,select,textarea){color-scheme:dark;border-color:#514757!important;background:#1b181f!important;color:#f2eaf5!important;font:inherit;font-size:13px!important;font-weight:500!important;box-shadow:0 1px 3px #0002 inset}
+.shop-consumption-voucher :is(input,select){height:45px;padding:0 12px!important;border-radius:10px!important;min-width:0;width:100%;border:1px solid}
+.shop-consumption-voucher label{color:#b8adbf!important;font-size:10px!important;letter-spacing:.06em;gap:8px}
+.shop-consumption-voucher :is(input,select,textarea):focus{outline:2px solid #71d0a46b;outline-offset:2px;border-color:#76c99d!important}
+.shop-consumption-voucher input[type=date]::-webkit-calendar-picker-indicator{opacity:1;cursor:pointer;filter:none;width:18px;height:18px;padding:4px}
+.shop-consumption-voucher textarea{width:100%;min-height:76px;padding:12px 14px!important;border:1px solid;border-radius:12px;resize:vertical}
+.shop-consumption-voucher ::placeholder{color:#908496!important;font-weight:400}
+.shop-consumption-party{display:grid;gap:10px;min-width:0;padding:15px;border:1px solid #453e4a;border-radius:12px;background:#ffffff02}
+.shop-consumption-party-head{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:24px}
+.shop-consumption-party-head label{margin:0!important;white-space:nowrap}
+.shop-consumption-party-head button{display:inline-flex;align-items:center;gap:5px;padding:4px 0;border:0;background:none;color:#a9d5bd;font-size:10px;font-weight:550;cursor:pointer}
+.shop-consumption-party-head button:hover{color:#d7f8e5;text-decoration:underline}
+.shop-consumption-party-head svg{width:14px;height:14px}
+.shop-consumption-lines-heading{display:flex;align-items:start;justify-content:space-between;gap:16px}
+.shop-consumption-lines-heading>button{display:flex;align-items:center;justify-content:center;gap:6px;flex-shrink:0;padding:9px 12px;border:1px solid #5b806b;border-radius:9px;background:#284034;color:#bde8cc;font-size:11px;font-weight:600;cursor:pointer}
+.shop-consumption-lines-heading>button svg{width:14px;height:14px}
+.shop-consumption-voucher-lines{margin-top:0}
+.shop-consumption-export-actions{display:flex;align-items:center;gap:9px;padding:14px 16px;background:#26372e;border:1px solid #56836766;border-radius:12px}
+.shop-consumption-export-actions[hidden]{display:none}
+.shop-consumption-export-actions>div{flex:1;min-width:0}
+.shop-consumption-export-actions strong,.shop-consumption-export-actions small{display:block}
+.shop-consumption-export-actions strong{color:#d6eddf;font-size:12px}
+.shop-consumption-export-actions small{color:#a1b9ab;font-size:10px;margin-top:4px}
+.shop-consumption-export-actions button{display:flex;align-items:center;gap:7px;justify-content:center;min-height:37px;padding:8px 13px;border:1px solid #698475;border-radius:9px;background:#ffffff05;color:#d2ecdd;font:inherit;font-size:11px;font-weight:600;cursor:pointer}
+.shop-consumption-export-actions svg{width:15px;height:15px}
+.shop-consumption-export-actions button:hover{background:#ffffff10}
+.shop-consumption-export-actions button:disabled{opacity:.6;cursor:wait}
+#shop-consumable-detail-modal .shop-fixed-asset-history-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;min-width:140px}
+#shop-consumable-detail-modal .shop-fixed-asset-history-actions .shop-voucher-pdf{color:#f3be8e;border-color:#97693e;background:#bd7a3610}
+#shop-consumable-detail-modal .shop-fixed-asset-history-actions .shop-voucher-xlsx{color:#a4dbb8;border-color:#47795b;background:#5ba27310}
+.shop-consumption-voucher-line{padding:15px;align-items:start;background:#1d1a20;border-color:#493f50;grid-template-columns:30px minmax(0,1fr) 210px 32px}
+.shop-consumption-voucher-line>span{width:28px;height:28px;margin-top:28px;background:#36303c;color:#cabdd1;font-size:11px;border-radius:8px}
+.shop-consumption-voucher-line>button{display:grid;place-items:center;width:32px;height:32px;margin-top:26px;padding:0;line-height:1;background:#442d3855;color:#eaa4b7;border-color:#795060;border-radius:8px}
+.shop-consumption-voucher-line label small{font-size:10px;letter-spacing:0;color:#9cb9aa;margin-top:1px}
+.shop-consumption-notes{display:grid}
+.shop-consumption-notes>span{display:flex;align-items:center;gap:9px}
+.shop-consumption-notes em{font-size:10px;font-weight:400;font-style:normal;text-transform:none;letter-spacing:0;color:#908497}
+.shop-consumption-voucher>footer{gap:10px;padding:17px 26px;background:#28232d;border-top:1px solid #4c414f}
+.shop-consumption-voucher>footer button{min-height:44px;padding:10px 18px;border-radius:11px;font-size:12px}
+.shop-consumption-voucher>footer #shop-consumption-voucher-delete{margin-right:auto}
+.shop-consumption-voucher>footer .btn-primary{border:1px solid #4fa675;background:linear-gradient(110deg,#278353,#17683e);color:#fff;box-shadow:0 1px 0 #ffffff16 inset}
+.shop-consumption-voucher>footer .btn-primary:hover{background:linear-gradient(110deg,#319462,#227d4f)}
+#shop-consumable-create-modal .shop-fixed-asset-line-total{display:flex;justify-content:flex-end;gap:7px;align-items:baseline;padding:14px 18px;background:#26362c;color:#b9cfc1;font-size:11px;border-top:1px solid #5b916436}
+#shop-consumable-create-modal .shop-fixed-asset-line-total strong{color:#d7f4e1;font-size:17px;margin-left:5px}
+#shop-consumable-create-modal [data-consumable-line-remove]{display:grid;place-items:center;padding:0;line-height:1;width:32px;height:32px}
+.shop-consumables-export .shop-nir-registry-content-options>button{min-height:112px}
+.shop-consumables-export .shop-nir-registry-content-options strong{font-size:13px}
+.shop-consumables-export .shop-nir-registry-content-options small{font-size:11px;line-height:1.5}
+@media(max-width:900px){.shop-consumption-voucher{width:calc(100vw - 24px);max-height:calc(100vh - 24px)}.shop-consumption-voucher .shop-commerce-modal-scroll{padding:18px}.shop-consumption-voucher>header,.shop-consumption-voucher>footer{padding:18px}.shop-consumption-voucher-card{padding:16px}.shop-consumption-voucher-line{grid-template-columns:28px minmax(0,1fr) 160px 32px;gap:10px}.shop-consumption-party-head{align-items:start;flex-direction:column;gap:5px}}
+@media(max-width:620px){.shop-consumption-voucher .shop-commerce-columns.three{grid-template-columns:1fr 1fr}.shop-consumption-voucher .shop-commerce-columns.three>label:first-child{grid-column:1/-1}.shop-consumption-parties{grid-template-columns:1fr}.shop-consumption-party-head{flex-direction:row;align-items:center}.shop-consumption-lines-heading{flex-wrap:wrap;gap:0;margin-bottom:14px}.shop-consumption-voucher-line{grid-template-columns:28px minmax(0,1fr) 32px}.shop-consumption-voucher-line>label:first-of-type{grid-column:2/4}.shop-consumption-voucher-line>label:nth-of-type(2){grid-column:2;grid-row:2}.shop-consumption-voucher-line>button{grid-column:3;grid-row:2}.shop-consumption-voucher>footer{flex-wrap:wrap}.shop-consumption-voucher>footer .btn-primary{flex:1}.shop-consumables-export .shop-nir-registry-content-options{grid-template-columns:1fr}}
+
+.shop-consumption-references{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:16px;padding-top:16px;border-top:1px solid #ffffff0c}
+.shop-consumption-references em{font-size:10px;font-weight:400;font-style:normal;color:#a69bab;text-transform:none;letter-spacing:0;margin-left:4px}
+@media(max-width:620px){.shop-consumption-references{grid-template-columns:1fr}}

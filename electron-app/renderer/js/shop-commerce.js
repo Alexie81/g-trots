@@ -36,6 +36,7 @@
     'shop-suppliers': 'shop-suppliers-content',
     'shop-nirs': 'shop-nirs-content',
     'shop-fixed-assets': 'shop-fixed-assets-content',
+    'shop-consumables': 'shop-consumables-content',
     'shop-payments': 'shop-payments-content',
     'shop-automations': 'shop-automations-content',
     'shop-shipping': 'shop-shipping-content',
@@ -207,6 +208,7 @@
       <div class="tab-panel shop-tab-panel" id="tab-shop-suppliers">${commercePage('Furnizori', 'Firme partenere, persoane de contact si date comerciale pentru achizitii.', 'shop-suppliers-content', true)}</div>
       <div class="tab-panel shop-tab-panel" id="tab-shop-nirs">${commercePage('NIR-uri', 'Recepții contabile, facturi de achiziție și costuri istorice.', 'shop-nirs-content', true)}</div>
       <div class="tab-panel shop-tab-panel" id="tab-shop-fixed-assets">${commercePage('Gestiune mijloace fixe', 'Registrul documentelor, valorilor și casărilor mijloacelor fixe.', 'shop-fixed-assets-content', true)}</div>
+      <div class="tab-panel shop-tab-panel" id="tab-shop-consumables">${window.GTrotsConsumables.page('Consumabile')}</div>
       <div class="tab-panel shop-tab-panel" id="tab-shop-payments">${commercePage('Metode de plata', 'Controleaza optiunile disponibile la finalizarea comenzii.', 'shop-payments-content')}</div>
       <div class="tab-panel shop-tab-panel" id="tab-shop-automations">${commercePage('Automatizări', 'Emitere și expediere automată a facturilor după plată și starea comenzii.', 'shop-automations-content')}</div>
       <div class="tab-panel shop-tab-panel" id="tab-shop-shipping">${commercePage('Livrari', 'Costuri, transport gratuit si termene estimate.', 'shop-shipping-content', true)}</div>
@@ -220,6 +222,7 @@
       ${dashboardCard('shop-suppliers', 'teal', 'ACHIZITII', 'Furnizori', 'Parteneri, contacte si date comerciale.')}
       ${dashboardCard('shop-nirs', 'teal', 'RECEPTII', 'NIR-uri', 'Facturi de achiziție, intrări și costuri reale.')}
       ${dashboardCard('shop-fixed-assets', 'amber', 'PATRIMONIU', 'Mijloace fixe', 'Documente, valori, casări și export contabil.')}
+      ${dashboardCard('shop-consumables', 'green', 'GESTIUNE', 'Consumabile', 'Intrări, stoc și bonuri de consum colective.')}
       ${dashboardCard('shop-payments', 'purple', 'CHECKOUT', 'Metode de plata', 'Card online si ramburs la curier.')}
       ${dashboardCard('shop-shipping', 'green', 'LOGISTICA', 'Livrari', 'Costuri si praguri de gratuitate.')}
       ${dashboardCard('shop-customers', 'blue', 'RELATII CLIENTI', 'Clienti', 'Conturi, comenzi si acces la magazin.')}
@@ -230,7 +233,8 @@
       ${dashboardCard('shop-automations', 'amber', 'FLUXURI', 'Automatizări', 'Emitere și trimitere automată a facturilor.')}
       ${dashboardCard('shop-spv', 'blue', 'ANAF', 'SPV - RO e-Factura', 'Conectarea și transmiterea facturilor vor fi configurate aici.')}
     `);
-    document.body.insertAdjacentHTML('beforeend', productModal() + productDetailModal() + productSaveProgressOverlay() + orderModal() + invoiceIssueModal() + shippingNoteModal() + invoiceDetailModal() + stockModal() + sourceModal() + supplierModal() + nirModal() + nirRegistryDownloadModal() + fixedAssetModals() + shippingModal() + customerModal() + promotionModal() + promotionStatsModal() + companyModal());
+    document.body.insertAdjacentHTML('beforeend', productModal() + productDetailModal() + productSaveProgressOverlay() + orderModal() + invoiceIssueModal() + shippingNoteModal() + invoiceDetailModal() + stockModal() + sourceModal() + supplierModal() + nirModal() + nirRegistryDownloadModal() + fixedAssetModals() + window.GTrotsConsumables.modals() + shippingModal() + customerModal() + promotionModal() + promotionStatsModal() + companyModal());
+    window.GTrotsConsumables.init();
     wire();
     if ($('tab-shop-dashboard')?.classList.contains('active')) void loadShopView('shop-dashboard', { force: true });
   }
@@ -497,6 +501,7 @@
       'shop-suppliers': loadSuppliers,
       'shop-nirs': () => loadNirs(undefined, { quiet: options.quiet }),
       'shop-fixed-assets': () => loadFixedAssets(undefined, { quiet: options.quiet }),
+      'shop-consumables': () => window.GTrotsConsumables.load(undefined, { quiet: options.quiet }),
       'shop-payments': loadPayments,
       'shop-automations': loadInvoiceAutomations,
       'shop-shipping': loadShippingPage,
@@ -572,7 +577,7 @@
 
   function wire() {
     mountNirStornoInvoiceFields();
-    const loaders = { 'shop-dashboard': () => loadDashboard({ quiet: Boolean(document.querySelector('#tab-shop-dashboard .shop-dashboard-header')) }), 'shop-products': loadProducts, 'shop-orders': loadOrders, 'shop-invoices': loadInvoices, 'shop-inventory': loadInventory, 'shop-sources': loadSourcesPage, 'shop-suppliers': loadSuppliers, 'shop-nirs': loadNirs, 'shop-fixed-assets': loadFixedAssets, 'shop-payments': loadPayments, 'shop-automations': loadInvoiceAutomations, 'shop-shipping': loadShippingPage, 'shop-customers': loadCustomers, 'shop-newsletter': loadNewsletterSubscribers, 'shop-discounts': loadPromotions, 'shop-company': loadCompanies, 'shop-invoice-configurator': loadInvoiceConfigurator, 'shop-spv': loadSpv };
+    const loaders = { 'shop-dashboard': () => loadDashboard({ quiet: Boolean(document.querySelector('#tab-shop-dashboard .shop-dashboard-header')) }), 'shop-products': loadProducts, 'shop-orders': loadOrders, 'shop-invoices': loadInvoices, 'shop-inventory': loadInventory, 'shop-sources': loadSourcesPage, 'shop-suppliers': loadSuppliers, 'shop-nirs': loadNirs, 'shop-fixed-assets': loadFixedAssets, 'shop-consumables': window.GTrotsConsumables.load, 'shop-payments': loadPayments, 'shop-automations': loadInvoiceAutomations, 'shop-shipping': loadShippingPage, 'shop-customers': loadCustomers, 'shop-newsletter': loadNewsletterSubscribers, 'shop-discounts': loadPromotions, 'shop-company': loadCompanies, 'shop-invoice-configurator': loadInvoiceConfigurator, 'shop-spv': loadSpv };
     window.addEventListener('tab-change', event => {
       cancelScheduledShopViewRefresh();
       const tabId = event.detail;

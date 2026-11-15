@@ -37,6 +37,7 @@ require_once __DIR__ . '/gomag.php';
 require_once __DIR__ . '/nir-domain.php';
 require_once __DIR__ . '/nir-service.php';
 require_once __DIR__ . '/fixed-assets-service.php';
+require_once __DIR__ . '/consumables-service.php';
 $nirBundlePath = __DIR__ . '/nir-bundle.php';
 if (is_file($nirBundlePath) && filesize($nirBundlePath) > 0) require_once $nirBundlePath;
 
@@ -6917,6 +6918,14 @@ try {
 
     $currentUser = validateAuthToken($db, $config, $body);
 
+    $consumableActions = [
+        'listConsumables','getConsumable','getConsumableDocument','createConsumableDocument','updateConsumableDocument',
+        'deleteConsumableDocument','deleteConsumable','addConsumableFiles','deleteConsumableFile','downloadConsumableDocument',
+        'listConsumablePeople','saveConsumablePerson','deleteConsumablePerson','getConsumptionVoucherMeta',
+        'getConsumptionVoucher','createConsumptionVoucher','updateConsumptionVoucher','deleteConsumptionVoucher','exportConsumables','exportConsumptionVoucher',
+    ];
+    if (in_array($action, $consumableActions, true)) GtrotsConsumables::ensureSchema($db);
+
     if ($action === 'listFixedAssets' && $method === 'GET') {
         jsonResponse(GtrotsFixedAssets::list($db, $_GET));
     }
@@ -6972,6 +6981,33 @@ try {
     if ($action === 'exportFixedAssets' && $method === 'GET') {
         @set_time_limit(0);
         jsonResponse(GtrotsFixedAssets::export($db, $_GET, strtolower(trim((string)($_GET['format'] ?? 'xlsx')))));
+    }
+
+    if ($action === 'listConsumables' && $method === 'GET') jsonResponse(GtrotsConsumables::list($db, $_GET));
+    if ($action === 'getConsumable' && $method === 'GET') jsonResponse(GtrotsConsumables::get($db, trim((string)($_GET['id'] ?? ''))));
+    if ($action === 'getConsumableDocument' && $method === 'GET') jsonResponse(GtrotsConsumables::getDocument($db, trim((string)($_GET['id'] ?? ''))));
+    if ($action === 'createConsumableDocument' && $method === 'POST') jsonResponse(GtrotsConsumables::createDocument($db, $body, (array)$currentUser), 201);
+    if ($action === 'updateConsumableDocument' && $method === 'PUT') jsonResponse(GtrotsConsumables::updateDocument($db, trim((string)($_GET['id'] ?? '')), $body, (array)$currentUser));
+    if ($action === 'deleteConsumableDocument' && $method === 'DELETE') jsonResponse(GtrotsConsumables::deleteDocument($db, trim((string)($_GET['id'] ?? '')), $body));
+    if ($action === 'deleteConsumable' && $method === 'DELETE') jsonResponse(GtrotsConsumables::deleteItem($db, trim((string)($_GET['id'] ?? '')), $body));
+    if ($action === 'addConsumableFiles' && $method === 'POST') jsonResponse(GtrotsConsumables::addFiles($db, trim((string)($_GET['id'] ?? '')), $body, (array)$currentUser), 201);
+    if ($action === 'deleteConsumableFile' && $method === 'DELETE') jsonResponse(GtrotsConsumables::deleteFile($db, trim((string)($_GET['id'] ?? '')), $body));
+    if ($action === 'downloadConsumableDocument' && $method === 'GET') jsonResponse(GtrotsConsumables::download($db, trim((string)($_GET['id'] ?? '')), trim((string)($_GET['file_id'] ?? ''))));
+    if ($action === 'listConsumablePeople' && $method === 'GET') jsonResponse(GtrotsConsumables::listPeople($db));
+    if ($action === 'saveConsumablePerson' && in_array($method, ['POST','PUT'], true)) jsonResponse(GtrotsConsumables::savePerson($db, $body), $method === 'POST' ? 201 : 200);
+    if ($action === 'deleteConsumablePerson' && $method === 'DELETE') jsonResponse(GtrotsConsumables::deletePerson($db, trim((string)($_GET['id'] ?? ''))));
+    if ($action === 'getConsumptionVoucherMeta' && $method === 'GET') jsonResponse(GtrotsConsumables::voucherMeta($db, trim((string)($_GET['series'] ?? 'BC'))));
+    if ($action === 'getConsumptionVoucher' && $method === 'GET') jsonResponse(GtrotsConsumables::getVoucher($db, trim((string)($_GET['id'] ?? ''))));
+    if ($action === 'createConsumptionVoucher' && $method === 'POST') jsonResponse(GtrotsConsumables::createVoucher($db, $body, (array)$currentUser), 201);
+    if ($action === 'updateConsumptionVoucher' && $method === 'PUT') jsonResponse(GtrotsConsumables::updateVoucher($db, trim((string)($_GET['id'] ?? '')), $body, (array)$currentUser));
+    if ($action === 'deleteConsumptionVoucher' && $method === 'DELETE') jsonResponse(GtrotsConsumables::deleteVoucher($db, trim((string)($_GET['id'] ?? '')), $body));
+    if ($action === 'exportConsumptionVoucher' && $method === 'GET') {
+        @set_time_limit(0);
+        jsonResponse(GtrotsConsumables::exportVoucher($db, trim((string)($_GET['id'] ?? '')), strtolower(trim((string)($_GET['format'] ?? 'pdf')))));
+    }
+    if ($action === 'exportConsumables' && $method === 'GET') {
+        @set_time_limit(0);
+        jsonResponse(GtrotsConsumables::export($db, $_GET, strtolower(trim((string)($_GET['format'] ?? 'xlsx')))));
     }
     // Pe LiteSpeed/PHP-FPM, răspunsul ajunge întâi la aplicație, iar coada SPV
     // este procesată apoi în fundal. Navigarea rămâne rapidă pe telefon și desktop.

@@ -63,6 +63,8 @@ FILES = (
     "fixed-assets-service.php",
     "fixed-assets-search.php",
     "fixed-assets-export.php",
+    "consumables-service.php",
+    "consumables-export.php",
 )
 
 

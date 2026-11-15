@@ -11,7 +11,7 @@
     const controller = new AbortController();
     // Stergerea arhiveaza mai intai produsul si pretul in Stripe, deci poate
     // dura mai mult decat o cerere obisnuita pe o conexiune lenta.
-    const timeoutMs = action === 'exportProducts' ? 180000 : ['exportInvoiceRegistry', 'exportInventoryLedger', 'downloadNirBundle', 'downloadNirRegistryBundle', 'exportFixedAssets'].includes(action) ? 1800000 : action === 'syncStripeCatalog' ? 90000 : ['syncBoomagTaxonomy', 'syncBoomagStock'].includes(action) ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
+    const timeoutMs = action === 'exportProducts' ? 180000 : ['exportInvoiceRegistry', 'exportInventoryLedger', 'downloadNirBundle', 'downloadNirRegistryBundle', 'exportFixedAssets', 'exportConsumables', 'exportConsumptionVoucher'].includes(action) ? 1800000 : action === 'syncStripeCatalog' ? 90000 : ['syncBoomagTaxonomy', 'syncBoomagStock'].includes(action) ? 240000 : action === 'deleteProduct' ? 65000 : 20000;
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const isGet = !options.method || options.method === 'GET';
     const cacheBuster = isGet ? `&_=${Date.now()}` : '';
@@ -202,6 +202,26 @@
     disposeFixedAsset: (id, payload) => call('disposeFixedAsset', json('POST', payload), id),
     downloadFixedAssetDocument: (documentId, fileId = '') => call('downloadFixedAssetDocument', {}, documentId, 0, { file_id: fileId }),
     exportFixedAssets: format => call('exportFixedAssets', {}, '', 0, { format }),
+    listConsumables: (filters = {}) => call('listConsumables', {}, '', 0, filters),
+    getConsumable: id => call('getConsumable', {}, id),
+    getConsumableDocument: id => call('getConsumableDocument', {}, id),
+    createConsumableDocument: payload => call('createConsumableDocument', json('POST', payload)),
+    updateConsumableDocument: (id, payload) => call('updateConsumableDocument', json('PUT', payload), id),
+    deleteConsumableDocument: (id, revision) => call('deleteConsumableDocument', json('DELETE', { revision }), id),
+    deleteConsumable: (id, revision) => call('deleteConsumable', json('DELETE', { revision }), id),
+    addConsumableFiles: (id, attachments) => call('addConsumableFiles', json('POST', { attachments }), id),
+    deleteConsumableFile: (id, fileId) => call('deleteConsumableFile', json('DELETE', { file_id: fileId }), id),
+    downloadConsumableDocument: (id, fileId = '') => call('downloadConsumableDocument', {}, id, 0, { file_id: fileId }),
+    listConsumablePeople: () => call('listConsumablePeople'),
+    saveConsumablePerson: payload => call('saveConsumablePerson', json(payload.id ? 'PUT' : 'POST', payload)),
+    deleteConsumablePerson: id => call('deleteConsumablePerson', { method: 'DELETE' }, id),
+    getConsumptionVoucherMeta: (series = 'BC') => call('getConsumptionVoucherMeta', {}, '', 0, { series }),
+    getConsumptionVoucher: id => call('getConsumptionVoucher', {}, id),
+    createConsumptionVoucher: payload => call('createConsumptionVoucher', json('POST', payload)),
+    updateConsumptionVoucher: (id, payload) => call('updateConsumptionVoucher', json('PUT', payload), id),
+    deleteConsumptionVoucher: (id, revision) => call('deleteConsumptionVoucher', json('DELETE', { revision }), id),
+    exportConsumptionVoucher: (id, format) => call('exportConsumptionVoucher', {}, id, 0, { format }),
+    exportConsumables: (format, from = '', to = '') => call('exportConsumables', {}, '', 0, { format, from, to }),
     listProducts: () => call('listProducts'),
     listProductOptions: (options = {}) => call('listProductOptions', json('POST', options)),
     listProductOptionIds: () => call('listProductOptionIds', json('POST', {})),

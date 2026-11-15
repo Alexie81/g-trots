@@ -57,6 +57,10 @@ foreach([['percent','100.01'],['percent','-1'],['fixed','121.01'],['fixed','-1']
     $before=costSnapshot($db);try{GtrotsConsumables::createDocument($db,sourceBody(['purchase_discount_type'=>$type,'purchase_discount_value'=>$amount]),[]);throw new RuntimeException('Invalid source discount accepted');}catch(InvalidArgumentException $e){}
     checkCost($before===costSnapshot($db),'Invalid source discount rolls back');
 }
+// Registry summaries expose each saved voucher for direct read-only PDF preview.
+$page=GtrotsConsumables::list($db,['page_size'=>500]);
+foreach($page['items'] as $entry){checkCost(count($entry['vouchers'])===(int)$entry['consumption_count'],'One preview entry for each saved voucher');foreach($entry['vouchers'] as $summary)checkCost(isset($summary['voucher_id'],$summary['series'],$summary['voucher_number']),'Preview voucher identity');}
+$smallPage=GtrotsConsumables::list($db,['page'=>2,'page_size'=>1]);checkCost(count($smallPage['items'])===1&&count($smallPage['items'][0]['vouchers'])===(int)$smallPage['items'][0]['consumption_count'],'Paginated voucher summaries');
 // Additive schema must never reclassify records or revalue saved amounts.
 $snapshot=costSnapshot($db);GtrotsConsumables::ensureSchema($db);checkCost(costSnapshot($db)===$snapshot,'Idempotent additive migration');
 $export=GtrotsConsumables::export($db,['from'=>'2026-09-01','to'=>'2026-11-30'],'xlsx');

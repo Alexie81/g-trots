@@ -393,7 +393,15 @@ final class GtrotsConsumables
         if($scores!==null){$rows=array_values(array_filter($rows,fn($r)=>isset($scores[$r['id']])));usort($rows,fn($a,$b)=>($scores[$b['id']]<=>$scores[$a['id']])?:strcmp((string)$b['document_date'],(string)$a['document_date']));}
         foreach($rows as &$row){$row['remaining_quantity']=round((float)$row['quantity']-(float)$row['consumed_quantity'],4);$row['has_document']=(int)$row['file_count']>0;}unset($row);
         $total=count($rows);$pageCount=max(1,(int)ceil($total/$pageSize));$page=min($page,$pageCount);
-        return ['items'=>array_slice($rows,($page-1)*$pageSize,$pageSize),'total'=>$total,'page'=>$page,'page_size'=>$pageSize,'page_count'=>$pageCount];
+        $items=array_slice($rows,($page-1)*$pageSize,$pageSize);$vouchers=[];
+        if($items){
+            $ids=array_column($items,'id');
+            $summary=$db->prepare('SELECT l.consumable_id,v.id voucher_id,v.series,v.voucher_number,v.voucher_date FROM shop_consumption_voucher_lines l JOIN shop_consumption_vouchers v ON v.id=l.voucher_id WHERE l.consumable_id IN ('.implode(',',array_fill(0,count($ids),'?')).') ORDER BY v.voucher_date DESC,v.created_at DESC,v.id');
+            $summary->execute($ids);
+            foreach($summary->fetchAll(PDO::FETCH_ASSOC) as $voucher){$itemId=$voucher['consumable_id'];unset($voucher['consumable_id']);$vouchers[$itemId][]=$voucher;}
+        }
+        foreach($items as &$item)$item['vouchers']=$vouchers[$item['id']]??[];unset($item);
+        return ['items'=>$items,'total'=>$total,'page'=>$page,'page_size'=>$pageSize,'page_count'=>$pageCount];
     }
 
     public static function get(PDO $db,string $id): array

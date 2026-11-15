@@ -212,7 +212,7 @@
 @media(max-width:620px){.shop-consumption-references{grid-template-columns:1fr}}
 
 /* Compact registry and voucher controls. */
-#tab-shop-consumables .shop-consumables-table{width:1530px;min-width:1530px;max-width:100%;table-layout:fixed}
+#tab-shop-consumables .shop-consumables-table{width:100%;min-width:1530px;max-width:none;table-layout:fixed}
 #tab-shop-consumables .shop-consumables-table :is(th,td):nth-child(6){width:220px;min-width:220px;max-width:220px;white-space:normal;overflow-wrap:anywhere}
 .shop-consumption-party input[hidden]{display:none!important}
 .shop-consumption-discount-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,1fr);gap:28px;align-items:start}
@@ -225,7 +225,7 @@
 .shop-consumption-totals .total dd{font-size:21px;color:#a8e3be}
 .shop-consumption-preview-button{display:flex;align-items:center;gap:7px}
 .shop-consumption-preview-button svg{width:16px;height:16px}
-.shop-consumption-preview-overlay{z-index:100020!important}
+.shop-consumption-preview-overlay{z-index:100020}
 .shop-consumption-preview{width:min(1250px,96vw);height:92vh;display:flex;flex-direction:column}
 .shop-consumption-preview>header p{font-size:12px;color:#b3a8bc;margin:5px 0 0}
 .shop-consumption-preview iframe{width:100%;flex:1;min-height:240px;border:0;background:#373737}
@@ -248,3 +248,13 @@
 
 #shop-consumable-create-modal .shop-fixed-asset-line-total { grid-column: 1 / -1; flex-wrap: wrap; border-radius: 12px; }
 #shop-consumable-create-modal .shop-fixed-asset-line-total strong { white-space: nowrap; }
+
+#tab-shop-consumables .shop-consumables-table-wrap+.shop-order-table-top-pagination { display:flex; width:100%; box-sizing:border-box; justify-content:flex-end; }
+.shop-consumable-saved-vouchers { display:grid; gap:6px; width:100%; max-height:160px; overflow-y:auto; }
+.shop-consumable-saved-vouchers>div { display:flex; gap:8px; align-items:center; justify-content:space-between; }
+.shop-consumable-saved-vouchers strong { font-size:11px; font-weight:600; color:#dfd8e4; overflow-wrap:anywhere; }
+.shop-consumable-saved-vouchers button,.shop-voucher-view { display:inline-flex; align-items:center; justify-content:center; gap:5px; border:1px solid #5a806c; border-radius:8px; padding:7px 10px; background:#294034; color:#c8f1d9; font:inherit; font-size:11px; font-weight:600; cursor:pointer; }
+.shop-consumable-saved-vouchers button:hover,.shop-voucher-view:hover { background:#365641; border-color:#8dc5a1; }
+.shop-consumable-saved-vouchers button:disabled,.shop-voucher-view:disabled { opacity:.55; cursor:wait; }
+.shop-consumable-saved-vouchers svg,.shop-voucher-view svg { width:14px; height:14px; }
+#shop-consumable-detail-modal .shop-voucher-view { grid-column:1/-1; }

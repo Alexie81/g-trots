@@ -51,8 +51,8 @@ app.whenReady().then(async () => {
       HTMLAnchorElement.prototype.click=function(){window.qaDownloads.push(this.download);};
       window.BUSINESS_UI = { showToast: (message, type) => {window.qaToasts.push(message);console.log('TOAST', type || 'success', message);} };
       const items = [
-        {id:'c1',document_id:'d1',document_date:'2026-11-10',document_type:'factura',series:'DEMO',document_number:'C-001',product_name:'Lavete microfibră atelier',unit:'buc',quantity:50,consumed_quantity:12,remaining_quantity:38,unit_price:4.5,net_value:225,vat_rate:19,vat_value:42.75,total_value:267.75,consumption_count:2,file_count:1,has_document:1,revision:'r-c1'},
-        {id:'c2',document_id:'d2',document_date:'2026-11-11',document_type:'bon',series:'BON',document_number:'84',product_name:'Spray curățare contacte electrice',unit:'buc',quantity:20,consumed_quantity:3,remaining_quantity:17,unit_price:18,net_value:360,vat_rate:19,vat_value:68.4,total_value:428.4,consumption_count:1,file_count:0,has_document:0,revision:'r-c2'},
+        {id:'c1',document_id:'d1',document_date:'2026-11-10',document_type:'factura',series:'DEMO',document_number:'C-001',product_name:'Lavete microfibră atelier',unit:'buc',quantity:50,consumed_quantity:12,remaining_quantity:38,unit_price:4.5,net_value:225,vat_rate:19,vat_value:42.75,total_value:267.75,consumption_count:2,vouchers:[{voucher_id:'v1',series:'BC',voucher_number:'1'},{voucher_id:'v2',series:'BC',voucher_number:'2'}],file_count:1,has_document:1,revision:'r-c1'},
+        {id:'c2',document_id:'d2',document_date:'2026-11-11',document_type:'bon',series:'BON',document_number:'84',product_name:'Spray curățare contacte electrice',unit:'buc',quantity:20,consumed_quantity:3,remaining_quantity:17,unit_price:18,net_value:360,vat_rate:19,vat_value:68.4,total_value:428.4,consumption_count:1,vouchers:[{voucher_id:'v3',series:'BC',voucher_number:'3'}],file_count:0,has_document:0,revision:'r-c2'},
       ];
       const files = [{id:'f1',document_id:'d1',original_name:'factura-demo.pdf',mime_type:'application/pdf',file_size:1234}];
       const vouchers = [{voucher_id:'v1',voucher_date:'2026-11-12',series:'BC',voucher_number:'1',quantity:12,value:54,giver_name:'Gestionar atelier',receiver_name:'Tehnician service'}];
@@ -73,7 +73,7 @@ app.whenReady().then(async () => {
         createConsumptionVoucher: async value => {window.qaSavedVoucher=value;return value;}, updateConsumptionVoucher: async (_id,value) => {window.qaSavedVoucher=value;return value;},
         deleteConsumptionVoucher: async () => ({success:true}),
         exportConsumables: async format => ({file_name:'qa.'+format,mime_type:'application/octet-stream',content_base64:btoa('qa')}),
-        exportConsumptionVoucher: async (id,format) => {window.qaExports.push({id,format});if(window.qaExportFails)throw new Error('Export indisponibil');return {file_name:'Bon-de-consum-BC-1.'+format,mime_type:'application/octet-stream',content_base64:btoa('qa')};},
+        exportConsumptionVoucher: async (id,format) => {window.qaExports.push({id,format});if(window.qaExportFails)throw new Error('Export indisponibil');return {file_name:'Bon-de-consum-BC-1.'+format,mime_type:format==='pdf'?'application/pdf':'application/octet-stream',content_base64:format==='pdf'?${JSON.stringify(process.env.GT_CONSUMABLES_PREVIEW_PDF ? fs.readFileSync(process.env.GT_CONSUMABLES_PREVIEW_PDF).toString('base64') : Buffer.from('%PDF-1.4').toString('base64'))}:btoa('qa')};},
       };
       if (window.selectAppModule) window.selectAppModule('shop');
       window.switchTab('shop-consumables');
@@ -89,6 +89,18 @@ app.whenReady().then(async () => {
   await run(`document.querySelector('.shop-consumables-table-wrap').scrollIntoView({block:'center'});document.querySelector('.shop-consumables-table-wrap').scrollLeft=9999;`);
   await capture('00-tabel-consumabile.png');
 
+  win.setSize(3200,1080);await pause(150);
+  await check(`(()=>{const table=document.querySelector('.shop-consumables-table'),wrap=document.querySelector('.shop-consumables-table-wrap'),bottom=wrap.nextElementSibling;return Math.abs(table.getBoundingClientRect().width-wrap.clientWidth)<=2&&Math.abs(bottom.getBoundingClientRect().width-wrap.getBoundingClientRect().width)<=2;})()`, 'Tabelul și paginarea trebuie să umple lățimea unui ecran mare.');
+  await capture('07-tabel-ecran-mare.png');
+  win.setSize(1700,1080);
+  await check(`document.querySelectorAll('#shop-consumables-content [data-consumption-view]').length===3`, 'Fiecare bon salvat trebuie să aibă buton Vezi, inclusiv la mai multe bonuri pe același consumabil.');
+  await click('#shop-consumables-content [data-consumption-view="v2"]');
+  await wait(`document.getElementById('shop-consumption-preview-modal').classList.contains('visible')`);
+  await check(`window.qaExports.at(-1).id==='v2'&&window.qaExports.at(-1).format==='pdf'&&window.qaDownloads.length===0&&!window.qaSavedVoucher&&document.getElementById('shop-consumption-preview-title').textContent==='Bon de consum BC 2'`, 'Vezi trebuie să deschidă PDF-ul bonului ales, fără descărcare sau salvare.');
+  if(process.env.GT_CONSUMABLES_PREVIEW_PDF){await pause(1700);await capture('08-vezi-bon-salvat.png');}
+  await click('[data-consumables-close="shop-consumption-preview-modal"]');
+  await run('window.qaExports=[]');
+  await pause(220);
   await fill('#shop-consumables-search', 'laveta atelier');
   await pause(500);
   await check(`document.activeElement?.id==='shop-consumables-search' && document.getElementById('shop-consumables-search').value==='laveta atelier'`, 'Căutarea pierde focusul după actualizarea semantică.');
@@ -156,6 +168,11 @@ app.whenReady().then(async () => {
   await click('[data-consumable-detail="c1"]');
   await wait(`document.getElementById('shop-consumable-detail-modal').classList.contains('visible') && document.querySelectorAll('[data-consumption-voucher-edit]').length===1`);
   await check(`Boolean(document.getElementById('shop-consumable-edit')) && Boolean(document.getElementById('shop-consumable-delete')) && Boolean(document.querySelector('[data-consumption-voucher-delete]'))`, 'Editarea și ștergerea permanentă lipsesc din fișă.');
+  await click('#shop-consumable-detail-content [data-consumption-view="v1"]');
+  await wait(`document.getElementById('shop-consumption-preview-modal').classList.contains('visible')`);
+  await check(`window.qaExports.at(-1).id==='v1'&&window.qaDownloads.length===0`, 'Vezi din fișă trebuie să previzualizeze bonul, fără descărcare.');
+  await click('[data-consumables-close="shop-consumption-preview-modal"]');
+  await run('window.qaExports=[]');await pause(220);
   await click('#shop-consumable-edit');
   await wait(`document.getElementById('shop-consumable-create-modal').classList.contains('visible')`);
   await check(`(()=>{const edit=document.getElementById('shop-consumable-create-modal'),detail=document.getElementById('shop-consumable-detail-modal');const input=document.getElementById('shop-consumable-number'),rect=input.getBoundingClientRect();return Number(getComputedStyle(edit).zIndex)>Number(getComputedStyle(detail).zIndex)&&edit.contains(document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2));})()`, 'Editarea din fișă trebuie să fie deasupra, accesibilă fără închiderea fișei.');

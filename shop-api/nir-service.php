@@ -1818,18 +1818,7 @@ function shopNirReleaseWithdrawnStock(PDO $db, array $layer, int $withdrawnStock
     return 0;
 }
 
-function shopNirDeleteDocument(PDO $db, string $id, array $body, array $user): array {
-    shopNirRequire($user, 'NIR_EDIT_DRAFT');
-    $stmt = $db->prepare('SELECT status FROM shop_nir_documents WHERE id = ?');
-    $stmt->execute([$id]);
-    $status = $stmt->fetchColumn();
-    if ($status === false) return ['success' => true, 'deleted' => 0, 'deleted_ids' => []];
-    if ($status === 'draft') return shopNirDeleteDrafts($db, $user, $id);
-    shopNirRequire($user, 'NIR_CONFIRM');
-    return shopNirReopenConfirmed($db, $id, $body, $user, true);
-}
-
-function shopNirReopenConfirmed(PDO $db, string $id, array $body, array $user, bool $deleteDocument = false): array {
+function shopNirReopenConfirmed(PDO $db, string $id, array $body, array $user): array {
     $expectedVersion = (int)($body['row_version'] ?? 0);
     if ($expectedVersion <= 0) throw new InvalidArgumentException('Versiunea NIR-ului este obligatorie pentru corectare.');
     $actor = shopNirActor($user);
@@ -1892,29 +1881,8 @@ function shopNirReopenConfirmed(PDO $db, string $id, array $body, array $user, b
         shopNirAudit($db, $user, 'NIR_REOPENED_FOR_CORRECTION', 'NirDocument', $id, ['status' => 'confirmed'], ['status' => 'draft', 'nir_number' => $document['nir_number']]);
         $db->prepare('INSERT INTO shop_domain_outbox (id, event_type, aggregate_type, aggregate_id, payload_json) VALUES (?, "NirReopenedForCorrection", "NirDocument", ?, ?)')
             ->execute([uuidV4(), $id, json_encode(['nir_id' => $id, 'nir_number' => $document['nir_number']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
-        $storedFiles = [];
-        if ($deleteDocument) {
-            $lines = $db->prepare('SELECT * FROM shop_nir_lines WHERE nir_document_id = ?');
-            $lines->execute([$id]);
-            $deletedLines = $lines->fetchAll();
-            $attachments = $db->prepare('SELECT storage_name FROM shop_nir_attachments WHERE nir_document_id = ?');
-            $attachments->execute([$id]);
-            $storedFiles = $attachments->fetchAll(PDO::FETCH_COLUMN);
-            shopNirAudit($db, $user, 'NIR_CONFIRMED_DELETED', 'NirDocument', $id, ['document' => $document, 'lines' => $deletedLines], null);
-            foreach (['shop_nir_attachments', 'shop_nir_lines', 'shop_nir_idempotency'] as $table) {
-                $db->prepare('DELETE FROM ' . $table . ' WHERE nir_document_id = ?')->execute([$id]);
-            }
-            $db->prepare('DELETE FROM shop_nir_documents WHERE id = ? AND status = "draft"')->execute([$id]);
-            $result = ['success' => true, 'deleted' => 1, 'deleted_ids' => [$id], 'lines' => $deletedLines];
-        } else {
-            $result = shopNirFetchDocument($db, $id, $user);
-        }
+        $result = shopNirFetchDocument($db, $id, $user);
         $db->commit();
-        $uploadRoot = realpath(__DIR__ . '/uploads/nir');
-        foreach ($storedFiles as $relative) {
-            $path = realpath(__DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, (string)$relative));
-            if ($uploadRoot !== false && $path !== false && str_starts_with($path, $uploadRoot . DIRECTORY_SEPARATOR) && is_file($path)) @unlink($path);
-        }
         return $result;
     } catch (Throwable $error) {
         if ($db->inTransaction()) $db->rollBack();

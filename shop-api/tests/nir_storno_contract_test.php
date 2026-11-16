@@ -129,7 +129,6 @@ foreach ([
     $expect(str_contains($service, $needle), $label);
 }
 foreach ([
-    'versiune de schemă ridicată pentru migrare' => '$schemaVersion = 2026090601',
     'endpoint nou și alias legacy' => "['reverseNir', 'stornoNir']",
     'normalizare status legacy' => "status = 'confirmed', reversed_at = NULL, reversed_by = NULL WHERE status = 'reversed'",
     'normalizare serie REV/STO' => "d.nir_number LIKE 'REV-%' OR d.nir_number LIKE 'STO-%'",
@@ -138,6 +137,8 @@ foreach ([
 ] as $label => $needle) {
     $expect(str_contains($api, $needle), $label);
 }
+preg_match('/\$schemaVersion\s*=\s*(\d+)/', $api, $schemaVersionMatch);
+$expect((int)($schemaVersionMatch[1] ?? 0) >= 2026090601, 'versiunea schemei include migrarea de storno și migrările ulterioare');
 
 fwrite(STDOUT, 'NIR storno contract: ' . ($failed ? "{$failed} verificări eșuate" : 'toate verificările au trecut') . ".\n");
 exit($failed === 0 ? 0 : 1);

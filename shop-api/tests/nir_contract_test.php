@@ -70,7 +70,7 @@ $reversalEnd = strpos((string)$service, 'function shopNirProductReferences');
 $reversalContract = $reversalStart !== false && $reversalEnd !== false
     ? substr((string)$service, $reversalStart, $reversalEnd - $reversalStart)
     : '';
-foreach (['NIR_REVERSAL', 'reversal_of_id', 'shop_inventory_layer_consumptions', 'cost_price', 'NirStornoCreated'] as $needle) {
+foreach (['NIR_REVERSAL', 'reversal_of_id', 'shopNirReleaseWithdrawnStock', 'cost_price', 'NirStornoCreated'] as $needle) {
     if (!str_contains($reversalContract, $needle)) {
         fwrite(STDERR, "FAIL contract stornare server: {$needle}\n");
         $failed++;

@@ -7352,6 +7352,12 @@ try {
         jsonResponse(shopNirDeleteDrafts($db, $currentUser, isset($_GET['id']) ? trim((string)$_GET['id']) : null));
     }
 
+    if ($action === 'deleteNir' && $method === 'DELETE') {
+        $result = shopNirDeleteDocument($db, trim((string)($_GET['id'] ?? $body['id'] ?? '')), $body, $currentUser);
+        $result['catalog_stock_sync'] = syncCommerceStockProducts($db, $config, nirResultProductIds($result));
+        jsonResponse($result);
+    }
+
     if ($action === 'validateNir' && $method === 'POST') {
         shopNirRequire($currentUser, 'NIR_EDIT_DRAFT');
         jsonResponse(shopNirValidateDocument($db, trim((string)($_GET['id'] ?? $body['id'] ?? ''))));

@@ -144,7 +144,7 @@
     getNir: (id) => call('getNir', {}, id),
     createNir: (payload) => call('createNir', json('POST', payload)),
     updateNir: (id, payload) => call('updateNir', json('PUT', payload), id),
-    deleteNir: (id) => call('deleteNirDrafts', { method: 'DELETE' }, id),
+    deleteNir: (id, rowVersion) => call('deleteNir', { method: 'DELETE', body: JSON.stringify({ row_version: rowVersion }) }, id),
     autosaveNir: (id, payload) => call('autosaveNir', json('POST', payload), id),
     validateNir: (id) => call('validateNir', json('POST', {}), id),
     confirmNir: (id, rowVersion, idempotencyKey) => call('confirmNir', { ...json('POST', { row_version: rowVersion, idempotency_key: idempotencyKey }), headers: { 'Idempotency-Key': idempotencyKey } }, id),

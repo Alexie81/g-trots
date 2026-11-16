@@ -360,9 +360,9 @@
     </div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-supplier-modal">Renunta</button><button type="submit" class="btn-primary" id="shop-supplier-save">Salveaza furnizorul</button></footer></form></div>`;
   }
   function nirModal() {
-    return `<div class="shop-commerce-overlay shop-nir-overlay" id="shop-nir-modal" hidden><section class="shop-commerce-modal shop-nir-modal"><header><div><small>ACHIZITII / NOTA DE INTRARE RECEPTIE</small><h2 id="shop-nir-title">NIR nou</h2></div><span id="shop-nir-status" class="shop-nir-status draft">CIORNA</span><button type="button" data-commerce-close="shop-nir-modal">×</button></header><div class="shop-commerce-modal-scroll" id="shop-nir-editor"><div class="shop-commerce-loading">Se pregateste editorul...</div></div><footer id="shop-nir-footer"><button type="button" class="shop-nir-delete-trigger" id="shop-nir-delete" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg><span>Șterge NIR-ul</span></button><button type="button" class="btn-ghost shop-nir-reverse-trigger" id="shop-nir-reverse-trigger" hidden>${nirUiIcon('reverse')} <span>Stornare factură</span></button><button type="button" class="btn-ghost shop-nir-correct" id="shop-nir-correct" hidden>${nirUiIcon('edit')} <span>Editeaza NIR</span></button><button type="button" class="btn-ghost" id="shop-nir-export-pdf" hidden>Export PDF</button><button type="button" class="btn-ghost" id="shop-nir-export-xlsx" hidden>Export Excel</button><button type="button" class="btn-ghost" id="shop-nir-save">Salveaza ciorna</button><button type="button" class="btn-primary" id="shop-nir-confirm">Verifica si confirma</button></footer></section><input type="file" id="shop-nir-files" accept="application/pdf,image/jpeg,image/png,image/webp,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/xml,text/xml" multiple hidden /></div>
+    return `<div class="shop-commerce-overlay shop-nir-overlay" id="shop-nir-modal" hidden><section class="shop-commerce-modal shop-nir-modal"><header><div><small>ACHIZITII / NOTA DE INTRARE RECEPTIE</small><h2 id="shop-nir-title">NIR nou</h2></div><span id="shop-nir-status" class="shop-nir-status draft">CIORNA</span><button type="button" data-commerce-close="shop-nir-modal">×</button></header><div class="shop-commerce-modal-scroll" id="shop-nir-editor"><div class="shop-commerce-loading">Se pregateste editorul...</div></div><footer id="shop-nir-footer"><button type="button" class="shop-nir-delete-trigger" id="shop-nir-delete" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg><span>Șterge NIR-ul</span></button><button type="button" class="btn-ghost shop-nir-reverse-trigger" id="shop-nir-reverse-trigger" hidden>${nirUiIcon('reverse')} <span>Stornare factură</span></button><button type="button" class="btn-ghost" id="shop-nir-unconfirm" hidden>Anulează confirmarea</button><button type="button" class="btn-ghost shop-nir-correct" id="shop-nir-correct" hidden>${nirUiIcon('edit')} <span>Editeaza NIR</span></button><button type="button" class="btn-ghost" id="shop-nir-export-pdf" hidden>Export PDF</button><button type="button" class="btn-ghost" id="shop-nir-export-xlsx" hidden>Export Excel</button><button type="button" class="btn-ghost" id="shop-nir-save">Salveaza ciorna</button><button type="button" class="btn-primary" id="shop-nir-confirm">Verifica si confirma</button></footer></section><input type="file" id="shop-nir-files" accept="application/pdf,image/jpeg,image/png,image/webp,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/xml,text/xml" multiple hidden /></div>
     <div class="shop-commerce-overlay shop-nir-delete-overlay" id="shop-nir-delete-dialog" hidden><section class="shop-nir-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="shop-nir-delete-title" aria-describedby="shop-nir-delete-message"><div class="shop-nir-delete-orb" aria-hidden="true"><i></i><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg></div><small>ȘTERGERE DEFINITIVĂ</small><h2 id="shop-nir-delete-title">Ștergi această notă de intrare-recepție?</h2><p id="shop-nir-delete-message">Ești sigur că vrei să ștergi această notă de intrare-recepție marfă?</p><div class="shop-nir-delete-document"><span><small>DOCUMENT</small><strong id="shop-nir-delete-number">NIR</strong></span><span><small>FURNIZOR</small><strong id="shop-nir-delete-supplier">Necompletat</strong></span></div><aside><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.7 20h18.6L12 3Zm0 6v5m0 3h.01"/></svg><span><b>Acțiunea nu poate fi anulată.</b>Pozițiile, documentele atașate și toate datele acestei ciorne vor fi eliminate definitiv.</span></aside><footer><button type="button" class="shop-nir-delete-cancel" id="shop-nir-delete-cancel">Nu, păstrează NIR-ul</button><button type="button" class="shop-nir-delete-confirm" id="shop-nir-delete-confirm"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg><span>Da, șterge definitiv</span></button></footer></section></div>
-    <div class="shop-commerce-overlay shop-nir-delete-overlay shop-nir-reverse-overlay" id="shop-nir-reverse-dialog" hidden><section class="shop-nir-delete-dialog shop-nir-reverse-dialog" role="dialog" aria-modal="true" aria-labelledby="shop-nir-reverse-title" aria-describedby="shop-nir-reverse-message"><div class="shop-nir-delete-orb shop-nir-reverse-orb" aria-hidden="true"><i></i>${nirUiIcon('reverse')}</div><small>STORNARE CONTABILĂ</small><h2 id="shop-nir-reverse-title">Ce poziții stornezi din această factură?</h2><p id="shop-nir-reverse-message">Alege produsele și completează separat cantitatea stornată pentru fiecare poziție.</p><div class="shop-nir-delete-document"><span><small>DOCUMENT</small><strong id="shop-nir-reverse-number">NIR</strong></span><span><small>FURNIZOR</small><strong id="shop-nir-reverse-supplier">Necompletat</strong></span></div><section class="shop-nir-storno-selection" aria-labelledby="shop-nir-storno-selection-title"><header><span><small>POZIȚII DIN NIR</small><strong id="shop-nir-storno-selection-title">Alege produsele stornate</strong></span><button type="button" id="shop-nir-storno-all">Deselectează toate</button></header><div id="shop-nir-storno-lines"></div><small id="shop-nir-storno-selection-error" hidden>Alege cel puțin un produs și introdu o cantitate validă.</small></section><label class="shop-nir-reverse-reason"><span>Motivul stornării *</span><textarea id="shop-nir-reverse-reason" rows="3" maxlength="500" placeholder="Ex: factură corectată de furnizor sau recepție anulată"></textarea><small id="shop-nir-reverse-error" hidden>Scrie motivul stornării.</small></label><aside><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.7 20h18.6L12 3Zm0 6v5m0 3h.01"/></svg><span><b>Stocul selectat trebuie să fie încă disponibil.</b>Dacă marfa a fost deja consumată într-un document de ieșire, stornarea poziției este blocată pentru protejarea stocului contabil.</span></aside><footer><button type="button" class="shop-nir-delete-cancel" id="shop-nir-reverse-cancel">Renunță</button><button type="button" class="shop-nir-delete-confirm shop-nir-reverse-confirm" id="shop-nir-reverse-confirm">${nirUiIcon('reverse')}<span>Stornare factură</span></button></footer></section><input type="file" id="shop-nir-storno-files" accept="application/pdf,image/jpeg,image/png,image/webp,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/xml,text/xml" multiple hidden /></div>
+    <div class="shop-commerce-overlay shop-nir-delete-overlay shop-nir-reverse-overlay" id="shop-nir-reverse-dialog" hidden><section class="shop-nir-delete-dialog shop-nir-reverse-dialog" role="dialog" aria-modal="true" aria-labelledby="shop-nir-reverse-title" aria-describedby="shop-nir-reverse-message"><div class="shop-nir-delete-orb shop-nir-reverse-orb" aria-hidden="true"><i></i>${nirUiIcon('reverse')}</div><small>STORNARE CONTABILĂ</small><h2 id="shop-nir-reverse-title">Ce poziții stornezi din această factură?</h2><p id="shop-nir-reverse-message">Alege produsele și completează separat cantitatea stornată pentru fiecare poziție.</p><div class="shop-nir-delete-document"><span><small>DOCUMENT</small><strong id="shop-nir-reverse-number">NIR</strong></span><span><small>FURNIZOR</small><strong id="shop-nir-reverse-supplier">Necompletat</strong></span></div><section class="shop-nir-storno-selection" aria-labelledby="shop-nir-storno-selection-title"><header><span><small>POZIȚII DIN NIR</small><strong id="shop-nir-storno-selection-title">Alege produsele stornate</strong></span><button type="button" id="shop-nir-storno-all">Deselectează toate</button></header><div id="shop-nir-storno-lines"></div><small id="shop-nir-storno-selection-error" hidden>Alege cel puțin un produs și introdu o cantitate validă.</small></section><label class="shop-nir-reverse-reason"><span>Motivul stornării *</span><textarea id="shop-nir-reverse-reason" rows="3" maxlength="500" placeholder="Ex: factură corectată de furnizor sau recepție anulată"></textarea><small id="shop-nir-reverse-error" hidden>Scrie motivul stornării.</small></label><aside><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.7 20h18.6L12 3Zm0 6v5m0 3h.01"/></svg><span><b>Ieșirile existente rămân înregistrate.</b>Stornarea scade cantitățile selectate, inclusiv sub zero. Poți înregistra ulterior factura înlocuitoare.</span></aside><footer><button type="button" class="shop-nir-delete-cancel" id="shop-nir-reverse-cancel">Renunță</button><button type="button" class="shop-nir-delete-confirm shop-nir-reverse-confirm" id="shop-nir-reverse-confirm">${nirUiIcon('reverse')}<span>Stornare factură</span></button></footer></section><input type="file" id="shop-nir-storno-files" accept="application/pdf,image/jpeg,image/png,image/webp,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/xml,text/xml" multiple hidden /></div>
     <div class="shop-commerce-overlay shop-nir-picker-overlay" id="shop-nir-product-picker" hidden><section class="shop-commerce-modal mini"><header><div><small>ASOCIERE FURNIZOR–PRODUS</small><h2>Selecteaza produsul intern</h2></div><button type="button" data-commerce-close="shop-nir-product-picker">×</button></header><div class="shop-commerce-modal-scroll"><label class="shop-nir-picker-search">Cauta dupa denumire, SKU sau cod<input id="shop-nir-product-search" type="search" autocomplete="off" placeholder="Scrie cel putin 2 caractere" /></label><div id="shop-nir-product-results" class="shop-nir-product-results"><p>Scrie pentru a cauta in catalog.</p></div></div></section></div>`;
   }
   function nirRegistryDownloadModal() {
@@ -662,6 +662,7 @@
     $('shop-nir-delete').addEventListener('click', openNirDeleteDialog);
     $('shop-nir-delete-cancel').addEventListener('click', closeNirDeleteDialog);
     $('shop-nir-delete-confirm').addEventListener('click', () => void deleteNir());
+    $('shop-nir-unconfirm').addEventListener('click', () => openNirDeleteDialog('unconfirm'));
     $('shop-nir-reverse-trigger').addEventListener('click', () => openNirReverseDialog());
     $('shop-nir-reverse-cancel').addEventListener('click', () => closeModal('shop-nir-reverse-dialog'));
     $('shop-nir-reverse-confirm').addEventListener('click', () => void reverseNir());
@@ -5488,7 +5489,8 @@
       $('shop-nir-editor').querySelectorAll('[data-nir-supplier-return]').forEach(button => button.addEventListener('click', () => void openSupplierReturnFromCustomerReturn(Number(button.dataset.nirSupplierReturn))));
     }
     $('shop-nir-save').hidden = !editable || correctionEditing; $('shop-nir-confirm').hidden = !editable || correctionEditing; $('shop-nir-confirm').disabled = !nirCan('NIR_CONFIRM');
-    $('shop-nir-delete').hidden = !editable || correctionEditing || !nirCan('NIR_EDIT_DRAFT');
+    $('shop-nir-delete').hidden = correctionEditing || !nirCan('NIR_EDIT_DRAFT') || (!editable && (correctionActionsLocked || !nirCan('NIR_CONFIRM')));
+    $('shop-nir-unconfirm').hidden = document.status !== 'confirmed' || correctionEditing || correctionActionsLocked || !nirCan('NIR_EDIT_DRAFT') || !nirCan('NIR_CONFIRM');
     $('shop-nir-reverse-trigger').hidden = !canNirStorno(document) || document.status !== 'confirmed' || correctionEditing || !nirCan('NIR_REVERSE');
     $('shop-nir-correct').hidden = correctionActionsLocked || !(document.status === 'confirmed' || correctionEditing) || !nirCan('NIR_EDIT_DRAFT') || !nirCan('NIR_CONFIRM');
     $('shop-nir-correct').classList.toggle('is-correction-save', correctionEditing);
@@ -5912,9 +5914,16 @@
     state.nirEditRevision += 1;
   }
 
-  function openNirDeleteDialog() {
+  function openNirDeleteDialog(mode = 'delete') {
     const document = state.nirEditor;
-    if (!document || document.status !== 'draft' || !nirCan('NIR_EDIT_DRAFT')) return;
+    if (!document || !nirCan('NIR_EDIT_DRAFT') || (document.status !== 'draft' && (isNirCorrectionLocked(document) || !nirCan('NIR_CONFIRM')))) return;
+    const unconfirm = mode === 'unconfirm';
+    $('shop-nir-delete-dialog').dataset.mode = unconfirm ? 'unconfirm' : 'delete';
+    $('shop-nir-delete-title').textContent = unconfirm ? 'Anulezi confirmarea NIR-ului?' : 'Ștergi această notă de intrare-recepție?';
+    $('shop-nir-delete-message').textContent = unconfirm ? 'Documentul revine la ciornă și intrarea lui se retrage din stoc.' : 'Documentul și fișierele lui vor fi eliminate; intrarea confirmată se retrage din stoc.';
+    $('shop-nir-delete-dialog').querySelector('section > small').textContent = unconfirm ? 'ANULARE CONFIRMARE' : 'ȘTERGERE DEFINITIVĂ';
+    $('shop-nir-delete-dialog').querySelector('aside span').textContent = 'Ieșirile existente rămân înregistrate. Stocul contabil poate deveni negativ până la înregistrarea intrării înlocuitoare.';
+    $('shop-nir-delete-confirm').querySelector('span').textContent = unconfirm ? 'Da, anulează confirmarea' : 'Da, șterge definitiv';
     if (state.nirSaving || state.nirSavePromise) return toast('Asteapta finalizarea salvarii, apoi sterge NIR-ul.', 'error');
     $('shop-nir-delete-number').textContent = document.nir_number || document.temporary_number || 'NIR nesalvat';
     $('shop-nir-delete-supplier').textContent = supplierDisplayName(document, 'Furnizor necompletat');
@@ -5929,7 +5938,8 @@
 
   async function deleteNir() {
     const document = state.nirEditor;
-    if (!document || document.status !== 'draft' || !nirCan('NIR_EDIT_DRAFT')) return closeNirDeleteDialog();
+    if (!document || !nirCan('NIR_EDIT_DRAFT') || (document.status !== 'draft' && (isNirCorrectionLocked(document) || !nirCan('NIR_CONFIRM')))) return closeNirDeleteDialog();
+    const unconfirm = $('shop-nir-delete-dialog').dataset.mode === 'unconfirm';
     const button = $('shop-nir-delete-confirm');
     const original = button.innerHTML;
     button.disabled = true;
@@ -5937,8 +5947,11 @@
     try {
       const localDraft = String(document.id || '').startsWith('local-nir-');
       if (!localDraft) {
-        const result = await window.SHOP_API.deleteNir(document.id);
-        if (!result?.deleted) throw new Error('Ciorna nu mai exista sau nu mai poate fi stearsa.');
+        if (unconfirm) await window.SHOP_API.reopenNir(document.id, document.row_version);
+        else {
+          const result = await window.SHOP_API.deleteNir(document.id, document.row_version);
+          if (!result?.deleted) throw new Error('NIR-ul nu mai există. Reîncarcă lista.');
+        }
       }
       state.nirEditor = null;
       state.nirPendingFiles = [];
@@ -5948,7 +5961,7 @@
       closeModal('shop-nir-delete-dialog');
       closeModal('shop-nir-modal');
       await loadNirs(1);
-      toast(localDraft ? 'NIR-ul nesalvat a fost eliminat.' : 'NIR-ul si toate datele sale au fost sterse.');
+      toast(unconfirm ? 'Confirmarea a fost anulată. NIR-ul este acum ciornă.' : localDraft ? 'NIR-ul nesalvat a fost eliminat.' : 'NIR-ul și intrarea lui au fost șterse.');
     } catch (error) {
       toast(error.message || 'NIR-ul nu a putut fi sters.', 'error');
     } finally {

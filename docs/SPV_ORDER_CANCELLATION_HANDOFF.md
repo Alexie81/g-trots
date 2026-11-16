@@ -22,6 +22,8 @@ Document persistent pentru continuarea lucrului în conversații viitoare.
 
 ## Puncte de recepție NIR
 
+- Din 16.11.2026, la cererea utilizatorului, NIR-urile de furnizor pot fi stornate, redeschise/anulate ca recepție sau șterse chiar dacă au ieșiri asociate ori stoc insuficient. Soldul contabil poate deveni temporar negativ; factura înlocuitoare poate fi introdusă ulterior. Ieșirile și facturile de vânzare rămân înregistrate. Se eliberează numai alocările FIFO care nu mai sunt acoperite de intrarea retrasă, cu audit, iar recepțiile ulterioare completează costurile rămase în așteptare. Nu se mai cere anularea vânzării pentru această corecție de achiziție. Această regulă privește recepțiile de furnizor, nu schimbă fluxul facturilor fiscale de retur client sau regulile SPV de mai jos.
+
 - Punctele de recepție se administrează din `Datele firmei`, atât pe telefon, cât și pe desktop: adăugare, editare, ștergere și alegerea punctului implicit.
 - La prima migrare se creează automat punctul implicit `Gestiune principală`.
 - NIR-ul păstrează separat gestiunea contabilă și locul fizic al recepției. La salvare, denumirea și adresa punctului sunt copiate în document, astfel încât NIR-urile istorice nu se schimbă dacă punctul este redenumit sau șters ulterior.

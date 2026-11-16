@@ -1783,7 +1783,53 @@ function shopNirConfirm(PDO $db, string $id, array $body, array $user): array {
     }
 }
 
-function shopNirReopenConfirmed(PDO $db, string $id, array $body, array $user): array {
+/** Release only allocations no longer covered by a corrected supplier receipt.
+ * Sales and their quantity movements stay intact; replacement receipts can
+ * allocate their costs later through the existing pending-FIFO mechanism.
+ */
+function shopNirReleaseWithdrawnStock(PDO $db, array $layer, int $withdrawnStock, array $user): int {
+    if (!$db->inTransaction()) throw new RuntimeException('Retragerea recepției necesită o tranzacție.');
+    $remaining = max(0, shopNirDecimalToScaled($layer['remaining_quantity'], 4));
+    $toRelease = max(0, $withdrawnStock - $remaining);
+    if ($toRelease === 0) return max(0, $remaining - $withdrawnStock);
+    $lock = $db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite' ? '' : ' FOR UPDATE';
+    $stmt = $db->prepare('SELECT * FROM shop_inventory_layer_consumptions WHERE inventory_cost_layer_id = ? AND reversed_at IS NULL AND quantity > 0 ORDER BY created_at DESC, id DESC' . $lock);
+    $stmt->execute([(string)$layer['id']]);
+    $update = $db->prepare('UPDATE shop_inventory_layer_consumptions SET original_quantity = COALESCE(original_quantity, quantity), quantity = ?, total_cost_ron = ?, row_version = row_version + 1 WHERE id = ?');
+    foreach ($stmt->fetchAll() as $consumption) {
+        if ($toRelease <= 0) break;
+        $quantity = shopNirDecimalToScaled($consumption['quantity'], 4);
+        $released = min($quantity, $toRelease);
+        $kept = $quantity - $released;
+        $keptCost = shopNirDivideRounded(shopNirDecimalToScaled($consumption['total_cost_ron'], 2) * $kept, $quantity);
+        $update->execute([shopNirScaledToDecimal($kept, 4), shopNirScaledToDecimal($keptCost, 2), $consumption['id']]);
+        shopNirAudit($db, $user, 'NIR_FIFO_ALLOCATION_RELEASED', 'InventoryConsumption', (string)$consumption['id'], $consumption, [
+            'quantity' => shopNirScaledToDecimal($kept, 4), 'released_quantity' => shopNirScaledToDecimal($released, 4),
+            'total_cost_ron' => shopNirScaledToDecimal($keptCost, 2),
+        ], ['nir_document_id' => $layer['nir_document_id'], 'layer_id' => $layer['id']]);
+        // Mark the cost assignment pending, without changing or cancelling the sale.
+        if ((string)$consumption['source_document_type'] === 'SALES_INVOICE') {
+            $db->prepare("UPDATE shop_inventory_movements SET fifo_status = 'pending', fifo_quantity_pending = ABS(COALESCE(accounting_quantity_delta, quantity_delta))
+                          WHERE movement_type = 'sale' AND sales_invoice_id = ? AND COALESCE(sales_invoice_line_id, id) = ?")
+                ->execute([$consumption['source_document_id'], $consumption['source_line_id']]);
+        }
+        $toRelease -= $released;
+    }
+    return 0;
+}
+
+function shopNirDeleteDocument(PDO $db, string $id, array $body, array $user): array {
+    shopNirRequire($user, 'NIR_EDIT_DRAFT');
+    $stmt = $db->prepare('SELECT status FROM shop_nir_documents WHERE id = ?');
+    $stmt->execute([$id]);
+    $status = $stmt->fetchColumn();
+    if ($status === false) return ['success' => true, 'deleted' => 0, 'deleted_ids' => []];
+    if ($status === 'draft') return shopNirDeleteDrafts($db, $user, $id);
+    shopNirRequire($user, 'NIR_CONFIRM');
+    return shopNirReopenConfirmed($db, $id, $body, $user, true);
+}
+
+function shopNirReopenConfirmed(PDO $db, string $id, array $body, array $user, bool $deleteDocument = false): array {
     $expectedVersion = (int)($body['row_version'] ?? 0);
     if ($expectedVersion <= 0) throw new InvalidArgumentException('Versiunea NIR-ului este obligatorie pentru corectare.');
     $actor = shopNirActor($user);
@@ -1793,6 +1839,9 @@ function shopNirReopenConfirmed(PDO $db, string $id, array $body, array $user): 
         $documentStmt->execute([$id]);
         $document = $documentStmt->fetch();
         if (!$document) throw new ShopNirHttpException('NIR-ul nu există.', 404);
+        if ((string)($document['source_type'] ?? '') === 'customer_return') {
+            throw new ShopNirHttpException('Recepția returului de la client se gestionează din factura de retur asociată.', 409);
+        }
         if (trim((string)($document['reversal_of_id'] ?? '')) !== '' || mb_strtolower((string)($document['source_type'] ?? '')) === 'reversal') {
             throw new ShopNirHttpException('Documentul de storno este definitiv și nu poate fi redeschis pentru corectare.', 409);
         }
@@ -1807,26 +1856,22 @@ function shopNirReopenConfirmed(PDO $db, string $id, array $body, array $user): 
         $layerStmt = $db->prepare('SELECT * FROM shop_inventory_cost_layers WHERE nir_document_id = ? ORDER BY created_at FOR UPDATE');
         $layerStmt->execute([$id]);
         $layers = $layerStmt->fetchAll();
-        $consumptionStmt = $db->prepare('SELECT COUNT(*) FROM shop_inventory_layer_consumptions WHERE inventory_cost_layer_id = ?');
-        foreach ($layers as $layer) {
-            $consumptionStmt->execute([(string)$layer['id']]);
-            if ((int)$consumptionStmt->fetchColumn() > 0 || shopNirDecimalToScaled($layer['remaining_quantity'], 4) !== shopNirDecimalToScaled($layer['original_quantity'], 4)) {
-                throw new ShopNirHttpException('Acest NIR are deja cantități consumate în alte documente. Corectarea lui necesită mai întâi anularea documentelor de ieșire legate de aceste cantități.', 409, ['layer_id' => $layer['id']]);
-            }
-        }
-
         $affectedProducts = [];
-        $subtractStock = $db->prepare('UPDATE shop_products SET accounting_stock_quantity = accounting_stock_quantity - ? WHERE id = ? AND accounting_stock_quantity >= ?');
+        $subtractStock = $db->prepare('UPDATE shop_products SET accounting_stock_quantity = accounting_stock_quantity - ? WHERE id = ?');
         foreach ($layers as $layer) {
             $productId = (string)$layer['product_id'];
             $quantity = (string)$layer['original_quantity'];
-            $subtractStock->execute([$quantity, $productId, $quantity]);
-            if ($subtractStock->rowCount() !== 1) throw new ShopNirHttpException('Stocul contabil nu permite redeschiderea NIR-ului.', 409, ['product_id' => $productId]);
+            shopNirReleaseWithdrawnStock($db, $layer, shopNirDecimalToScaled($quantity, 4), $user);
+            $subtractStock->execute([$quantity, $productId]);
+            if ($subtractStock->rowCount() !== 1) throw new ShopNirHttpException('Produsul asociat NIR-ului nu mai există.', 409, ['product_id' => $productId]);
             shopNirRefreshBoomagOnlineStock($db, $productId);
             $affectedProducts[$productId] = true;
         }
         $db->prepare('DELETE FROM shop_inventory_movements WHERE nir_document_id = ? AND movement_type = "NIR_IN"')->execute([$id]);
-        $db->prepare('DELETE FROM shop_inventory_cost_layers WHERE nir_document_id = ?')->execute([$id]);
+        // Keep the former layers for allocation/audit history, but make them
+        // unavailable and detach the line keys before the receipt is rewritten.
+        $db->prepare('UPDATE shop_inventory_cost_layers SET nir_document_id = NULL, nir_line_id = NULL, remaining_quantity = 0, is_reversed = 1, status = "withdrawn", reversed_at = CURRENT_TIMESTAMP, row_version = row_version + 1 WHERE nir_document_id = ?')->execute([$id]);
+        shopNirReconcilePendingInvoiceFifo($db, array_keys($affectedProducts));
 
         $latestCost = $db->prepare('SELECT unit_cost_ron FROM shop_inventory_cost_layers WHERE product_id = ? AND is_reversed = 0 AND remaining_quantity > 0 ORDER BY reception_date DESC, confirmed_at DESC, created_at DESC LIMIT 1');
         $updateCost = $db->prepare('UPDATE shop_products SET cost_price = ? WHERE id = ?');
@@ -1847,8 +1892,29 @@ function shopNirReopenConfirmed(PDO $db, string $id, array $body, array $user): 
         shopNirAudit($db, $user, 'NIR_REOPENED_FOR_CORRECTION', 'NirDocument', $id, ['status' => 'confirmed'], ['status' => 'draft', 'nir_number' => $document['nir_number']]);
         $db->prepare('INSERT INTO shop_domain_outbox (id, event_type, aggregate_type, aggregate_id, payload_json) VALUES (?, "NirReopenedForCorrection", "NirDocument", ?, ?)')
             ->execute([uuidV4(), $id, json_encode(['nir_id' => $id, 'nir_number' => $document['nir_number']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
-        $result = shopNirFetchDocument($db, $id, $user);
+        $storedFiles = [];
+        if ($deleteDocument) {
+            $lines = $db->prepare('SELECT * FROM shop_nir_lines WHERE nir_document_id = ?');
+            $lines->execute([$id]);
+            $deletedLines = $lines->fetchAll();
+            $attachments = $db->prepare('SELECT storage_name FROM shop_nir_attachments WHERE nir_document_id = ?');
+            $attachments->execute([$id]);
+            $storedFiles = $attachments->fetchAll(PDO::FETCH_COLUMN);
+            shopNirAudit($db, $user, 'NIR_CONFIRMED_DELETED', 'NirDocument', $id, ['document' => $document, 'lines' => $deletedLines], null);
+            foreach (['shop_nir_attachments', 'shop_nir_lines', 'shop_nir_idempotency'] as $table) {
+                $db->prepare('DELETE FROM ' . $table . ' WHERE nir_document_id = ?')->execute([$id]);
+            }
+            $db->prepare('DELETE FROM shop_nir_documents WHERE id = ? AND status = "draft"')->execute([$id]);
+            $result = ['success' => true, 'deleted' => 1, 'deleted_ids' => [$id], 'lines' => $deletedLines];
+        } else {
+            $result = shopNirFetchDocument($db, $id, $user);
+        }
         $db->commit();
+        $uploadRoot = realpath(__DIR__ . '/uploads/nir');
+        foreach ($storedFiles as $relative) {
+            $path = realpath(__DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, (string)$relative));
+            if ($uploadRoot !== false && $path !== false && str_starts_with($path, $uploadRoot . DIRECTORY_SEPARATOR) && is_file($path)) @unlink($path);
+        }
         return $result;
     } catch (Throwable $error) {
         if ($db->inTransaction()) $db->rollBack();
@@ -2113,30 +2179,11 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
         $layers = $layerStmt->fetchAll();
         $layerByLine = [];
         foreach ($layers as $layer) $layerByLine[(string)$layer['nir_line_id']] = $layer;
-        $consumptionStmt = $db->prepare('SELECT COUNT(*) FROM shop_inventory_layer_consumptions WHERE inventory_cost_layer_id = ? AND reversed_at IS NULL');
         foreach ($selection as $selected) {
             $line = $selected['line'];
             if (empty($line['is_stock_item'])) continue;
             $layer = $layerByLine[(string)$line['id']] ?? null;
             if (!$layer) throw new ShopNirHttpException('Produsul selectat nu mai are lotul contabil asociat.', 409, ['line_id' => $line['id']]);
-            $consumptionStmt->execute([(string)$layer['id']]);
-            $isCustomerReturnShortcut = $supplierReturnContext !== null && isset($supplierReturnContext['by_line'][(string)$line['id']]);
-            if (!$isCustomerReturnShortcut && (int)$consumptionStmt->fetchColumn() > 0) {
-                throw new ShopNirHttpException('Produsul selectat este folosit de un document de ieșire. Anulează mai întâi ieșirea, apoi stornează produsul.', 409, ['layer_id' => $layer['id']]);
-            }
-            $priorStock = (int)($alreadyStorned[(string)$line['id']]['stock_quantity'] ?? 0);
-            $expectedRemaining = shopNirDecimalToScaled($layer['original_quantity'], 4) - $priorStock;
-            $actualRemaining = shopNirDecimalToScaled($layer['remaining_quantity'], 4);
-            if (!$isCustomerReturnShortcut && $actualRemaining !== $expectedRemaining) {
-                throw new ShopNirHttpException('O parte din produsul selectat a fost deja consumată. Anulează mai întâi documentele de ieșire legate, apoi încearcă din nou.', 409, ['layer_id' => $layer['id']]);
-            }
-            $requestedStock = (int)($supplierReturnContext['by_line'][(string)$line['id']]['selected_stock_scaled'] ?? 0);
-            if ($isCustomerReturnShortcut && ($requestedStock <= 0 || $requestedStock > $actualRemaining)) {
-                throw new ShopNirHttpException('Cantitatea returnată de client nu mai este disponibilă integral în lotul contabil original.', 409, [
-                    'line_id' => $line['id'],
-                    'available_stock_quantity' => shopNirScaledToDecimal($actualRemaining, 4),
-                ]);
-            }
         }
 
         $settings = shopNirSettings($db, true);
@@ -2223,7 +2270,7 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
             ]);
         };
         $productLock = $db->prepare('SELECT accounting_stock_quantity FROM shop_products WHERE id = ? FOR UPDATE');
-        $updateProduct = $db->prepare('UPDATE shop_products SET accounting_stock_quantity = accounting_stock_quantity - ? WHERE id = ? AND accounting_stock_quantity >= ?');
+        $updateProduct = $db->prepare('UPDATE shop_products SET accounting_stock_quantity = accounting_stock_quantity - ? WHERE id = ?');
         $readStock = $db->prepare('SELECT accounting_stock_quantity FROM shop_products WHERE id = ?');
         $insertMovement = $db->prepare(
             'INSERT INTO shop_inventory_movements
@@ -2273,8 +2320,8 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
             $productLock->execute([$productId]);
             $productLock->fetch();
             $stornoStockQuantity = (string)$data['stock_quantity'];
-            $updateProduct->execute([$stornoStockQuantity, $productId, $stornoStockQuantity]);
-            if ($updateProduct->rowCount() !== 1) throw new ShopNirHttpException('Stocul contabil nu permite stornarea cantității selectate.', 409, ['product_id' => $productId]);
+            $updateProduct->execute([$stornoStockQuantity, $productId]);
+            if ($updateProduct->rowCount() !== 1) throw new ShopNirHttpException('Produsul asociat NIR-ului nu mai există.', 409, ['product_id' => $productId]);
             shopNirRefreshBoomagOnlineStock($db, $productId);
             $readStock->execute([$productId]);
             $after = (string)$readStock->fetchColumn();
@@ -2285,15 +2332,17 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
             $insertMovement->execute([
                 uuidV4(), $productId, $layer['warehouse_id'], $reversalId, $reverseLineId, $layer['id'],
                 shopNirDecimalToScaled($negativeQuantity, 0), shopNirDecimalToScaled($after, 0), $negativeQuantity, $after,
-                $layer['unit_cost_ron'], $negativeTotal, (new DateTimeImmutable('today'))->format('Y-m-d'), $originalMovementId,
+                $layer['unit_cost_ron'], $negativeTotal, $stornoDocumentDate, $originalMovementId,
                 'Stornare ' . $reversalNumber . ': ' . $reason, $actor['name'],
             ]);
-            $newRemaining = shopNirDecimalToScaled($layer['remaining_quantity'], 4) - shopNirDecimalToScaled($stornoStockQuantity, 4);
-            if ($newRemaining < 0) throw new ShopNirHttpException('Cantitatea selectată depășește lotul disponibil.', 409, ['layer_id' => $layer['id']]);
+            $newRemaining = shopNirReleaseWithdrawnStock($db, $layer, shopNirDecimalToScaled($stornoStockQuantity, 4), $user);
+            $fullyWithdrawn = shopNirDecimalToScaled($layer['original_quantity'], 4)
+                - (int)($alreadyStorned[(string)$line['id']]['stock_quantity'] ?? 0)
+                - shopNirDecimalToScaled($stornoStockQuantity, 4) <= 0;
             $layerUpdate = $db->prepare('UPDATE shop_inventory_cost_layers SET remaining_quantity = ?, status = ?, is_reversed = ?, reversed_at = ?, row_version = row_version + 1 WHERE id = ? AND remaining_quantity = ?');
             $layerUpdate->execute([
-                shopNirScaledToDecimal($newRemaining, 4), $newRemaining === 0 ? 'reversed' : 'open', $newRemaining === 0 ? 1 : 0,
-                $newRemaining === 0 ? (new DateTimeImmutable())->format('Y-m-d H:i:s') : null, $layer['id'], $layer['remaining_quantity'],
+                shopNirScaledToDecimal($newRemaining, 4), $fullyWithdrawn ? 'reversed' : ($newRemaining > 0 ? 'open' : 'consumed'), $fullyWithdrawn ? 1 : 0,
+                $fullyWithdrawn ? (new DateTimeImmutable())->format('Y-m-d H:i:s') : null, $layer['id'], $layer['remaining_quantity'],
             ]);
             if ($layerUpdate->rowCount() !== 1) throw new ShopNirHttpException('Lotul contabil a fost modificat simultan.', 409, ['conflict' => true, 'layer_id' => $layer['id']]);
         }
@@ -2303,6 +2352,7 @@ function shopNirReverse(PDO $db, string $id, array $body, array $user): array {
             $latestCost->execute([$productId]);
             $updateCost->execute([(string)($latestCost->fetchColumn() ?: '0'), $productId]);
         }
+        shopNirReconcilePendingInvoiceFifo($db, array_keys($affectedProducts));
         $selectedQuantityByLine = [];
         foreach ($selection as $selected) $selectedQuantityByLine[(string)$selected['line']['id']] = (int)$selected['quantity_scaled'];
         $fullyStorned = true;
@@ -2696,7 +2746,10 @@ function shopNirReconcilePendingInvoiceFifo(PDO $db, array $productIds): array {
     $lockSuffix = $driver === 'sqlite' ? '' : ' FOR UPDATE';
     $placeholders = implode(',', array_fill(0, count($productIds), '?'));
     $stmt = $db->prepare(
-        "SELECT im.*, i.issue_date, i.issued_at
+        "SELECT im.*, i.issue_date, i.issued_at,
+                COALESCE((SELECT SUM(ABS(COALESCE(r.accounting_quantity_delta, r.quantity_delta)))
+                          FROM shop_inventory_movements r WHERE r.reversal_of_movement_id = im.id
+                            AND r.movement_type IN ('return', 'RETURN_IN')), 0) AS returned_quantity
          FROM shop_inventory_movements im
          INNER JOIN shop_invoices i ON i.id = im.sales_invoice_id
          WHERE im.movement_type = 'sale' AND im.sales_invoice_id IS NOT NULL
@@ -2711,8 +2764,11 @@ function shopNirReconcilePendingInvoiceFifo(PDO $db, array $productIds): array {
     $reconciled = 0;
     $pending = 0;
     foreach ($stmt->fetchAll() as $movement) {
-        $requested = abs((float)($movement['accounting_quantity_delta'] ?? $movement['quantity_delta'] ?? 0));
-        if ($requested <= 0) continue;
+        $requested = max(0, abs((float)($movement['accounting_quantity_delta'] ?? $movement['quantity_delta'] ?? 0)) - (float)$movement['returned_quantity']);
+        if ($requested <= 0) {
+            $update->execute(['returned', 0, 0, $movement['inventory_unit_cost_ron'], $movement['inventory_cost_total_ron'], (string)$movement['id']]);
+            continue;
+        }
         $lineId = trim((string)($movement['sales_invoice_line_id'] ?? '')) ?: (string)$movement['id'];
         $invoiceId = (string)$movement['sales_invoice_id'];
         $fifo = shopNirConsumeFifoAvailable($db, (string)$movement['product_id'], $warehouseId, $requested, 'SALES_INVOICE', $invoiceId, $lineId, 'invoice:' . $invoiceId . ':' . $lineId, false);

@@ -4688,9 +4688,49 @@
     const prioritized = [...nirCurrencyCodes].sort((a, b) => { const priority = ['RON', 'EUR', 'USD', 'GBP', 'CHF']; const ai = priority.indexOf(a); const bi = priority.indexOf(b); if (ai >= 0 || bi >= 0) return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi); return nirCurrencyName(a).localeCompare(nirCurrencyName(b), 'ro'); });
     return `<div class="shop-nir-currency-field"><span>MONEDA ISO *</span><button type="button" id="shop-nir-currency-toggle" ${editable ? '' : 'disabled'} aria-haspopup="listbox" aria-expanded="false"><i>${nirUiIcon('currency')}</i><span><b>${esc(code)}</b><small>${esc(nirCurrencyName(code))}</small></span><svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg></button><div id="shop-nir-currency-panel" class="shop-nir-currency-panel" hidden><header><span>${nirUiIcon('currency')}</span><div><strong>Alege moneda facturii</strong><small>Coduri ISO · cauta dupa cod sau denumire</small></div><b>${prioritized.length} MONEDE</b></header><label>${nirUiIcon('search')}<input id="shop-nir-currency-search" autocomplete="off" placeholder="Scrie EUR, dolar, franc..." /></label><div role="listbox">${prioritized.map(currency => `<button type="button" role="option" data-nir-currency="${currency}" data-currency-search="${esc(`${currency} ${nirCurrencyName(currency)}`.toLowerCase())}" class="${currency === code ? 'active' : ''}"><b>${currency}</b><span>${esc(nirCurrencyName(currency))}</span>${currency === code ? nirUiIcon('check') : '<i>›</i>'}</button>`).join('')}</div><footer><span>Prețurile rămân în moneda facturii.</span><b>Totalurile se calculează în LEI</b></footer></div></div>`;
   };
+  let nirRateRequestRevision = 0;
+  function updateNirRateControls() {
+    const current = state.nirEditor;
+    const editor = $('shop-nir-editor');
+    if (!current || !editor) return;
+    const loading = state.nirRateLoading === current.currency;
+    for (const field of ['exchange_rate', 'exchange_rate_date']) {
+      const input = editor.querySelector(`[data-nir-field="${field}"]`);
+      const value = String(current[field] ?? '');
+      if (input && input.value !== value) input.value = value;
+      if (field === 'exchange_rate' && input) input.placeholder = loading ? 'Se preia de la BNR...' : 'Curs in lei';
+    }
+    const note = editor.querySelector('.shop-nir-bnr-note');
+    if (note) note.innerHTML = current.currency === 'RON'
+      ? `${nirUiIcon('check')} RON: curs fix 1, data cursului este data facturii.`
+      : loading ? `${nirUiIcon('currency')} Se preia cursul oficial BNR...`
+      : `${nirUiIcon('check')} Curs BNR din ${esc(current.exchange_rate_date || 'data facturii')} · totalurile si costul contabil sunt calculate in lei.`;
+  }
+  async function loadNirBnrRate(currency, date, documentId, requestRevision) {
+    const isCurrent = () => requestRevision === nirRateRequestRevision && state.nirEditor?.id === documentId
+      && state.nirEditor.currency === currency;
+    try {
+      const result = await window.SHOP_API.getBnrExchangeRate(currency, date);
+      if (!isCurrent()) return;
+      state.nirEditor.exchange_rate = nirTrimStoredDecimal(result.rate);
+      state.nirEditor.exchange_rate_date = result.date;
+      state.nirRateLoading = '';
+      scheduleNirAutosave();
+      updateNirRateControls();
+      (state.nirEditor.lines || []).forEach((_line, index) => updateNirLiveCalculations(index));
+      updateNirLiveCalculations();
+      toast(`Curs BNR ${currency}: ${result.rate} lei · ${result.date}`);
+    } catch (error) {
+      if (!isCurrent()) return;
+      state.nirRateLoading = '';
+      updateNirRateControls();
+      toast(error.message || 'Cursul BNR nu a putut fi preluat. Completeaza-l manual.', 'error');
+    }
+  }
   async function applyNirCurrency(currency) {
     const document = state.nirEditor;
     if (!document || currency === document.currency) return;
+    const requestRevision = ++nirRateRequestRevision;
     const invoiceDate = document.supplier_invoice_date || document.nir_date || nirToday();
     document.currency = currency;
     document.exchange_rate_date = invoiceDate;
@@ -4705,43 +4745,16 @@
     state.nirRateLoading = currency;
     scheduleNirAutosave();
     renderNirEditor();
-    try {
-      const result = await window.SHOP_API.getBnrExchangeRate(currency, invoiceDate);
-      if (!state.nirEditor || state.nirEditor.currency !== currency) return;
-      state.nirEditor.exchange_rate = result.rate;
-      state.nirEditor.exchange_rate_date = result.date;
-      state.nirRateLoading = '';
-      scheduleNirAutosave();
-      renderNirEditor();
-      toast(`Curs BNR ${currency}: ${result.rate} lei · ${result.date}`);
-    } catch (error) {
-      if (!state.nirEditor || state.nirEditor.currency !== currency) return;
-      state.nirRateLoading = '';
-      renderNirEditor();
-      toast(error.message || 'Cursul BNR nu a putut fi preluat. Completeaza-l manual.', 'error');
-    }
+    await loadNirBnrRate(currency, invoiceDate, document.id, requestRevision);
   }
   async function refreshNirBnrRate(date) {
     const document = state.nirEditor;
     if (!document || document.currency === 'RON' || !date) return;
     const currency = document.currency;
+    const requestRevision = ++nirRateRequestRevision;
     state.nirRateLoading = currency;
-    renderNirEditor();
-    try {
-      const result = await window.SHOP_API.getBnrExchangeRate(currency, date);
-      if (!state.nirEditor || state.nirEditor.currency !== currency) return;
-      state.nirEditor.exchange_rate = result.rate;
-      state.nirEditor.exchange_rate_date = result.date;
-      state.nirRateLoading = '';
-      scheduleNirAutosave();
-      renderNirEditor();
-      toast(`Curs BNR ${currency}: ${result.rate} lei · ${result.date}`);
-    } catch (error) {
-      if (!state.nirEditor || state.nirEditor.currency !== currency) return;
-      state.nirRateLoading = '';
-      renderNirEditor();
-      toast(error.message || 'Cursul BNR nu a putut fi preluat. Cursul ramane editabil.', 'error');
-    }
+    updateNirRateControls();
+    await loadNirBnrRate(currency, date, document.id, requestRevision);
   }
   function fixedAssetIcon(name) {
     const paths = {
@@ -5757,14 +5770,29 @@
       if (field === 'currency') input.value = state.nirEditor.currency;
       if (field === 'currency' && state.nirEditor.currency === 'RON') { state.nirEditor.exchange_rate = '1'; state.nirEditor.exchange_rate_date = state.nirEditor.nir_date; renderNirEditor(); }
       if (field === 'supplier_invoice_date') {
-        state.nirEditor.nir_date = input.value;
-        state.nirEditor.reception_date = input.value;
-        if (state.nirEditor.currency === 'RON') state.nirEditor.exchange_rate_date = input.value;
+        // Keep the native date input mounted while its calendar or keyboard
+        // editor is active. Replacing the editor closes Chromium's date picker.
+        if (input.value && input.validity.valid) {
+          for (const prefix of ['nir', 'reception']) {
+            state.nirEditor[`${prefix}_date`] = input.value;
+            const linked = $('shop-nir-editor').querySelector(`[data-nir-datetime="${prefix}"]`);
+            if (linked) linked.value = `${input.value}T${String(state.nirEditor[`${prefix}_time`] || '00:00').slice(0, 5)}`;
+          }
+          if (state.nirEditor.currency === 'RON') {
+            state.nirEditor.exchange_rate_date = input.value;
+            updateNirRateControls();
+          }
+        }
         scheduleNirAutosave();
-        renderNirEditor();
         return;
       }
-      if (field === 'exchange_rate') { updateNirLiveCalculations(); scheduleNirAutosave(); return; }
+      if (field === 'exchange_rate') {
+        ++nirRateRequestRevision;
+        state.nirRateLoading = '';
+        updateNirRateControls();
+        updateNirLiveCalculations(); scheduleNirAutosave(); return;
+      }
+      if (field === 'exchange_rate_date') { ++nirRateRequestRevision; state.nirRateLoading = ''; updateNirRateControls(); }
       scheduleNirAutosave();
     }));
     $('shop-nir-editor').querySelector('[data-nir-field="exchange_rate_date"]')?.addEventListener('change', event => void refreshNirBnrRate(event.currentTarget.value));

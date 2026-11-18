@@ -17,6 +17,7 @@
   const PAGE_SIZE_OPTIONS = [10, 25, 50];
   state.fixedAssetCategory = 'fixed_assets';
   const ASSET_TABS = ['shop-fixed-assets', 'shop-inventory-objects'];
+  const fixedAssetsReadOnly = () => state.fixedAssetCategory === 'inventory_objects';
   const fixedAssetStaticLabels = [];
   function fixedAssetText(text) {
     if (state.fixedAssetCategory !== 'inventory_objects') return text;
@@ -42,6 +43,10 @@
     const panel = $('tab-' + tabId);
     if (page && panel && page.parentElement !== panel) panel.appendChild(page);
     page?.querySelector('h1')?.replaceChildren(document.createTextNode(fixedAssetText('Gestiune mijloace fixe')));
+    const addButton = page?.querySelector('[data-commerce-add="shop-fixed-assets-content"]');
+    if (addButton) addButton.hidden = fixedAssetsReadOnly();
+    const subtitle = page?.querySelector('.shop-commerce-title p');
+    if (subtitle) subtitle.textContent = fixedAssetsReadOnly() ? 'Înregistrările din Mijloace fixe, disponibile pentru consultare și export.' : 'Documente, valori și casări, într-un singur registru.';
     for (const [node, original] of fixedAssetStaticLabels) node.nodeValue = fixedAssetText(original);
   }
   const PRODUCT_SALES_PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25, 50, 75, 100];
@@ -252,7 +257,7 @@
       ${dashboardCard('shop-suppliers', 'teal', 'ACHIZITII', 'Furnizori', 'Parteneri, contacte si date comerciale.')}
       ${dashboardCard('shop-nirs', 'teal', 'RECEPTII', 'NIR-uri', 'Facturi de achiziție, intrări și costuri reale.')}
       ${dashboardCard('shop-fixed-assets', 'amber', 'PATRIMONIU', 'Mijloace fixe', 'Documente, valori, casări și export contabil.')}
-      ${dashboardCard('shop-inventory-objects', 'teal', 'PATRIMONIU', 'Obiecte de inventar', 'Documente, obiecte în folosință, casări și exporturi.')}
+      ${dashboardCard('shop-inventory-objects', 'teal', 'PATRIMONIU', 'Obiecte de inventar', 'Consultă și exportă înregistrările gestionate din Mijloace fixe.')}
       ${dashboardCard('shop-consumables', 'green', 'GESTIUNE', 'Consumabile', 'Intrări, stoc și bonuri de consum colective.')}
       ${dashboardCard('shop-payments', 'purple', 'CHECKOUT', 'Metode de plata', 'Card online si ramburs la curier.')}
       ${dashboardCard('shop-shipping', 'green', 'LOGISTICA', 'Livrari', 'Costuri si praguri de gratuitate.')}
@@ -4882,18 +4887,19 @@
   function renderFixedAssets() {
     const root = $('shop-fixed-assets-content');
     if (!root) return;
+    const readOnly = fixedAssetsReadOnly();
     const focusedSearch = document.activeElement?.id === 'shop-fixed-assets-search' ? { start: document.activeElement.selectionStart, end: document.activeElement.selectionEnd } : null;
     const registry = state.fixedAssetRegistry || { items: [], page: 1, page_size: state.pageSizes.fixedAssets, total: 0, total_pages: 1 };
     const items = Array.isArray(registry.items) ? registry.items : [];
     const rows = items.map((asset, index) => {
       const disposed = Number(asset.disposal_quantity || 0);
       const remaining = Number(asset.remaining_quantity || 0);
-      return `<tr data-fixed-asset-row="${esc(asset.id)}"><td>${(Number(registry.page || 1) - 1) * Number(registry.page_size || 25) + index + 1}</td><td>${esc(String(asset.document_date || '').split('-').reverse().join('.'))}</td><td><span class="shop-fixed-asset-type ${esc(asset.document_type)}">${esc(fixedAssetTypeLabel(asset.document_type))}</span></td><td><strong>${esc(fixedAssetDocumentNumber(asset))}</strong></td><td class="shop-fixed-asset-name">${esc(asset.product_name)}</td><td>${quantity(asset.quantity)}</td><td>${money(asset.unit_price)}</td><td>${money(asset.net_value)}</td><td>${quantity(asset.vat_rate)}%<small>${money(asset.vat_value)}</small></td><td><strong>${money(asset.total_value)}</strong></td><td><button type="button" class="shop-fixed-asset-dispose ${disposed < 0 ? 'has-disposals' : ''}" data-fixed-asset-dispose="${esc(asset.id)}" ${remaining <= 0 ? 'disabled' : ''}><b>${disposed < 0 ? quantity(disposed) : '—'}</b><small>${remaining <= 0 ? 'Casat integral' : 'Înregistrează casare'}</small></button></td><td><div class="shop-fixed-asset-row-actions"><button type="button" class="shop-fixed-asset-open" data-fixed-asset-open="${esc(asset.id)}" aria-label="Deschide fișa">Fișă <span>→</span></button><button type="button" data-fixed-asset-edit="${esc(asset.id)}">Editează</button><button type="button" class="shop-fixed-asset-danger" data-fixed-asset-delete="${esc(asset.id)}">Șterge</button></div></td></tr>`;
+      return `<tr data-fixed-asset-row="${esc(asset.id)}"><td>${(Number(registry.page || 1) - 1) * Number(registry.page_size || 25) + index + 1}</td><td>${esc(String(asset.document_date || '').split('-').reverse().join('.'))}</td><td><span class="shop-fixed-asset-type ${esc(asset.document_type)}">${esc(fixedAssetTypeLabel(asset.document_type))}</span></td><td><strong>${esc(fixedAssetDocumentNumber(asset))}</strong></td><td class="shop-fixed-asset-name">${esc(asset.product_name)}</td><td>${quantity(asset.quantity)}</td><td>${money(asset.unit_price)}</td><td>${money(asset.net_value)}</td><td>${quantity(asset.vat_rate)}%<small>${money(asset.vat_value)}</small></td><td><strong>${money(asset.total_value)}</strong></td>${readOnly ? `<td><strong>${disposed < 0 ? quantity(disposed) : '—'}</strong><small>${remaining <= 0 ? 'Casat integral' : `${quantity(remaining)} rămase`}</small></td>` : `<td><button type="button" class="shop-fixed-asset-dispose ${disposed < 0 ? 'has-disposals' : ''}" data-fixed-asset-dispose="${esc(asset.id)}" ${remaining <= 0 ? 'disabled' : ''}><b>${disposed < 0 ? quantity(disposed) : '—'}</b><small>${remaining <= 0 ? 'Casat integral' : 'Înregistrează casare'}</small></button></td><td><div class="shop-fixed-asset-row-actions"><button type="button" class="shop-fixed-asset-open" data-fixed-asset-open="${esc(asset.id)}" aria-label="Deschide fișa">Fișă <span>→</span></button><button type="button" data-fixed-asset-edit="${esc(asset.id)}">Editează</button><button type="button" class="shop-fixed-asset-danger" data-fixed-asset-delete="${esc(asset.id)}">Șterge</button></div></td>`}</tr>`;
     }).join('');
     const topPagination = tableHeaderPagination('fixedAssets', Number(registry.total || 0), Number(registry.page || 1), Number(registry.total_pages || 1), Number(registry.page_size || state.pageSizes.fixedAssets));
     const bottomPagination = pagination('fixedAssets', Number(registry.total || 0), Number(registry.page || 1), Number(registry.total_pages || 1), Number(registry.page_size || state.pageSizes.fixedAssets));
     const emptyRegistry = `<section class="shop-fixed-assets-empty"><span class="shop-fixed-assets-empty-glow"></span><div class="shop-fixed-assets-empty-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V8l8-5 8 5v13H4Z"/><path d="M8 21v-6h8v6M8 10h.01M12 10h.01M16 10h.01"/></svg></div><div class="shop-fixed-assets-empty-copy"><small>REGISTRU PATRIMONIAL</small><h2>Începe gestiunea mijloacelor fixe</h2><p>Înregistrează documentul justificativ, urmărește valoarea fiecărui bun și păstrează toate casările într-un istoric verificabil.</p></div><div class="shop-fixed-assets-empty-flow"><span><b>01</b><strong>Document</strong><small>Factură, bon sau PV</small></span><i>→</i><span><b>02</b><strong>Mijloc fix</strong><small>Valoare și TVA</small></span><i>→</i><span><b>03</b><strong>Trasabilitate</strong><small>Casări și export</small></span></div><button type="button" id="shop-fixed-assets-empty-add"><span>+</span><b>Înregistrează primul document</b><small>Durează mai puțin de un minut</small></button></section>`;
-    root.innerHTML = `${fixedAssetOverview(registry, items)}${fixedAssetToolbar(registry, topPagination)}${rows ? `<div class="shop-fixed-assets-register-title"><div><small>EVIDENȚĂ PATRIMONIALĂ</small><h2>${fixedAssetText('Registrul mijloacelor fixe')}</h2></div><span>${Number(registry.total || 0)} poziții</span></div><div class="shop-fixed-assets-table-wrap"><table class="shop-fixed-assets-table"><thead><tr><th>Nr. crt.</th><th>Data doc.</th><th>Tip doc.</th><th>Serie/nr. doc.</th><th>Denumire produs</th><th>Cant.</th><th>Preț unitar</th><th>Valoare</th><th>TVA</th><th>Valoare totală</th><th>Casare produs</th><th>Detalii</th></tr></thead><tbody>${rows}</tbody></table></div>${bottomPagination}` : fixedAssetText(emptyRegistry)}`;
+    root.innerHTML = `${fixedAssetOverview(registry, items)}${fixedAssetToolbar(registry, topPagination)}${rows ? `<div class="shop-fixed-assets-register-title"><div><small>EVIDENȚĂ PATRIMONIALĂ</small><h2>${fixedAssetText('Registrul mijloacelor fixe')}</h2></div><span>${Number(registry.total || 0)} poziții</span></div><div class="shop-fixed-assets-table-wrap"><table class="shop-fixed-assets-table"><thead><tr><th>Nr. crt.</th><th>Data doc.</th><th>Tip doc.</th><th>Serie/nr. doc.</th><th>Denumire produs</th><th>Cant.</th><th>Preț unitar</th><th>Valoare</th><th>TVA</th><th>Valoare totală</th><th>Casare produs</th>${readOnly ? '' : '<th>Detalii</th>'}</tr></thead><tbody>${rows}</tbody></table></div>${bottomPagination}` : readOnly ? `<section class="shop-fixed-assets-empty"><div class="shop-fixed-assets-empty-copy"><h2>Nu există obiecte de inventar</h2><p>Înregistrările adăugate în Mijloace fixe vor apărea automat aici.</p></div></section>` : fixedAssetText(emptyRegistry)}`;
     $('shop-fixed-assets-search')?.addEventListener('input', event => {
       clearTimeout(state.fixedAssetSearchTimer);
       state.fixedAssetQuery = event.target.value;
@@ -4914,6 +4920,7 @@
   }
 
   function openFixedAssetCreate() {
+    if (fixedAssetsReadOnly()) return;
     state.fixedAssetEditing = null;
     state.fixedAssetFiles = [];
     $('shop-fixed-asset-editor-title').textContent = 'Înregistrează un document';
@@ -4984,6 +4991,7 @@
 
   async function saveFixedAssetDocument(event) {
     event.preventDefault();
+    if (fixedAssetsReadOnly()) return;
     const button = $('shop-fixed-asset-save');
     if (button?.disabled) return;
     button.disabled = true;
@@ -5007,9 +5015,12 @@
   }
 
   async function openFixedAssetEdit(id) {
+    if (fixedAssetsReadOnly()) return;
     try {
       const asset = await window.SHOP_API.getFixedAsset(id);
+      if (fixedAssetsReadOnly()) return;
       const document = await window.SHOP_API.getFixedAssetDocument(asset.document_id);
+      if (fixedAssetsReadOnly()) return;
       openFixedAssetCreate();
       state.fixedAssetEditing = document;
       state.fixedAssetLines = document.lines.map(line=>({...line,vat_manual:Boolean(Number(line.vat_manual))}));
@@ -5033,6 +5044,7 @@
     openModal('shop-fixed-asset-confirm-modal');
   }
   async function confirmFixedAssetDelete() {
+    if (fixedAssetsReadOnly()) return;
     const button = $('shop-fixed-asset-confirm-submit');
     if (button.disabled || !state.fixedAssetDeleteTask) return;
     button.disabled = true;
@@ -5048,9 +5060,12 @@
     } finally { button.disabled = false; }
   }
   async function deleteFixedAsset(id) {
+    if (fixedAssetsReadOnly()) return;
     try {
       const asset = await window.SHOP_API.getFixedAsset(id);
+      if (fixedAssetsReadOnly()) return;
       const document = await window.SHOP_API.getFixedAssetDocument(asset.document_id);
+      if (fixedAssetsReadOnly()) return;
       fixedAssetConfirm(fixedAssetText('Șterge mijlocul fix'), `Ștergi „${asset.product_name}”${asset.disposals.length ? ` și cele ${asset.disposals.length} casări asociate` : ''}? ${document.lines.length === 1 ? `Acesta este singurul produs rămas pe documentul ${fixedAssetDocumentNumber(document)}. Se va șterge și documentul${document.files.length ? `, împreună cu cele ${document.files.length} fișiere atașate` : ''}.` : 'Celelalte poziții și fișierele documentului se păstrează.'} Numerele „Nr. crt.” se recalculează automat. Operațiunea nu poate fi anulată.`, async()=>{
         await window.SHOP_API.deleteFixedAsset(id,asset.revision,document.revision);
         closeModal('shop-fixed-asset-detail-modal');
@@ -5060,6 +5075,7 @@
     } catch (error) { toast(error.message,'error'); }
   }
   function deleteFixedAssetDocument() {
+    if (fixedAssetsReadOnly()) return;
     const document = state.fixedAssetEditing;
     if (!document) return;
     const disposals = document.lines.reduce((total,line)=>total+line.disposals.length,0);
@@ -5114,10 +5130,12 @@
   }
 
   async function openFixedAssetDetail(id) {
+    if (fixedAssetsReadOnly()) return;
     openModal('shop-fixed-asset-detail-modal');
     $('shop-fixed-asset-detail-content').innerHTML = '<div class="shop-commerce-loading">Se încarcă fișa...</div>';
     try {
       const asset = await window.SHOP_API.getFixedAsset(id);
+      if (fixedAssetsReadOnly()) return;
       state.fixedAssetSelected = asset;
       if (state.fixedAssetPreviewUrl) URL.revokeObjectURL(state.fixedAssetPreviewUrl);
       state.fixedAssetPreviewUrl = '';
@@ -5135,8 +5153,10 @@
   }
 
   async function openFixedAssetDisposal(id, disposalId = null) {
+    if (fixedAssetsReadOnly()) return;
     try {
       const asset = await window.SHOP_API.getFixedAsset(id);
+      if (fixedAssetsReadOnly()) return;
       const disposal = disposalId ? asset.disposals.find(item=>item.id===disposalId) : null;
       state.fixedAssetEditingDisposal = disposal;
       const available = Number(asset.remaining_quantity || 0) - Number(disposal?.quantity || 0);
@@ -5156,6 +5176,7 @@
 
   async function saveFixedAssetDisposal(event) {
     event.preventDefault();
+    if (fixedAssetsReadOnly()) return;
     const asset = state.fixedAssetDisposalTarget;
     const button = $('shop-fixed-asset-disposal-save');
     if (!asset || button.disabled) return;

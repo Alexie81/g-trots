@@ -289,6 +289,7 @@ final class GtrotsFixedAssets
                 $db->prepare('UPDATE shop_fixed_assets SET line_number=line_number+1000000 WHERE document_id=?')->execute([$id]);
             } else {
                 $category = self::category($document['asset_category'] ?? 'fixed_assets');
+                if ($category === 'inventory_objects') throw new ShopNirHttpException('Obiectele de inventar se înregistrează din Mijloace fixe.', 409);
                 $stmt = $db->prepare('INSERT INTO shop_fixed_asset_documents (id,document_date,document_type,series,document_number,notes,created_by,asset_category) VALUES (?,?,?,?,?,?,?,?)');
                 $stmt->execute([$id,$date,$type,$series,$number,$notes,$actor,$category]);
             }
@@ -323,8 +324,10 @@ final class GtrotsFixedAssets
 
     private static function filters(array $filters, array &$params): string
     {
-        $parts = ['d.asset_category = ?'];
-        $params[] = self::category($filters['asset_category'] ?? 'fixed_assets');
+        // Obiecte de inventar is a read-only view of the registry maintained in
+        // Mijloace fixe. Both views read the same IDs; no duplicate stock or values.
+        self::category($filters['asset_category'] ?? 'fixed_assets');
+        $parts = [];
         $type = strtolower(trim((string)($filters['type'] ?? '')));
         if (in_array($type, self::DOCUMENT_TYPES, true)) { $parts[] = 'd.document_type = ?'; $params[] = $type; }
         foreach ([['from', '>='], ['to', '<=']] as [$key, $operator]) {

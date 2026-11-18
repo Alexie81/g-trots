@@ -27,15 +27,25 @@ expectObject($after['id']===$before['id'] && $after['lines'][0]['id']===$id,'Doc
 expectObject($after['lines'][0]['disposals']===$before['lines'][0]['disposals'],'Disposal history must be preserved byte-for-byte.');
 expectObject($after['files']===$before['files'] && GtrotsFixedAssets::download($db,$doc['id'])===$files,'Attachment metadata and bytes must be preserved.');
 foreach(['quantity','unit_price','vat_value','total_value','remaining_quantity','vat_manual'] as $field) expectObject($after['lines'][0][$field]===$before['lines'][0][$field],'Value changed: '.$field);
-expectObject(GtrotsFixedAssets::list($db,[])['total']===0,'Fixed assets must be empty after transfer.');
+expectObject(GtrotsFixedAssets::list($db,[])['total']===1,'Existing inventory objects remain manageable from Fixed assets.');
 expectObject(GtrotsFixedAssets::list($db,['asset_category'=>'inventory_objects','search'=>'transferat'])['total']===1,'Transferred item must be searchable in the new category.');
 $new=GtrotsFixedAssets::create($db,['document'=>$payload['document'],'lines'=>[['product_name'=>'Mijloc fix nou','quantity'=>1,'unit_price'=>9000,'vat_rate'=>0]]],$user);
-$object=GtrotsFixedAssets::create($db,['document'=>$payload['document']+['asset_category'=>'inventory_objects'],'lines'=>[['product_name'=>'Obiect nou','quantity'=>1,'unit_price'=>20,'vat_rate'=>0]]],$user);
+$object=GtrotsFixedAssets::create($db,['document'=>$payload['document']+['asset_category'=>'fixed_assets'],'lines'=>[['product_name'=>'Obiect nou','quantity'=>1,'unit_price'=>20,'vat_rate'=>0]]],$user);
+try {
+    GtrotsFixedAssets::create($db,['document'=>$payload['document']+['asset_category'=>'inventory_objects'],'lines'=>$payload['lines']],$user);
+    throw new RuntimeException('Read-only view allowed creation');
+} catch (ShopNirHttpException $expected) {}
 GtrotsFixedAssets::ensureSchema($db);GtrotsFixedAssets::ensureSchema($db);
-expectObject(GtrotsFixedAssets::list($db,[])['total']===1,'Repeated migration must never reclassify new fixed assets.');
-expectObject(GtrotsFixedAssets::list($db,['asset_category'=>'inventory_objects'])['total']===2,'Category lists must remain disjoint.');
+expectObject(GtrotsFixedAssets::getDocument($db,$new['id'])['asset_category']==='fixed_assets','Repeated migration must never reclassify newly saved documents.');
+expectObject(GtrotsFixedAssets::list($db,['asset_category'=>'inventory_objects'])['total']===3,'New Fixed assets entries appear automatically in Inventory objects.');
+expectObject(GtrotsFixedAssets::list($db,[])['items']===GtrotsFixedAssets::list($db,['asset_category'=>'inventory_objects'])['items'],'Both views share the same IDs and values without copies.');
 $edited=GtrotsFixedAssets::updateDocument($db,$after['id'],['revision'=>$after['revision'],'document'=>$payload['document'],'lines'=>$after['lines']],$user);
 expectObject($edited['asset_category']==='inventory_objects','Editing with an older client must preserve the stored category.');
+$changedLines=$edited['lines'];$changedLines[0]['product_name']='Obiect transferat editat';$changedLines[0]['unit_price']=123;
+$edited=GtrotsFixedAssets::updateDocument($db,$after['id'],['revision'=>$edited['revision'],'document'=>$payload['document'],'lines'=>$changedLines],$user);
+$found=GtrotsFixedAssets::list($db,['asset_category'=>'inventory_objects','search'=>'transferat editat']);
+expectObject($found['total']===1 && (float)$found['items'][0]['unit_price']===123.0,'Edits in the master registry are immediately visible and searchable in Inventory objects.');
+expectObject($found['items'][0]['remaining_quantity']===3.0,'Disposal quantities are shared, not counted twice.');
 foreach(['fixed_assets','inventory_objects'] as $category) {
     $export=GtrotsFixedAssets::export($db,['asset_category'=>$category,'search'=>'NOT MATCHING','from'=>'2099-01-01'],'xlsx');
     $tmp=tempnam(sys_get_temp_dir(),'gt-objects-test-');file_put_contents($tmp,base64_decode($export['content_base64']));
@@ -43,7 +53,7 @@ foreach(['fixed_assets','inventory_objects'] as $category) {
     $sheet=$zip->getFromName('xl/worksheets/sheet1.xml');$workbook=$zip->getFromName('xl/workbook.xml');$zip->close();unlink($tmp);
     $isObject=$category==='inventory_objects';
     expectObject(str_contains($workbook,$isObject?'Obiecte de inventar':'Mijloace fixe'),'Sheet title follows category.');
-    expectObject(str_contains($sheet,'Obiect transferat')===$isObject && str_contains($sheet,'Mijloc fix nou')!==$isObject,'Export must include entire chosen category and never the other category.');
+    expectObject(str_contains($sheet,'Obiect transferat editat') && str_contains($sheet,'Mijloc fix nou') && str_contains($sheet,'Obiect nou'),'Both exports contain the entire shared registry, with their respective title.');
 }
 $rows=(new ReflectionMethod(GtrotsFixedAssets::class,'exportRows'))->invoke(null,$db,['asset_category'=>'inventory_objects']);
 $html=GtrotsFixedAssetExport::html($rows,['asset_category'=>'inventory_objects'],[]);
@@ -56,4 +66,5 @@ $attachmentFound=false;for($i=0;$i<$zip->numFiles;$i++){if(str_ends_with($zip->g
 expectObject($attachmentFound,'ZIP preserves original attachment.');$zip->close();unlink($tmp);
 try { GtrotsFixedAssets::list($db,['asset_category'=>'other']);throw new RuntimeException('Invalid category accepted'); } catch (InvalidArgumentException $expected) {}
 foreach([$edited['id'],$new['id'],$object['id']] as $docId){$current=GtrotsFixedAssets::getDocument($db,$docId);GtrotsFixedAssets::deleteDocument($db,$docId,['revision'=>$current['revision']]);}
-echo "PASS: migration, idempotence, IDs, files, disposals, values, category lists/search, editing and scoped PDF/XLSX/ZIP exports.\n";
+expectObject(GtrotsFixedAssets::list($db,['asset_category'=>'inventory_objects'])['total']===0,'Deleting in Fixed assets removes the same records from the read-only view.');
+echo "PASS: migration preservation, shared registry, automatic future visibility, read-only creation, search, edits, disposals, deletion and branded PDF/XLSX/ZIP exports.\n";

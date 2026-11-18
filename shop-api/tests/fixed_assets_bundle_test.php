@@ -42,7 +42,7 @@ function assertWholeAssetWorkbook(string $bytes): void
     foreach (['Stație diagnoză', 'Calculator atelier', 'Imprimantă etichete', 'Scule bon', 'Mobilier PV', 'Casare unu', 'Casare doi', 'Casare trei'] as $text) {
         checkAssetBundle(str_contains($xml, $text), 'The complete workbook is missing: ' . $text);
     }
-    checkAssetBundle(str_contains($xml, 'Registru complet.') && !str_contains($xml, 'PERIOADA DOCUMENTELOR'), 'Export metadata must describe the complete register without a period card.');
+    checkAssetBundle(str_contains($xml, 'Gestiune completă.') && !str_contains($xml, 'PERIOADA DOCUMENTELOR'), 'Export metadata must describe the complete management ledger without a period card.');
     $sheet = simplexml_load_string($xml);
     $sheet->registerXPathNamespace('s', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main');
     $values = $sheet->xpath('//s:row[number(@r) >= 10 and number(@r) <= 16]/s:c[starts-with(@r,"K")]/s:v');

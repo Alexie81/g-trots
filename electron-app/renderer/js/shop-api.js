@@ -201,7 +201,7 @@
     createFixedAssetDocument: (payload) => call('createFixedAssetDocument', json('POST', payload)),
     disposeFixedAsset: (id, payload) => call('disposeFixedAsset', json('POST', payload), id),
     downloadFixedAssetDocument: (documentId, fileId = '') => call('downloadFixedAssetDocument', {}, documentId, 0, { file_id: fileId }),
-    exportFixedAssets: format => call('exportFixedAssets', {}, '', 0, { format }),
+    exportFixedAssets: (format, asset_category = 'fixed_assets') => call('exportFixedAssets', {}, '', 0, { format, asset_category }),
     listConsumables: (filters = {}) => call('listConsumables', {}, '', 0, filters),
     getConsumable: id => call('getConsumable', {}, id),
     getConsumableDocument: id => call('getConsumableDocument', {}, id),

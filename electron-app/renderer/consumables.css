@@ -38,9 +38,6 @@
 #tab-shop-consumables #shop-consumables-export .shop-fixed-assets-export-copy strong{color:#b2efd5}
 #tab-shop-consumables #shop-consumables-export .shop-fixed-assets-export-copy small{color:#90bba9}
 #tab-shop-consumables .shop-fixed-assets-controls>#shop-consumables-export>svg{width:15px;height:15px;flex:0 0 15px;color:#88c9ad}
-.shop-consumables-nav{position:relative;padding-left:29px!important}
-.shop-consumables-nav::before{content:"";position:absolute;left:16px;top:-7px;width:1px;height:28px;background:#4d4a4a}
-.shop-consumables-nav svg{width:16px!important;height:16px!important;color:#6ad5a8!important}
 
 .shop-consumables-table-wrap{scrollbar-width:auto;scrollbar-color:#b77a49 #272126}
 .shop-consumables-table-wrap::-webkit-scrollbar{height:15px}

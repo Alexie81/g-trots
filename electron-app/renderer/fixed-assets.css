@@ -1,39 +1,39 @@
 /* Patrimonial register: isolated from orders, invoices and NIR screens. */
-#tab-shop-fixed-assets {
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) {
   --mf-surface: #201f24;
   --mf-line: #3d3a42;
   --mf-muted: #aca5af;
 }
-#tab-shop-fixed-assets svg,.shop-fixed-asset-overlay svg,.shop-fixed-asset-export svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) svg,.shop-fixed-asset-overlay svg,.shop-fixed-asset-export svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 /* A single overview surface: introduction above, financial summary below. */
-#tab-shop-fixed-assets .shop-fixed-assets-breadcrumb { display:flex; align-items:center; gap:12px; margin:0 0 22px; color:#716975; font-size:11px; }
-#tab-shop-fixed-assets .shop-fixed-assets-breadcrumb button { display:flex; align-items:center; gap:7px; padding:0; background:none; border:0; color:#bcb1c0; font:inherit; cursor:pointer; }
-#tab-shop-fixed-assets .shop-fixed-assets-breadcrumb button:hover { color:#ffc28b; }
-#tab-shop-fixed-assets .shop-fixed-assets-breadcrumb svg { width:15px; height:15px; }
-#tab-shop-fixed-assets .shop-fixed-assets-breadcrumb strong { font-weight:500; color:#e0d5e2; }
-#tab-shop-fixed-assets .shop-commerce-head[data-commerce-kind="fixed-assets"] {
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-fixed-assets-breadcrumb { display:flex; align-items:center; gap:12px; margin:0 0 22px; color:#716975; font-size:11px; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-fixed-assets-breadcrumb button { display:flex; align-items:center; gap:7px; padding:0; background:none; border:0; color:#bcb1c0; font:inherit; cursor:pointer; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-fixed-assets-breadcrumb button:hover { color:#ffc28b; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-fixed-assets-breadcrumb svg { width:15px; height:15px; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-fixed-assets-breadcrumb strong { font-weight:500; color:#e0d5e2; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-head[data-commerce-kind="fixed-assets"] {
   position:relative; display:flex; align-items:center; justify-content:space-between; gap:24px;
   min-height:128px; padding:24px 32px; margin:0; border:1px solid #48404a; border-bottom:0; border-radius:22px 22px 0 0;
   background:radial-gradient(ellipse at 0 0,#75452424,transparent 60%),linear-gradient(110deg,#292429,#211e24);
   box-shadow:0 1px 0 #ffffff06 inset; overflow:hidden;
 }
-#tab-shop-fixed-assets .shop-fixed-assets-head::before { content:""; position:absolute; left:32px; right:32px; bottom:0; height:1px; background:linear-gradient(90deg,#ffa45c70,#59465470 42%,#59465420); }
-#tab-shop-fixed-assets .shop-fixed-assets-heading { display:flex; align-items:center; gap:19px; min-width:0; }
-#tab-shop-fixed-assets .shop-fixed-assets-heading-icon { position:relative; display:grid; place-items:center; width:62px; height:62px; flex:0 0 62px; border:1px solid #a373474d; border-radius:18px; background:linear-gradient(145deg,#5b3e29,#352a26); color:#ffc08b; box-shadow:0 1px 0 #ffc99b15 inset,0 7px 18px #0002; }
-#tab-shop-fixed-assets .shop-fixed-assets-heading-icon svg { width:29px; height:29px; stroke-width:1.5; }
-#tab-shop-fixed-assets .shop-commerce-title { position:static; text-align:left; margin:0; padding:0; min-width:0; }
-#tab-shop-fixed-assets .shop-commerce-title > span { display:block; color:#c49d7d; font-size:9px; font-weight:650; letter-spacing:.17em; }
-#tab-shop-fixed-assets .shop-commerce-title h1 { margin:9px 0 8px; color:#fcf3ef; font-size:clamp(24px,2.1vw,34px); font-weight:650; letter-spacing:-.04em; white-space:normal; line-height:1.15; }
-#tab-shop-fixed-assets .shop-commerce-title p { color:#b8abb9; font-size:12px; line-height:1.5; margin:0; }
-#tab-shop-fixed-assets .shop-commerce-head-actions { position:static; flex:0 0 auto; margin:0; align-self:center; display:flex; gap:10px; }
-#tab-shop-fixed-assets .shop-commerce-refresh { display:grid; place-items:center; width:44px; height:46px; padding:0; border:1px solid #50444e; border-radius:12px; background:#ffffff04; color:#d4bfce; transition:background .15s,border-color .15s; }
-#tab-shop-fixed-assets .shop-commerce-refresh:hover { color:#ffd1a4; background:#ffb06010; border-color:#947054; }
-#tab-shop-fixed-assets .shop-commerce-refresh svg { width:18px; height:18px; }
-#tab-shop-fixed-assets .shop-commerce-add { display:flex; align-items:center; justify-content:center; gap:11px; min-height:46px; padding:7px 16px 7px 9px; border:1px solid #ffad5b; border-radius:12px; background:linear-gradient(110deg,#f9821c,#ed660e); color:#fff; font-size:12px; font-weight:650; letter-spacing:0; box-shadow:0 4px 14px #d95d101a,0 1px 0 #ffffff24 inset; transition:background .15s,box-shadow .15s; }
-#tab-shop-fixed-assets .shop-commerce-add:hover { background:linear-gradient(110deg,#ff9534,#f57b1c); box-shadow:0 4px 18px #e36b2833; }
-#tab-shop-fixed-assets .shop-fixed-assets-add-symbol { display:grid; place-items:center; width:29px; height:29px; background:#ffffff16; border:1px solid #ffffff25; border-radius:8px; }
-#tab-shop-fixed-assets .shop-fixed-assets-add-symbol svg { width:16px; height:16px; stroke-width:2; }
-#tab-shop-fixed-assets .shop-fixed-assets-add-arrow { width:16px; height:16px; margin-left:6px; opacity:.8; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-fixed-assets-head::before { content:""; position:absolute; left:32px; right:32px; bottom:0; height:1px; background:linear-gradient(90deg,#ffa45c70,#59465470 42%,#59465420); }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-fixed-assets-heading { display:flex; align-items:center; gap:19px; min-width:0; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-fixed-assets-heading-icon { position:relative; display:grid; place-items:center; width:62px; height:62px; flex:0 0 62px; border:1px solid #a373474d; border-radius:18px; background:linear-gradient(145deg,#5b3e29,#352a26); color:#ffc08b; box-shadow:0 1px 0 #ffc99b15 inset,0 7px 18px #0002; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-fixed-assets-heading-icon svg { width:29px; height:29px; stroke-width:1.5; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-title { position:static; text-align:left; margin:0; padding:0; min-width:0; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-title > span { display:block; color:#c49d7d; font-size:9px; font-weight:650; letter-spacing:.17em; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-title h1 { margin:9px 0 8px; color:#fcf3ef; font-size:clamp(24px,2.1vw,34px); font-weight:650; letter-spacing:-.04em; white-space:normal; line-height:1.15; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-title p { color:#b8abb9; font-size:12px; line-height:1.5; margin:0; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-head-actions { position:static; flex:0 0 auto; margin:0; align-self:center; display:flex; gap:10px; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-refresh { display:grid; place-items:center; width:44px; height:46px; padding:0; border:1px solid #50444e; border-radius:12px; background:#ffffff04; color:#d4bfce; transition:background .15s,border-color .15s; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-refresh:hover { color:#ffd1a4; background:#ffb06010; border-color:#947054; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-refresh svg { width:18px; height:18px; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-add { display:flex; align-items:center; justify-content:center; gap:11px; min-height:46px; padding:7px 16px 7px 9px; border:1px solid #ffad5b; border-radius:12px; background:linear-gradient(110deg,#f9821c,#ed660e); color:#fff; font-size:12px; font-weight:650; letter-spacing:0; box-shadow:0 4px 14px #d95d101a,0 1px 0 #ffffff24 inset; transition:background .15s,box-shadow .15s; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-add:hover { background:linear-gradient(110deg,#ff9534,#f57b1c); box-shadow:0 4px 18px #e36b2833; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-fixed-assets-add-symbol { display:grid; place-items:center; width:29px; height:29px; background:#ffffff16; border:1px solid #ffffff25; border-radius:8px; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-fixed-assets-add-symbol svg { width:16px; height:16px; stroke-width:2; }
+:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-fixed-assets-add-arrow { width:16px; height:16px; margin-left:6px; opacity:.8; }
 /* Two-level summary: a financial block and a compact register ledger. */
 .shop-fixed-assets-overview { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr); gap:18px; padding:22px 32px 26px; margin:0 0 26px; border:1px solid #48404a; border-top:0; border-radius:0 0 22px 22px; background:#211e23; box-shadow:0 18px 35px -28px #000b; }
 .shop-fixed-assets-overview-value { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(150px,1fr); align-items:center; gap:24px; min-width:0; padding:21px 24px; border:1px solid #75543d66; border-radius:15px; background:linear-gradient(115deg,#4631238c,#2b2528 90%); box-shadow:0 1px 0 #ffca9810 inset; }
@@ -57,12 +57,12 @@
 .shop-fixed-assets-overview-counts dd.no-disposals { color:#a99eb0; }
 .shop-fixed-assets-overview-counts dd.has-disposals { color:#edbd91; }
 @media(max-width:1200px) {
-  #tab-shop-fixed-assets .shop-commerce-head[data-commerce-kind="fixed-assets"] { padding:24px; }
-  #tab-shop-fixed-assets .shop-fixed-assets-heading { gap:14px; }
-  #tab-shop-fixed-assets .shop-fixed-assets-heading-icon { width:50px; height:54px; flex-basis:50px; border-radius:15px; }
-  #tab-shop-fixed-assets .shop-commerce-title h1 { font-size:26px; }
-  #tab-shop-fixed-assets .shop-commerce-add { font-size:11px; gap:8px; }
-  #tab-shop-fixed-assets .shop-fixed-assets-add-arrow { display:none; }
+  :is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-head[data-commerce-kind="fixed-assets"] { padding:24px; }
+  :is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-fixed-assets-heading { gap:14px; }
+  :is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-fixed-assets-heading-icon { width:50px; height:54px; flex-basis:50px; border-radius:15px; }
+  :is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-title h1 { font-size:26px; }
+  :is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-add { font-size:11px; gap:8px; }
+  :is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-fixed-assets-add-arrow { display:none; }
   .shop-fixed-assets-overview { grid-template-columns:minmax(0,1.5fr) minmax(225px,1fr); gap:14px; padding:20px 24px 24px; }
   .shop-fixed-assets-overview-value { gap:18px; padding:20px; }
   .shop-fixed-assets-overview-breakdown { padding-left:18px; }
@@ -73,14 +73,14 @@
   .shop-fixed-assets-overview-counts > div + div { border-top:0; border-left:1px solid #4b3e514f; padding-left:24px; }
 }
 @media(max-width:950px) {
-  #tab-shop-fixed-assets .shop-commerce-head[data-commerce-kind="fixed-assets"] { flex-wrap:wrap; gap:20px; }
-  #tab-shop-fixed-assets .shop-commerce-head-actions { margin-left:auto; }
+  :is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-head[data-commerce-kind="fixed-assets"] { flex-wrap:wrap; gap:20px; }
+  :is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-head-actions { margin-left:auto; }
 }
 @media(max-width:580px) {
-  #tab-shop-fixed-assets .shop-commerce-head[data-commerce-kind="fixed-assets"] { padding:20px; }
-  #tab-shop-fixed-assets .shop-fixed-assets-heading-icon { display:none; }
-  #tab-shop-fixed-assets .shop-commerce-head-actions { width:100%; }
-  #tab-shop-fixed-assets .shop-commerce-add { flex:1; }
+  :is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-head[data-commerce-kind="fixed-assets"] { padding:20px; }
+  :is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-fixed-assets-heading-icon { display:none; }
+  :is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-head-actions { width:100%; }
+  :is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) .shop-commerce-add { flex:1; }
   .shop-fixed-assets-overview { padding:16px 20px 20px; }
   .shop-fixed-assets-overview-value { grid-template-columns:minmax(0,1fr); gap:18px; }
   .shop-fixed-assets-overview-breakdown { grid-template-columns:1fr 1fr; padding:16px 0 0; border-left:0; border-top:1px solid #ad82542b; gap:16px; }
@@ -227,7 +227,7 @@
 .shop-fixed-asset-overlay .shop-commerce-modal > footer button { min-height: 46px; padding: 0 18px; border-radius: 12px; font-size: 13px; }
 .shop-fixed-asset-overlay .btn-primary { color: white; border: 1px solid #ffac66; background: linear-gradient(135deg,#f78a27,#e56410); box-shadow: 0 6px 18px #e6751020; }
 .shop-fixed-asset-overlay .btn-ghost { color: #d8ccd9; background: #ffffff06; border-color: #5b4c5e; }
-.shop-fixed-asset-overlay button:focus-visible,#tab-shop-fixed-assets button:focus-visible,.shop-fixed-asset-export button:focus-visible { outline: 2px solid #ffb778; outline-offset: 3px; }
+.shop-fixed-asset-overlay button:focus-visible,:is(#tab-shop-fixed-assets, #tab-shop-inventory-objects) button:focus-visible,.shop-fixed-asset-export button:focus-visible { outline: 2px solid #ffb778; outline-offset: 3px; }
 .shop-fixed-asset-overlay button:disabled { opacity: .45; cursor: not-allowed; }
 .shop-fixed-asset-create { width: min(1240px,calc(100vw - 48px)); max-height: calc(100vh - 48px); }
 .shop-fixed-asset-create > .shop-fixed-asset-create-head { grid-template-columns: 56px minmax(0,1fr) 36px; min-height: 112px; }

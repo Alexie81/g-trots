@@ -6,6 +6,13 @@ final class GtrotsFixedAssetExport
 {
     private const HEADERS = ['Nr. crt.', 'Data doc.', 'Tip doc.', 'Serie/nr. doc.', 'Denumire produs', 'Cantitate', 'Preț unitar', 'Valoare fără TVA', 'TVA %', 'Valoare TVA', 'Valoare totală', 'Data casării', 'Cantitatea casată', 'Cantitate actuală', 'Motivul casării'];
 
+    private static function labels(array $filters): array
+    {
+        return ($filters['asset_category'] ?? 'fixed_assets') === 'inventory_objects'
+            ? ['title' => 'GESTIUNEA OBIECTELOR DE INVENTAR', 'sheet' => 'Obiecte de inventar', 'item' => 'OBIECT DE INVENTAR / VALORI DE ÎNREGISTRARE', 'code' => 'OI', 'footer' => 'Gestiunea obiectelor de inventar']
+            : ['title' => 'GESTIUNEA MIJLOACELOR FIXE', 'sheet' => 'Mijloace fixe', 'item' => 'MIJLOC FIX / VALORI DE ÎNREGISTRARE', 'code' => 'MF', 'footer' => 'Gestiunea mijloacelor fixe'];
+    }
+
     private static function date($value): string
     {
         return $value ? implode('.', array_reverse(explode('-', substr((string)$value, 0, 10)))) : '';
@@ -120,18 +127,19 @@ final class GtrotsFixedAssetExport
 
     public static function xlsx(array $data, array $filters = [], array $company = []): string
     {
+        $labels = self::labels($filters);
         require_once __DIR__ . '/nir-xlsx.php';
         $data = self::withCurrentQuantities($data);
         $cell = static fn($value, string $type = 'string', int $style = 10, ?string $formula = null): array => shopNirPremiumXlsxCellSpec($value, $type, $style, $formula);
         $totals = self::totals($data);
-        $rows = shopNirPremiumXlsxRow(1, [3 => $cell('G-TROTS', 'string', 43), 7 => $cell('REGISTRUL MIJLOACELOR FIXE', 'string', 44)], 40);
+        $rows = shopNirPremiumXlsxRow(1, [3 => $cell('G-TROTS', 'string', 43), 7 => $cell($labels['title'], 'string', 44)], 40);
         $rows .= shopNirPremiumXlsxRow(2, [3 => $cell($company['legal_name'] ?? 'G-Trots România', 'string', 62), 7 => $cell('Documente justificative  •  Valori  •  Istoric casări', 'string', 45)], 28);
         $rows .= shopNirPremiumXlsxRow(3, [3 => $cell(self::identity($company), 'string', 46)], 27);
         $rows .= shopNirPremiumXlsxRow(4, [], 11);
-        $rows .= shopNirPremiumXlsxRow(5, [1 => $cell('POZIȚII ÎN REGISTRU', 'string', 47), 9 => $cell('VALOARE TOTALĂ CU TVA', 'string', 49)], 22);
+        $rows .= shopNirPremiumXlsxRow(5, [1 => $cell('POZIȚII ÎN GESTIUNE', 'string', 47), 9 => $cell('VALOARE TOTALĂ CU TVA', 'string', 49)], 22);
         $rows .= shopNirPremiumXlsxRow(6, [1 => $cell($totals['count'], 'number', 48), 9 => $cell($totals['total'], 'number', 50)], 34);
         $rows .= shopNirPremiumXlsxRow(7, [1 => $cell('INFORMAȚIE  •  Sume în lei. Casările sunt afișate cu minus; valorile bunului sunt înscrise o singură dată.', 'string', 51)], 25);
-        $rows .= shopNirPremiumXlsxRow(8, [1 => $cell('DOCUMENT JUSTIFICATIV', 'string', 52), 5 => $cell('MIJLOC FIX / VALORI DE ÎNREGISTRARE', 'string', 52), 12 => $cell('ISTORIC CASĂRI', 'string', 52)], 26);
+        $rows .= shopNirPremiumXlsxRow(8, [1 => $cell('DOCUMENT JUSTIFICATIV', 'string', 52), 5 => $cell($labels['item'], 'string', 52), 12 => $cell('ISTORIC CASĂRI', 'string', 52)], 26);
         $headers = [];
         foreach (self::HEADERS as $index => $label) $headers[$index + 1] = $cell($label, 'string', 53);
         $rows .= shopNirPremiumXlsxRow(9, $headers, 38);
@@ -156,10 +164,10 @@ final class GtrotsFixedAssetExport
             }
         }
         $lastData = $r - 1;
-        $rows .= shopNirPremiumXlsxRow($r, [1 => $cell('TOTAL REGISTRU', 'string', 58), 8 => $cell($totals['net'], 'number', 58, 'SUM(H10:H' . $lastData . ')'), 10 => $cell($totals['vat'], 'number', 58, 'SUM(J10:J' . $lastData . ')'), 11 => $cell($totals['total'], 'number', 59, 'SUM(K10:K' . $lastData . ')')], 36);
+        $rows .= shopNirPremiumXlsxRow($r, [1 => $cell('TOTAL GESTIUNE', 'string', 58), 8 => $cell($totals['net'], 'number', 58, 'SUM(H10:H' . $lastData . ')'), 10 => $cell($totals['vat'], 'number', 58, 'SUM(J10:J' . $lastData . ')'), 11 => $cell($totals['total'], 'number', 59, 'SUM(K10:K' . $lastData . ')')], 36);
         $merges = ['A1:B3', 'C1:F1', 'G1:O1', 'C2:F2', 'G2:O2', 'C3:O3', 'A5:H5', 'I5:O5', 'A6:H6', 'I6:O6', 'A7:O7', 'A8:D8', 'E8:K8', 'L8:O8', 'A' . $r . ':G' . $r];
         $r += 2;
-        $rows .= shopNirPremiumXlsxRow($r, [1 => $cell('Registru complet. Cantitatea actuală arată cantitatea rămasă după fiecare casare. Generat: ' . date('d.m.Y H:i'), 'string', 51)], 27);
+        $rows .= shopNirPremiumXlsxRow($r, [1 => $cell('Gestiune completă. Cantitatea actuală arată cantitatea rămasă după fiecare casare. Generat: ' . date('d.m.Y H:i'), 'string', 51)], 27);
         $merges[] = 'A' . $r . ':O' . $r;
         $files = []; $media = []; $mediaIndex = []; $pictures = [];
         $logo = shopNirPremiumXlsxLogoImage(120, 120);
@@ -176,9 +184,9 @@ final class GtrotsFixedAssetExport
         $files['[Content_Types].xml'] = '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' . ($pictures ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : '') . '</Types>';
         $files['_rels/.rels'] = self::relationships(['officeDocument' => 'xl/workbook.xml']);
         $files['xl/_rels/workbook.xml.rels'] = self::relationships(['worksheet' => 'worksheets/sheet1.xml', 'styles' => 'styles.xml']);
-        $files['xl/workbook.xml'] = '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Mijloace fixe" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">\'Mijloace fixe\'!$A$1:$O$' . $r . '</definedName><definedName name="_xlnm.Print_Titles" localSheetId="0">\'Mijloace fixe\'!$8:$9</definedName></definedNames><calcPr calcMode="auto" fullCalcOnLoad="1"/></workbook>';
+        $files['xl/workbook.xml'] = '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="' . $labels['sheet'] . '" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">\'' . $labels['sheet'] . '\'!$A$1:$O$' . $r . '</definedName><definedName name="_xlnm.Print_Titles" localSheetId="0">\'' . $labels['sheet'] . '\'!$8:$9</definedName></definedNames><calcPr calcMode="auto" fullCalcOnLoad="1"/></workbook>';
         $files['xl/styles.xml'] = self::xlsxStyles();
-        $files['xl/worksheets/sheet1.xml'] = shopNirPremiumXlsxSheet($rows, [7, 13, 15, 18, 32, 11, 15, 16, 9, 15, 18, 13, 13, 14, 32], $r, 15, ['merges' => $merges, 'drawing' => (bool)$pictures, 'freeze_rows' => 9, 'freeze_columns' => 4, 'auto_filter' => 'A9:O' . $lastData, 'fit_to_height' => 0, 'header' => '', 'footer' => '&LG-Trots | Registrul mijloacelor fixe&RPagina &P / &N']);
+        $files['xl/worksheets/sheet1.xml'] = shopNirPremiumXlsxSheet($rows, [7, 13, 15, 18, 32, 11, 15, 16, 9, 15, 18, 13, 13, 14, 32], $r, 15, ['merges' => $merges, 'drawing' => (bool)$pictures, 'freeze_rows' => 9, 'freeze_columns' => 4, 'auto_filter' => 'A9:O' . $lastData, 'fit_to_height' => 0, 'header' => '', 'footer' => '&LG-Trots | ' . $labels['footer'] . '&RPagina &P / &N']);
         return shopNirBuildZip($files);
     }
 
@@ -192,15 +200,16 @@ final class GtrotsFixedAssetExport
 
     public static function html(array $data, array $filters, array $company): string
     {
+        $labels = self::labels($filters);
         require_once __DIR__ . '/nir-pdf.php';
         $data = self::withCurrentQuantities($data);
         $e = static fn($v): string => shopNirPdfEscape($v);
         $totals = self::totals($data);
         $logo = shopNirPdfLogoDataUri();
         $html = '<!doctype html><html lang="ro"><head><meta charset="UTF-8"><style>' . self::css() . '</style></head><body>';
-        $html .= '<div class="hero"><table class="masthead"><tr><td class="brand">' . ($logo ? '<img src="' . $e($logo) . '">' : '') . '<b>G-TROTS</b><div>' . $e($company['legal_name'] ?? 'G-Trots România') . '</div></td><td class="title">REGISTRUL MIJLOACELOR FIXE<small>Documente justificative • Valori • Istoric casări</small></td><td class="report"><span>REGISTRU</span><b>MF</b><small>Sume exprimate în lei</small></td></tr></table>';
-        $html .= '<div class="identity">' . $e(self::identity($company)) . '</div></div><table class="ribbon"><tr><td><small>POZIȚII ÎN REGISTRU</small><b>' . $totals['count'] . '</b></td><td class="grand"><small>VALOARE TOTALĂ CU TVA</small><b>' . shopNirPdfMoney($totals['total']) . '</b></td></tr></table>';
-        $html .= '<div class="hint"><b>INFORMAȚIE</b><span>Registru complet, cu toate casările. Cantitatea actuală arată cantitatea rămasă după fiecare casare; valorile fiecărui bun sunt înscrise o singură dată.</span></div><div class="table-card"><table class="items"><colgroup>';
+        $html .= '<div class="hero"><table class="masthead"><tr><td class="brand">' . ($logo ? '<img src="' . $e($logo) . '">' : '') . '<b>G-TROTS</b><div>' . $e($company['legal_name'] ?? 'G-Trots România') . '</div></td><td class="title">' . $labels['title'] . '<small>Documente justificative • Valori • Istoric casări</small></td><td class="report"><span>GESTIUNE</span><b>' . $labels['code'] . '</b><small>Sume exprimate în lei</small></td></tr></table>';
+        $html .= '<div class="identity">' . $e(self::identity($company)) . '</div></div><table class="ribbon"><tr><td><small>POZIȚII ÎN GESTIUNE</small><b>' . $totals['count'] . '</b></td><td class="grand"><small>VALOARE TOTALĂ CU TVA</small><b>' . shopNirPdfMoney($totals['total']) . '</b></td></tr></table>';
+        $html .= '<div class="hint"><b>INFORMAȚIE</b><span>Gestiune completă, cu toate casările. Cantitatea actuală arată cantitatea rămasă după fiecare casare; valorile fiecărui bun sunt înscrise o singură dată.</span></div><div class="table-card"><table class="items"><colgroup>';
         $widths = [2.5, 6, 6, 6.5, 14.5, 4.5, 6.5, 7, 3.5, 6.5, 7, 6, 5.5, 5.5, 12.5];
         foreach ($widths as $width) $html .= '<col style="width:' . $width . '%">';
         // Dompdf needs widths on the cells; colgroup alone is ignored.
@@ -250,6 +259,7 @@ final class GtrotsFixedAssetExport
 
     public static function pdf(array $rows, array $filters, array $company = []): string
     {
+        $labels = self::labels($filters);
         $html = self::html($rows, $filters, $company);
         $options = new Dompdf\Options();
         $options->set('isRemoteEnabled', false);
@@ -260,7 +270,7 @@ final class GtrotsFixedAssetExport
         $pdf->loadHtml($html, 'UTF-8');
         $pdf->render();
         $font = $pdf->getFontMetrics()->getFont('DejaVu Sans', 'normal');
-        $pdf->getCanvas()->page_text(22, 571, 'G-Trots | Registrul mijloacelor fixe', $font, 6, [.38, .45, .55]);
+        $pdf->getCanvas()->page_text(22, 571, 'G-Trots | ' . $labels['footer'], $font, 6, [.38, .45, .55]);
         $pdf->getCanvas()->page_text(733, 571, 'Pagina {PAGE_NUM} / {PAGE_COUNT}', $font, 6, [.38, .45, .55]);
         return $pdf->output();
     }

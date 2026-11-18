@@ -8,6 +8,15 @@ final class GtrotsFixedAssets
     private const DOCUMENT_TYPES = ['factura', 'bon', 'pv'];
     private const MAX_FILE_SIZE = 15728640;
 
+    public static function category($value = 'fixed_assets'): string
+    {
+        $category = trim((string)$value);
+        if (!in_array($category, ['fixed_assets', 'inventory_objects'], true)) {
+            throw new InvalidArgumentException('Categoria trebuie să fie Mijloace fixe sau Obiecte de inventar.');
+        }
+        return $category;
+    }
+
     public static function ensureSchema(PDO $db): void
     {
         if ($db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
@@ -54,6 +63,14 @@ final class GtrotsFixedAssets
     private static function ensureEditingSchema(PDO $db): void
     {
         $sqlite = $db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+        $documentColumns = $sqlite ? $db->query('PRAGMA table_info(shop_fixed_asset_documents)')->fetchAll(PDO::FETCH_COLUMN, 1) : $db->query('SHOW COLUMNS FROM shop_fixed_asset_documents')->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('asset_category', $documentColumns, true)) {
+            // One-time reclassification requested by the owner. ALTER assigns the
+            // category to all existing documents atomically; IDs, files and disposals stay intact.
+            // New documents always supply their category explicitly in saveDocument.
+            $db->exec("ALTER TABLE shop_fixed_asset_documents ADD COLUMN asset_category VARCHAR(32) NOT NULL DEFAULT 'inventory_objects'");
+            $db->exec('CREATE INDEX idx_fixed_asset_category_date ON shop_fixed_asset_documents(asset_category,document_date)');
+        }
         $columns = $sqlite ? $db->query('PRAGMA table_info(shop_fixed_assets)')->fetchAll(PDO::FETCH_COLUMN, 1) : $db->query('SHOW COLUMNS FROM shop_fixed_assets')->fetchAll(PDO::FETCH_COLUMN);
         if (!in_array('vat_manual', $columns, true)) $db->exec('ALTER TABLE shop_fixed_assets ADD COLUMN vat_manual INTEGER NOT NULL DEFAULT 0');
         $db->exec($sqlite ? 'CREATE TABLE IF NOT EXISTS shop_fixed_asset_files (
@@ -271,8 +288,9 @@ final class GtrotsFixedAssets
                 // Temporarily move line numbers out of the final range to permit reordering.
                 $db->prepare('UPDATE shop_fixed_assets SET line_number=line_number+1000000 WHERE document_id=?')->execute([$id]);
             } else {
-                $stmt = $db->prepare('INSERT INTO shop_fixed_asset_documents (id,document_date,document_type,series,document_number,notes,created_by) VALUES (?,?,?,?,?,?,?)');
-                $stmt->execute([$id,$date,$type,$series,$number,$notes,$actor]);
+                $category = self::category($document['asset_category'] ?? 'fixed_assets');
+                $stmt = $db->prepare('INSERT INTO shop_fixed_asset_documents (id,document_date,document_type,series,document_number,notes,created_by,asset_category) VALUES (?,?,?,?,?,?,?,?)');
+                $stmt->execute([$id,$date,$type,$series,$number,$notes,$actor,$category]);
             }
             $seen = [];
             $lineStmt = $db->prepare('INSERT INTO shop_fixed_assets (id, document_id, line_number, product_name, quantity, unit_price, net_value, vat_rate, vat_value, total_value, vat_manual) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
@@ -305,7 +323,8 @@ final class GtrotsFixedAssets
 
     private static function filters(array $filters, array &$params): string
     {
-        $parts = [];
+        $parts = ['d.asset_category = ?'];
+        $params[] = self::category($filters['asset_category'] ?? 'fixed_assets');
         $type = strtolower(trim((string)($filters['type'] ?? '')));
         if (in_array($type, self::DOCUMENT_TYPES, true)) { $parts[] = 'd.document_type = ?'; $params[] = $type; }
         foreach ([['from', '>='], ['to', '<=']] as [$key, $operator]) {
@@ -360,7 +379,7 @@ final class GtrotsFixedAssets
             $params = $pageIds;
             $offset = 0;
         }
-        $sql = 'SELECT a.*, d.document_date, d.document_type, d.series, d.document_number, d.original_name, d.mime_type,
+        $sql = 'SELECT a.*, d.asset_category, d.document_date, d.document_type, d.series, d.document_number, d.original_name, d.mime_type,
                 COALESCE((SELECT SUM(x.quantity) FROM shop_fixed_asset_disposals x WHERE x.fixed_asset_id = a.id), 0) AS disposal_quantity,
                 (SELECT COUNT(*) FROM shop_fixed_asset_disposals x WHERE x.fixed_asset_id = a.id) AS disposal_count
             FROM shop_fixed_assets a INNER JOIN shop_fixed_asset_documents d ON d.id = a.document_id' . $where .
@@ -374,12 +393,12 @@ final class GtrotsFixedAssets
         }
         foreach ($items as &$item) $item['remaining_quantity'] = round((float)$item['quantity'] + (float)$item['disposal_quantity'], 4);
         unset($item);
-        return ['items' => $items, 'page' => $page, 'page_size' => $pageSize, 'total' => $total, 'total_pages' => $pages];
+        return ['items' => $items, 'asset_category' => self::category($filters['asset_category'] ?? 'fixed_assets'), 'page' => $page, 'page_size' => $pageSize, 'total' => $total, 'total_pages' => $pages];
     }
 
     public static function get(PDO $db, string $assetId): array
     {
-        $stmt = $db->prepare('SELECT a.*, d.document_date, d.document_type, d.series, d.document_number, d.notes, d.original_name, d.mime_type, d.file_size, d.created_by, d.created_at AS document_created_at FROM shop_fixed_assets a INNER JOIN shop_fixed_asset_documents d ON d.id = a.document_id WHERE a.id = ? LIMIT 1');
+        $stmt = $db->prepare('SELECT a.*, d.asset_category, d.document_date, d.document_type, d.series, d.document_number, d.notes, d.original_name, d.mime_type, d.file_size, d.created_by, d.created_at AS document_created_at FROM shop_fixed_assets a INNER JOIN shop_fixed_asset_documents d ON d.id = a.document_id WHERE a.id = ? LIMIT 1');
         $stmt->execute([$assetId]);
         $asset = $stmt->fetch();
         if (!$asset) throw new ShopNirHttpException('Mijlocul fix nu există.', 404);
@@ -643,7 +662,7 @@ final class GtrotsFixedAssets
         return $candidate;
     }
 
-    private static function zip(PDO $db, array $rows, array $company, string $base): string
+    private static function zip(PDO $db, array $rows, array $company, string $base, array $filters): string
     {
         if (!class_exists('ZipArchive')) throw new RuntimeException('Arhivarea documentelor nu este disponibilă pe server.');
         $temporaryPath = tempnam(sys_get_temp_dir(), 'gt_fixed_assets_');
@@ -653,8 +672,8 @@ final class GtrotsFixedAssets
         try {
             if ($zip->open($temporaryPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) throw new RuntimeException('Arhiva registrului nu a putut fi deschisă.');
             $opened = true;
-            if (!shopNirZipAddStoredString($zip, $base . '.pdf', self::pdf($rows, [], $company))) throw new RuntimeException('Registrul PDF nu a putut fi adăugat în arhivă.');
-            if (!shopNirZipAddStoredString($zip, $base . '.xlsx', self::xlsx($rows, [], $company))) throw new RuntimeException('Registrul Excel nu a putut fi adăugat în arhivă.');
+            if (!shopNirZipAddStoredString($zip, $base . '.pdf', self::pdf($rows, $filters, $company))) throw new RuntimeException('Registrul PDF nu a putut fi adăugat în arhivă.');
+            if (!shopNirZipAddStoredString($zip, $base . '.xlsx', self::xlsx($rows, $filters, $company))) throw new RuntimeException('Registrul Excel nu a putut fi adăugat în arhivă.');
             $documents = [];
             foreach ($rows as $row) $documents[(string)$row['document_id']] ??= $row;
             $usedFolders = [];
@@ -688,7 +707,7 @@ final class GtrotsFixedAssets
         if (!in_array($format, ['pdf', 'xlsx', 'zip'], true)) throw new InvalidArgumentException('Formatul de export trebuie să fie PDF, Excel sau ZIP.');
         // Accounting exports always contain the entire registry, including when
         // an older client still sends dates or the table has active filters.
-        $filters = [];
+        $filters = ['asset_category' => self::category($filters['asset_category'] ?? 'fixed_assets')];
         $company = [];
         try {
             $company = $db->query('SELECT * FROM shop_company_settings ORDER BY is_default DESC, id ASC LIMIT 1')->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -699,10 +718,10 @@ final class GtrotsFixedAssets
             if (!$missingTable) throw $error;
         }
         $rows = self::exportRows($db, $filters);
-        if (!$rows) throw new ShopNirHttpException('Nu există mijloace fixe în registru.', 404);
-        $base = 'Gestiune-mijloace-fixe-registru-complet';
+        if (!$rows) throw new ShopNirHttpException('Nu există poziții în această gestiune.', 404);
+        $base = $filters['asset_category'] === 'inventory_objects' ? 'Gestiune-obiecte-de-inventar-registru-complet' : 'Gestiune-mijloace-fixe-registru-complet';
         if ($format === 'xlsx') return ['file_name' => $base . '.xlsx', 'mime_type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'content_base64' => base64_encode(self::xlsx($rows, $filters, $company))];
         if ($format === 'pdf') return ['file_name' => $base . '.pdf', 'mime_type' => 'application/pdf', 'content_base64' => base64_encode(self::pdf($rows, $filters, $company))];
-        return ['file_name' => $base . '.zip', 'mime_type' => 'application/zip', 'content_base64' => base64_encode(self::zip($db, $rows, $company, $base))];
+        return ['file_name' => $base . '.zip', 'mime_type' => 'application/zip', 'content_base64' => base64_encode(self::zip($db, $rows, $company, $base, $filters))];
     }
 }

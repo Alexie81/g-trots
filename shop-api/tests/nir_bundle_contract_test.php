@@ -47,6 +47,12 @@ $expect(str_contains($xlsx, 'xSplit="2" ySplit="6"'), 'Registrul XLSX nu fixeaz�
 $expect((bool)preg_match('/<c r="F7" s="30"><v>0\.427083333333<\/v><\/c>/', $xlsx), 'Ora NIR nu este salvată ca valoare Excel formatată HH:mm:ss.');
 $expect((bool)preg_match('/<c r="H7" s="30"><v>0\.423611111111<\/v><\/c>/', $xlsx), 'Ora recepției nu este salvată ca valoare Excel formatată HH:mm:ss.');
 
+require_once dirname(__DIR__).'/tabular-pdf.php';
+$html=GtrotsTabularPdf::html($xlsx);
+foreach (['NIR-2026-000154','6.013,70','10:15:00','KIDOTOYS SRL','Recepție verificată.'] as $value) $expect(str_contains($html,$value),'PDF registry missing '.$value);
+$pdf=GtrotsTabularPdf::render($xlsx);
+$expect(str_starts_with($pdf,'%PDF-'),'NIR registry PDF must be genuine.');
+if (!empty($argv[1])) { file_put_contents($argv[1],$pdf); file_put_contents(preg_replace('/\.pdf$/i','.xlsx',$argv[1]),$xlsx); }
 if ($failures) {
     fwrite(STDERR, "Export NIR: " . count($failures) . " verificări eșuate:\n- " . implode("\n- ", $failures) . "\n");
     exit(1);

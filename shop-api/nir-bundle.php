@@ -305,14 +305,19 @@ function shopNirBundleAddAttachments(ZipArchive $zip, PDO $db, string $documentI
     }
 }
 
-function shopNirDownloadRegistryBundle(PDO $db, string $from, string $to, bool $includeDocuments, array $user): array
+function shopNirDownloadRegistryBundle(PDO $db, string $from, string $to, bool $includeDocuments, array $user, string $format = 'xlsx'): array
 {
+    if (!in_array($format, ['xlsx', 'pdf'], true)) throw new InvalidArgumentException('Alege formatul PDF sau Excel.');
     [$from, $to] = shopNirRegistryDateRange($db, $from, $to);
     $documents = shopNirRegistryRows($db, $from, $to);
     if (!$documents) throw new ShopNirHttpException('Nu există NIR-uri în perioada selectată.', 404);
     $registryName = 'Registru_NIR_' . $from . '_' . $to . '.xlsx';
     $registryBytes = shopNirBuildRegistryXlsx($documents, $from, $to, $user);
     if (!$includeDocuments) {
+        if ($format === 'pdf') {
+            require_once __DIR__ . '/tabular-pdf.php';
+            return ['file_name' => 'Registru_NIR_' . $from . '_' . $to . '.pdf', 'mime_type' => 'application/pdf', 'content_base64' => base64_encode(GtrotsTabularPdf::render($registryBytes)), 'document_count' => count($documents), 'bundle_type' => 'registry'];
+        }
         return ['file_name' => $registryName, 'mime_type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'content_base64' => base64_encode($registryBytes), 'document_count' => count($documents), 'bundle_type' => 'registry'];
     }
     if (!class_exists('ZipArchive')) throw new RuntimeException('Arhivarea registrului nu este disponibilă pe server.');

@@ -39,6 +39,7 @@ export default function ShopInventoryExportButton() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const compact = width < 700;
+  const [format, setFormat] = useState<'xlsx' | 'pdf'>('xlsx');
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [period, setPeriod] = useState('current_month');
@@ -79,14 +80,14 @@ export default function ShopInventoryExportButton() {
       const nextEstimate = await shopApi.getInventoryExportEstimate(token, dates[0], dates[1]);
       expected = Math.max(1, nextEstimate.estimated_seconds);
       setEstimate(nextEstimate); setProgress((current) => Math.max(current, 18)); setStage('Construim registrul contabil și fișele de magazie');
-      const file = await shopApi.exportInventoryLedger(token, dates[0], dates[1]);
-      setProgress(96); setStage('Salvăm fișierul Excel');
+      const file = await shopApi.exportInventoryLedger(token, dates[0], dates[1], format);
+      setProgress(96); setStage(format === 'pdf' ? 'Salvăm fișierul PDF' : 'Salvăm fișierul Excel');
       const uri = `${FileSystem.cacheDirectory}${file.file_name.replace(/[\\/:*?"<>|]/g, '-')}`;
       await FileSystem.writeAsStringAsync(uri, file.content_base64, { encoding: FileSystem.EncodingType.Base64 });
       setProgress(100); setStage('Export finalizat');
       await new Promise((resolve) => setTimeout(resolve, 220));
       setVisible(false); setBusy(false);
-      await Sharing.shareAsync(uri, { mimeType: file.mime_type, UTI: 'org.openxmlformats.spreadsheetml.sheet', dialogTitle: 'Export stocuri G-Trots' });
+      await Sharing.shareAsync(uri, { mimeType: file.mime_type, UTI: format === 'pdf' ? 'com.adobe.pdf' : 'org.openxmlformats.spreadsheetml.sheet', dialogTitle: 'Export stocuri G-Trots' });
     } catch (error) {
       Alert.alert('Export nereușit', error instanceof Error ? error.message : 'Fișierul nu a putut fi generat.');
     } finally {
@@ -96,7 +97,7 @@ export default function ShopInventoryExportButton() {
 
   const remaining = estimate ? Math.max(0, Math.ceil(estimate.estimated_seconds - elapsed)) : null;
   return <>
-    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Exportă stocurile și mișcările în Excel" style={[s.trigger, compact && s.triggerCompact]} onPress={() => setVisible(true)}>
+    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Exportă stocurile și mișcările în PDF sau Excel" style={[s.trigger, compact && s.triggerCompact]} onPress={() => setVisible(true)}>
       <FileSpreadsheet size={18} color="#9FE8C1" />{!compact ? <Text style={s.triggerText}>Exportă</Text> : null}
     </TouchableOpacity>
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => { if (!busy) setVisible(false); }}>
@@ -114,10 +115,10 @@ export default function ShopInventoryExportButton() {
             <Text style={s.section}>Perioada registrului</Text>
             <View style={s.periods}>{periods.map((option) => <TouchableOpacity key={option.id} accessibilityRole="radio" accessibilityState={{ checked: period === option.id }} style={[s.period, period === option.id && s.periodActive]} onPress={() => setPeriod(option.id)}><CalendarDays size={18} color={period === option.id ? '#FFB36B' : '#7DD3FC'} /><Text style={s.periodText}>{option.label}</Text>{period === option.id ? <Check size={15} color="#5EEAD4" /> : null}</TouchableOpacity>)}</View>
             {period === 'custom' ? <View style={s.dates}><View style={{ flex: 1 }}><Text style={s.note}>DE LA</Text><TextInput accessibilityLabel="Data de început" value={from} onChangeText={setFrom} placeholder="AAAA-LL-ZZ" placeholderTextColor="#99919D" style={s.input} /></View><View style={{ flex: 1 }}><Text style={s.note}>PÂNĂ LA</Text><TextInput accessibilityLabel="Data de sfârșit" value={to} onChangeText={setTo} placeholder="AAAA-LL-ZZ" placeholderTextColor="#99919D" style={s.input} /></View></View> : null}
-            <View style={s.summary}><Check size={20} color="#5EEAD4" /><View style={{ flex: 1 }}><Text style={s.optionTitle}>Registru Excel complet</Text><Text style={s.hint}>{dates[0] && dates[1] ? `${dates[0]} — ${dates[1]}` : period === 'custom' ? 'Completează ambele date.' : 'Toată perioada disponibilă.'}</Text></View></View>
+            <View style={s.summary}><Check size={20} color="#5EEAD4" /><View style={{ flex: 1 }}><Text style={s.optionTitle}>{format === 'pdf' ? 'Registru PDF complet' : 'Registru Excel complet'}</Text><Text style={s.hint}>{dates[0] && dates[1] ? `${dates[0]} — ${dates[1]}` : period === 'custom' ? 'Completează ambele date.' : 'Toată perioada disponibilă.'}</Text></View></View>
             <Text style={s.note}>Exportul este doar în citire: nu schimbă stocuri, facturi, comenzi sau documente NIR.</Text>
           </KeyboardAwareScrollView>
-          <TouchableOpacity style={s.submit} onPress={() => void download()}><FileSpreadsheet size={20} color="#FFFFFF" /><Text style={s.submitText}>Generează Excel</Text></TouchableOpacity>
+          <TouchableOpacity style={s.submit} onPress={() => void download()}><FileSpreadsheet size={20} color="#FFFFFF" /><Text style={s.submitText}>{format === 'pdf' ? 'Generează PDF' : 'Generează Excel'}</Text></TouchableOpacity>
         </>}
       </View></View>
     </Modal>

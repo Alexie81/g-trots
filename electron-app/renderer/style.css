@@ -17586,3 +17586,10 @@ html.performance-rendering :where(
     display: none;
   }
 }
+
+/* The third choice is the complete archive; direct formats remain side by side. */
+.shop-nir-registry-content-options>button:nth-child(3):last-child { grid-column:1/-1; }
+.shop-nir-add-floating { position:fixed; right:28px; bottom:28px; z-index:90; display:flex; align-items:center; gap:9px; height:52px; padding:0 19px 0 13px; border:1px solid #80f7df; border-radius:17px; color:#073e35; background:linear-gradient(120deg,#42dbc2,#79efdb); font-size:13px; font-weight:750; box-shadow:0 6px 24px #0007; cursor:pointer; }
+.shop-nir-add-floating b { font-size:29px; line-height:1; }
+.shop-nir-add-floating:focus-visible { outline:3px solid white; outline-offset:3px; }
+#shop-nirs-content { padding-bottom:84px; }

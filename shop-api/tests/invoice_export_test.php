@@ -61,8 +61,15 @@ registryZip(base64_decode($archive['content_base64']), static function (ZipArchi
         registryAssert((string)$xp->evaluate('string(/*/cbc:InvoiceTypeCode)') === '380', 'Both positive and return documents must use BT-3=380.');
     }
 });
+$pdfs = GtrotsInvoiceExport::download($db,['from'=>'2026-09-01','to'=>'2026-09-05','content'=>'pdfs']);
+registryAssert($pdfs['mime_type']==='application/zip' && $pdfs['item_count']===2, 'PDF-only returns an archive for the selected period.');
+registryZip(base64_decode($pdfs['content_base64']), static function (ZipArchive $zip): void {
+    registryAssert($zip->numFiles===2, 'PDF-only must contain no registry, Excel or XML.');
+    foreach (['001','002'] as $number) registryAssert(str_starts_with($zip->getFromName("GT-$number.pdf"), '%PDF-'), 'Each invoice has its own genuine PDF, including returns.');
+});
 registryAssert(GtrotsInvoiceExport::download($db,[])['item_count']===3, 'All-period export must include all dates.');
 registryAssert(GtrotsInvoiceExport::download($db,['from'=>'2020-01-01','to'=>'2020-01-31'])['item_count']===0, 'Empty selection must produce an honest empty registry.');
+try { GtrotsInvoiceExport::download($db,['from'=>'2020-01-01','to'=>'2020-01-31','content'=>'pdfs']); throw new RuntimeException('Empty PDF archive accepted'); } catch (InvalidArgumentException $expected) {}
 foreach ([['2026-02-30','2026-03-01'],['','2026-09-05'],['2026-09-05','2026-09-01'],['x','y']] as [$from,$to]) {
     try { GtrotsInvoiceExport::range($from,$to); throw new RuntimeException('Invalid range accepted.'); } catch (InvalidArgumentException $expected) {}
 }

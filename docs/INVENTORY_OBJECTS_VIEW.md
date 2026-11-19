@@ -1,12 +1,14 @@
-# Obiecte de inventar — regula de funcționare
+# Mijloace fixe și obiecte de inventar — gestiuni independente
 
-Cerință clarificată la 18.11.2026: „Obiecte de inventar” este o vizualizare numai pentru consultare și export a înregistrărilor gestionate din „Mijloace fixe”.
+Cerință finală: toate documentele existente în Mijloace fixe se transferă o singură dată în Obiecte de inventar. Nu se creează o oglindă și nu există sincronizare ulterioară între categorii.
 
-- Adăugarea, editarea, ștergerea și casările se fac din Mijloace fixe.
-- În Obiecte de inventar se afișează aceleași documente și poziții, inclusiv cele adăugate ulterior, cu aceleași ID-uri, valori, fișiere și casări. Nu se creează copii.
-- Sunt disponibile tabelul, căutarea, filtrarea, paginarea și exportul. Nu există acțiuni de modificare sau fișe cu acțiuni de modificare în această vizualizare.
-- Exporturile PDF, Excel și ZIP folosesc același generator și aceleași valori ca la Mijloace fixe, cu denumirea Obiecte de inventar. Exportul include întreaga gestiune, indiferent de filtrele tabelului.
-- Coloana istorică `asset_category` nu mai separă înregistrările afișate. Se păstrează pentru compatibilitatea datelor, fără o nouă migrare sau rescriere a documentelor. Parametrul de vizualizare selectează titlurile exporturilor.
-- Consumabile rămâne o categorie independentă în meniu.
+- Transferul schimbă doar categoria documentului. ID-urile, pozițiile, cantitățile, valorile, documentele atașate și istoricul casărilor rămân intacte.
+- Migrarea la versiunea de schemă `2026111901` acoperă și documentele introduse când interfața afișa aceeași gestiune în ambele categorii. Transferul și salvarea versiunii se fac în aceeași tranzacție, sub blocarea migrării. Nu se repetă după succes.
+- Adăugările viitoare se înregistrează exclusiv în categoria aleasă. Editarea păstrează categoria documentului, inclusiv pentru clienții mai vechi.
+- Ambele module permit adăugare, editare, ștergere, casare, consultarea fișei, gestionarea fișierelor, căutare, filtrare și paginare. Modificările dintr-o categorie nu afectează cealaltă categorie.
+- Exporturile PDF, Excel și ZIP folosesc același design și întreaga gestiune selectată, indiferent de filtrele tabelului. Titlurile, numele foilor și fișierelor identifică gestiunea aleasă.
+- Consumabile este o categorie independentă, la același nivel în meniu.
+
+Migrarea producției se execută numai odată cu publicarea autorizată a API-ului, după backup. Modificările rămân locale până atunci.
 
 Verificări: `shop-api/tests/inventory_objects_test.php` și `electron-app/scripts/qa-inventory-objects.cjs`.

@@ -8,6 +8,13 @@ final class GtrotsFixedAssets
     private const DOCUMENT_TYPES = ['factura', 'bon', 'pv'];
     private const MAX_FILE_SIZE = 15728640;
 
+    /** Called only by the versioned migration, in the marker's transaction. */
+    public static function transferExistingInventoryObjects(PDO $db, int $previousVersion): void
+    {
+        if ($previousVersion >= 2026111901) return;
+        $db->exec("UPDATE shop_fixed_asset_documents SET asset_category = 'inventory_objects' WHERE asset_category = 'fixed_assets'");
+    }
+
     public static function category($value = 'fixed_assets'): string
     {
         $category = trim((string)$value);
@@ -289,7 +296,6 @@ final class GtrotsFixedAssets
                 $db->prepare('UPDATE shop_fixed_assets SET line_number=line_number+1000000 WHERE document_id=?')->execute([$id]);
             } else {
                 $category = self::category($document['asset_category'] ?? 'fixed_assets');
-                if ($category === 'inventory_objects') throw new ShopNirHttpException('Obiectele de inventar se înregistrează din Mijloace fixe.', 409);
                 $stmt = $db->prepare('INSERT INTO shop_fixed_asset_documents (id,document_date,document_type,series,document_number,notes,created_by,asset_category) VALUES (?,?,?,?,?,?,?,?)');
                 $stmt->execute([$id,$date,$type,$series,$number,$notes,$actor,$category]);
             }
@@ -324,10 +330,8 @@ final class GtrotsFixedAssets
 
     private static function filters(array $filters, array &$params): string
     {
-        // Obiecte de inventar is a read-only view of the registry maintained in
-        // Mijloace fixe. Both views read the same IDs; no duplicate stock or values.
-        self::category($filters['asset_category'] ?? 'fixed_assets');
-        $parts = [];
+        $parts = ['d.asset_category = ?'];
+        $params[] = self::category($filters['asset_category'] ?? 'fixed_assets');
         $type = strtolower(trim((string)($filters['type'] ?? '')));
         if (in_array($type, self::DOCUMENT_TYPES, true)) { $parts[] = 'd.document_type = ?'; $params[] = $type; }
         foreach ([['from', '>='], ['to', '<=']] as [$key, $operator]) {

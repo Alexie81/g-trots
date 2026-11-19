@@ -367,8 +367,6 @@
 .shop-fixed-asset-danger { border:1px solid #a84f64 !important; background:#ac3a551c !important; color:#ffa8ba !important; cursor:pointer; border-radius:10px; padding:10px 14px; font-weight:700; }
 .shop-fixed-asset-danger:hover { background:#ac3a5538 !important; border-color:#ef87a0 !important; }
 .shop-fixed-asset-danger[hidden],.shop-fixed-asset-vat-mode button[hidden] { display:none !important; }
-#tab-shop-inventory-objects [data-commerce-add][hidden] { display:none !important; }
-#tab-shop-inventory-objects .shop-fixed-assets-table th:nth-child(5) { width:28%; }
 .shop-fixed-asset-vat-mode { display:flex; align-items:center; justify-content:space-between; min-height:27px; gap:6px; margin-top:5px; }
 .shop-fixed-asset-vat-mode small { font-size:10px; color:#c2b0ce; font-weight:500; text-transform:none; letter-spacing:0; }
 .shop-fixed-asset-vat-mode button { padding:4px 7px; color:#ffc493; font-size:10px; }
@@ -419,3 +417,9 @@
   .shop-fixed-asset-detail-hero { flex-wrap: wrap; padding: 18px; }
   .shop-fixed-asset-detail-hero h3 { font-size: 19px; }
 }
+
+/* Keep adding positions available while scrolling the document body. */
+.shop-entry-add-shortcut { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:42px; padding:8px 14px; border:1px solid #a77449; border-radius:12px; background:#493121; color:#ffd3ad; font-size:12px; font-weight:600; cursor:pointer; }
+.shop-entry-add-shortcut b { font-size:23px; line-height:1; }
+.shop-entry-add-shortcut:focus-visible { outline:2px solid #ffd3ad; outline-offset:3px; }
+.shop-fixed-asset-lines article > header > b { display:grid; place-items:center; min-width:44px; height:44px; margin:8px 10px 8px 0; font-size:20px; font-weight:700; line-height:1; }

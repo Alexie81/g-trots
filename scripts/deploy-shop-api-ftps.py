@@ -20,6 +20,7 @@ REMOTE_ROOT = "/g-trots.ro/shop-api"
 FILES = (
     "invoice-export.php",
     "inventory-export.php",
+    "tabular-pdf.php",
     "product-search.php",
     "product-pricing.php",
     "product-export.php",

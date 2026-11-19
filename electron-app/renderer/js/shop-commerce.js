@@ -17,7 +17,6 @@
   const PAGE_SIZE_OPTIONS = [10, 25, 50];
   state.fixedAssetCategory = 'fixed_assets';
   const ASSET_TABS = ['shop-fixed-assets', 'shop-inventory-objects'];
-  const fixedAssetsReadOnly = () => state.fixedAssetCategory === 'inventory_objects';
   const fixedAssetStaticLabels = [];
   function fixedAssetText(text) {
     if (state.fixedAssetCategory !== 'inventory_objects') return text;
@@ -43,10 +42,6 @@
     const panel = $('tab-' + tabId);
     if (page && panel && page.parentElement !== panel) panel.appendChild(page);
     page?.querySelector('h1')?.replaceChildren(document.createTextNode(fixedAssetText('Gestiune mijloace fixe')));
-    const addButton = page?.querySelector('[data-commerce-add="shop-fixed-assets-content"]');
-    if (addButton) addButton.hidden = fixedAssetsReadOnly();
-    const subtitle = page?.querySelector('.shop-commerce-title p');
-    if (subtitle) subtitle.textContent = fixedAssetsReadOnly() ? 'Înregistrările din Mijloace fixe, disponibile pentru consultare și export.' : 'Documente, valori și casări, într-un singur registru.';
     for (const [node, original] of fixedAssetStaticLabels) node.nodeValue = fixedAssetText(original);
   }
   const PRODUCT_SALES_PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25, 50, 75, 100];
@@ -257,7 +252,7 @@
       ${dashboardCard('shop-suppliers', 'teal', 'ACHIZITII', 'Furnizori', 'Parteneri, contacte si date comerciale.')}
       ${dashboardCard('shop-nirs', 'teal', 'RECEPTII', 'NIR-uri', 'Facturi de achiziție, intrări și costuri reale.')}
       ${dashboardCard('shop-fixed-assets', 'amber', 'PATRIMONIU', 'Mijloace fixe', 'Documente, valori, casări și export contabil.')}
-      ${dashboardCard('shop-inventory-objects', 'teal', 'PATRIMONIU', 'Obiecte de inventar', 'Consultă și exportă înregistrările gestionate din Mijloace fixe.')}
+      ${dashboardCard('shop-inventory-objects', 'teal', 'PATRIMONIU', 'Obiecte de inventar', 'Documente, obiecte în folosință, casări și exporturi.')}
       ${dashboardCard('shop-consumables', 'green', 'GESTIUNE', 'Consumabile', 'Intrări, stoc și bonuri de consum colective.')}
       ${dashboardCard('shop-payments', 'purple', 'CHECKOUT', 'Metode de plata', 'Card online si ramburs la curier.')}
       ${dashboardCard('shop-shipping', 'green', 'LOGISTICA', 'Livrari', 'Costuri si praguri de gratuitate.')}
@@ -284,7 +279,7 @@
     const kind = contentId.replace('shop-', '').replace('-content', '');
     const symbols = { products: '◇', orders: '✓', invoices: '<svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>', inventory: '▦', sources: '◎', suppliers: '⌁', nirs: '<svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h5M9 12h7m-7 4h7"/><path d="m9 8 1.2 1.2L12.7 7"/></svg>', 'fixed-assets': '<svg viewBox="0 0 24 24"><path d="M4 21V8l8-5 8 5v13H4Z"/><path d="M8 21v-6h8v6M8 10h.01M12 10h.01M16 10h.01"/></svg>', payments: '▣', automations: '<svg viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 10-13h-7Z"/></svg>', shipping: '⇢', customers: '◉', newsletter: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m5 8 7 5 7-5"/><path d="m16 17 2 2 4-4"/></svg>', discounts: '%', company: '▤' };
     const addLabel = contentId === 'shop-nirs-content' ? '<span class="shop-nir-add-icon">+</span> NIR nou' : contentId === 'shop-fixed-assets-content' ? '<span class="shop-fixed-asset-add-icon">+</span> Document nou' : '+ Adaugă';
-    return `<div class="shop-commerce-page"><button type="button" class="shop-back-btn" data-shop-open="shop-dashboard" aria-label="Înapoi la Panoul SHOP" title="Panou SHOP"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><header class="shop-commerce-head shop-commerce-hero" data-commerce-kind="${kind}"><span class="shop-commerce-hero-glow"></span><div class="shop-commerce-title"><span>G-TROTS SHOP CRM</span><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="shop-commerce-hero-symbol" aria-hidden="true">${symbols[kind] || '◇'}</div><div class="shop-commerce-head-actions"><button type="button" class="shop-commerce-refresh" data-commerce-refresh="${contentId}" title="Reîncarcă" aria-label="Reîncarcă datele"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0 2 5"/><path d="M20 4v7h-7"/></svg></button>${hasAdd ? `<button type="button" class="shop-commerce-add" data-commerce-add="${contentId}" ${contentId === 'shop-company-content' ? 'hidden' : ''}>${addLabel}</button>` : ''}</div></header><main id="${contentId}" class="shop-commerce-content"><div class="shop-commerce-loading">Se încarcă...</div></main></div>`;
+    return `<div class="shop-commerce-page"><button type="button" class="shop-back-btn" data-shop-open="shop-dashboard" aria-label="Înapoi la Panoul SHOP" title="Panou SHOP"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><header class="shop-commerce-head shop-commerce-hero" data-commerce-kind="${kind}"><span class="shop-commerce-hero-glow"></span><div class="shop-commerce-title"><span>G-TROTS SHOP CRM</span><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="shop-commerce-hero-symbol" aria-hidden="true">${symbols[kind] || '◇'}</div><div class="shop-commerce-head-actions"><button type="button" class="shop-commerce-refresh" data-commerce-refresh="${contentId}" title="Reîncarcă" aria-label="Reîncarcă datele"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0 2 5"/><path d="M20 4v7h-7"/></svg></button>${hasAdd ? `<button type="button" class="shop-commerce-add" data-commerce-add="${contentId}" ${contentId === 'shop-company-content' ? 'hidden' : ''}>${addLabel}</button>` : ''}</div></header>${contentId === 'shop-nirs-content' ? `<button type="button" class="shop-nir-add-floating" data-commerce-add="shop-nirs-content" aria-label="Adaugă NIR nou" title="Adaugă NIR nou"><b aria-hidden="true">＋</b><span>NIR nou</span></button>` : ''}<main id="${contentId}" class="shop-commerce-content"><div class="shop-commerce-loading">Se încarcă...</div></main></div>`;
   }
   function dashboardCard(target, tone, kicker, title, description) {
     return `<button type="button" class="shop-area-card ${tone}" data-shop-open="${target}"><span class="shop-area-icon">${target === 'shop-sources' ? '◎' : target === 'shop-suppliers' ? '⌁' : target === 'shop-payments' ? '▣' : '⇢'}</span><span class="shop-area-copy"><small>${kicker}</small><strong>${title}</strong><em>${description}</em></span><span class="shop-area-arrow">&rarr;</span></button>`;
@@ -424,7 +419,7 @@
       ['current_month', 'Luna curentă', 'De la începutul lunii până astăzi'],
       ['custom', 'Custom', 'Alegi exact datele'],
     ].map(([value, label, hint]) => `<button type="button" data-nir-registry-period="${value}" class="${value === 'current_month' ? 'active' : ''}"><span class="shop-nir-period-icon">${periodIcons[value]}</span><strong>${label}</strong><small>${hint}</small><i></i></button>`).join('');
-    return `<div class="shop-commerce-overlay shop-nir-registry-download-overlay" id="shop-nir-registry-download-dialog" hidden><section class="shop-nir-registry-download-dialog" role="dialog" aria-modal="true" aria-labelledby="shop-nir-registry-download-title"><header><span class="shop-nir-registry-download-orb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7zM14 3v5h5M12 10v7m0 0 3-3m-3 3-3-3"/></svg></span><div><small>EXPORT CONTABIL</small><h2 id="shop-nir-registry-download-title">Descarcă registrul NIR</h2><p>Alege perioada și conținutul arhivei. Fișierele sunt generate acum și nu ocupă spațiul hostingului.</p></div><button type="button" data-commerce-close="shop-nir-registry-download-dialog" aria-label="Închide">×</button></header><div class="shop-nir-registry-download-body"><section><div class="shop-nir-registry-section-title"><span>01</span><div><strong>Ce vrei să descarci?</strong><small>Registrul este un Excel detaliat, pregătit pentru verificare.</small></div></div><div class="shop-nir-registry-content-options"><button type="button" data-nir-registry-content="registry"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 10h16M10 4v16"/></svg><span><strong>Doar registrul</strong><small>Un singur fișier XLSX detaliat</small></span><i></i></button><button type="button" data-nir-registry-content="complete" class="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 2h9v11H3zM8 3h8v4H8z"/></svg><span><strong>Registru + toate NIR-urile</strong><small>ZIP cu registru și câte un folder pentru fiecare NIR</small></span><i></i></button></div></section><section><div class="shop-nir-registry-section-title"><span>02</span><div><strong>Pentru ce perioadă?</strong><small>Poți folosi o perioadă rapidă sau un interval ales de tine.</small></div></div><div class="shop-nir-registry-periods">${periods}</div><div class="shop-nir-registry-custom" id="shop-nir-registry-custom" hidden><label>De la<input type="date" id="shop-nir-registry-from" /></label><span>—</span><label>Până la<input type="date" id="shop-nir-registry-to" /></label></div></section><aside class="shop-nir-registry-download-summary"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></span><div><small>SE VA GENERA</small><strong id="shop-nir-registry-download-summary">Arhivă completă pentru luna curentă</strong><p id="shop-nir-registry-download-range">Perioada este calculată automat.</p></div></aside></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-nir-registry-download-dialog">Renunță</button><button type="button" class="shop-nir-registry-download-confirm" id="shop-nir-registry-download-confirm"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg><span>Descarcă acum</span></button></footer></section></div>
+    return `<div class="shop-commerce-overlay shop-nir-registry-download-overlay" id="shop-nir-registry-download-dialog" hidden><section class="shop-nir-registry-download-dialog" role="dialog" aria-modal="true" aria-labelledby="shop-nir-registry-download-title"><header><span class="shop-nir-registry-download-orb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7zM14 3v5h5M12 10v7m0 0 3-3m-3 3-3-3"/></svg></span><div><small>EXPORT CONTABIL</small><h2 id="shop-nir-registry-download-title">Descarcă registrul NIR</h2><p>Alege perioada și conținutul arhivei. Fișierele sunt generate acum și nu ocupă spațiul hostingului.</p></div><button type="button" data-commerce-close="shop-nir-registry-download-dialog" aria-label="Închide">×</button></header><div class="shop-nir-registry-download-body"><section><div class="shop-nir-registry-section-title"><span>01</span><div><strong>Ce vrei să descarci?</strong><small>Alege registrul separat în PDF sau Excel, ori arhiva completă.</small></div></div><div class="shop-nir-registry-content-options"><button type="button" data-nir-registry-content="registry"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 10h16M10 4v16"/></svg><span><strong>Doar registrul · Excel</strong><small>Un singur fișier XLSX detaliat</small></span><i></i></button><button type="button" data-nir-registry-content="registry_pdf"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6zM15 3v5h5M9 12h7m-7 4h7"/></svg><span><strong>Doar registrul · PDF</strong><small>Un fișier PDF separat, pregătit pentru tipărire</small></span><i></i></button><button type="button" data-nir-registry-content="complete" class="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 2h9v11H3zM8 3h8v4H8z"/></svg><span><strong>Registru + toate NIR-urile</strong><small>ZIP cu registru și câte un folder pentru fiecare NIR</small></span><i></i></button></div></section><section><div class="shop-nir-registry-section-title"><span>02</span><div><strong>Pentru ce perioadă?</strong><small>Poți folosi o perioadă rapidă sau un interval ales de tine.</small></div></div><div class="shop-nir-registry-periods">${periods}</div><div class="shop-nir-registry-custom" id="shop-nir-registry-custom" hidden><label>De la<input type="date" id="shop-nir-registry-from" /></label><span>—</span><label>Până la<input type="date" id="shop-nir-registry-to" /></label></div></section><aside class="shop-nir-registry-download-summary"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></span><div><small>SE VA GENERA</small><strong id="shop-nir-registry-download-summary">Arhivă completă pentru luna curentă</strong><p id="shop-nir-registry-download-range">Perioada este calculată automat.</p></div></aside></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-nir-registry-download-dialog">Renunță</button><button type="button" class="shop-nir-registry-download-confirm" id="shop-nir-registry-download-confirm"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg><span>Descarcă acum</span></button></footer></section></div>
     <div class="shop-commerce-overlay shop-nir-export-progress-overlay" id="shop-nir-export-progress-dialog" hidden><section class="shop-nir-export-progress" role="dialog" aria-modal="true" aria-labelledby="shop-nir-export-progress-title"><div class="shop-nir-export-progress-orb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7zM14 3v5h5M12 10v7m0 0 3-3m-3 3-3-3"/></svg><i></i></div><small>EXPORT ÎN CURS</small><h2 id="shop-nir-export-progress-title">Pregătim exportul</h2><p id="shop-nir-export-progress-detail">Calculăm volumul de date…</p><div class="shop-nir-export-progress-stats"><span><b id="shop-nir-export-progress-docs">—</b><small>NIR-URI</small></span><span><b id="shop-nir-export-progress-lines">—</b><small>POZIȚII</small></span><span><b id="shop-nir-export-progress-files">—</b><small>FIȘIERE</small></span></div><div class="shop-nir-export-progress-meta"><strong id="shop-nir-export-progress-percent">2%</strong><span id="shop-nir-export-progress-eta">Calculăm timpul rămas…</span></div><div class="shop-nir-export-progress-track"><i id="shop-nir-export-progress-fill"></i></div><footer>Poți lăsa această fereastră deschisă. Descărcarea pornește automat când arhiva este gata.</footer></section></div>`;
   }
   function fixedAssetModals() {
@@ -439,7 +434,7 @@
         <div class="shop-fixed-asset-position-intro">${section('02', 'Pozițiile documentului', 'Adaugă fiecare mijloc fix; valorile și TVA-ul se calculează automat.')}
         <div class="shop-fixed-asset-lines-head"><strong>MIJLOACE FIXE</strong><button type="button" id="shop-fixed-asset-add-line"><span>＋</span> Adaugă poziție</button></div></div><div id="shop-fixed-asset-lines" class="shop-fixed-asset-lines"></div>
       </section>
-    </div><footer class="shop-fixed-asset-create-footer"><p><span>✓</span>Datele rămân în registru și pot fi exportate oricând.</p><div><button type="button" class="shop-fixed-asset-danger" id="shop-fixed-asset-delete-document" hidden>Șterge documentul</button><button type="button" class="btn-ghost" data-commerce-close="shop-fixed-asset-create-modal">Renunță</button><button type="submit" class="btn-primary" id="shop-fixed-asset-save"><span>Înregistrează documentul</span><b>→</b></button></div></footer></form></div>
+    </div><footer class="shop-fixed-asset-create-footer"><button type="button" class="shop-entry-add-shortcut" id="shop-fixed-asset-add-bottom"><b aria-hidden="true">＋</b> Adaugă poziție</button><div><button type="button" class="shop-fixed-asset-danger" id="shop-fixed-asset-delete-document" hidden>Șterge documentul</button><button type="button" class="btn-ghost" data-commerce-close="shop-fixed-asset-create-modal">Renunță</button><button type="submit" class="btn-primary" id="shop-fixed-asset-save"><span>Înregistrează documentul</span><b>→</b></button></div></footer></form></div>
     <div class="shop-commerce-overlay shop-fixed-asset-overlay" id="shop-fixed-asset-disposal-modal" hidden><form class="shop-commerce-modal mini shop-fixed-asset-disposal" id="shop-fixed-asset-disposal-form"><header><span class="shop-fixed-asset-modal-symbol disposal">${fixedAssetIcon('archive')}</span><div><small>CASARE MIJLOC FIX</small><h2 id="shop-fixed-asset-disposal-title">Înregistrează casarea</h2></div><button type="button" data-commerce-close="shop-fixed-asset-disposal-modal">×</button></header><div class="shop-commerce-modal-scroll"><aside id="shop-fixed-asset-disposal-summary"></aside><div class="shop-commerce-columns"><label>Data casării *<input id="shop-fixed-asset-disposal-date" type="date" required /></label><label>Cantitate casată *<input id="shop-fixed-asset-disposal-quantity" type="number" max="-0.0001" step="0.0001" required placeholder="-1" /><small>Se introduce obligatoriu cu minus.</small></label></div><label>Motivul casării *<textarea id="shop-fixed-asset-disposal-reason" rows="4" maxlength="1000" required placeholder="Descrie motivul și documentele justificative"></textarea></label></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-fixed-asset-disposal-modal">Renunță</button><button type="submit" class="btn-primary" id="shop-fixed-asset-disposal-save">Înregistrează casarea</button></footer></form></div>
     <div class="shop-commerce-overlay shop-fixed-asset-overlay" id="shop-fixed-asset-detail-modal" hidden><section class="shop-commerce-modal shop-fixed-asset-detail"><header><span class="shop-fixed-asset-modal-symbol">${fixedAssetIcon('box')}</span><div><small>FIȘĂ MIJLOC FIX</small><h2 id="shop-fixed-asset-detail-title">Mijloc fix</h2></div><button type="button" data-commerce-close="shop-fixed-asset-detail-modal">×</button></header><div class="shop-commerce-modal-scroll" id="shop-fixed-asset-detail-content"></div><footer><button type="button" class="shop-fixed-asset-danger" id="shop-fixed-asset-delete">Șterge mijlocul fix</button><button type="button" class="btn-primary" id="shop-fixed-asset-edit">Editează documentul</button><button type="button" class="btn-ghost" data-commerce-close="shop-fixed-asset-detail-modal">Închide</button><button type="button" class="shop-fixed-asset-document-action" id="shop-fixed-asset-view-document">Vizualizează documentul</button><button type="button" class="btn-primary" id="shop-fixed-asset-download-document">Descarcă documentul</button></footer></section></div>
     <div class="shop-commerce-overlay shop-fixed-asset-overlay" id="shop-fixed-asset-confirm-modal" hidden><section class="shop-commerce-modal mini shop-fixed-asset-confirm"><header><span class="shop-fixed-asset-modal-symbol disposal">${fixedAssetIcon('archive')}</span><div><small>CONFIRMARE ȘTERGERE</small><h2 id="shop-fixed-asset-confirm-title"></h2></div><button type="button" data-commerce-close="shop-fixed-asset-confirm-modal" aria-label="Închide">×</button></header><div class="shop-commerce-modal-scroll"><p id="shop-fixed-asset-confirm-text"></p><p class="shop-fixed-asset-confirm-error" id="shop-fixed-asset-confirm-error" role="alert" hidden></p></div><footer><button type="button" class="btn-ghost" data-commerce-close="shop-fixed-asset-confirm-modal">Renunță</button><button type="button" class="shop-fixed-asset-danger" id="shop-fixed-asset-confirm-submit">Șterge</button></footer></section></div>
@@ -659,6 +654,7 @@
     }));
     document.querySelectorAll('[data-commerce-add]').forEach(button => button.addEventListener('click', () => ({ 'shop-products-content': openProduct, 'shop-sources-content': openSource, 'shop-suppliers-content': openSupplier, 'shop-nirs-content': createNir, 'shop-fixed-assets-content': openFixedAssetCreate, 'shop-shipping-content': openShipping, 'shop-discounts-content': openPromotion, 'shop-company-content': openCompany })[button.dataset.commerceAdd]?.()));
     $('shop-fixed-asset-create-form')?.addEventListener('submit', saveFixedAssetDocument);
+    $('shop-fixed-asset-add-bottom')?.addEventListener('click', () => { $('shop-fixed-asset-add-line').click(); const line = $('shop-fixed-asset-lines').lastElementChild; line?.scrollIntoView({block:'nearest'}); line?.querySelector('input')?.focus({preventScroll:true}); });
     $('shop-fixed-asset-add-line')?.addEventListener('click', () => { state.fixedAssetLines.push(newFixedAssetLine()); renderFixedAssetLines(); });
     $('shop-fixed-asset-file-pick')?.addEventListener('click', () => $('shop-fixed-asset-file-input')?.click());
     $('shop-fixed-asset-file-input')?.addEventListener('change', event => selectFixedAssetFile(event.target.files));
@@ -1118,7 +1114,8 @@
     const opened = [...document.querySelectorAll('.shop-commerce-overlay.visible')].filter(item => item !== modal);
     modal.style.zIndex = String(750 + opened.length + 1);
     modal.hidden = false;
-    requestAnimationFrame(() => modal.classList.add('visible'));
+    modal.dataset.openRequested = 'true';
+    requestAnimationFrame(() => { if (modal.dataset.openRequested === 'true') modal.classList.add('visible'); });
   }
   function closeModal(id) {
     if (id === 'shop-fixed-asset-confirm-modal' && $('shop-fixed-asset-confirm-submit')?.disabled) return;
@@ -1153,6 +1150,7 @@
       if (!leave) return;
     }
     const modal = $(id);
+    if (modal) modal.dataset.openRequested = 'false';
     modal?.classList.remove('visible');
     setTimeout(() => { if (modal && !modal.classList.contains('visible')) { modal.hidden = true; modal.classList.remove('over-order'); modal.style.zIndex = ''; } }, 180);
   }
@@ -1632,7 +1630,7 @@
     const titles = { categories: 'Categorii', brands: 'Compatibilități', manufacturers: 'Producători', invoices: 'Facturi emise' };
     if (!titles[kind]) return;
     let overlay;
-    let period = 'current_month'; let complete = false; let busy = false;
+    let period = 'current_month'; let content = 'registry'; let busy = false;
     if (kind === 'invoices') {
       const template = document.createElement('template');
       template.innerHTML = nirRegistryDownloadModal();
@@ -1642,6 +1640,10 @@
       overlay.querySelector('h2').textContent = 'Exportă facturile emise';
       overlay.querySelector('header p').textContent = 'Alege perioada și conținutul exportului. Nu se emit facturi și nu se trimit documente în SPV.';
       overlay.querySelector('.shop-nir-registry-section-title small').textContent = 'Centralizator XLSX cu toate datele și starea SPV în coloana a doua.';
+      const pdfOption = overlay.querySelector('[data-nir-registry-content="registry_pdf"]');
+      pdfOption.dataset.nirRegistryContent = 'pdfs';
+      pdfOption.querySelector('strong').textContent = 'Doar PDF-uri';
+      pdfOption.querySelector('small').textContent = 'ZIP cu un PDF separat pentru fiecare factură';
       overlay.querySelector('[data-nir-registry-content="registry"] strong').textContent = 'Doar centralizatorul';
       overlay.querySelector('[data-nir-registry-content="complete"] strong').textContent = 'Centralizator + toate facturile';
       overlay.querySelector('[data-nir-registry-content="complete"] small').textContent = 'ZIP · folder Serie-Număr cu PDF, XLSX și RO_e-Factura XML';
@@ -1662,14 +1664,14 @@
       : nirRegistryPeriodRange(period);
     const update = () => {
       if (kind !== 'invoices') return;
-      overlay.querySelectorAll('[data-nir-registry-content]').forEach(button => { button.classList.toggle('active', (button.dataset.nirRegistryContent === 'complete') === complete); });
+      overlay.querySelectorAll('[data-nir-registry-content]').forEach(button => { button.classList.toggle('active', button.dataset.nirRegistryContent === content); });
       overlay.querySelectorAll('[data-nir-registry-period]').forEach(button => { button.classList.toggle('active', button.dataset.nirRegistryPeriod === period); });
       overlay.querySelector('.shop-nir-registry-custom').hidden = period !== 'custom';
       const selected = dates();
-      overlay.querySelector('.shop-nir-registry-download-summary strong').textContent = `${complete ? 'Arhivă completă' : 'Centralizator Excel'} pentru ${selected.label}`;
+      overlay.querySelector('.shop-nir-registry-download-summary strong').textContent = `${content === 'complete' ? 'Arhivă completă' : content === 'pdfs' ? 'Arhivă doar cu PDF-uri' : 'Centralizator Excel'} pentru ${selected.label}`;
       overlay.querySelector('.shop-nir-registry-download-summary p').textContent = selected.from && selected.to ? `${selected.from} — ${selected.to}` : period === 'custom' ? 'Completează ambele date.' : 'Toate facturile emise, inclusiv retururile.';
     };
-    overlay.querySelectorAll('[data-nir-registry-content]').forEach(button => { button.onclick = () => { complete = button.dataset.nirRegistryContent === 'complete'; update(); }; });
+    overlay.querySelectorAll('[data-nir-registry-content]').forEach(button => { button.onclick = () => { content = button.dataset.nirRegistryContent; update(); }; });
     overlay.querySelectorAll('[data-nir-registry-period]').forEach(button => { button.onclick = () => { period = button.dataset.nirRegistryPeriod; update(); }; });
     overlay.querySelectorAll('input[type="date"]').forEach(input => { input.onchange = update; });
     update();
@@ -1681,8 +1683,8 @@
       const section = overlay.querySelector('section'); section.className = 'shop-product-export-panel';
       section.removeAttribute('aria-labelledby'); section.setAttribute('aria-label', 'Export în curs');
       section.innerHTML = '<div class="shop-product-export-progress"><div class="shop-export-orbit"><img src="../assets/logo.png" alt="G-Trots" /><i></i></div><small>EXPORT G-TROTS CRM</small><h2>Pregătim fișierele</h2><p data-stage></p><div class="shop-export-progress-labels"><b data-percent>0%</b><span data-eta>Estimăm timpul rămas…</span></div><div class="shop-export-track"><i data-fill></i></div><p class="shop-export-note">Progres estimat până la primirea fișierului.</p></div>';
-      section.querySelector('[data-stage]').textContent = kind === 'invoices' && complete ? 'Centralizator, PDF, XLSX și XML pentru fiecare factură.' : `Centralizăm ${titles[kind].toLowerCase()} în XLSX.`;
-      const estimate = Math.max(3, kind === 'invoices' && complete ? state.invoices.length * 1.1 : 3);
+      section.querySelector('[data-stage]').textContent = kind === 'invoices' && content === 'pdfs' ? 'Generăm PDF-ul fiecărei facturi și arhiva ZIP.' : kind === 'invoices' && content === 'complete' ? 'Centralizator, PDF, XLSX și XML pentru fiecare factură.' : `Centralizăm ${titles[kind].toLowerCase()} în XLSX.`;
+      const estimate = Math.max(3, kind === 'invoices' && content !== 'registry' ? state.invoices.length * 1.1 : 3);
       const started = Date.now();
       const show = value => { section.querySelector('[data-percent]').textContent = `${value}%`; section.querySelector('[data-fill]').style.width = `${value}%`; };
       const timer = setInterval(() => {
@@ -1690,7 +1692,7 @@
         section.querySelector('[data-eta]').textContent = seconds < estimate ? `Estimare: ~${Math.max(1, Math.ceil(estimate - seconds))} secunde` : 'Procesarea continuă…';
       }, 400);
       try {
-        const file = kind === 'invoices' ? await window.SHOP_API.exportInvoiceRegistry(selected.from, selected.to, complete) : await window.SHOP_API.exportCatalog(kind);
+        const file = kind === 'invoices' ? await window.SHOP_API.exportInvoiceRegistry(selected.from, selected.to, content === 'complete', content) : await window.SHOP_API.exportCatalog(kind);
         clearInterval(timer); show(100); section.querySelector('[data-stage]').textContent = `${file.item_count} înregistrări · Export finalizat`;
         saveNirDownload(file); await new Promise(resolve => setTimeout(resolve, 200)); toast('Exportul a fost descărcat.');
       } catch (error) { toast(error.message || 'Exportul nu a putut fi finalizat.', 'error'); }
@@ -3363,7 +3365,7 @@
 
   function openInventoryExport() {
     if ($('shop-inventory-export-overlay')) return;
-    let period = 'current_month'; let busy = false;
+    let period = 'current_month'; let format = 'xlsx'; let busy = false;
     const template = document.createElement('template'); template.innerHTML = nirRegistryDownloadModal();
     const overlay = template.content.firstElementChild;
     overlay.id = 'shop-inventory-export-overlay'; overlay.hidden = false;
@@ -3371,10 +3373,13 @@
     overlay.querySelector('section').setAttribute('aria-labelledby', 'shop-inventory-export-registry-download-title');
     overlay.querySelector('h2').textContent = 'Exportă stocurile și mișcările';
     overlay.querySelector('header small').textContent = 'EXPORT CONTABIL DE STOC';
-    overlay.querySelector('header p').textContent = 'Alege perioada. Primești un singur Excel cu rezumat, stoc, fișe de magazie, mișcări și documente-sursă.';
-    overlay.querySelector('.shop-nir-registry-content-options')?.closest('section')?.remove();
+    overlay.querySelector('[data-nir-registry-period="all"] small').textContent = 'Întregul istoric de stoc';
+    overlay.querySelector('header p').textContent = 'Alege perioada și formatul: PDF sau Excel, cu rezumat, stoc, fișe de magazie, mișcări și documente-sursă.';
+    overlay.querySelector('[data-nir-registry-content="complete"]')?.remove();
+    overlay.querySelector('[data-nir-registry-content="registry"] strong').textContent = 'Excel · toate foile';
+    overlay.querySelector('[data-nir-registry-content="registry_pdf"] strong').textContent = 'PDF · toate secțiunile';
     const sectionTitle = overlay.querySelector('.shop-nir-registry-section-title');
-    if (sectionTitle) { sectionTitle.querySelector('span').textContent = '01'; sectionTitle.querySelector('strong').textContent = 'Pentru ce perioadă?'; sectionTitle.querySelector('small').textContent = 'Poți folosi o perioadă rapidă sau un interval ales de tine.'; }
+    if (sectionTitle) { sectionTitle.querySelector('span').textContent = '01'; sectionTitle.querySelector('strong').textContent = 'În ce format?'; sectionTitle.querySelector('small').textContent = 'Aceleași date și evidențierea stocului final în ambele formate.'; }
     const summary = overlay.querySelector('.shop-nir-registry-download-summary');
     summary?.querySelector('small') && (summary.querySelector('small').textContent = 'SE VA GENERA');
     overlay.querySelector('.shop-nir-registry-download-confirm span').textContent = 'Generează Excel';
@@ -3387,14 +3392,17 @@
     overlay.querySelectorAll('[data-commerce-close]').forEach(button => { button.onclick = close; });
     overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
     const update = () => {
+      overlay.querySelectorAll('[data-nir-registry-content]').forEach(button => button.classList.toggle('active', button.dataset.nirRegistryContent === (format === 'pdf' ? 'registry_pdf' : 'registry')));
+      overlay.querySelector('.shop-nir-registry-download-confirm span').textContent = format === 'pdf' ? 'Generează PDF' : 'Generează Excel';
       overlay.querySelectorAll('[data-nir-registry-period]').forEach(button => button.classList.toggle('active', button.dataset.nirRegistryPeriod === period));
       overlay.querySelector('.shop-nir-registry-custom').hidden = period !== 'custom';
       const selected = inventoryExportPeriodRange(period, overlay);
-      summary.querySelector('strong').textContent = `Registru Excel complet pentru ${selected.label}`;
+      summary.querySelector('strong').textContent = `Registru ${format === 'pdf' ? 'PDF' : 'Excel'} complet pentru ${selected.label}`;
       summary.querySelector('p').textContent = selected.from && selected.to ? `${selected.from.split('-').reverse().join('.')} — ${selected.to.split('-').reverse().join('.')}` : period === 'custom' ? 'Completează ambele date.' : 'Toată perioada disponibilă.';
     };
     overlay.querySelectorAll('[data-nir-registry-period]').forEach(button => { button.onclick = () => { period = button.dataset.nirRegistryPeriod; update(); }; });
     overlay.querySelectorAll('input[type="date"]').forEach(input => { input.onchange = update; });
+    overlay.querySelectorAll('[data-nir-registry-content]').forEach(button => { button.onclick = () => { format = button.dataset.nirRegistryContent === 'registry_pdf' ? 'pdf' : 'xlsx'; update(); }; });
     update();
     overlay.querySelector('.shop-nir-registry-download-confirm').onclick = async () => {
       if (busy) return;
@@ -3410,7 +3418,7 @@
         } catch (_) {
           // Exportul continuă pe servere API mai vechi; estimarea de rezervă rămâne vizibilă.
         }
-        const file = await window.SHOP_API.exportInventoryLedger(selected.from, selected.to);
+        const file = await window.SHOP_API.exportInventoryLedger(selected.from, selected.to, format);
         await finishNirExportProgress(true); saveNirDownload(file);
         toast(`${Number(file.product_count || 0)} produse și ${Number(file.movement_count || 0)} mișcări au fost exportate.`);
       } catch (error) {
@@ -3423,7 +3431,7 @@
   function renderInventory() {
     const root = $('shop-inventory-content');
     if (!$('shop-inventory-search')) {
-      root.innerHTML = `<section class="shop-inventory-searchbar"><span class="shop-inventory-search-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg></span><label for="shop-inventory-search"><small>CAUTARE INTELIGENTA IN STOCURI</small><input id="shop-inventory-search" type="search" value="${esc(state.inventoryQuery)}" placeholder="Nume, cod, furnizor, marca, categorie sau chiar cu o greseala" autocomplete="off" /></label><button type="button" id="shop-inventory-search-clear" aria-label="Sterge cautarea" title="Sterge cautarea" ${state.inventoryQuery ? '' : 'hidden'}><svg viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></svg></button><button type="button" id="shop-inventory-export-trigger" class="shop-inventory-export-trigger" aria-label="Exportă registrul de stoc în Excel" title="Exportă registrul de stoc"><svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7zM14 3v5h5M12 10v7m0 0 3-3m-3 3-3-3"/></svg><span>Exportă</span></button><em id="shop-inventory-search-count"></em></section><div id="shop-inventory-results"></div>`;
+      root.innerHTML = `<section class="shop-inventory-searchbar"><span class="shop-inventory-search-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg></span><label for="shop-inventory-search"><small>CAUTARE INTELIGENTA IN STOCURI</small><input id="shop-inventory-search" type="search" value="${esc(state.inventoryQuery)}" placeholder="Nume, cod, furnizor, marca, categorie sau chiar cu o greseala" autocomplete="off" /></label><button type="button" id="shop-inventory-search-clear" aria-label="Sterge cautarea" title="Sterge cautarea" ${state.inventoryQuery ? '' : 'hidden'}><svg viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></svg></button><button type="button" id="shop-inventory-export-trigger" class="shop-inventory-export-trigger" aria-label="Exportă registrul de stoc în PDF sau Excel" title="Exportă registrul de stoc"><svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7zM14 3v5h5M12 10v7m0 0 3-3m-3 3-3-3"/></svg><span>Exportă</span></button><em id="shop-inventory-search-count"></em></section><div id="shop-inventory-results"></div>`;
       const search = $('shop-inventory-search');
       const clear = $('shop-inventory-search-clear');
       search.addEventListener('input', () => {
@@ -4887,19 +4895,18 @@
   function renderFixedAssets() {
     const root = $('shop-fixed-assets-content');
     if (!root) return;
-    const readOnly = fixedAssetsReadOnly();
     const focusedSearch = document.activeElement?.id === 'shop-fixed-assets-search' ? { start: document.activeElement.selectionStart, end: document.activeElement.selectionEnd } : null;
     const registry = state.fixedAssetRegistry || { items: [], page: 1, page_size: state.pageSizes.fixedAssets, total: 0, total_pages: 1 };
     const items = Array.isArray(registry.items) ? registry.items : [];
     const rows = items.map((asset, index) => {
       const disposed = Number(asset.disposal_quantity || 0);
       const remaining = Number(asset.remaining_quantity || 0);
-      return `<tr data-fixed-asset-row="${esc(asset.id)}"><td>${(Number(registry.page || 1) - 1) * Number(registry.page_size || 25) + index + 1}</td><td>${esc(String(asset.document_date || '').split('-').reverse().join('.'))}</td><td><span class="shop-fixed-asset-type ${esc(asset.document_type)}">${esc(fixedAssetTypeLabel(asset.document_type))}</span></td><td><strong>${esc(fixedAssetDocumentNumber(asset))}</strong></td><td class="shop-fixed-asset-name">${esc(asset.product_name)}</td><td>${quantity(asset.quantity)}</td><td>${money(asset.unit_price)}</td><td>${money(asset.net_value)}</td><td>${quantity(asset.vat_rate)}%<small>${money(asset.vat_value)}</small></td><td><strong>${money(asset.total_value)}</strong></td>${readOnly ? `<td><strong>${disposed < 0 ? quantity(disposed) : '—'}</strong><small>${remaining <= 0 ? 'Casat integral' : `${quantity(remaining)} rămase`}</small></td>` : `<td><button type="button" class="shop-fixed-asset-dispose ${disposed < 0 ? 'has-disposals' : ''}" data-fixed-asset-dispose="${esc(asset.id)}" ${remaining <= 0 ? 'disabled' : ''}><b>${disposed < 0 ? quantity(disposed) : '—'}</b><small>${remaining <= 0 ? 'Casat integral' : 'Înregistrează casare'}</small></button></td><td><div class="shop-fixed-asset-row-actions"><button type="button" class="shop-fixed-asset-open" data-fixed-asset-open="${esc(asset.id)}" aria-label="Deschide fișa">Fișă <span>→</span></button><button type="button" data-fixed-asset-edit="${esc(asset.id)}">Editează</button><button type="button" class="shop-fixed-asset-danger" data-fixed-asset-delete="${esc(asset.id)}">Șterge</button></div></td>`}</tr>`;
+      return `<tr data-fixed-asset-row="${esc(asset.id)}"><td>${(Number(registry.page || 1) - 1) * Number(registry.page_size || 25) + index + 1}</td><td>${esc(String(asset.document_date || '').split('-').reverse().join('.'))}</td><td><span class="shop-fixed-asset-type ${esc(asset.document_type)}">${esc(fixedAssetTypeLabel(asset.document_type))}</span></td><td><strong>${esc(fixedAssetDocumentNumber(asset))}</strong></td><td class="shop-fixed-asset-name">${esc(asset.product_name)}</td><td>${quantity(asset.quantity)}</td><td>${money(asset.unit_price)}</td><td>${money(asset.net_value)}</td><td>${quantity(asset.vat_rate)}%<small>${money(asset.vat_value)}</small></td><td><strong>${money(asset.total_value)}</strong></td><td><button type="button" class="shop-fixed-asset-dispose ${disposed < 0 ? 'has-disposals' : ''}" data-fixed-asset-dispose="${esc(asset.id)}" ${remaining <= 0 ? 'disabled' : ''}><b>${disposed < 0 ? quantity(disposed) : '—'}</b><small>${remaining <= 0 ? 'Casat integral' : 'Înregistrează casare'}</small></button></td><td><div class="shop-fixed-asset-row-actions"><button type="button" class="shop-fixed-asset-open" data-fixed-asset-open="${esc(asset.id)}" aria-label="Deschide fișa">Fișă <span>→</span></button><button type="button" data-fixed-asset-edit="${esc(asset.id)}">Editează</button><button type="button" class="shop-fixed-asset-danger" data-fixed-asset-delete="${esc(asset.id)}">Șterge</button></div></td></tr>`;
     }).join('');
     const topPagination = tableHeaderPagination('fixedAssets', Number(registry.total || 0), Number(registry.page || 1), Number(registry.total_pages || 1), Number(registry.page_size || state.pageSizes.fixedAssets));
     const bottomPagination = pagination('fixedAssets', Number(registry.total || 0), Number(registry.page || 1), Number(registry.total_pages || 1), Number(registry.page_size || state.pageSizes.fixedAssets));
     const emptyRegistry = `<section class="shop-fixed-assets-empty"><span class="shop-fixed-assets-empty-glow"></span><div class="shop-fixed-assets-empty-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V8l8-5 8 5v13H4Z"/><path d="M8 21v-6h8v6M8 10h.01M12 10h.01M16 10h.01"/></svg></div><div class="shop-fixed-assets-empty-copy"><small>REGISTRU PATRIMONIAL</small><h2>Începe gestiunea mijloacelor fixe</h2><p>Înregistrează documentul justificativ, urmărește valoarea fiecărui bun și păstrează toate casările într-un istoric verificabil.</p></div><div class="shop-fixed-assets-empty-flow"><span><b>01</b><strong>Document</strong><small>Factură, bon sau PV</small></span><i>→</i><span><b>02</b><strong>Mijloc fix</strong><small>Valoare și TVA</small></span><i>→</i><span><b>03</b><strong>Trasabilitate</strong><small>Casări și export</small></span></div><button type="button" id="shop-fixed-assets-empty-add"><span>+</span><b>Înregistrează primul document</b><small>Durează mai puțin de un minut</small></button></section>`;
-    root.innerHTML = `${fixedAssetOverview(registry, items)}${fixedAssetToolbar(registry, topPagination)}${rows ? `<div class="shop-fixed-assets-register-title"><div><small>EVIDENȚĂ PATRIMONIALĂ</small><h2>${fixedAssetText('Registrul mijloacelor fixe')}</h2></div><span>${Number(registry.total || 0)} poziții</span></div><div class="shop-fixed-assets-table-wrap"><table class="shop-fixed-assets-table"><thead><tr><th>Nr. crt.</th><th>Data doc.</th><th>Tip doc.</th><th>Serie/nr. doc.</th><th>Denumire produs</th><th>Cant.</th><th>Preț unitar</th><th>Valoare</th><th>TVA</th><th>Valoare totală</th><th>Casare produs</th>${readOnly ? '' : '<th>Detalii</th>'}</tr></thead><tbody>${rows}</tbody></table></div>${bottomPagination}` : readOnly ? `<section class="shop-fixed-assets-empty"><div class="shop-fixed-assets-empty-copy"><h2>Nu există obiecte de inventar</h2><p>Înregistrările adăugate în Mijloace fixe vor apărea automat aici.</p></div></section>` : fixedAssetText(emptyRegistry)}`;
+    root.innerHTML = `${fixedAssetOverview(registry, items)}${fixedAssetToolbar(registry, topPagination)}${rows ? `<div class="shop-fixed-assets-register-title"><div><small>EVIDENȚĂ PATRIMONIALĂ</small><h2>${fixedAssetText('Registrul mijloacelor fixe')}</h2></div><span>${Number(registry.total || 0)} poziții</span></div><div class="shop-fixed-assets-table-wrap"><table class="shop-fixed-assets-table"><thead><tr><th>Nr. crt.</th><th>Data doc.</th><th>Tip doc.</th><th>Serie/nr. doc.</th><th>Denumire produs</th><th>Cant.</th><th>Preț unitar</th><th>Valoare</th><th>TVA</th><th>Valoare totală</th><th>Casare produs</th><th>Detalii</th></tr></thead><tbody>${rows}</tbody></table></div>${bottomPagination}` : fixedAssetText(emptyRegistry)}`;
     $('shop-fixed-assets-search')?.addEventListener('input', event => {
       clearTimeout(state.fixedAssetSearchTimer);
       state.fixedAssetQuery = event.target.value;
@@ -4920,7 +4927,6 @@
   }
 
   function openFixedAssetCreate() {
-    if (fixedAssetsReadOnly()) return;
     state.fixedAssetEditing = null;
     state.fixedAssetFiles = [];
     $('shop-fixed-asset-editor-title').textContent = 'Înregistrează un document';
@@ -4991,7 +4997,6 @@
 
   async function saveFixedAssetDocument(event) {
     event.preventDefault();
-    if (fixedAssetsReadOnly()) return;
     const button = $('shop-fixed-asset-save');
     if (button?.disabled) return;
     button.disabled = true;
@@ -5015,12 +5020,9 @@
   }
 
   async function openFixedAssetEdit(id) {
-    if (fixedAssetsReadOnly()) return;
     try {
       const asset = await window.SHOP_API.getFixedAsset(id);
-      if (fixedAssetsReadOnly()) return;
       const document = await window.SHOP_API.getFixedAssetDocument(asset.document_id);
-      if (fixedAssetsReadOnly()) return;
       openFixedAssetCreate();
       state.fixedAssetEditing = document;
       state.fixedAssetLines = document.lines.map(line=>({...line,vat_manual:Boolean(Number(line.vat_manual))}));
@@ -5044,7 +5046,6 @@
     openModal('shop-fixed-asset-confirm-modal');
   }
   async function confirmFixedAssetDelete() {
-    if (fixedAssetsReadOnly()) return;
     const button = $('shop-fixed-asset-confirm-submit');
     if (button.disabled || !state.fixedAssetDeleteTask) return;
     button.disabled = true;
@@ -5060,12 +5061,9 @@
     } finally { button.disabled = false; }
   }
   async function deleteFixedAsset(id) {
-    if (fixedAssetsReadOnly()) return;
     try {
       const asset = await window.SHOP_API.getFixedAsset(id);
-      if (fixedAssetsReadOnly()) return;
       const document = await window.SHOP_API.getFixedAssetDocument(asset.document_id);
-      if (fixedAssetsReadOnly()) return;
       fixedAssetConfirm(fixedAssetText('Șterge mijlocul fix'), `Ștergi „${asset.product_name}”${asset.disposals.length ? ` și cele ${asset.disposals.length} casări asociate` : ''}? ${document.lines.length === 1 ? `Acesta este singurul produs rămas pe documentul ${fixedAssetDocumentNumber(document)}. Se va șterge și documentul${document.files.length ? `, împreună cu cele ${document.files.length} fișiere atașate` : ''}.` : 'Celelalte poziții și fișierele documentului se păstrează.'} Numerele „Nr. crt.” se recalculează automat. Operațiunea nu poate fi anulată.`, async()=>{
         await window.SHOP_API.deleteFixedAsset(id,asset.revision,document.revision);
         closeModal('shop-fixed-asset-detail-modal');
@@ -5075,7 +5073,6 @@
     } catch (error) { toast(error.message,'error'); }
   }
   function deleteFixedAssetDocument() {
-    if (fixedAssetsReadOnly()) return;
     const document = state.fixedAssetEditing;
     if (!document) return;
     const disposals = document.lines.reduce((total,line)=>total+line.disposals.length,0);
@@ -5130,12 +5127,10 @@
   }
 
   async function openFixedAssetDetail(id) {
-    if (fixedAssetsReadOnly()) return;
     openModal('shop-fixed-asset-detail-modal');
     $('shop-fixed-asset-detail-content').innerHTML = '<div class="shop-commerce-loading">Se încarcă fișa...</div>';
     try {
       const asset = await window.SHOP_API.getFixedAsset(id);
-      if (fixedAssetsReadOnly()) return;
       state.fixedAssetSelected = asset;
       if (state.fixedAssetPreviewUrl) URL.revokeObjectURL(state.fixedAssetPreviewUrl);
       state.fixedAssetPreviewUrl = '';
@@ -5153,10 +5148,8 @@
   }
 
   async function openFixedAssetDisposal(id, disposalId = null) {
-    if (fixedAssetsReadOnly()) return;
     try {
       const asset = await window.SHOP_API.getFixedAsset(id);
-      if (fixedAssetsReadOnly()) return;
       const disposal = disposalId ? asset.disposals.find(item=>item.id===disposalId) : null;
       state.fixedAssetEditingDisposal = disposal;
       const available = Number(asset.remaining_quantity || 0) - Number(disposal?.quantity || 0);
@@ -5176,7 +5169,6 @@
 
   async function saveFixedAssetDisposal(event) {
     event.preventDefault();
-    if (fixedAssetsReadOnly()) return;
     const asset = state.fixedAssetDisposalTarget;
     const button = $('shop-fixed-asset-disposal-save');
     if (!asset || button.disabled) return;
@@ -6584,7 +6576,7 @@
     if ($('shop-nir-registry-custom')) $('shop-nir-registry-custom').hidden = !custom;
     const range = nirRegistryPeriodRange();
     const full = state.nirRegistryDownloadContent === 'complete';
-    if ($('shop-nir-registry-download-summary')) $('shop-nir-registry-download-summary').textContent = `${full ? 'Arhivă completă' : 'Registru Excel'} pentru ${range.label}`;
+    if ($('shop-nir-registry-download-summary')) $('shop-nir-registry-download-summary').textContent = `${full ? 'Arhivă completă' : state.nirRegistryDownloadContent === 'registry_pdf' ? 'Registru PDF' : 'Registru Excel'} pentru ${range.label}`;
     if ($('shop-nir-registry-download-range')) $('shop-nir-registry-download-range').textContent = range.from && range.to ? `${range.from.split('-').reverse().join('.')} — ${range.to.split('-').reverse().join('.')}` : custom ? 'Completează ambele date.' : 'Toate NIR-urile din registru.';
   }
 
@@ -6613,7 +6605,7 @@
     const titleElement = $('shop-nir-export-progress-title');
     const detailElement = $('shop-nir-export-progress-detail');
     if (titleElement) titleElement.textContent = title;
-    if (detailElement) detailElement.textContent = estimate.bundle_type === 'registry' ? 'Construim registrul Excel optimizat…' : 'Generăm documentele și împachetăm arhiva ZIP…';
+    if (detailElement) detailElement.textContent = estimate.bundle_type === 'registry' ? 'Construim registrul în formatul ales…' : 'Generăm documentele și împachetăm arhiva ZIP…';
     if ($('shop-nir-export-progress-docs')) $('shop-nir-export-progress-docs').textContent = Number(estimate.document_count || 0).toLocaleString('ro-RO');
     if ($('shop-nir-export-progress-lines')) $('shop-nir-export-progress-lines').textContent = Number(estimate.line_count || 0).toLocaleString('ro-RO');
     if ($('shop-nir-export-progress-files')) $('shop-nir-export-progress-files').textContent = Number(estimate.attachment_count || 0).toLocaleString('ro-RO');
@@ -6659,18 +6651,19 @@
     if (button) button.disabled = true;
     try {
       const complete = state.nirRegistryDownloadContent === 'complete';
+      const format = state.nirRegistryDownloadContent === 'registry_pdf' ? 'pdf' : 'xlsx';
       closeModal('shop-nir-registry-download-dialog');
-      startNirExportProgress({ estimated_seconds: complete ? 12 : 2, bundle_type: complete ? 'complete' : 'registry' }, complete ? 'Pregătim arhiva completă' : 'Pregătim registrul Excel');
+      startNirExportProgress({ estimated_seconds: complete ? 12 : 2, bundle_type: complete ? 'complete' : 'registry' }, complete ? 'Pregătim arhiva completă' : `Pregătim registrul ${format === 'pdf' ? 'PDF' : 'Excel'}`);
       try {
         const estimate = await window.SHOP_API.getNirExportEstimate(range.from, range.to, complete);
-        startNirExportProgress(estimate, complete ? 'Pregătim arhiva completă' : 'Pregătim registrul Excel');
+        startNirExportProgress(estimate, complete ? 'Pregătim arhiva completă' : `Pregătim registrul ${format === 'pdf' ? 'PDF' : 'Excel'}`);
       } catch (_) {
         // Exportul continuă și pe serverele API mai vechi; estimarea de rezervă rămâne vizibilă.
       }
-      const file = await window.SHOP_API.downloadNirRegistryBundle(range.from, range.to, complete);
+      const file = await window.SHOP_API.downloadNirRegistryBundle(range.from, range.to, complete, format);
       await finishNirExportProgress(true);
       saveNirDownload(file);
-      toast(complete ? 'Arhiva completă a registrului NIR a fost descărcată.' : 'Registrul NIR în Excel a fost descărcat.');
+      toast(complete ? 'Arhiva completă a registrului NIR a fost descărcată.' : `Registrul NIR în ${format === 'pdf' ? 'PDF' : 'Excel'} a fost descărcat.`);
     } catch (error) {
       await finishNirExportProgress(false);
       toast(error.message || 'Registrul NIR nu a putut fi descărcat.', 'error');

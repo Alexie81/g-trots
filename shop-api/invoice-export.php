@@ -11,17 +11,20 @@ final class GtrotsInvoiceExport
     {
         [$from, $to] = self::range((string)($input['from'] ?? ''), (string)($input['to'] ?? ''));
         $complete = filter_var($input['include_documents'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $pdfOnly = ($input['content'] ?? '') === 'pdfs';
+        $archive = $complete || $pdfOnly;
         $where = $from === '' ? '' : 'WHERE i.issue_date >= ? AND i.issue_date <= ?';
         $stmt = $db->prepare('SELECT i.*,o.order_number,o.payment_status,o.payment_method,o.stripe_paid_at,o.customer_email,o.customer_phone
             FROM shop_invoices i LEFT JOIN shop_orders o ON o.id=i.order_id ' . $where . ' ORDER BY i.issue_date,i.issued_at,i.id');
         $stmt->execute($from === '' ? [] : [$from,$to]);
         $invoices = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if ($pdfOnly && !$invoices) throw new InvalidArgumentException('Nu există facturi în perioada selectată pentru exportul PDF.');
         // Do not reuse listInvoices: that endpoint has a UI limit of 1,000 records.
         $rows = [];
-        $path = $complete ? tempnam(sys_get_temp_dir(), 'gt-invoice-export-') : false;
+        $path = $archive ? tempnam(sys_get_temp_dir(), 'gt-invoice-export-') : false;
         $zip = null; $fallback = []; $folders = [];
         try {
-            if ($complete && class_exists('ZipArchive')) {
+            if ($archive && class_exists('ZipArchive')) {
                 $zip = new ZipArchive();
                 if ($path === false || $zip->open($path, ZipArchive::OVERWRITE) !== true) throw new RuntimeException('Arhiva nu poate fi creată.');
             }
@@ -32,15 +35,19 @@ final class GtrotsInvoiceExport
             foreach ($invoices as $invoice) {
                 $payload = GtrotsInvoiceService::snapshotForExport($db, $invoice);
                 $rows[] = self::registryRow($invoice, $payload);
-                if (!$complete) continue;
+                if (!$archive) continue;
                 $folder = self::folder($invoice);
                 if (isset($folders[$folder])) throw new RuntimeException('Două facturi au același nume de folder la export: ' . $folder);
                 $folders[$folder] = true;
                 // Render the existing snapshot. XML validation/upload is not a prerequisite for a local export.
                 require_once __DIR__ . '/invoice-pdf.php';
-                require_once __DIR__ . '/invoice-xlsx.php';
-                require_once __DIR__ . '/invoice-ubl.php';
                 try {
+                    if ($pdfOnly) {
+                        $add($folder . '.pdf', GtrotsInvoicePdf::render($payload));
+                        continue;
+                    }
+                    require_once __DIR__ . '/invoice-xlsx.php';
+                    require_once __DIR__ . '/invoice-ubl.php';
                     $add($folder . '/' . $folder . '.pdf', GtrotsInvoicePdf::render($payload));
                     $add($folder . '/' . $folder . '.xlsx', GtrotsInvoiceXlsx::render($payload));
                     $add($folder . '/' . $folder . ' - RO_e-Factura.xml', GtrotsInvoiceUbl::render($payload));
@@ -48,11 +55,11 @@ final class GtrotsInvoiceExport
                     throw new RuntimeException('Exportul facturii ' . $folder . ' nu a putut fi finalizat: ' . $error->getMessage(), 0, $error);
                 }
             }
-            $registry = GtrotsProductExport::table('Facturi emise', self::headers(), $rows, self::widths(),
+            $registry = $pdfOnly ? '' : GtrotsProductExport::table('Facturi emise', self::headers(), $rows, self::widths(),
                 ($from === '' ? 'Toată perioada' : $from . ' — ' . $to) . ' · Facturi pozitive și retururi. Stare SPV: trimisă numai după confirmarea ANAF.');
-            $filename = 'Centralizator-facturi-' . ($from === '' ? 'toata-perioada' : $from . '_' . $to);
-            if ($complete) {
-                $add($filename . '.xlsx', $registry);
+            $filename = ($pdfOnly ? 'Facturi-PDF-' : 'Centralizator-facturi-') . ($from === '' ? 'toata-perioada' : $from . '_' . $to);
+            if ($archive) {
+                if (!$pdfOnly) $add($filename . '.xlsx', $registry);
                 if ($zip) {
                     if (!$zip->close()) throw new RuntimeException('Arhiva nu a putut fi finalizată.');
                     $zip = null;
@@ -60,7 +67,7 @@ final class GtrotsInvoiceExport
                     if (!is_string($bytes)) throw new RuntimeException('Arhiva nu a putut fi citită.');
                 } else $bytes = shopNirBuildZip($fallback);
             } else $bytes = $registry;
-            return ['file_name' => $filename . ($complete ? '.zip' : '.xlsx'), 'mime_type' => $complete ? 'application/zip' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            return ['file_name' => $filename . ($archive ? '.zip' : '.xlsx'), 'mime_type' => $archive ? 'application/zip' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 'content_base64' => base64_encode($bytes),'item_count' => count($invoices)];
         } finally {
             if ($zip) $zip->close();

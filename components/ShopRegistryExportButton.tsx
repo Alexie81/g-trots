@@ -28,7 +28,8 @@ function range(period: string, from: string, to: string) {
 export default function ShopRegistryExportButton({ kind, total = 0 }: { kind: Kind; total?: number }) {
   const { token } = useAuth(); const insets = useSafeAreaInsets();
   const [visible, setVisible] = useState(false); const [busy, setBusy] = useState(false);
-  const [complete, setComplete] = useState(false); const [period, setPeriod] = useState('current_month');
+  const [content, setContent] = useState<'registry' | 'pdfs' | 'complete'>('registry');
+  const complete = content === 'complete'; const [period, setPeriod] = useState('current_month');
   const [from, setFrom] = useState(''); const [to, setTo] = useState('');
   const [progress, setProgress] = useState(0); const [elapsed, setElapsed] = useState(0);
   const active = useRef(false); const spin = useRef(new Animated.Value(0)).current;
@@ -50,7 +51,7 @@ export default function ShopRegistryExportButton({ kind, total = 0 }: { kind: Ki
     const started = Date.now();
     const timer = setInterval(() => { const seconds = (Date.now() - started) / 1000; setElapsed(seconds); setProgress(Math.min(92, Math.round(92 * (1 - Math.exp(-seconds / estimate))))); }, 400);
     try {
-      const file = invoices ? await shopApi.exportInvoiceRegistry(token, dates[0], dates[1], complete) : await shopApi.exportCatalog(token, kind);
+      const file = invoices ? await shopApi.exportInvoiceRegistry(token, dates[0], dates[1], complete, content) : await shopApi.exportCatalog(token, kind);
       clearInterval(timer); setProgress(96);
       const uri = `${FileSystem.cacheDirectory}${file.file_name.replace(/[\\/:*?"<>|]/g, '-')}`;
       await FileSystem.writeAsStringAsync(uri, file.content_base64, { encoding: FileSystem.EncodingType.Base64 });
@@ -60,13 +61,13 @@ export default function ShopRegistryExportButton({ kind, total = 0 }: { kind: Ki
     finally { clearInterval(timer); active.current = false; setBusy(false); }
   };
   return <>
-    <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Exportă ${titles[kind]} în XLSX`} style={s.trigger} onPress={() => setVisible(true)}><FileSpreadsheet size={20} color="#9FE8C1" /><Text style={s.triggerText}>Exportă</Text></TouchableOpacity>
+    <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Exportă ${titles[kind]}`} style={s.trigger} onPress={() => setVisible(true)}><FileSpreadsheet size={20} color="#9FE8C1" /><Text style={s.triggerText}>Exportă</Text></TouchableOpacity>
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => { if (!busy) setVisible(false); }}>
       <View style={[s.overlay, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}><View style={s.panel}>
         {busy ? <View style={s.busy}>
           <View style={s.orbit}><Animated.View style={[s.ring, { transform: [{ rotate: spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) }] }]} /><Image source={require('../assets/images/logo.png')} style={s.logo} resizeMode="contain" /></View>
           <Text style={s.eyebrow}>EXPORT G-TROTS CRM</Text><Text style={s.title}>{progress === 100 ? 'Export finalizat' : 'Pregătim fișierele'}</Text>
-          <Text style={s.hint}>{invoices && complete ? 'Centralizator, PDF, XLSX și RO e-Factura XML pentru fiecare factură.' : `Centralizăm ${titles[kind].toLowerCase()} în XLSX.`}</Text>
+          <Text style={s.hint}>{invoices && content === 'pdfs' ? 'Generăm PDF-ul fiecărei facturi și arhiva ZIP.' : invoices && complete ? 'Centralizator, PDF, XLSX și RO e-Factura XML pentru fiecare factură.' : `Centralizăm ${titles[kind].toLowerCase()} în XLSX.`}</Text>
           <View style={s.progressLabels}><Text style={s.percent}>{progress}%</Text><Text style={s.hint}>{elapsed < estimate ? `Estimare: ~${Math.max(1, Math.ceil(estimate - elapsed))} secunde` : 'Procesarea continuă…'}</Text></View>
           <View style={s.track}><View style={[s.fill, { width: `${progress}%` }]} /></View><Text style={s.note}>Progres estimat până la primirea fișierului.</Text>
         </View> : <>
@@ -74,10 +75,10 @@ export default function ShopRegistryExportButton({ kind, total = 0 }: { kind: Ki
           <KeyboardAwareScrollView extraScrollHeight={120} contentContainerStyle={s.body}>
             {invoices ? <>
               <Text style={s.section}>01   Ce vrei să descarci?</Text>
-              {[false, true].map(value => <TouchableOpacity key={String(value)} accessibilityRole="radio" accessibilityState={{ checked: complete === value }} onPress={() => setComplete(value)} style={[s.option, complete === value && s.selected]}>{value ? <FolderArchive size={23} color="#7DD3FC" /> : <FileSpreadsheet size={23} color="#7DD3FC" />}<View style={{ flex: 1 }}><Text style={s.optionTitle}>{value ? 'Centralizator + toate facturile' : 'Doar centralizatorul'}</Text><Text style={s.hint}>{value ? 'ZIP · folder Serie-Număr cu PDF, XLSX și XML' : 'Un singur fișier Excel detaliat'}</Text></View>{complete === value && <Check size={18} color="#5EEAD4" />}</TouchableOpacity>)}
+              {([{value:'registry',title:'Doar centralizatorul',hint:'Un singur fișier Excel detaliat'}, {value:'pdfs',title:'Doar PDF-uri',hint:'ZIP cu un PDF separat pentru fiecare factură'}, {value:'complete',title:'Centralizator + toate facturile',hint:'ZIP · folder Serie-Număr cu PDF, XLSX și XML'}] as const).map(option => <TouchableOpacity key={option.value} accessibilityRole="radio" accessibilityState={{checked:content===option.value}} onPress={()=>setContent(option.value)} style={[s.option,content===option.value && s.selected]}><FolderArchive size={23} color="#7DD3FC"/><View style={{flex:1}}><Text style={s.optionTitle}>{option.title}</Text><Text style={s.hint}>{option.hint}</Text></View>{content===option.value && <Check size={18} color="#5EEAD4"/>}</TouchableOpacity>)}
               <Text style={s.section}>02   Pentru ce perioadă?</Text><View style={s.periods}>{periods.map(option => <TouchableOpacity key={option.id} accessibilityRole="radio" accessibilityState={{ checked: period === option.id }} style={[s.period, period === option.id && s.periodActive]} onPress={() => setPeriod(option.id)}><CalendarDays size={18} color={period === option.id ? '#FFB36B' : '#7DD3FC'} /><Text style={s.periodText}>{option.label}</Text></TouchableOpacity>)}</View>
               {period === 'custom' && <View style={s.dates}><View style={{ flex: 1 }}><Text style={s.note}>DE LA</Text><TextInput accessibilityLabel="Data de început" value={from} onChangeText={setFrom} placeholder="AAAA-LL-ZZ" placeholderTextColor="#99919D" style={s.input} /></View><View style={{ flex: 1 }}><Text style={s.note}>PÂNĂ LA</Text><TextInput accessibilityLabel="Data de sfârșit" value={to} onChangeText={setTo} placeholder="AAAA-LL-ZZ" placeholderTextColor="#99919D" style={s.input} /></View></View>}
-              <View style={s.summary}><Check size={20} color="#5EEAD4" /><View style={{ flex: 1 }}><Text style={s.optionTitle}>{complete ? 'Arhivă completă' : 'Centralizator Excel'}</Text><Text style={s.hint}>{dates[0] && dates[1] ? `${dates[0]} — ${dates[1]}` : period === 'custom' ? 'Completează ambele date.' : 'Toate facturile emise, inclusiv retururile.'}</Text></View></View>
+              <View style={s.summary}><Check size={20} color="#5EEAD4" /><View style={{ flex: 1 }}><Text style={s.optionTitle}>{complete ? 'Arhivă completă' : content === 'pdfs' ? 'Arhivă doar cu PDF-uri' : 'Centralizator Excel'}</Text><Text style={s.hint}>{dates[0] && dates[1] ? `${dates[0]} — ${dates[1]}` : period === 'custom' ? 'Completează ambele date.' : 'Toate facturile emise, inclusiv retururile.'}</Text></View></View>
               <Text style={s.note}>Exportul nu emite facturi și nu trimite documente către ANAF.</Text>
             </> : <Text style={s.hint}>Se exportă toate înregistrările, inclusiv cele inactive, cu starea și numărul produselor asociate. Fișierul include logo-ul G-Trots și antetul portocaliu.</Text>}
           </KeyboardAwareScrollView>

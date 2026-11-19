@@ -273,7 +273,7 @@ function shopDb(array $config): PDO {
  * after an actual schema version bump.
  */
 function ensureShopSchemaIsCurrent(PDO $db): void {
-    $schemaVersion = 2026111801;
+    $schemaVersion = 2026111901;
     // Ruta normala face doar SELECT-ul indexat. Un CREATE TABLE IF NOT EXISTS la
     // fiecare request tot cere verificari de metadata si poate astepta lock-uri.
     try {
@@ -298,14 +298,24 @@ function ensureShopSchemaIsCurrent(PDO $db): void {
     if ((int)$lock->fetchColumn() !== 1) throw new RuntimeException('Actualizarea bazei SHOP este ocupată. Reîncearcă imediat.');
     try {
         $stmt->execute(['schema_version']);
-        if ((int)$stmt->fetchColumn() < $schemaVersion) {
+        $previousVersion = (int)$stmt->fetchColumn();
+        if ($previousVersion < $schemaVersion) {
             ensureShopSchema($db);
             GtrotsFixedAssets::ensureSchema($db);
-            $save = $db->prepare(
-                'INSERT INTO shop_schema_meta (meta_key, meta_value) VALUES (?, ?)
-                 ON DUPLICATE KEY UPDATE meta_value = VALUES(meta_value)'
-            );
-            $save->execute(['schema_version', (string)$schemaVersion]);
+            // MySQL DDL above may implicitly commit. Transfer + marker are atomic.
+            $db->beginTransaction();
+            try {
+                GtrotsFixedAssets::transferExistingInventoryObjects($db, $previousVersion);
+                $save = $db->prepare(
+                    'INSERT INTO shop_schema_meta (meta_key, meta_value) VALUES (?, ?)
+                     ON DUPLICATE KEY UPDATE meta_value = VALUES(meta_value)'
+                );
+                $save->execute(['schema_version', (string)$schemaVersion]);
+                $db->commit();
+            } catch (Throwable $error) {
+                if ($db->inTransaction()) $db->rollBack();
+                throw $error;
+            }
         }
     } finally {
         $release = $db->prepare('SELECT RELEASE_LOCK(?)');
@@ -7423,7 +7433,8 @@ try {
             trim((string)($_GET['from'] ?? '')),
             trim((string)($_GET['to'] ?? '')),
             ((int)($_GET['include_documents'] ?? 0)) === 1,
-            $currentUser
+            $currentUser,
+            strtolower(trim((string)($_GET['format'] ?? 'xlsx')))
         ));
     }
 

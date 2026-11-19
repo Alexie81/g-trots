@@ -260,3 +260,9 @@
 .shop-consumable-saved-vouchers button:disabled,.shop-voucher-view:disabled { opacity:.55; cursor:wait; }
 .shop-consumable-saved-vouchers svg,.shop-voucher-view svg { width:14px; height:14px; }
 #shop-consumable-detail-modal .shop-voucher-view { grid-column:1/-1; }
+
+.shop-consumption-voucher-line { grid-template-columns:44px minmax(0,1fr) 210px 32px; }
+.shop-consumption-voucher-line>span { width:42px; height:42px; font-size:20px; font-weight:700; }
+.shop-consumption-voucher>footer .shop-entry-add-shortcut { margin-right:auto; }
+@media(max-width:900px) { .shop-consumption-voucher-line { grid-template-columns:44px minmax(0,1fr) 150px 32px; } }
+@media(max-width:620px) { .shop-consumption-voucher-line { grid-template-columns:44px minmax(0,1fr) 32px; } .shop-consumption-voucher>footer .shop-entry-add-shortcut { width:100%; margin-right:0; } }

@@ -51,6 +51,14 @@ for ($i = 0; $i < $zip->numFiles; $i++) {
     $name = $zip->getNameIndex($i);
     if (str_ends_with($name, '.xml') || str_ends_with($name, '.rels')) inventoryExportAssert((new DOMDocument())->loadXML($zip->getFromIndex($i)), 'Invalid OOXML part: ' . $name);
 }
+$styleDoc = new DOMDocument(); $styleDoc->loadXML($styles); $styleXp = new DOMXPath($styleDoc); $styleXp->registerNamespace('s','http://schemas.openxmlformats.org/spreadsheetml/2006/main');
+$stockDoc = new DOMDocument(); $stockDoc->loadXML($zip->getFromName('xl/worksheets/sheet2.xml')); $stockXp = new DOMXPath($stockDoc); $stockXp->registerNamespace('s','http://schemas.openxmlformats.org/spreadsheetml/2006/main');
+$closingCell = $stockXp->query('//s:c[starts-with(@r,"H") and s:v]')->item(0);
+inventoryExportAssert($closingCell !== null, 'Closing stock must be present.');
+$xf = $styleXp->query('//s:cellXfs/s:xf')->item((int)$closingCell->getAttribute('s'));
+$font = (int)$xf->getAttribute('fontId')+1; $fill=(int)$xf->getAttribute('fillId')+1;
+inventoryExportAssert($styleXp->evaluate('string(//s:fills/s:fill['.$fill.']/s:patternFill/s:fgColor/@rgb)')==='FFFFFF00', 'Closing stock fill must be yellow.');
+inventoryExportAssert($styleXp->evaluate('string(//s:fonts/s:font['.$font.']/s:color/@rgb)')==='FFFF0000' && $styleXp->query('//s:fonts/s:font['.$font.']/s:b')->length===1, 'Closing stock must be red and bold.');
 $zip->close(); unlink($path);
 
 inventoryExportAssert(GtrotsInventoryExport::download($db, [])['movement_count'] === 2, 'All-period export must include only the documented ledger.');
@@ -59,5 +67,12 @@ foreach ([['2026-02-30','2026-03-01'],['','2026-09-05'],['2026-09-05','2026-09-0
     catch (InvalidArgumentException $expected) {}
 }
 
-if (!empty($argv[1])) file_put_contents($argv[1], $bytes);
+$pdf = GtrotsInventoryExport::download($db, ['from'=>'2026-09-01','to'=>'2026-09-30','format'=>'pdf']);
+$pdfBytes = base64_decode($pdf['content_base64'], true);
+inventoryExportAssert($pdf['mime_type']==='application/pdf' && str_starts_with($pdfBytes, '%PDF-'), 'Stock PDF must be a real downloadable PDF.');
+$html = GtrotsTabularPdf::html($bytes);
+foreach (['SE-CMM087','12','780,00 lei','#FFFF00','#FF0000','Cauciuc test','Stoc pe produse','Documente sursă'] as $value) inventoryExportAssert(str_contains($html,$value), 'PDF loses data or color: '.$value);
+inventoryExportAssert(!str_contains($html,'30.12.1899'), 'Red number format must not be interpreted as an Excel date.');
+if (!empty($argv[1])) { file_put_contents($argv[1], $bytes); file_put_contents(preg_replace('/\.xlsx$/i','.pdf',$argv[1]), $pdfBytes); }
+echo 'PDF bytes: '.strlen($pdfBytes)."\n";
 echo "Inventory export tests passed: accounting snapshot, movement traceability, print settings and six-sheet workbook.\n";

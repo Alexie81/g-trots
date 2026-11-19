@@ -35,6 +35,8 @@ foreach ([false,true] as $complete) {
 }
 registryAssert(shopNirRegistryDateRange($nirDb,'','')===['2026-09-21','2026-10-01'],'All-period bounds must come from reception dates.');
 
+$nirPdf=shopNirDownloadRegistryBundle($nirDb,'2026-09-01','2026-09-30',false,[],'pdf');
+registryAssert($nirPdf['document_count']===4 && $nirPdf['mime_type']==='application/pdf' && str_starts_with(base64_decode($nirPdf['content_base64']),'%PDF-'),'Standalone NIR PDF includes all four documents by reception date.');
 require_once dirname(__DIR__) . '/consumables-service.php';
 $consDb=new PDO('sqlite::memory:',null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);
 GtrotsConsumables::ensureSchema($consDb);
